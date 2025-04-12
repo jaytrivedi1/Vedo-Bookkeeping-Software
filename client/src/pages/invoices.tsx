@@ -5,6 +5,7 @@ import { PlusIcon, UserPlus } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import CustomerDialog from "@/components/customers/CustomerDialog";
+import CustomerList from "@/components/customers/CustomerList";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,6 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -158,10 +165,23 @@ export default function Invoices() {
             </Select>
           </div>
           
-          {/* Invoices Table */}
-          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-            <TransactionTable transactions={invoices} loading={isLoading} />
-          </div>
+          {/* Tabbed Content - Invoices and Customers */}
+          <Tabs defaultValue="invoices" className="mb-6">
+            <TabsList>
+              <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              <TabsTrigger value="customers">Customers</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="invoices" className="mt-4">
+              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                <TransactionTable transactions={invoices} loading={isLoading} />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="customers" className="mt-4">
+              <CustomerList />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>

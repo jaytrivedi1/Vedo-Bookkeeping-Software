@@ -77,7 +77,7 @@ export default function AccountBooks() {
     ledgerEntries.forEach(entry => {
       const transaction = transactions.find(t => t.id === entry.transactionId);
       if (transaction) {
-        const entryWithTransaction = {
+        const entryWithTransaction: LedgerEntryWithTransaction = {
           ...entry,
           transaction
         };
@@ -273,32 +273,26 @@ export default function AccountBooks() {
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                          {account.ledgerEntries
-                                            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                                            .reduce((acc, entry, index, entries) => {
-                                              // Calculate running balance
-                                              const previousBalance = index > 0 ? 
-                                                acc[index - 1].runningBalance : 0;
-                                              
-                                              // For asset and expense accounts, debits increase the balance
-                                              // For liability, equity, and revenue accounts, credits increase the balance
-                                              const isDebitNormal = 
-                                                account.type === 'asset' || account.type === 'expense';
-                                              
+                                          {account.ledgerEntries.sort((a, b) => 
+                                            new Date(a.date).getTime() - new Date(b.date).getTime()
+                                          ).map((entry, index, entries) => {
+                                            // Calculate running balance
+                                            let runningBalance = 0;
+                                            
+                                            // For asset and expense accounts, debits increase the balance
+                                            // For liability, equity, and revenue accounts, credits increase the balance
+                                            const isDebitNormal = account.type === 'asset' || account.type === 'expense';
+                                            
+                                            // Calculate balance up to this entry
+                                            for (let i = 0; i <= index; i++) {
+                                              const e = entries[i];
                                               const change = isDebitNormal ? 
-                                                (entry.debit - entry.credit) : 
-                                                (entry.credit - entry.debit);
-                                              
-                                              const runningBalance = previousBalance + change;
-                                              
-                                              acc.push({
-                                                ...entry,
-                                                runningBalance
-                                              });
-                                              
-                                              return acc;
-                                            }, [] as (LedgerEntryWithTransaction & { runningBalance: number })[])
-                                            .map((entry, index) => (
+                                                (e.debit - e.credit) : 
+                                                (e.credit - e.debit);
+                                              runningBalance += change;
+                                            }
+                                            
+                                            return (
                                               <TableRow key={entry.id}>
                                                 <TableCell className="text-xs">
                                                   {format(new Date(entry.date), 'MMM dd, yyyy')}
@@ -316,11 +310,11 @@ export default function AccountBooks() {
                                                   {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
                                                 </TableCell>
                                                 <TableCell className="text-xs text-right font-medium">
-                                                  {formatCurrency(entry.runningBalance)}
+                                                  {formatCurrency(runningBalance)}
                                                 </TableCell>
                                               </TableRow>
-                                            ))
-                                          }
+                                            );
+                                          })}
                                         </TableBody>
                                       </Table>
                                     )}

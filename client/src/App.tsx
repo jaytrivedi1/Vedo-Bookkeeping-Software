@@ -10,6 +10,7 @@ import Journals from "@/pages/journals";
 import Deposits from "@/pages/deposits";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
+import AccountBooks from "@/pages/account-books";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
       <Route path="/chart-of-accounts" component={ChartOfAccounts} />
+      <Route path="/account-books" component={AccountBooks} />
       <Route path="/reports" component={Reports} />
       <Route component={NotFound} />
     </Switch>
