@@ -23,11 +23,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
 
   const menuItems = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-5 h-5 mr-3" /> },
+    { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-5 h-5 mr-3" /> },
     { path: "/expenses", label: "Expenses", icon: <BanknoteIcon className="w-5 h-5 mr-3" /> },
     { path: "/journals", label: "Journal Entries", icon: <ScaleIcon className="w-5 h-5 mr-3" /> },
     { path: "/deposits", label: "Deposits", icon: <PiggyBankIcon className="w-5 h-5 mr-3" /> },
-    { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/account-books", label: "Account Books", icon: <BookOpenIcon className="w-5 h-5 mr-3" /> },
     { path: "/chart-of-accounts", label: "Chart of Accounts", icon: <DatabaseIcon className="w-5 h-5 mr-3" /> },
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-5 h-5 mr-3" /> },
