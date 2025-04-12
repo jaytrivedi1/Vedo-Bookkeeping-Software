@@ -11,6 +11,7 @@ import Deposits from "@/pages/deposits";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
+import Banking from "@/pages/banking";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
