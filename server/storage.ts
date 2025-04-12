@@ -267,6 +267,37 @@ export class MemStorage implements IStorage {
   async getAllLedgerEntries(): Promise<LedgerEntry[]> {
     return Array.from(this.ledgerEntries.values());
   }
+  
+  async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
+    const entries = Array.from(this.ledgerEntries.values());
+    const transactions = Array.from(this.transactions.values());
+    
+    // Map to quickly look up transactions by ID
+    const transactionMap = new Map<number, Transaction>();
+    transactions.forEach(tx => transactionMap.set(tx.id, tx));
+    
+    // If no dates specified, return all entries
+    if (!startDate && !endDate) {
+      return entries;
+    }
+    
+    return entries.filter(entry => {
+      const transaction = transactionMap.get(entry.transactionId);
+      if (!transaction) return false;
+      
+      const txDate = new Date(transaction.date);
+      
+      if (startDate && endDate) {
+        return txDate >= startDate && txDate <= endDate;
+      } else if (startDate) {
+        return txDate >= startDate;
+      } else if (endDate) {
+        return txDate <= endDate;
+      }
+      
+      return true;
+    });
+  }
 
   async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
     const id = this.ledgerEntryIdCounter++;

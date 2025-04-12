@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { Calendar as CalendarIcon } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -8,6 +9,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import {
   Tabs,
   TabsContent,
@@ -39,6 +48,9 @@ import { Account } from "@shared/schema";
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("income-statement");
+  const [startDate, setStartDate] = useState<Date | undefined>(startOfMonth(subMonths(new Date(), 1)));
+  const [endDate, setEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
+  
   
   // Fetch income statement
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
@@ -117,6 +129,7 @@ export default function Reports() {
             <TabsList className="mb-6">
               <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
               <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
+              <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
               <TabsTrigger value="expense-analysis">Expense Analysis</TabsTrigger>
               <TabsTrigger value="revenue-analysis">Revenue Analysis</TabsTrigger>
             </TabsList>

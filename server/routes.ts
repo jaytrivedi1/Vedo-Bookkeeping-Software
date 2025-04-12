@@ -456,6 +456,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to fetch ledger entries" });
     }
   });
+  
+  // General Ledger report route - for date range filtering
+  apiRouter.get("/reports/general-ledger", async (req: Request, res: Response) => {
+    try {
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      
+      // Parse dates if provided
+      const startDate = startDateStr ? new Date(startDateStr) : undefined;
+      const endDate = endDateStr ? new Date(endDateStr) : undefined;
+      
+      // Get ledger entries for the date range
+      const ledgerEntries = await storage.getLedgerEntriesByDateRange(startDate, endDate);
+      
+      // Get all accounts and transactions for reference
+      const accounts = await storage.getAccounts();
+      const transactions = await storage.getTransactions();
+      
+      // Create account and transaction lookup maps
+      const accountMap = new Map(accounts.map(acc => [acc.id, acc]));
+      const transactionMap = new Map(transactions.map(tx => [tx.id, tx]));
+      
+      // Enrich ledger entries with account and transaction data
+      const enrichedEntries = ledgerEntries.map(entry => {
+        const account = accountMap.get(entry.accountId);
+        const transaction = transactionMap.get(entry.transactionId);
+        
+        return {
+          ...entry,
+          account: account ? {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type
+          } : null,
+          transaction: transaction ? {
+            id: transaction.id,
+            type: transaction.type,
+            reference: transaction.reference,
+            date: transaction.date,
+            status: transaction.status
+          } : null
+        };
+      });
+      
+      res.json(enrichedEntries);
+    } catch (error) {
+      console.error("Error fetching general ledger:", error);
+      res.status(500).json({ message: "Failed to fetch general ledger data" });
+    }
+  });
 
   app.use("/api", apiRouter);
   
