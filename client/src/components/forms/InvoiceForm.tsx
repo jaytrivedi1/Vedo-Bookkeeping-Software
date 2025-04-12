@@ -572,17 +572,18 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           </div>
           
           {/* Footer/Actions */}
-          <div className="flex justify-between pt-6">
-            <div>
+          <div className="grid grid-cols-4 gap-2 pt-6">
+            <div className="col-span-1">
               <Button 
                 type="button"
                 variant="outline"
                 onClick={onCancel}
+                className="w-full"
               >
                 Cancel
               </Button>
             </div>
-            <div className="flex space-x-2">
+            <div className="col-span-3 flex justify-end gap-2">
               <Button 
                 type="button"
                 variant="outline"
