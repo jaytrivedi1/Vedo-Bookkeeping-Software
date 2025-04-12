@@ -210,6 +210,10 @@ export { seed };
 
 // Run directly if this file is executed directly
 if (process.argv[1] === import.meta.url) {
+  console.log("Starting seed script...");
+  console.log("Import meta URL:", import.meta.url);
+  console.log("Process argv[1]:", process.argv[1]);
+  
   seed()
     .then(() => {
       console.log("Seed script completed.");
