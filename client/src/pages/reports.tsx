@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft } from "lucide-react";
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -118,6 +119,24 @@ export default function Reports() {
       }, {} as Record<string, Account[]>)
     : {};
   
+  // Helper function to get report title
+  const getReportTitle = (tab: string): string => {
+    switch (tab) {
+      case 'income-statement':
+        return 'Income Statement';
+      case 'balance-sheet':
+        return 'Balance Sheet';
+      case 'general-ledger':
+        return 'General Ledger';
+      case 'expense-analysis':
+        return 'Expense Analysis';
+      case 'revenue-analysis':
+        return 'Revenue Analysis';
+      default:
+        return 'Financial Reports';
+    }
+  };
+  
   // Transform account balances for pie chart
   const expenseAccounts = accountBalances
     ? accountBalances
@@ -149,15 +168,125 @@ export default function Reports() {
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="py-4">
-          <Tabs defaultValue="income-statement" onValueChange={setActiveTab}>
-            <TabsList className="mb-6">
-              <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
-              <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
-              <TabsTrigger value="general-ledger">General Ledger</TabsTrigger>
-              <TabsTrigger value="expense-analysis">Expense Analysis</TabsTrigger>
-              <TabsTrigger value="revenue-analysis">Revenue Analysis</TabsTrigger>
-            </TabsList>
+          {activeTab === '' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("income-statement")}
+              >
+                <CardHeader>
+                  <CardTitle>Income Statement</CardTitle>
+                  <CardDescription>
+                    View your revenues, expenses, and net income for a specific period
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The income statement shows how your business performed financially over a specific 
+                    time period, displaying revenues earned and expenses incurred.
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("balance-sheet")}
+              >
+                <CardHeader>
+                  <CardTitle>Balance Sheet</CardTitle>
+                  <CardDescription>
+                    Examine your assets, liabilities, and equity at a specific point in time
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The balance sheet provides a snapshot of your company's financial position, showing 
+                    what you own (assets), what you owe (liabilities), and the resulting net worth (equity).
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("general-ledger")}
+              >
+                <CardHeader>
+                  <CardTitle>General Ledger</CardTitle>
+                  <CardDescription>
+                    Examine all financial transactions with detailed debit and credit entries
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The general ledger provides a complete record of all financial transactions, 
+                    showing every debit and credit entry made to each account in your chart of accounts.
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("expense-analysis")}
+              >
+                <CardHeader>
+                  <CardTitle>Expense Analysis</CardTitle>
+                  <CardDescription>
+                    Break down your expenses by category to identify spending patterns
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The expense analysis report helps you understand where your money is going by categorizing 
+                    and visualizing expense transactions across different accounts and time periods.
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("revenue-analysis")}
+              >
+                <CardHeader>
+                  <CardTitle>Revenue Analysis</CardTitle>
+                  <CardDescription>
+                    Analyze your revenue streams to understand your income sources
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The revenue analysis report helps you track where your income is coming from by breaking down
+                    revenue by source, customer, product or service categories.
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+            </div>
+          )}
+
+          {activeTab !== '' && (
+            <div className="mb-6 flex items-center gap-4">
+              <Button variant="outline" onClick={() => setActiveTab('')}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Reports
+              </Button>
+              <h2 className="text-xl font-semibold">{getReportTitle(activeTab)}</h2>
+            </div>
+          )}
             
+          <Tabs value={activeTab} defaultValue="income-statement">
             {/* Income Statement */}
             <TabsContent value="income-statement">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
