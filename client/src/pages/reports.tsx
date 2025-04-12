@@ -44,7 +44,7 @@ import {
   Pie,
   Cell
 } from "recharts";
-import { Account } from "@shared/schema";
+import { Account, LedgerEntry } from "@shared/schema";
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState("income-statement");
@@ -68,21 +68,21 @@ export default function Reports() {
   });
   
   // Fetch general ledger entries with date filtering
-  const { data: generalLedger, isLoading: ledgerLoading } = useQuery({
+  const { data: generalLedger, isLoading: ledgerLoading } = useQuery<LedgerEntry[]>({
     queryKey: ['/api/reports/general-ledger', { startDate, endDate }],
     queryFn: async ({ queryKey }) => {
-      const [_path, { startDate, endDate }] = queryKey;
-      const params = new URLSearchParams();
+      const [_path, params] = queryKey;
+      const urlParams = new URLSearchParams();
       
-      if (startDate) {
-        params.append('startDate', startDate.toISOString());
+      if (params && typeof params === 'object' && 'startDate' in params && params.startDate) {
+        urlParams.append('startDate', params.startDate.toISOString());
       }
       
-      if (endDate) {
-        params.append('endDate', endDate.toISOString());
+      if (params && typeof params === 'object' && 'endDate' in params && params.endDate) {
+        urlParams.append('endDate', params.endDate.toISOString());
       }
       
-      const response = await fetch(`/api/reports/general-ledger?${params.toString()}`);
+      const response = await fetch(`/api/reports/general-ledger?${urlParams.toString()}`);
       if (!response.ok) {
         throw new Error('Failed to fetch general ledger data');
       }
