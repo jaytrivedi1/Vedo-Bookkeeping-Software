@@ -131,7 +131,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Invoice routes
   apiRouter.post("/invoices", async (req: Request, res: Response) => {
     try {
-      const invoiceData = invoiceSchema.parse(req.body);
+      console.log("Invoice payload:", JSON.stringify(req.body));
+      
+      // Validate invoice data
+      const result = invoiceSchema.safeParse(req.body);
+      if (!result.success) {
+        console.log("Invoice validation errors:", JSON.stringify(result.error));
+        return res.status(400).json({ 
+          message: "Invalid invoice data", 
+          errors: result.error.errors 
+        });
+      }
+      
+      const invoiceData = result.data;
       
       // Calculate amount from line items or use provided total amount
       const totalAmount = invoiceData.totalAmount || 
@@ -407,6 +419,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(accountBalances);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch account balances" });
+    }
+  });
+  
+  // Ledger entries route - needed for Account Books
+  apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {
+    try {
+      const ledgerEntries = await storage.getAllLedgerEntries();
+      res.json(ledgerEntries);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch ledger entries" });
     }
   });
 
