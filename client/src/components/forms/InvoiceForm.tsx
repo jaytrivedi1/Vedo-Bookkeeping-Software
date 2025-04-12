@@ -179,13 +179,25 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   }, [form.watch, paymentTerms]);
 
   const onSubmit = (data: Invoice) => {
-    // Add the calculated totals to the invoice data before submitting
+    // Add the calculated totals and payment terms to the invoice data before submitting
     const enrichedData = {
       ...data,
       subTotal,
+      taxRate,
       taxAmount,
-      totalAmount
+      totalAmount,
+      dueDate,
+      paymentTerms
     };
+    
+    console.log("Submitting invoice:", enrichedData);
+    
+    // Ensure the line items have the correct amount calculated
+    enrichedData.lineItems = enrichedData.lineItems.map(item => ({
+      ...item,
+      amount: calculateLineItemAmount(item.quantity, item.unitPrice)
+    }));
+    
     createInvoice.mutate(enrichedData as any);
   };
 
