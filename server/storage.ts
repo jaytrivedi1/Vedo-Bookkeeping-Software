@@ -45,6 +45,7 @@ export interface IStorage {
   getAllLedgerEntries(): Promise<LedgerEntry[]>;
   getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]>;
   createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry>;
+  updateLedgerEntry(id: number, ledgerEntry: Partial<LedgerEntry>): Promise<LedgerEntry | undefined>;
 
   // Reports
   getAccountBalances(): Promise<{ account: Account; balance: number }[]>;
@@ -305,6 +306,15 @@ export class MemStorage implements IStorage {
     const newLedgerEntry: LedgerEntry = { ...ledgerEntry, id };
     this.ledgerEntries.set(id, newLedgerEntry);
     return newLedgerEntry;
+  }
+  
+  async updateLedgerEntry(id: number, ledgerEntryUpdate: Partial<LedgerEntry>): Promise<LedgerEntry | undefined> {
+    const ledgerEntry = this.ledgerEntries.get(id);
+    if (!ledgerEntry) return undefined;
+
+    const updatedLedgerEntry = { ...ledgerEntry, ...ledgerEntryUpdate };
+    this.ledgerEntries.set(id, updatedLedgerEntry);
+    return updatedLedgerEntry;
   }
 
   // Reports

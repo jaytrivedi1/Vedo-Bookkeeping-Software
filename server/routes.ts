@@ -524,7 +524,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Banking routes for transaction classification and import
   apiRouter.post("/banking/classify", async (req: Request, res: Response) => {
     try {
-      const { transactions } = req.body;
+      const { transactions, accountType, accountId } = req.body;
       
       if (!transactions || !Array.isArray(transactions)) {
         return res.status(400).json({ message: "Invalid transaction data format" });
@@ -538,12 +538,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           continue; // Skip unclassified transactions
         }
         
+        // Determine the bank/credit account to use for the offsetting entry
+        let bankAccountId = 1000; // Default to Cash account
+        
+        if (accountType === 'credit-card') {
+          bankAccountId = 2000; // Credit Card Payable account
+        } else if (accountType === 'line-of-credit') {
+          bankAccountId = 2100; // Line of Credit account
+        }
+        
+        // Amount handling based on payment or deposit
+        const transactionAmount = transaction.payment > 0 ? transaction.payment : transaction.deposit;
+        const isPayment = transaction.payment > 0;
+        
         // Create a transaction record
         const newTransaction = await storage.createTransaction(
           {
-            type: transaction.type === 'credit' ? 'deposit' : 'expense',
-            reference: `Banking import: ${transaction.description}`,
-            amount: transaction.amount,
+            type: isPayment ? 'expense' : 'deposit',
+            reference: transaction.chequeNo ? `Cheque #${transaction.chequeNo}` : `Banking import: ${transaction.description}`,
+            amount: transactionAmount,
             date: new Date(transaction.date),
             description: transaction.description,
             status: 'completed',
@@ -551,26 +564,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
           [], // No line items for bank transactions
           [
-            // Create a ledger entry for this transaction
+            // Create a ledger entry for the classified account
             {
               accountId: transaction.accountId,
               transactionId: 0, // Will be set by createTransaction
               date: new Date(transaction.date),
               description: transaction.description,
-              debit: transaction.type === 'debit' ? transaction.amount : 0,
-              credit: transaction.type === 'credit' ? transaction.amount : 0
+              debit: isPayment ? transactionAmount : 0,
+              credit: !isPayment ? transactionAmount : 0
             },
-            // Create the offset entry (bank account)
+            // Create the offset entry (bank/credit card account)
             {
-              accountId: 1000, // Cash/Bank account - adjust as needed for your chart of accounts
+              accountId: bankAccountId,
               transactionId: 0, // Will be set by createTransaction
               date: new Date(transaction.date),
               description: transaction.description,
-              debit: transaction.type === 'credit' ? transaction.amount : 0,
-              credit: transaction.type === 'debit' ? transaction.amount : 0
+              debit: !isPayment ? transactionAmount : 0,
+              credit: isPayment ? transactionAmount : 0
             }
           ]
         );
+        
+        // Add sales tax entry if provided
+        if (transaction.salesTax && transaction.salesTax > 0) {
+          await storage.createLedgerEntry({
+            accountId: 2200, // Sales Tax Payable account
+            transactionId: newTransaction.id,
+            date: new Date(transaction.date),
+            description: `Sales tax for: ${transaction.description}`,
+            debit: 0,
+            credit: transaction.salesTax
+          });
+          
+          // Adjust the main account entry to account for the tax
+          const mainEntry = await storage.getLedgerEntriesByTransaction(newTransaction.id);
+          if (mainEntry && mainEntry.length > 0) {
+            const targetEntry = mainEntry.find(entry => entry.accountId === transaction.accountId);
+            if (targetEntry) {
+              if (isPayment) {
+                // For payments, increase the debit to account for tax
+                await storage.updateLedgerEntry(targetEntry.id, {
+                  debit: targetEntry.debit + transaction.salesTax
+                });
+              } else {
+                // For deposits, decrease the credit to account for tax
+                await storage.updateLedgerEntry(targetEntry.id, {
+                  credit: targetEntry.credit - transaction.salesTax
+                });
+              }
+            }
+          }
+        }
         
         processedTransactions.push(newTransaction);
       }

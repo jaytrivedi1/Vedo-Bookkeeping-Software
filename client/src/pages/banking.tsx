@@ -1,7 +1,6 @@
 import { useState, useRef, ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,11 +37,13 @@ import { apiRequest } from "@/lib/queryClient";
 interface BankTransaction {
   id: string;
   date: string;
+  chequeNo?: string;
   description: string;
-  amount: number;
-  type: 'credit' | 'debit';
-  status: 'unclassified' | 'classified';
+  payment: number;
+  deposit: number;
   accountId?: number;
+  salesTax?: number;
+  status: 'unclassified' | 'classified';
   transactionId?: number;
 }
 
@@ -53,11 +54,19 @@ interface AccountOption {
   type: string;
 }
 
+interface BankAccountTile {
+  id: string;
+  type: 'bank' | 'credit-card' | 'line-of-credit';
+  name: string;
+  icon: React.ReactNode;
+  description: string;
+}
+
 export default function Banking() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState("bank");
+  const [selectedAccount, setSelectedAccount] = useState<BankAccountTile | null>(null);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -65,6 +74,45 @@ export default function Banking() {
   const { data: accounts, isLoading: accountsLoading } = useQuery<AccountOption[]>({
     queryKey: ['/api/accounts'],
   });
+
+  // Define bank account tiles
+  const bankAccounts: BankAccountTile[] = [
+    {
+      id: "checking",
+      type: "bank",
+      name: "Checking Account",
+      icon: <BuildingIcon className="h-10 w-10 text-primary" />,
+      description: "Primary business checking account"
+    },
+    {
+      id: "savings",
+      type: "bank",
+      name: "Savings Account",
+      icon: <BuildingIcon className="h-10 w-10 text-blue-500" />,
+      description: "Business savings account"
+    },
+    {
+      id: "visa",
+      type: "credit-card",
+      name: "Business Visa",
+      icon: <CreditCardIcon className="h-10 w-10 text-red-500" />,
+      description: "Business credit card"
+    },
+    {
+      id: "mastercard",
+      type: "credit-card",
+      name: "Business Mastercard",
+      icon: <CreditCardIcon className="h-10 w-10 text-orange-500" />,
+      description: "Executive credit card"
+    },
+    {
+      id: "line-of-credit",
+      type: "line-of-credit",
+      name: "Business Line of Credit",
+      icon: <PercentIcon className="h-10 w-10 text-green-500" />,
+      description: "Revolving line of credit"
+    }
+  ];
 
   // Upload handler for CSV file
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -91,6 +139,15 @@ export default function Banking() {
       return;
     }
 
+    if (!selectedAccount) {
+      toast({
+        title: "No account selected",
+        description: "Please select an account first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -106,18 +163,20 @@ export default function Banking() {
             if (line) {
               const columns = line.split(',');
               
-              // Adjust this based on your CSV format
+              // Adjust this based on your CSV format - assuming Date, Description, Amount
               if (columns.length >= 3) {
                 const date = columns[0];
                 const description = columns[1];
                 const amount = parseFloat(columns[2]);
+                const chequeNo = columns.length > 3 ? columns[3] : '';
                 
                 parsedTransactions.push({
                   id: `temp-${i}`,
                   date,
                   description,
-                  amount: Math.abs(amount),
-                  type: amount < 0 ? 'debit' : 'credit',
+                  chequeNo: chequeNo || undefined,
+                  payment: amount < 0 ? Math.abs(amount) : 0,
+                  deposit: amount > 0 ? amount : 0,
                   status: 'unclassified'
                 });
               }
@@ -153,13 +212,31 @@ export default function Banking() {
     );
   };
 
+  // Handle sales tax input for a transaction
+  const handleSalesTaxChange = (transactionId: string, taxAmount: string) => {
+    const taxValue = parseFloat(taxAmount);
+    if (!isNaN(taxValue)) {
+      setTransactions(prev => 
+        prev.map(t => 
+          t.id === transactionId 
+            ? { ...t, salesTax: taxValue } 
+            : t
+        )
+      );
+    }
+  };
+
   // Mutation to save classified transactions
   const { mutate: saveTransactions, isPending: isSaving } = useMutation({
     mutationFn: async (classifiedTransactions: BankTransaction[]) => {
       return await apiRequest(
         'POST',
         '/api/banking/classify', 
-        { transactions: classifiedTransactions }
+        { 
+          transactions: classifiedTransactions,
+          accountType: selectedAccount?.type,
+          accountId: selectedAccount?.id
+        }
       );
     },
     onSuccess: () => {
@@ -208,210 +285,176 @@ export default function Banking() {
           <h1 className="text-3xl font-bold">Banking</h1>
         </div>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-3 w-[400px]">
-            <TabsTrigger value="bank">
-              <BuildingIcon className="w-4 h-4 mr-2" />
-              Bank Accounts
-            </TabsTrigger>
-            <TabsTrigger value="credit-card">
-              <CreditCardIcon className="w-4 h-4 mr-2" />
-              Credit Cards
-            </TabsTrigger>
-            <TabsTrigger value="line-of-credit">
-              <PercentIcon className="w-4 h-4 mr-2" />
-              Lines of Credit
-            </TabsTrigger>
-          </TabsList>
-          
-          {/* Bank Account Tab */}
-          <TabsContent value="bank" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Bank Transactions</CardTitle>
-                <CardDescription>
-                  Upload CSV files from your bank to import transactions
-                </CardDescription>
+        {/* Account Tiles */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {bankAccounts.map((account) => (
+            <Card 
+              key={account.id}
+              className={`cursor-pointer hover:border-primary transition-colors ${
+                selectedAccount?.id === account.id ? 'border-primary border-2' : ''
+              }`}
+              onClick={() => setSelectedAccount(account)}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{account.name}</CardTitle>
+                  <div>{account.icon}</div>
+                </div>
+                <CardDescription>{account.description}</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {/* File Upload Section */}
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileChange}
-                    accept=".csv"
-                    className="hidden"
-                  />
-                  <div className="flex flex-col items-center space-y-3">
-                    <Upload className="h-10 w-10 text-gray-400" />
-                    <h3 className="text-lg font-medium">
-                      {selectedFile 
-                        ? `Selected: ${selectedFile.name}` 
-                        : "Drag and drop your CSV file, or click to browse"}
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Supported formats: CSV
-                    </p>
+            </Card>
+          ))}
+        </div>
+        
+        {selectedAccount && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Transactions - {selectedAccount.name}</CardTitle>
+              <CardDescription>
+                Import and classify transactions for {selectedAccount.name}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* File Upload Section */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".csv"
+                  className="hidden"
+                />
+                <div className="flex flex-col items-center space-y-3">
+                  <Upload className="h-10 w-10 text-gray-400" />
+                  <h3 className="text-lg font-medium">
+                    {selectedFile 
+                      ? `Selected: ${selectedFile.name}` 
+                      : "Drag and drop your CSV file, or click to browse"}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Supported formats: CSV
+                  </p>
+                  <Button 
+                    onClick={handleUploadClick} 
+                    variant="outline"
+                    className="mt-2"
+                  >
+                    <FileTextIcon className="mr-2 h-4 w-4" />
+                    Browse Files
+                  </Button>
+                  {selectedFile && (
                     <Button 
-                      onClick={handleUploadClick} 
-                      variant="outline"
-                      className="mt-2"
+                      onClick={handleParseCSV}
+                      className="mt-2" 
                     >
-                      <FileTextIcon className="mr-2 h-4 w-4" />
-                      Browse Files
+                      <PlusCircleIcon className="mr-2 h-4 w-4" />
+                      Import Transactions
                     </Button>
-                    {selectedFile && (
-                      <Button 
-                        onClick={handleParseCSV}
-                        className="mt-2" 
-                      >
-                        <PlusCircleIcon className="mr-2 h-4 w-4" />
-                        Import Transactions
-                      </Button>
-                    )}
-                  </div>
+                  )}
                 </div>
-                
-                {/* Transaction Classification Table */}
-                {transactions.length > 0 && (
-                  <div className="mt-6 space-y-4">
-                    <h3 className="text-lg font-medium">Classify Transactions</h3>
-                    <div className="border rounded-md overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Amount</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Account Classification</TableHead>
-                            <TableHead className="w-16">Status</TableHead>
+              </div>
+              
+              {/* Transaction Classification Table */}
+              {transactions.length > 0 && (
+                <div className="mt-6 space-y-4">
+                  <h3 className="text-lg font-medium">Classify Transactions</h3>
+                  <div className="border rounded-md overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Cheque No.</TableHead>
+                          <TableHead>Bank Text</TableHead>
+                          <TableHead>Payment</TableHead>
+                          <TableHead>Deposit</TableHead>
+                          <TableHead>Account</TableHead>
+                          <TableHead>Sales Tax</TableHead>
+                          <TableHead className="w-16">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {transactions.map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell>{transaction.date}</TableCell>
+                            <TableCell>{transaction.chequeNo || '-'}</TableCell>
+                            <TableCell>{transaction.description}</TableCell>
+                            <TableCell>
+                              {transaction.payment > 0 ? `$${transaction.payment.toFixed(2)}` : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {transaction.deposit > 0 ? `$${transaction.deposit.toFixed(2)}` : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Select 
+                                onValueChange={(value) => handleAccountSelect(transaction.id, value)}
+                                defaultValue={transaction.accountId?.toString()}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select an account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {accountsLoading ? (
+                                    <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
+                                  ) : accounts && accounts.length > 0 ? (
+                                    accounts.map(account => (
+                                      <SelectItem key={account.id} value={account.id.toString()}>
+                                        {account.code} - {account.name}
+                                      </SelectItem>
+                                    ))
+                                  ) : (
+                                    <SelectItem value="none" disabled>No accounts found</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                placeholder="0.00"
+                                value={transaction.salesTax?.toString() || ''}
+                                onChange={(e) => handleSalesTaxChange(transaction.id, e.target.value)}
+                                className="w-20"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {transaction.status === 'classified' ? (
+                                <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                              ) : (
+                                <XCircleIcon className="h-5 w-5 text-gray-300" />
+                              )}
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {transactions.map((transaction) => (
-                            <TableRow key={transaction.id}>
-                              <TableCell>{transaction.date}</TableCell>
-                              <TableCell>{transaction.description}</TableCell>
-                              <TableCell>${transaction.amount.toFixed(2)}</TableCell>
-                              <TableCell>
-                                <span className={transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}>
-                                  {transaction.type === 'credit' ? 'Credit' : 'Debit'}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <Select 
-                                  onValueChange={(value) => handleAccountSelect(transaction.id, value)}
-                                  defaultValue={transaction.accountId?.toString()}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select an account" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {accountsLoading ? (
-                                      <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
-                                    ) : accounts && accounts.length > 0 ? (
-                                      accounts.map(account => (
-                                        <SelectItem key={account.id} value={account.id.toString()}>
-                                          {account.code} - {account.name}
-                                        </SelectItem>
-                                      ))
-                                    ) : (
-                                      <SelectItem value="none" disabled>No accounts found</SelectItem>
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                {transaction.status === 'classified' ? (
-                                  <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                                ) : (
-                                  <XCircleIcon className="h-5 w-5 text-gray-300" />
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    
-                    <div className="flex justify-end mt-4">
-                      <Button 
-                        onClick={handleSaveTransactions}
-                        disabled={isSaving || transactions.every(t => t.status === 'unclassified')}
-                      >
-                        {isSaving ? 'Saving...' : 'Save Classifications'}
-                      </Button>
-                    </div>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  
+                  <div className="flex justify-end mt-4">
+                    <Button 
+                      onClick={handleSaveTransactions}
+                      disabled={isSaving || transactions.every(t => t.status === 'unclassified')}
+                    >
+                      {isSaving ? 'Saving...' : 'Save Classifications'}
+                    </Button>
+                  </div>
 
-                    <Alert>
-                      <AlertTitle>Classification Guidelines</AlertTitle>
-                      <AlertDescription>
-                        <ul className="list-disc pl-5 space-y-1 mt-2">
-                          <li>Assign each transaction to the correct account in the Chart of Accounts</li>
-                          <li>Income and deposits should be assigned to appropriate revenue or asset accounts</li>
-                          <li>Expenses should be assigned to the specific expense accounts</li>
-                          <li>Transfers between accounts should be properly classified</li>
-                        </ul>
-                      </AlertDescription>
-                    </Alert>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {/* Credit Card Tab */}
-          <TabsContent value="credit-card" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Credit Card Transactions</CardTitle>
-                <CardDescription>
-                  Upload CSV files from your credit card provider to import transactions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <div className="flex flex-col items-center space-y-3">
-                    <CreditCardIcon className="h-10 w-10 text-gray-400" />
-                    <h3 className="text-lg font-medium">
-                      Credit Card CSV Import
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Coming soon: Import your credit card statements directly from CSV files
-                    </p>
-                  </div>
+                  <Alert>
+                    <AlertTitle>Classification Guidelines</AlertTitle>
+                    <AlertDescription>
+                      <ul className="list-disc pl-5 space-y-1 mt-2">
+                        <li>Assign each transaction to the correct account in the Chart of Accounts</li>
+                        <li>Income and deposits should be assigned to appropriate revenue or asset accounts</li>
+                        <li>Expenses should be assigned to the specific expense accounts</li>
+                        <li>Enter sales tax amounts if applicable</li>
+                        <li>Transactions will be automatically balanced against this bank account</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          {/* Line of Credit Tab */}
-          <TabsContent value="line-of-credit" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Import Line of Credit Transactions</CardTitle>
-                <CardDescription>
-                  Upload CSV files from your line of credit provider to import transactions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <div className="flex flex-col items-center space-y-3">
-                    <PercentIcon className="h-10 w-10 text-gray-400" />
-                    <h3 className="text-lg font-medium">
-                      Line of Credit CSV Import
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Coming soon: Import your line of credit statements directly from CSV files
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
