@@ -43,6 +43,7 @@ export interface IStorage {
   // Ledger Entries
   getLedgerEntriesByTransaction(transactionId: number): Promise<LedgerEntry[]>;
   getAllLedgerEntries(): Promise<LedgerEntry[]>;
+  getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]>;
   createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry>;
 
   // Reports
