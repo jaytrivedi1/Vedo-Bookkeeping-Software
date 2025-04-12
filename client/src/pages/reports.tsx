@@ -128,6 +128,8 @@ export default function Reports() {
         return 'Balance Sheet';
       case 'general-ledger':
         return 'General Ledger';
+      case 'trial-balance':
+        return 'Trial Balance';
       case 'expense-analysis':
         return 'Expense Analysis';
       case 'revenue-analysis':
@@ -226,6 +228,27 @@ export default function Reports() {
                   <p className="text-sm text-muted-foreground">
                     The general ledger provides a complete record of all financial transactions, 
                     showing every debit and credit entry made to each account in your chart of accounts.
+                  </p>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                  <Button variant="ghost" size="sm">View Report →</Button>
+                </CardFooter>
+              </Card>
+              
+              <Card 
+                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                onClick={() => setActiveTab("trial-balance")}
+              >
+                <CardHeader>
+                  <CardTitle>Trial Balance</CardTitle>
+                  <CardDescription>
+                    View account balances with debit and credit columns to verify accounting equation
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The trial balance report verifies that total debits equal total credits across all accounts,
+                    confirming the accounting equation is in balance before creating financial statements.
                   </p>
                 </CardContent>
                 <CardFooter className="flex justify-end">
@@ -709,6 +732,132 @@ export default function Reports() {
                         </Table>
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+            
+            {/* Trial Balance */}
+            <TabsContent value="trial-balance">
+              <div className="grid grid-cols-1 gap-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                      <CardTitle>Trial Balance</CardTitle>
+                      <CardDescription>
+                        Account balances organized in debit and credit columns
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={"outline"}
+                            className="w-[240px] justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {format(new Date(), "PPP")}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={new Date()}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {accountsLoading ? (
+                      <div className="text-center py-6">Loading trial balance data...</div>
+                    ) : accountBalances && accountBalances.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Account Code</TableHead>
+                              <TableHead>Account Name</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead className="text-right">Debit</TableHead>
+                              <TableHead className="text-right">Credit</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {accountBalances.map(({ account, balance }, index) => {
+                              // For trial balance:
+                              // - Assets and Expenses have debit balances
+                              // - Liabilities, Equity, and Income have credit balances
+                              const isDebitAccount = account.type === 'asset' || account.type === 'expense';
+                              const debitAmount = isDebitAccount && balance > 0 ? balance : 0;
+                              const creditAmount = !isDebitAccount && balance > 0 ? balance : 0;
+                              
+                              return (
+                                <TableRow key={index}>
+                                  <TableCell>{account.code}</TableCell>
+                                  <TableCell>{account.name}</TableCell>
+                                  <TableCell className="capitalize">{account.type}</TableCell>
+                                  <TableCell className="text-right">
+                                    {debitAmount > 0 ? `$${debitAmount.toFixed(2)}` : ''}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {creditAmount > 0 ? `$${creditAmount.toFixed(2)}` : ''}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                            
+                            {/* Calculate totals */}
+                            {(() => {
+                              let totalDebit = 0;
+                              let totalCredit = 0;
+                              
+                              accountBalances.forEach(({ account, balance }) => {
+                                const isDebitAccount = account.type === 'asset' || account.type === 'expense';
+                                if (isDebitAccount && balance > 0) {
+                                  totalDebit += balance;
+                                } else if (!isDebitAccount && balance > 0) {
+                                  totalCredit += balance;
+                                }
+                              });
+                              
+                              return (
+                                <TableRow className="font-bold">
+                                  <TableCell colSpan={3} className="text-right">Total</TableCell>
+                                  <TableCell className="text-right">${totalDebit.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right">${totalCredit.toFixed(2)}</TableCell>
+                                </TableRow>
+                              );
+                            })()}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">No accounts found to generate a trial balance</div>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle>About the Trial Balance</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <p>
+                        The trial balance is a worksheet with two columns, "debit" and "credit," that lists 
+                        all the accounts with their balances before the financial statements are prepared.
+                      </p>
+                      <p>
+                        <strong>Purpose:</strong> To verify that the total debits equal the total credits. 
+                        This ensures that the accounting equation (Assets = Liabilities + Equity) is in balance.
+                      </p>
+                      <p>
+                        <strong>Important:</strong> A balanced trial balance does not guarantee that there are no errors in
+                        the individual ledger entries. It only confirms that the total debits equal the total credits.
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
