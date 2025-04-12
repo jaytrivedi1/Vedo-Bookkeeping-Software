@@ -289,22 +289,43 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
           
           {/* Document upload */}
           <div>
-            <FormLabel>Attach Documents</FormLabel>
-            <div className="mt-1 border-2 border-dashed rounded-md p-6 flex flex-col items-center">
-              <Upload className="h-10 w-10 text-gray-400 mb-2" />
-              <div className="text-center">
-                <p className="text-sm text-gray-600">
-                  {selectedFile 
-                    ? `Selected: ${selectedFile.name}`
-                    : "Click to upload or drag and drop"}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, JPG, PNG up to 10MB</p>
-              </div>
+            <FormLabel className="mb-2 block">Attach Documents</FormLabel>
+            <div className="flex flex-col gap-2">
+              <label 
+                htmlFor="file-upload" 
+                className="cursor-pointer flex items-center justify-center border-2 border-dashed border-gray-300 rounded-md p-4 hover:border-primary transition-colors"
+              >
+                <Upload className="h-5 w-5 text-gray-400 mr-2" />
+                <span className="text-sm text-gray-600">
+                  Click to select document
+                </span>
+              </label>
               <input
+                id="file-upload"
                 type="file"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="hidden"
                 onChange={handleFileChange}
               />
+              
+              {selectedFile && (
+                <div className="flex items-center justify-between p-2 bg-slate-50 rounded border">
+                  <div className="flex items-center">
+                    <Upload className="h-4 w-4 text-blue-500 mr-2" />
+                    <span className="text-sm">{selectedFile.name}</span>
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setSelectedFile(null)}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">Supported formats: PDF, DOC, DOCX, JPG, PNG (max 10MB)</p>
             </div>
           </div>
         </div>
