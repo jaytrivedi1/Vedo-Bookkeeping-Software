@@ -48,7 +48,7 @@ import {
 import { Account, LedgerEntry } from "@shared/schema";
 
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState("income-statement");
+  const [activeTab, setActiveTab] = useState("");
   const [startDate, setStartDate] = useState<Date | undefined>(startOfMonth(subMonths(new Date(), 1)));
   const [endDate, setEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
   
