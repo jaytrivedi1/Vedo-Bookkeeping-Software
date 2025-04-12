@@ -182,11 +182,13 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     // Add the calculated totals and payment terms to the invoice data before submitting
     const enrichedData = {
       ...data,
+      // Make sure we're passing Date objects and not strings
+      date: data.date instanceof Date ? data.date : new Date(data.date),
+      dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       subTotal,
       taxRate,
       taxAmount,
       totalAmount,
-      dueDate,
       paymentTerms
     };
     
@@ -198,7 +200,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       amount: calculateLineItemAmount(item.quantity, item.unitPrice)
     }));
     
-    createInvoice.mutate(enrichedData as any);
+    createInvoice.mutate(enrichedData);
   };
 
   // Form sections for navigation

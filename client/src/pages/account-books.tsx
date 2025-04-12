@@ -298,7 +298,7 @@ export default function AccountBooks() {
                                                   {format(new Date(entry.date), 'MMM dd, yyyy')}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
-                                                  {transactions.find(t => t.id === entry.transactionId)?.reference || '-'}
+                                                  {transactions ? transactions.find(t => t.id === entry.transactionId)?.reference || '-' : '-'}
                                                 </TableCell>
                                                 <TableCell className="text-xs">
                                                   {entry.description}
