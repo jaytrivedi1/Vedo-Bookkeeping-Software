@@ -26,6 +26,8 @@ export const accounts = pgTable('accounts', {
   isActive: boolean('is_active').notNull().default(true),
 });
 
+// Relations are defined through foreign keys in the table definitions
+
 // Contacts (Customers and Vendors)
 export const contacts = pgTable('contacts', {
   id: serial('id').primaryKey(),

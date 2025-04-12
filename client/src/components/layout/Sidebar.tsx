@@ -10,8 +10,16 @@ import {
   LineChartIcon,
   DatabaseIcon,
   BookOpenIcon,
-  BuildingIcon
+  BuildingIcon,
+  PlusIcon
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 
 interface SidebarProps {
   open: boolean;
@@ -25,12 +33,16 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-5 h-5 mr-3" /> },
     { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-5 h-5 mr-3" /> },
-    { path: "/expenses", label: "Expenses", icon: <BanknoteIcon className="w-5 h-5 mr-3" /> },
-    { path: "/journals", label: "Journal Entries", icon: <ScaleIcon className="w-5 h-5 mr-3" /> },
-    { path: "/deposits", label: "Deposits", icon: <PiggyBankIcon className="w-5 h-5 mr-3" /> },
     { path: "/account-books", label: "Account Books", icon: <BookOpenIcon className="w-5 h-5 mr-3" /> },
     { path: "/chart-of-accounts", label: "Chart of Accounts", icon: <DatabaseIcon className="w-5 h-5 mr-3" /> },
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-5 h-5 mr-3" /> },
+  ];
+  
+  const transactionTypes = [
+    { path: "/invoices/new", label: "Invoice", icon: <FileTextIcon className="w-4 h-4 mr-2" /> },
+    { path: "/expenses/new", label: "Expense", icon: <BanknoteIcon className="w-4 h-4 mr-2" /> },
+    { path: "/journals/new", label: "Journal Entry", icon: <ScaleIcon className="w-4 h-4 mr-2" /> },
+    { path: "/deposits/new", label: "Deposit", icon: <PiggyBankIcon className="w-4 h-4 mr-2" /> },
   ];
 
   return (
@@ -73,6 +85,28 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
             {item.label}
           </Link>
         ))}
+        
+        {/* New Transaction Dropdown */}
+        <div className="mt-3 px-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="w-full justify-start" variant="outline">
+                <PlusIcon className="w-5 h-5 mr-3" />
+                New Transaction
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {transactionTypes.map((type) => (
+                <Link key={type.path} href={type.path}>
+                  <DropdownMenuItem className="cursor-pointer">
+                    {type.icon}
+                    {type.label}
+                  </DropdownMenuItem>
+                </Link>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </nav>
 
       {/* Account section */}
