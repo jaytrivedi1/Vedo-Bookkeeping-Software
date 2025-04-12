@@ -93,6 +93,7 @@ export class MemStorage implements IStorage {
       { code: '1700', name: 'Equipment', type: 'asset', description: 'Equipment assets' },
       { code: '2000', name: 'Accounts Payable', type: 'liability', description: 'Money owed to vendors' },
       { code: '2100', name: 'Credit Card', type: 'liability', description: 'Business credit card payable' },
+      { code: '2200', name: 'Sales Tax Payable', type: 'liability', description: 'Tax collected on sales' },
       { code: '3000', name: 'Owner Equity', type: 'equity', description: 'Owner investment' },
       { code: '3900', name: 'Retained Earnings', type: 'equity', description: 'Accumulated earnings' },
       { code: '4000', name: 'Service Revenue', type: 'income', description: 'Revenue from services' },

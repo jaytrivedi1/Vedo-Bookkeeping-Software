@@ -177,28 +177,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }));
       
       // Create ledger entries - Double Entry Accounting
-      // Debit Accounts Receivable, Credit Revenue
+      // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable
       const receivableAccount = await storage.getAccountByCode('1200'); // Accounts Receivable
       const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
+      const taxPayableAccount = await storage.getAccountByCode('2200'); // Sales Tax Payable
       
-      if (!receivableAccount || !revenueAccount) {
+      if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
+      
+      // Calculate subtotal (revenue) and tax amounts
+      const subTotal = invoiceData.subTotal || totalAmount / (1 + (invoiceData.taxRate || 0) / 100);
+      const taxAmount = invoiceData.taxAmount || (totalAmount - subTotal);
       
       const ledgerEntries = [
         {
           accountId: receivableAccount.id,
           description: `Invoice ${transaction.reference}`,
-          debit: totalAmount,
+          debit: totalAmount,  // Total invoice amount including tax
           credit: 0,
           date: transaction.date,
           transactionId: 0 // Will be set by createTransaction
         },
         {
           accountId: revenueAccount.id,
-          description: `Invoice ${transaction.reference}`,
+          description: `Invoice ${transaction.reference} - Revenue`,
           debit: 0,
-          credit: totalAmount,
+          credit: subTotal,  // Revenue amount (subtotal)
+          date: transaction.date,
+          transactionId: 0 // Will be set by createTransaction
+        },
+        {
+          accountId: taxPayableAccount.id,
+          description: `Invoice ${transaction.reference} - Sales Tax`,
+          debit: 0,
+          credit: taxAmount,  // Tax amount only
           date: transaction.date,
           transactionId: 0 // Will be set by createTransaction
         }
