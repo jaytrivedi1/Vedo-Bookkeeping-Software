@@ -56,7 +56,7 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
           New Transaction
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>New Transaction</DialogTitle>
           <DialogDescription>
