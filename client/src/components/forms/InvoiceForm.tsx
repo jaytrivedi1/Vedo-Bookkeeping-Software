@@ -189,214 +189,259 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     createInvoice.mutate(enrichedData as any);
   };
 
+  // Form sections for navigation
+  const formSections = [
+    { id: 'customer-info', label: 'Customer Info' },
+    { id: 'items', label: 'Line Items' },
+    { id: 'totals', label: 'Totals & Submit' }
+  ];
+  
+  const [activeSection, setActiveSection] = useState('customer-info');
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="space-y-4">
-          {/* Header Section - Customer and Invoice Info */}
-          <div className="grid grid-cols-2 gap-6">
-            {/* Left Side - Customer Details */}
-            <div className="space-y-4">
-              <h3 className="text-md font-medium">Bill To:</h3>
-              
-              <FormField
-                control={form.control}
-                name="contactId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Customer</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        field.onChange(parseInt(value));
-                        handleContactChange(parseInt(value));
-                      }} 
-                      defaultValue={field.value?.toString()}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a customer" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {contactsLoading ? (
-                          <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                        ) : contacts && contacts.length > 0 ? (
-                          contacts
-                            .filter(contact => contact.type === 'customer' || contact.type === 'both')
-                            .map((contact) => (
-                              <SelectItem key={contact.id} value={contact.id.toString()}>
-                                {contact.name}
-                              </SelectItem>
-                            ))
-                        ) : (
-                          <SelectItem value="none" disabled>No customers available</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              
-              {selectedContact && (
-                <Card className="bg-slate-50">
-                  <CardContent className="p-3">
-                    <p className="font-medium">{selectedContact.name}</p>
-                    <p className="text-sm text-gray-600">{selectedContact.address || 'No address on file'}</p>
-                    <p className="text-sm text-gray-600 mt-1">{selectedContact.email}</p>
-                    <p className="text-sm text-gray-600">{selectedContact.phone || 'No phone on file'}</p>
-                  </CardContent>
-                </Card>
+        {/* Navigation Tabs */}
+        <div className="flex mb-4 border-b">
+          {formSections.map(section => (
+            <Button 
+              key={section.id}
+              type="button"
+              variant="ghost"
+              className={cn(
+                "rounded-none border-b-2 -mb-px px-4",
+                activeSection === section.id 
+                  ? "border-primary text-primary" 
+                  : "border-transparent hover:border-gray-300"
               )}
-            </div>
-            
-            {/* Right Side - Invoice Details */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <h2 className="text-xl font-bold">INVOICE</h2>
+              onClick={() => setActiveSection(section.id)}
+            >
+              {section.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          {/* Customer Info Section */}
+          <div className={activeSection === 'customer-info' ? 'block' : 'hidden'}>
+            {/* Header Section - Customer and Invoice Info */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Left Side - Customer Details */}
+              <div className="space-y-3">
+                <h3 className="text-md font-medium">Bill To:</h3>
                 
                 <FormField
                   control={form.control}
-                  name="reference"
+                  name="contactId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Invoice Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="INV-YYYY-MM" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Invoice Date</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? (
-                                format(field.value, "MMM dd, yyyy")
-                              ) : (
-                                <span>Select date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <FormLabel>Customer</FormLabel>
+                      <Select 
+                        onValueChange={(value) => {
+                          field.onChange(parseInt(value));
+                          handleContactChange(parseInt(value));
+                        }} 
+                        defaultValue={field.value?.toString()}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a customer" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {contactsLoading ? (
+                            <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
+                          ) : contacts && contacts.length > 0 ? (
+                            contacts
+                              .filter(contact => contact.type === 'customer' || contact.type === 'both')
+                              .map((contact) => (
+                                <SelectItem key={contact.id} value={contact.id.toString()}>
+                                  {contact.name}
+                                </SelectItem>
+                              ))
+                          ) : (
+                            <SelectItem value="none" disabled>No customers available</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 
-                <div>
-                  <FormLabel>Due Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full pl-3 text-left font-normal"
-                      >
-                        {format(dueDate, "MMM dd, yyyy")}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dueDate}
-                        onSelect={(date) => date && setDueDate(date)}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                {selectedContact && (
+                  <Card className="bg-slate-50">
+                    <CardContent className="p-2">
+                      <p className="font-medium">{selectedContact.name}</p>
+                      <p className="text-sm text-gray-600">{selectedContact.address || 'No address on file'}</p>
+                      <p className="text-sm text-gray-600">{selectedContact.email}</p>
+                      <p className="text-sm text-gray-600">{selectedContact.phone || 'No phone on file'}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              
+              {/* Right Side - Invoice Details */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-start">
+                  <h2 className="text-xl font-bold">INVOICE</h2>
+                  
+                  <FormField
+                    control={form.control}
+                    name="reference"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Invoice Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="INV-YYYY-MM" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              </div>
-              
-              <div>
-                <FormLabel>Payment Terms</FormLabel>
-                <Select 
-                  value={paymentTerms} 
-                  onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select payment terms" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">Net 7 Days</SelectItem>
-                    <SelectItem value="14">Net 14 Days</SelectItem>
-                    <SelectItem value="30">Net 30 Days</SelectItem>
-                    <SelectItem value="60">Net 60 Days</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a status" />
-                        </SelectTrigger>
-                      </FormControl>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Invoice Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "MMM dd, yyyy")
+                                ) : (
+                                  <span>Select date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <div>
+                    <FormLabel>Due Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full pl-3 text-left font-normal"
+                        >
+                          {format(dueDate, "MMM dd, yyyy")}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={dueDate}
+                          onSelect={(date) => date && setDueDate(date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <FormLabel>Payment Terms</FormLabel>
+                    <Select 
+                      value={paymentTerms} 
+                      onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment terms" />
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="paid">Paid</SelectItem>
-                        <SelectItem value="overdue">Overdue</SelectItem>
+                        <SelectItem value="7">Net 7 Days</SelectItem>
+                        <SelectItem value="14">Net 14 Days</SelectItem>
+                        <SelectItem value="30">Net 30 Days</SelectItem>
+                        <SelectItem value="60">Net 60 Days</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
                       </SelectContent>
                     </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  </div>
+                  
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Status</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a status" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="draft">Draft</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="paid">Paid</SelectItem>
+                            <SelectItem value="overdue">Overdue</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Invoice Description</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Enter details about this invoice" rows={3} {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4">
+              <Button 
+                type="button" 
+                onClick={() => setActiveSection('items')}
+                className="flex items-center"
+              >
+                Next: Line Items
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </Button>
             </div>
           </div>
           
-          <Separator className="my-6" />
-          
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Invoice Description</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Enter details about this invoice" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
           {/* Line Items Section */}
-          <div className="mt-6">
+          <div className={activeSection === 'items' ? 'block' : 'hidden'}>
             <h3 className="text-md font-medium mb-2">Items</h3>
             
             <div className="rounded-md border overflow-hidden">
@@ -410,7 +455,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
               </div>
               
               {/* Line Items */}
-              <div className="p-2 space-y-2">
+              <div className="p-2 space-y-1">
                 {fields.map((field, index) => (
                   <div key={field.id} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-5">
@@ -525,88 +570,141 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
               type="button"
               variant="outline"
               size="sm"
-              className="mt-3"
+              className="mt-2"
               onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Item
             </Button>
-            
+
+            <div className="flex justify-between mt-4">
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={() => setActiveSection('customer-info')}
+                className="flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                </svg>
+                Back: Customer Info
+              </Button>
+              <Button 
+                type="button" 
+                onClick={() => setActiveSection('totals')}
+                className="flex items-center"
+              >
+                Next: Totals & Submit
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </Button>
+            </div>
+          </div>
+
+          {/* Totals & Submit Section */}
+          <div className={activeSection === 'totals' ? 'block' : 'hidden'}>
             {/* Totals Section */}
-            <div className="mt-6 flex justify-end">
-              <div className="w-1/3 space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm">Subtotal:</span>
-                  <span>${subTotal.toFixed(2)}</span>
+            <div className="bg-slate-50 p-4 rounded-md">
+              <h3 className="text-md font-medium mb-4">Totals</h3>
+              
+              <div className="space-y-2">
+                {/* Line Item Summary */}
+                <div className="grid grid-cols-4 text-sm mb-2">
+                  <div className="col-span-2 font-medium">Item</div>
+                  <div className="text-right font-medium">Quantity</div>
+                  <div className="text-right font-medium">Amount</div>
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Tax Rate (%):</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    className="w-20 text-right"
-                    value={taxRate}
-                    onChange={(e) => {
-                      setTaxRate(parseFloat(e.target.value) || 0);
-                      calculateTotals();
-                    }}
-                  />
-                </div>
-                
-                <div className="flex justify-between">
-                  <span className="text-sm">Tax Amount:</span>
-                  <span>${taxAmount.toFixed(2)}</span>
-                </div>
-                
-                <Separator />
-                
-                <div className="flex justify-between font-bold">
-                  <span>Total:</span>
-                  <span>${totalAmount.toFixed(2)}</span>
+
+                {fields.map((field, index) => {
+                  const { description, quantity, amount } = form.getValues(`lineItems.${index}`);
+                  return (
+                    <div key={field.id} className="grid grid-cols-4 text-sm">
+                      <div className="col-span-2 truncate">{description || 'Unnamed item'}</div>
+                      <div className="text-right">{quantity}</div>
+                      <div className="text-right">${amount.toFixed(2)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-4 border-t pt-4">
+                <div className="w-full md:w-1/2 ml-auto space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Subtotal:</span>
+                    <span>${subTotal.toFixed(2)}</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Tax Rate (%):</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-20 text-right"
+                      value={taxRate}
+                      onChange={(e) => {
+                        setTaxRate(parseFloat(e.target.value) || 0);
+                        calculateTotals();
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <span className="text-sm">Tax Amount:</span>
+                    <span>${taxAmount.toFixed(2)}</span>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex justify-between font-bold">
+                    <span>Total:</span>
+                    <span>${totalAmount.toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Footer/Actions */}
-          <div className="grid grid-cols-4 gap-2 pt-6">
-            <div className="col-span-1">
+            
+            {/* Navigation and Action Buttons */}
+            <div className="flex justify-between mt-4">
               <Button 
-                type="button"
+                type="button" 
                 variant="outline"
-                onClick={onCancel}
-                className="w-full"
+                onClick={() => setActiveSection('items')}
+                className="flex items-center"
               >
-                Cancel
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                </svg>
+                Back: Line Items
               </Button>
-            </div>
-            <div className="col-span-3 flex justify-end gap-2">
-              <Button 
-                type="button"
-                variant="outline"
-                onClick={recalculateLineItemAmounts}
-              >
-                Recalculate
-              </Button>
-              <Button 
-                type="submit"
-                variant="default"
-                disabled={createInvoice.isPending}
-              >
-                {createInvoice.isPending ? 'Saving...' : 'Save Invoice'}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={sendInvoice}
-                disabled={!selectedContact?.email}
-              >
-                <SendIcon className="h-4 w-4 mr-2" />
-                Send Invoice
-              </Button>
+              
+              <div className="flex gap-2">
+                <Button 
+                  type="button"
+                  variant="outline"
+                  onClick={recalculateLineItemAmounts}
+                >
+                  Recalculate
+                </Button>
+                <Button 
+                  type="submit"
+                  variant="default"
+                  disabled={createInvoice.isPending}
+                >
+                  {createInvoice.isPending ? 'Saving...' : 'Save Invoice'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={sendInvoice}
+                  disabled={!selectedContact?.email}
+                >
+                  <SendIcon className="h-4 w-4 mr-2" />
+                  Send Invoice
+                </Button>
+              </div>
             </div>
           </div>
         </div>
