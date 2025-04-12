@@ -69,11 +69,63 @@ export default function Banking() {
   const [selectedAccount, setSelectedAccount] = useState<BankAccountTile | null>(null);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showExampleData, setShowExampleData] = useState(false);
 
   // Fetch accounts for the dropdown selection
   const { data: accounts, isLoading: accountsLoading } = useQuery<AccountOption[]>({
     queryKey: ['/api/accounts'],
   });
+  
+  // Example transaction data to show the format
+  const exampleTransactions: BankTransaction[] = [
+    {
+      id: 'example-1',
+      date: '2025-04-01',
+      chequeNo: '1234',
+      description: 'Office Supplies Purchase',
+      payment: 235.67,
+      deposit: 0,
+      salesTax: 23.57,
+      status: 'classified',
+      accountId: 6300
+    },
+    {
+      id: 'example-2',
+      date: '2025-04-05',
+      description: 'Client Payment - ABC Corp',
+      payment: 0,
+      deposit: 1500.00,
+      status: 'classified',
+      accountId: 4000
+    },
+    {
+      id: 'example-3',
+      date: '2025-04-07',
+      chequeNo: '1235',
+      description: 'Monthly Rent Payment',
+      payment: 1200.00,
+      deposit: 0,
+      status: 'unclassified'
+    },
+    {
+      id: 'example-4',
+      date: '2025-04-10',
+      description: 'Utilities - Electricity',
+      payment: 145.30,
+      deposit: 0,
+      salesTax: 7.27,
+      status: 'classified',
+      accountId: 6200
+    },
+    {
+      id: 'example-5',
+      date: '2025-04-15',
+      description: 'Consulting Revenue - XYZ Ltd',
+      payment: 0,
+      deposit: 3500.00,
+      status: 'unclassified'
+    }
+  ];
 
   // Define bank account tiles
   const bankAccounts: BankAccountTile[] = [
@@ -201,6 +253,13 @@ export default function Banking() {
     reader.readAsText(selectedFile);
   };
 
+  // Handle tile selection
+  const handleAccountTileSelect = (account: BankAccountTile) => {
+    setSelectedAccount(account);
+    // Show example transactions to demonstrate format
+    setTransactions(exampleTransactions);
+  };
+
   // Handle account selection for a transaction
   const handleAccountSelect = (transactionId: string, accountId: string) => {
     setTransactions(prev => 
@@ -293,7 +352,7 @@ export default function Banking() {
               className={`cursor-pointer hover:border-primary transition-colors ${
                 selectedAccount?.id === account.id ? 'border-primary border-2' : ''
               }`}
-              onClick={() => setSelectedAccount(account)}
+              onClick={() => handleAccountTileSelect(account)}
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
