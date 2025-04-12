@@ -133,13 +133,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const invoiceData = invoiceSchema.parse(req.body);
       
+      // Calculate amount from line items or use provided total amount
+      const totalAmount = invoiceData.totalAmount || 
+        invoiceData.lineItems.reduce((sum, item) => sum + item.amount, 0);
+      
       // Create transaction
       const transaction = {
         reference: invoiceData.reference,
         type: 'invoice' as const,
         date: invoiceData.date,
         description: invoiceData.description,
-        amount: invoiceData.lineItems.reduce((sum, item) => sum + item.amount, 0),
+        amount: totalAmount,
         contactId: invoiceData.contactId,
         status: invoiceData.status
       };
@@ -162,7 +166,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
       
-      const totalAmount = transaction.amount;
       const ledgerEntries = [
         {
           accountId: receivableAccount.id,
@@ -184,10 +187,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
       
+      // Include additional invoice details in the response
       res.status(201).json({
         transaction: newTransaction,
         lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
-        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id)
+        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        // Additional invoice details
+        subTotal: invoiceData.subTotal,
+        taxRate: invoiceData.taxRate,
+        taxAmount: invoiceData.taxAmount,
+        totalAmount: invoiceData.totalAmount || totalAmount,
+        dueDate: invoiceData.dueDate,
+        paymentTerms: invoiceData.paymentTerms
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

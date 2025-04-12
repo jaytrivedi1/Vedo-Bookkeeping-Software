@@ -91,6 +91,13 @@ export const invoiceSchema = z.object({
       amount: z.number()
     })
   ).min(1, "At least one line item is required"),
+  // Additional fields for enhanced invoice functionality
+  subTotal: z.number().optional(),
+  taxRate: z.number().optional(),
+  taxAmount: z.number().optional(),
+  totalAmount: z.number().optional(),
+  dueDate: z.date().optional(),
+  paymentTerms: z.string().optional(),
 });
 
 export const expenseSchema = z.object({
