@@ -73,6 +73,22 @@ export default function Invoices() {
         <h1 className="text-2xl font-semibold text-gray-900">Invoices</h1>
         <div className="flex items-center space-x-3">
           <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <CustomerDialog 
+                    buttonLabel="Add Customer" 
+                    buttonVariant="secondary"
+                    onSuccess={() => refetch()}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add a new customer</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TransactionForm onSuccess={refetch} />
         </div>
       </div>

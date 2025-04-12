@@ -35,6 +35,11 @@ const customerFormSchema = insertContactSchema.extend({
   // Make these fields required for customers
   email: z.string().email("Invalid email address").min(1, "Email is required"),
   currency: z.string().min(1, "Currency is required"),
+  contactName: z.string().optional(),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  defaultTaxRate: z.number().optional(),
+  documentIds: z.array(z.string()).optional(),
 }).refine(data => data.type === 'customer' || data.type === 'both', {
   message: "Type must be either 'customer' or 'both'",
   path: ['type']
@@ -71,7 +76,7 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
       type: "customer",
       currency: "USD",
       defaultTaxRate: 0,
-      documentIds: []
+      documentIds: [],
     }
   });
   
@@ -79,10 +84,7 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
   const createCustomer = useMutation({
     mutationFn: async (data: CustomerFormValues) => {
       // Handle file upload logic here if needed
-      const response = await apiRequest('/api/contacts', {
-        method: 'POST',
-        body: JSON.stringify(data)
-      });
+      const response = await apiRequest('POST', '/api/contacts', data);
       return response;
     },
     onSuccess: () => {
