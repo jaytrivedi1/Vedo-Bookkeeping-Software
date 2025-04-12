@@ -195,7 +195,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                 {selectedCustomer.contactName && (
                   <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
                 )}
-                <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>
+                {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
                 {selectedCustomer.phone && (
                   <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
                 )}
