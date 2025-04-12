@@ -29,11 +29,15 @@ export const accounts = pgTable('accounts', {
 // Contacts (Customers and Vendors)
 export const contacts = pgTable('contacts', {
   id: serial('id').primaryKey(),
-  name: text('name').notNull(),
+  name: text('name').notNull(), // Company/Business name
+  contactName: text('contact_name'), // Primary contact person's name
   email: text('email'),
   phone: text('phone'),
   address: text('address'),
   type: text('type').notNull(), // customer, vendor, or both
+  currency: text('currency').default('USD'), // Default currency for this contact
+  defaultTaxRate: doublePrecision('default_tax_rate').default(0), // Default sales tax rate
+  documentIds: text('document_ids').array(), // Array of document IDs for attachments
 });
 
 // Transaction Headers

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, UserPlus } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import TransactionForm from "@/components/transactions/TransactionForm";
+import CustomerDialog from "@/components/customers/CustomerDialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
