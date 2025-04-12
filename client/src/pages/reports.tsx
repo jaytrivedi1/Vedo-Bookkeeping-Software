@@ -67,6 +67,30 @@ export default function Reports() {
     queryKey: ['/api/reports/account-balances'],
   });
   
+  // Fetch general ledger entries with date filtering
+  const { data: generalLedger, isLoading: ledgerLoading } = useQuery({
+    queryKey: ['/api/reports/general-ledger', { startDate, endDate }],
+    queryFn: async ({ queryKey }) => {
+      const [_path, { startDate, endDate }] = queryKey;
+      const params = new URLSearchParams();
+      
+      if (startDate) {
+        params.append('startDate', startDate.toISOString());
+      }
+      
+      if (endDate) {
+        params.append('endDate', endDate.toISOString());
+      }
+      
+      const response = await fetch(`/api/reports/general-ledger?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch general ledger data');
+      }
+      return response.json();
+    },
+    enabled: activeTab === 'general-ledger'
+  });
+  
   // Prepare data for charts
   const incomeData = [
     { name: 'Revenue', value: incomeStatement?.revenues || 0 },
@@ -451,6 +475,111 @@ export default function Reports() {
                         </Table>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+            
+            {/* General Ledger */}
+            <TabsContent value="general-ledger">
+              <div className="grid grid-cols-1 gap-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>General Ledger</CardTitle>
+                      <CardDescription>
+                        View all ledger entries for the selected period
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {/* Start Date Selector */}
+                      <div className="flex flex-col space-y-1">
+                        <span className="text-sm font-medium">Start Date</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-[200px] justify-start text-left font-normal",
+                                !startDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {startDate ? format(startDate, "PPP") : "Select date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={startDate}
+                              onSelect={setStartDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      
+                      {/* End Date Selector */}
+                      <div className="flex flex-col space-y-1">
+                        <span className="text-sm font-medium">End Date</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-[200px] justify-start text-left font-normal",
+                                !endDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {endDate ? format(endDate, "PPP") : "Select date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={endDate}
+                              onSelect={setEndDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {ledgerLoading ? (
+                      <div className="text-center py-6">Loading ledger entries...</div>
+                    ) : !generalLedger || generalLedger.length === 0 ? (
+                      <div className="text-center py-6">No ledger entries found for the selected period</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Account</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead className="text-right">Debit</TableHead>
+                              <TableHead className="text-right">Credit</TableHead>
+                              <TableHead>Reference</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {generalLedger.map((entry) => (
+                              <TableRow key={entry.id}>
+                                <TableCell>{format(new Date(entry.date), "yyyy-MM-dd")}</TableCell>
+                                <TableCell>{entry.account?.name || `Account #${entry.accountId}`}</TableCell>
+                                <TableCell>{entry.description || entry.transaction?.description || "—"}</TableCell>
+                                <TableCell className="text-right">{entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : ""}</TableCell>
+                                <TableCell className="text-right">{entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : ""}</TableCell>
+                                <TableCell>{entry.transaction?.reference || "—"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
