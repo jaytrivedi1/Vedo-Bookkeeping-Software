@@ -133,8 +133,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("Invoice payload:", JSON.stringify(req.body));
       
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date),
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
+      };
+      
       // Validate invoice data
-      const result = invoiceSchema.safeParse(req.body);
+      const result = invoiceSchema.safeParse(body);
       if (!result.success) {
         console.log("Invoice validation errors:", JSON.stringify(result.error));
         return res.status(400).json({ 
@@ -223,7 +230,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Expense routes
   apiRouter.post("/expenses", async (req: Request, res: Response) => {
     try {
-      const expenseData = expenseSchema.parse(req.body);
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date)
+      };
+      
+      const expenseData = expenseSchema.parse(body);
       
       // Create transaction
       const transaction = {
@@ -292,7 +305,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Journal Entry routes
   apiRouter.post("/journal-entries", async (req: Request, res: Response) => {
     try {
-      const journalData = journalEntrySchema.parse(req.body);
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date)
+      };
+      
+      const journalData = journalEntrySchema.parse(body);
       
       // Validate debits = credits
       const totalDebits = journalData.entries.reduce((sum, entry) => sum + entry.debit, 0);
@@ -343,7 +362,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Deposit routes
   apiRouter.post("/deposits", async (req: Request, res: Response) => {
     try {
-      const depositData = depositSchema.parse(req.body);
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date)
+      };
+      
+      const depositData = depositSchema.parse(body);
       
       // Create transaction
       const transaction = {
