@@ -22,6 +22,7 @@ function Router() {
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
+      <Route path="/banking" component={Banking} />
       <Route path="/chart-of-accounts" component={ChartOfAccounts} />
       <Route path="/account-books" component={AccountBooks} />
       <Route path="/reports" component={Reports} />

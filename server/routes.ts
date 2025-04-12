@@ -521,6 +521,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Banking routes for transaction classification and import
+  apiRouter.post("/banking/classify", async (req: Request, res: Response) => {
+    try {
+      const { transactions } = req.body;
+      
+      if (!transactions || !Array.isArray(transactions)) {
+        return res.status(400).json({ message: "Invalid transaction data format" });
+      }
+      
+      // Process each classified transaction
+      const processedTransactions = [];
+      
+      for (const transaction of transactions) {
+        if (!transaction.accountId) {
+          continue; // Skip unclassified transactions
+        }
+        
+        // Create a transaction record
+        const newTransaction = await storage.createTransaction(
+          {
+            type: transaction.type === 'credit' ? 'deposit' : 'expense',
+            reference: `Banking import: ${transaction.description}`,
+            amount: transaction.amount,
+            date: new Date(transaction.date),
+            description: transaction.description,
+            status: 'completed',
+            contactId: null
+          },
+          [], // No line items for bank transactions
+          [
+            // Create a ledger entry for this transaction
+            {
+              accountId: transaction.accountId,
+              transactionId: 0, // Will be set by createTransaction
+              date: new Date(transaction.date),
+              description: transaction.description,
+              debit: transaction.type === 'debit' ? transaction.amount : 0,
+              credit: transaction.type === 'credit' ? transaction.amount : 0
+            },
+            // Create the offset entry (bank account)
+            {
+              accountId: 1000, // Cash/Bank account - adjust as needed for your chart of accounts
+              transactionId: 0, // Will be set by createTransaction
+              date: new Date(transaction.date),
+              description: transaction.description,
+              debit: transaction.type === 'credit' ? transaction.amount : 0,
+              credit: transaction.type === 'debit' ? transaction.amount : 0
+            }
+          ]
+        );
+        
+        processedTransactions.push(newTransaction);
+      }
+      
+      res.status(200).json({ 
+        message: `Successfully classified ${processedTransactions.length} transactions`,
+        transactions: processedTransactions
+      });
+    } catch (error) {
+      console.error("Error classifying bank transactions:", error);
+      res.status(500).json({ message: "Failed to process bank transactions" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
