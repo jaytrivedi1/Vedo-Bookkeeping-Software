@@ -1,8 +1,8 @@
 import { db } from "./db";
 import { 
-  Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax,
-  InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax,
-  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema
+  Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
+  InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
+  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -313,6 +313,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSalesTax(id: number): Promise<boolean> {
     const result = await db.delete(salesTaxSchema).where(eq(salesTaxSchema.id, id));
+    return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Product Methods
+  async getProducts(): Promise<Product[]> {
+    return await db.select().from(productsSchema).orderBy(productsSchema.name);
+  }
+
+  async getProduct(id: number): Promise<Product | undefined> {
+    const result = await db.select().from(productsSchema).where(eq(productsSchema.id, id));
+    return result[0];
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    const [newProduct] = await db.insert(productsSchema).values(product).returning();
+    return newProduct;
+  }
+
+  async updateProduct(id: number, productUpdate: Partial<Product>): Promise<Product | undefined> {
+    const [updatedProduct] = await db.update(productsSchema)
+      .set(productUpdate)
+      .where(eq(productsSchema.id, id))
+      .returning();
+    return updatedProduct;
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    const result = await db.delete(productsSchema).where(eq(productsSchema.id, id));
     return result.rowCount !== null && result.rowCount > 0;
   }
 }

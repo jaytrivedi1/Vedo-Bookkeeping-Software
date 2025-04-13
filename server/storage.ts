@@ -5,6 +5,7 @@ import {
   lineItems,
   ledgerEntries,
   salesTaxSchema,
+  productsSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -17,6 +18,8 @@ import {
   type InsertLedgerEntry,
   type SalesTax,
   type InsertSalesTax,
+  type Product,
+  type InsertProduct,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -77,6 +80,7 @@ export class MemStorage implements IStorage {
   private lineItems: Map<number, LineItem>;
   private ledgerEntries: Map<number, LedgerEntry>;
   private salesTaxes: Map<number, SalesTax>;
+  private products: Map<number, Product>;
   
   private accountIdCounter: number;
   private contactIdCounter: number;
@@ -84,6 +88,7 @@ export class MemStorage implements IStorage {
   private lineItemIdCounter: number;
   private ledgerEntryIdCounter: number;
   private salesTaxIdCounter: number;
+  private productIdCounter: number;
 
   constructor() {
     this.accounts = new Map();
@@ -92,6 +97,7 @@ export class MemStorage implements IStorage {
     this.lineItems = new Map();
     this.ledgerEntries = new Map();
     this.salesTaxes = new Map();
+    this.products = new Map();
     
     this.accountIdCounter = 1;
     this.contactIdCounter = 1;
@@ -99,6 +105,7 @@ export class MemStorage implements IStorage {
     this.lineItemIdCounter = 1;
     this.ledgerEntryIdCounter = 1;
     this.salesTaxIdCounter = 1;
+    this.productIdCounter = 1;
 
     // Initialize with default chart of accounts
     this.initializeDefaultAccounts();

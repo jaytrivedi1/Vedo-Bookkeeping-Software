@@ -470,6 +470,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Products & Services routes
+  apiRouter.get("/products", async (req: Request, res: Response) => {
+    try {
+      const products = await storage.getProducts();
+      res.json(products);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  apiRouter.get("/products/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const product = await storage.getProduct(id);
+      
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      res.json(product);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch product" });
+    }
+  });
+
+  apiRouter.post("/products", async (req: Request, res: Response) => {
+    try {
+      const productData = insertProductSchema.parse(req.body);
+      const product = await storage.createProduct(productData);
+      res.status(201).json(product);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid product data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create product" });
+    }
+  });
+
+  apiRouter.patch("/products/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Allow partial data for update (don't require all fields)
+      const productData = insertProductSchema.partial().parse(req.body);
+      const product = await storage.updateProduct(id, productData);
+      
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      res.json(product);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid product data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update product" });
+    }
+  });
+
+  apiRouter.delete("/products/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteProduct(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
   // Sales Tax routes
   apiRouter.get("/sales-taxes", async (req: Request, res: Response) => {
     try {
