@@ -649,48 +649,64 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           </div>
         </div>
         
+        {/* Add padding at the bottom to ensure content doesn't get hidden behind the fixed footer */}
+        <div className="pb-24"></div>
+        
         {/* Fixed footer */}
-        <div className="fixed bottom-0 left-0 right-0 border-t bg-white py-3 px-6 flex justify-between">
-          <Button type="button" variant="outline" onClick={onCancel}>
+        <div className="fixed bottom-0 left-0 right-0 border-t bg-gray-50 py-4 px-4 md:px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-md">
+          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full">
             Cancel
           </Button>
           
-          <div className="flex space-x-2">
-            <Button type="button" variant="outline">
-              Print or Preview
-            </Button>
-            <Button type="button" variant="outline">
-              Make recurring
-            </Button>
-            <Button type="button" variant="outline">
-              Customize
-            </Button>
-            
-            <div className="flex">
+          <div className="flex flex-wrap md:flex-nowrap gap-2 md:space-x-2">
+            <div className="flex md:hidden w-full justify-end">
+              {/* Mobile save button */}
               <Button 
                 type="submit"
                 disabled={createInvoice.isPending}
+                className="w-full md:w-auto"
               >
-                {createInvoice.isPending ? 'Saving...' : 'Save'}
+                {createInvoice.isPending ? 'Saving...' : 'Save and send'}
               </Button>
-              <div className="relative ml-px">
-                <Select 
-                  defaultValue="save" 
-                  onValueChange={(value) => {
-                    if (value === "save_send") {
-                      setSendInvoiceEmail(true);
-                      form.handleSubmit(onSubmit)();
-                    }
-                  }}
+            </div>
+            
+            <div className="hidden md:flex md:space-x-2 flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
+                Print or Preview
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
+                Make recurring
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
+                Customize
+              </Button>
+              
+              <div className="flex">
+                <Button 
+                  type="submit"
+                  disabled={createInvoice.isPending}
                 >
-                  <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    <SelectItem value="save">Save</SelectItem>
-                    <SelectItem value="save_send">Save and send</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {createInvoice.isPending ? 'Saving...' : 'Save'}
+                </Button>
+                <div className="relative ml-px">
+                  <Select 
+                    defaultValue="save" 
+                    onValueChange={(value) => {
+                      if (value === "save_send") {
+                        setSendInvoiceEmail(true);
+                        form.handleSubmit(onSubmit)();
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="end">
+                      <SelectItem value="save">Save</SelectItem>
+                      <SelectItem value="save_send">Save and send</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </div>
