@@ -36,7 +36,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -180,11 +182,36 @@ export default function ChartOfAccounts() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="asset">Asset</SelectItem>
-                              <SelectItem value="liability">Liability</SelectItem>
-                              <SelectItem value="equity">Equity</SelectItem>
-                              <SelectItem value="income">Income</SelectItem>
-                              <SelectItem value="expense">Expense</SelectItem>
+                              <SelectGroup>
+                                <SelectLabel>Assets</SelectLabel>
+                                <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
+                                <SelectItem value="current_assets">Current Assets</SelectItem>
+                                <SelectItem value="bank">Bank</SelectItem>
+                                <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
+                                <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
+                              </SelectGroup>
+                              <SelectGroup>
+                                <SelectLabel>Liabilities</SelectLabel>
+                                <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
+                                <SelectItem value="credit_card">Credit Card</SelectItem>
+                                <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
+                                <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
+                              </SelectGroup>
+                              <SelectGroup>
+                                <SelectLabel>Equity</SelectLabel>
+                                <SelectItem value="equity">Equity</SelectItem>
+                              </SelectGroup>
+                              <SelectGroup>
+                                <SelectLabel>Income</SelectLabel>
+                                <SelectItem value="income">Income</SelectItem>
+                                <SelectItem value="other_income">Other Income</SelectItem>
+                              </SelectGroup>
+                              <SelectGroup>
+                                <SelectLabel>Expenses</SelectLabel>
+                                <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
+                                <SelectItem value="expenses">Expenses</SelectItem>
+                                <SelectItem value="other_expense">Other Expense</SelectItem>
+                              </SelectGroup>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -267,11 +294,26 @@ export default function ChartOfAccounts() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="asset">Asset</SelectItem>
-                <SelectItem value="liability">Liability</SelectItem>
+                
+                <SelectLabel>Assets</SelectLabel>
+                <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
+                <SelectItem value="current_assets">Current Assets</SelectItem>
+                <SelectItem value="bank">Bank</SelectItem>
+                <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
+                <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
+                
+                <SelectLabel>Liabilities</SelectLabel>
+                <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
+                <SelectItem value="credit_card">Credit Card</SelectItem>
+                <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
+                <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
+                
                 <SelectItem value="equity">Equity</SelectItem>
                 <SelectItem value="income">Income</SelectItem>
-                <SelectItem value="expense">Expense</SelectItem>
+                <SelectItem value="other_income">Other Income</SelectItem>
+                <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
+                <SelectItem value="expenses">Expenses</SelectItem>
+                <SelectItem value="other_expense">Other Expense</SelectItem>
               </SelectContent>
             </Select>
           </div>
