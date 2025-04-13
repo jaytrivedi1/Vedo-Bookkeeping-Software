@@ -8,6 +8,7 @@ import {
   insertLineItemSchema, 
   insertLedgerEntrySchema,
   insertSalesTaxSchema,
+  insertProductSchema,
   invoiceSchema,
   expenseSchema,
   journalEntrySchema,

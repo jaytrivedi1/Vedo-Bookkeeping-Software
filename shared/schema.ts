@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -184,6 +184,31 @@ export const insertSalesTaxSchema = createInsertSchema(salesTaxSchema).omit({ id
 
 export type SalesTax = typeof salesTaxSchema.$inferSelect;
 export type InsertSalesTax = z.infer<typeof insertSalesTaxSchema>;
+
+// Products & Services schema
+export const productsSchema = pgTable('products', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  sku: text('sku'),
+  type: text('type', { enum: ['product', 'service'] }).notNull().default('product'),
+  price: decimal('price', { precision: 10, scale: 2 }).notNull().default('0'),
+  cost: decimal('cost', { precision: 10, scale: 2 }).default('0'),
+  accountId: integer('account_id').references(() => accounts.id).notNull(),
+  salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const insertProductSchema = createInsertSchema(productsSchema, {
+  id: undefined,
+  createdAt: undefined, 
+  updatedAt: undefined
+});
+
+export type Product = typeof productsSchema.$inferSelect;
+export type InsertProduct = z.infer<typeof insertProductSchema>;
 
 export type Invoice = z.infer<typeof invoiceSchema>;
 export type Expense = z.infer<typeof expenseSchema>;

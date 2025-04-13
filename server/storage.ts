@@ -34,6 +34,13 @@ export interface IStorage {
   updateSalesTax(id: number, salesTax: Partial<SalesTax>): Promise<SalesTax | undefined>;
   deleteSalesTax(id: number): Promise<boolean>;
 
+  // Products & Services
+  getProducts(): Promise<Product[]>;
+  getProduct(id: number): Promise<Product | undefined>;
+  createProduct(product: InsertProduct): Promise<Product>;
+  updateProduct(id: number, product: Partial<Product>): Promise<Product | undefined>;
+  deleteProduct(id: number): Promise<boolean>;
+
   // Contacts
   getContacts(): Promise<Contact[]>;
   getContact(id: number): Promise<Contact | undefined>;
