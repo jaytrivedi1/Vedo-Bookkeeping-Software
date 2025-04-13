@@ -47,10 +47,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.post("/accounts", async (req: Request, res: Response) => {
     try {
+      console.log("Request body:", req.body);
       const accountData = insertAccountSchema.parse(req.body);
+      console.log("Parsed account data:", accountData);
       const account = await storage.createAccount(accountData);
       res.status(201).json(account);
     } catch (error) {
+      console.error("Error creating account:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid account data", errors: error.errors });
       }
