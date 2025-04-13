@@ -133,7 +133,7 @@ export default function ChartOfAccounts() {
       name: account.name,
       type: account.type,
       currency: account.currency || "CAD",
-      salesTaxType: account.salesTaxType || "",
+      salesTaxType: account.salesTaxType || "none", // Use "none" instead of empty string
       isActive: account.isActive,
     });
     setEditAccountOpen(true);
@@ -141,11 +141,19 @@ export default function ChartOfAccounts() {
   
   // Handler for creating an account
   const onSubmit = (data: any) => {
+    // Convert "none" to empty string for salesTaxType
+    if (data.salesTaxType === "none") {
+      data.salesTaxType = "";
+    }
     createAccount.mutate(data);
   };
   
   // Handler for updating an account
   const onUpdate = (data: any) => {
+    // Convert "none" to empty string for salesTaxType
+    if (data.salesTaxType === "none") {
+      data.salesTaxType = "";
+    }
     updateAccount.mutate(data);
   };
   
@@ -408,7 +416,7 @@ export default function ChartOfAccounts() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">None</SelectItem>
+                              <SelectItem value="none">None</SelectItem>
                               {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
                                 <SelectItem key={tax.id} value={tax.name}>
                                   {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
@@ -707,7 +715,7 @@ export default function ChartOfAccounts() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
                             <SelectItem key={tax.id} value={tax.name}>
                               {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
