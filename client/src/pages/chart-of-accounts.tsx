@@ -52,6 +52,8 @@ export default function ChartOfAccounts() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [newAccountOpen, setNewAccountOpen] = useState(false);
+  const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
   
   const { toast } = useToast();
   
@@ -407,7 +409,8 @@ export default function ChartOfAccounts() {
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>Currency</TableHead>
+                  <TableHead>Sales Tax Type</TableHead>
                   <TableHead className="text-right">Balance</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -435,12 +438,17 @@ export default function ChartOfAccounts() {
                           {getTypeLabel(account.type)}
                         </Badge>
                       </TableCell>
-                      <TableCell className="max-w-xs truncate">{account.description || 'N/A'}</TableCell>
+                      <TableCell>{account.currency || 'USD'}</TableCell>
+                      <TableCell>{account.salesTaxType || '-'}</TableCell>
                       <TableCell className="text-right font-medium">
                         ${account.balance.toFixed(2)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleEditAccount(account)}
+                        >
                           <Edit2Icon className="h-4 w-4" />
                         </Button>
                       </TableCell>

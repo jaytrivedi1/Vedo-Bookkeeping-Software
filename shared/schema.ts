@@ -23,7 +23,8 @@ export const accounts = pgTable('accounts', {
   code: text('code').notNull().unique(),
   name: text('name').notNull(),
   type: accountTypeEnum('type').notNull(),
-  description: text('description'),
+  currency: text('currency').default('USD'),
+  salesTaxType: text('sales_tax_type'),
   balance: doublePrecision('balance').notNull().default(0),
   isActive: boolean('is_active').notNull().default(true),
 });
