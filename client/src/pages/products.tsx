@@ -4,7 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Pencil, Trash2 } from "lucide-react";
+import { PlusCircle, Pencil, Trash2, Plus, Settings } from "lucide-react";
+import { 
+  DropdownMenu, 
+  DropdownMenuTrigger, 
+  DropdownMenuContent, 
+  DropdownMenuItem 
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProductDialog } from "@/components/products/ProductDialog";
@@ -16,6 +22,7 @@ export default function ProductsPage() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [productType, setProductType] = useState<"product" | "service">("product");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
 
@@ -32,8 +39,9 @@ export default function ProductsPage() {
     queryKey: ['/api/sales-taxes'],
   });
 
-  const handleCreateProduct = () => {
+  const handleOpenProductForm = (type: "product" | "service") => {
     setSelectedProduct(null);
+    setProductType(type);
     setIsDialogOpen(true);
   };
 
@@ -89,10 +97,26 @@ export default function ProductsPage() {
             <CardTitle className="text-2xl">Products & Services</CardTitle>
             <CardDescription>Manage your products and services for invoices and expenses</CardDescription>
           </div>
-          <Button onClick={handleCreateProduct} className="flex items-center gap-1">
-            <PlusCircle className="h-4 w-4" />
-            Add Product
-          </Button>
+          <div className="relative">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="flex items-center gap-1">
+                  <PlusCircle className="h-4 w-4" />
+                  Add
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => handleOpenProductForm("product")}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Product
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleOpenProductForm("service")}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Add Service
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -149,7 +173,8 @@ export default function ProductsPage() {
       <ProductDialog 
         open={isDialogOpen} 
         onOpenChange={setIsDialogOpen} 
-        product={selectedProduct} 
+        product={selectedProduct}
+        defaultType={productType}
       />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

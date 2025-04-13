@@ -33,9 +33,10 @@ interface ProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: Product | null;
+  defaultType?: "product" | "service";
 }
 
-export function ProductDialog({ open, onOpenChange, product }: ProductDialogProps) {
+export function ProductDialog({ open, onOpenChange, product, defaultType = "product" }: ProductDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,7 +62,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
     defaultValues: {
       name: "",
       description: "",
-      type: "product",
+      type: defaultType,
       price: 0,
       isActive: true,
       accountId: 0,
@@ -87,7 +88,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
       form.reset({
         name: "",
         description: "",
-        type: "product",
+        type: defaultType,
         price: 0,
         isActive: true,
         accountId: 0,
