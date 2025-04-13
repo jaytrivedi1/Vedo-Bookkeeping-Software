@@ -56,6 +56,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create account" });
     }
   });
+  
+  apiRouter.patch("/accounts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Allow partial data for update (don't require all fields)
+      const accountData = insertAccountSchema.partial().parse(req.body);
+      const account = await storage.updateAccount(id, accountData);
+      
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      
+      res.json(account);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid account data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update account" });
+    }
+  });
 
   // Contacts routes
   apiRouter.get("/contacts", async (req: Request, res: Response) => {
