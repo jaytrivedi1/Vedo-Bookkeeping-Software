@@ -8,6 +8,18 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { 
   Pagination, 
   PaginationContent, 
@@ -16,15 +28,47 @@ import {
   PaginationNext, 
   PaginationPrevious 
 } from "@/components/ui/pagination";
+import { Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
 import { Transaction } from "@shared/schema";
 
 interface TransactionTableProps {
   transactions: Transaction[];
   loading?: boolean;
+  onDeleteSuccess?: () => void;
 }
 
-export default function TransactionTable({ transactions, loading = false }: TransactionTableProps) {
+export default function TransactionTable({ transactions, loading = false, onDeleteSuccess }: TransactionTableProps) {
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  
+  const handleDelete = async () => {
+    if (!transactionToDelete) return;
+    
+    setIsDeleteLoading(true);
+    try {
+      await apiRequest(
+        `/api/transactions/${transactionToDelete.id}`, 
+        { method: 'DELETE' }, 
+        null
+      );
+      
+      // Clear the transaction to delete
+      setTransactionToDelete(null);
+      
+      // Trigger refresh
+      if (onDeleteSuccess) {
+        onDeleteSuccess();
+      }
+    } catch (error) {
+      console.error('Failed to delete transaction:', error);
+      // You could add toast notification here
+    } finally {
+      setIsDeleteLoading(false);
+    }
+  };
   // Helper function to get status badge color
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -120,13 +164,47 @@ export default function TransactionTable({ transactions, loading = false }: Tran
                         ? '-$' + transaction.amount.toFixed(2) 
                         : '$' + transaction.amount.toFixed(2)}
                     </TableCell>
-                    <TableCell className="text-right text-sm font-medium">
+                    <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
                       <Link 
                         href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`} 
                         className="text-primary hover:text-primary/90"
                       >
                         View
                       </Link>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => setTransactionToDelete(transaction)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete this {transactionToDelete?.type.replace('_', ' ')} and all associated records.
+                              This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDelete}
+                              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                              disabled={isDeleteLoading}
+                            >
+                              {isDeleteLoading ? 'Deleting...' : 'Delete'}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))

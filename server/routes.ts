@@ -542,6 +542,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to delete product" });
     }
   });
+  
+  // Transaction delete endpoint
+  apiRouter.delete("/transactions/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteTransaction(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+      res.status(500).json({ message: "Failed to delete transaction" });
+    }
+  });
 
   // Sales Tax routes
   apiRouter.get("/sales-taxes", async (req: Request, res: Response) => {

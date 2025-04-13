@@ -155,7 +155,11 @@ export default function Invoices() {
             
             <TabsContent value="invoices" className="mt-4">
               <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-                <TransactionTable transactions={invoices} loading={isLoading} />
+                <TransactionTable 
+                  transactions={invoices} 
+                  loading={isLoading} 
+                  onDeleteSuccess={() => refetch()}
+                />
               </div>
             </TabsContent>
             

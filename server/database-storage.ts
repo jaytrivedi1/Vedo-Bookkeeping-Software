@@ -131,6 +131,76 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updatedTransaction;
   }
+  
+  async deleteTransaction(id: number): Promise<boolean> {
+    try {
+      // Use a transaction to ensure all related data is properly deleted
+      return await db.transaction(async (tx) => {
+        // Get the transaction to verify it exists
+        const transactionToDelete = await tx
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, id));
+        
+        if (transactionToDelete.length === 0) {
+          return false; // Transaction not found
+        }
+        
+        // Get the ledger entries to reverse account balances
+        const ledgerEntriesToDelete = await tx
+          .select()
+          .from(ledgerEntries)
+          .where(eq(ledgerEntries.transactionId, id));
+        
+        // Reverse the effect on account balances - subtract debits and add credits
+        for (const entry of ledgerEntriesToDelete) {
+          const accountResult = await tx
+            .select()
+            .from(accounts)
+            .where(eq(accounts.id, entry.accountId));
+          
+          if (accountResult.length > 0) {
+            const account = accountResult[0];
+            let balanceChange = 0;
+            
+            if (['asset', 'expense'].includes(account.type)) {
+              // Debits increase assets and expenses, so subtract them for deletion
+              balanceChange = -(entry.debit - entry.credit);
+            } else {
+              // Credits increase liabilities, equity, and income, so subtract them for deletion
+              balanceChange = -(entry.credit - entry.debit);
+            }
+            
+            // Update the account balance
+            await tx
+              .update(accounts)
+              .set({ balance: account.balance + balanceChange })
+              .where(eq(accounts.id, account.id));
+          }
+        }
+        
+        // Delete the related ledger entries
+        await tx
+          .delete(ledgerEntries)
+          .where(eq(ledgerEntries.transactionId, id));
+        
+        // Delete the related line items
+        await tx
+          .delete(lineItems)
+          .where(eq(lineItems.transactionId, id));
+        
+        // Delete the transaction
+        const deleteResult = await tx
+          .delete(transactions)
+          .where(eq(transactions.id, id));
+        
+        return deleteResult.rowCount > 0;
+      });
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      return false;
+    }
+  }
 
   // Line Items
   async getLineItemsByTransaction(transactionId: number): Promise<LineItem[]> {
