@@ -226,4 +226,32 @@ export class DatabaseStorage implements IStorage {
     
     return { assets, liabilities, equity };
   }
+
+  // Sales Taxes
+  async getSalesTaxes(): Promise<SalesTax[]> {
+    return await db.select().from(salesTaxSchema).orderBy(salesTaxSchema.name);
+  }
+
+  async getSalesTax(id: number): Promise<SalesTax | undefined> {
+    const result = await db.select().from(salesTaxSchema).where(eq(salesTaxSchema.id, id));
+    return result[0];
+  }
+
+  async createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax> {
+    const [newSalesTax] = await db.insert(salesTaxSchema).values(salesTax).returning();
+    return newSalesTax;
+  }
+
+  async updateSalesTax(id: number, salesTaxUpdate: Partial<SalesTax>): Promise<SalesTax | undefined> {
+    const [updatedSalesTax] = await db.update(salesTaxSchema)
+      .set(salesTaxUpdate)
+      .where(eq(salesTaxSchema.id, id))
+      .returning();
+    return updatedSalesTax;
+  }
+
+  async deleteSalesTax(id: number): Promise<boolean> {
+    const result = await db.delete(salesTaxSchema).where(eq(salesTaxSchema.id, id));
+    return result.rowCount > 0;
+  }
 }

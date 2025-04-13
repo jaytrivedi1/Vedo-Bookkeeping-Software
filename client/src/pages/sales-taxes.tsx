@@ -106,10 +106,7 @@ export default function SalesTaxes() {
   // Create a new sales tax
   const createMutation = useMutation({
     mutationFn: async (values: SalesTaxFormValues) => {
-      return apiRequest("/api/sales-taxes", {
-        method: "POST",
-        body: JSON.stringify(values),
-      });
+      return await apiRequest("/api/sales-taxes", "POST", values);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -133,10 +130,7 @@ export default function SalesTaxes() {
   // Update an existing sales tax
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: number; values: SalesTaxFormValues }) => {
-      return apiRequest(`/api/sales-taxes/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(values),
-      });
+      return await apiRequest(`/api/sales-taxes/${id}`, "PATCH", values);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -161,9 +155,7 @@ export default function SalesTaxes() {
   // Delete a sales tax
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/sales-taxes/${id}`, {
-        method: "DELETE",
-      });
+      return await apiRequest(`/api/sales-taxes/${id}`, "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -274,7 +266,7 @@ export default function SalesTaxes() {
                     <TableCell>{formatRate(tax.rate)}</TableCell>
                     <TableCell>
                       {tax.isActive ? (
-                        <Badge variant="success" className="bg-green-100 text-green-800">
+                        <Badge variant="outline" className="bg-green-100 text-green-800">
                           <CheckCircleIcon className="h-3 w-3 mr-1" />
                           Active
                         </Badge>
