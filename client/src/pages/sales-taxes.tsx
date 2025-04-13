@@ -106,7 +106,12 @@ export default function SalesTaxes() {
   // Create a new sales tax
   const createMutation = useMutation({
     mutationFn: async (values: SalesTaxFormValues) => {
-      return await apiRequest("/api/sales-taxes", "POST", values);
+      // Handle the case where accountId is 0 (meaning "None")
+      const processedValues = {
+        ...values,
+        accountId: values.accountId === 0 ? null : values.accountId
+      };
+      return await apiRequest("/api/sales-taxes", "POST", processedValues);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -130,7 +135,12 @@ export default function SalesTaxes() {
   // Update an existing sales tax
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: number; values: SalesTaxFormValues }) => {
-      return await apiRequest(`/api/sales-taxes/${id}`, "PATCH", values);
+      // Handle the case where accountId is 0 (meaning "None")
+      const processedValues = {
+        ...values,
+        accountId: values.accountId === 0 ? null : values.accountId
+      };
+      return await apiRequest(`/api/sales-taxes/${id}`, "PATCH", processedValues);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -383,8 +393,8 @@ export default function SalesTaxes() {
                   <FormItem>
                     <FormLabel>Tax Liability Account</FormLabel>
                     <Select
-                      onValueChange={(value) => field.onChange(value ? parseInt(value) : null)}
-                      value={field.value?.toString() || ""}
+                      onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                      value={field.value?.toString() || "0"}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -392,7 +402,7 @@ export default function SalesTaxes() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="0">None</SelectItem>
                         {accounts && accounts
                           .filter(account => 
                             account.type === "accounts_payable" || 
