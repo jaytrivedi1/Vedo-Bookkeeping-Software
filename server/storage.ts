@@ -4,6 +4,7 @@ import {
   transactions,
   lineItems,
   ledgerEntries,
+  salesTaxSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -14,6 +15,8 @@ import {
   type InsertLineItem,
   type LedgerEntry,
   type InsertLedgerEntry,
+  type SalesTax,
+  type InsertSalesTax,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -23,6 +26,13 @@ export interface IStorage {
   getAccountByCode(code: string): Promise<Account | undefined>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: number, account: Partial<Account>): Promise<Account | undefined>;
+
+  // Sales Taxes
+  getSalesTaxes(): Promise<SalesTax[]>;
+  getSalesTax(id: number): Promise<SalesTax | undefined>;
+  createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax>;
+  updateSalesTax(id: number, salesTax: Partial<SalesTax>): Promise<SalesTax | undefined>;
+  deleteSalesTax(id: number): Promise<boolean>;
 
   // Contacts
   getContacts(): Promise<Contact[]>;
@@ -59,12 +69,14 @@ export class MemStorage implements IStorage {
   private transactions: Map<number, Transaction>;
   private lineItems: Map<number, LineItem>;
   private ledgerEntries: Map<number, LedgerEntry>;
+  private salesTaxes: Map<number, SalesTax>;
   
   private accountIdCounter: number;
   private contactIdCounter: number;
   private transactionIdCounter: number;
   private lineItemIdCounter: number;
   private ledgerEntryIdCounter: number;
+  private salesTaxIdCounter: number;
 
   constructor() {
     this.accounts = new Map();
@@ -72,12 +84,14 @@ export class MemStorage implements IStorage {
     this.transactions = new Map();
     this.lineItems = new Map();
     this.ledgerEntries = new Map();
+    this.salesTaxes = new Map();
     
     this.accountIdCounter = 1;
     this.contactIdCounter = 1;
     this.transactionIdCounter = 1;
     this.lineItemIdCounter = 1;
     this.ledgerEntryIdCounter = 1;
+    this.salesTaxIdCounter = 1;
 
     // Initialize with default chart of accounts
     this.initializeDefaultAccounts();
@@ -158,6 +172,40 @@ export class MemStorage implements IStorage {
     const updatedAccount = { ...account, ...accountUpdate };
     this.accounts.set(id, updatedAccount);
     return updatedAccount;
+  }
+
+  // Sales Tax Methods
+  async getSalesTaxes(): Promise<SalesTax[]> {
+    return Array.from(this.salesTaxes.values());
+  }
+
+  async getSalesTax(id: number): Promise<SalesTax | undefined> {
+    return this.salesTaxes.get(id);
+  }
+
+  async createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax> {
+    const id = this.salesTaxIdCounter++;
+    const newSalesTax: SalesTax = {
+      ...salesTax,
+      id,
+      isActive: salesTax.isActive !== undefined ? salesTax.isActive : true
+    };
+    this.salesTaxes.set(id, newSalesTax);
+    return newSalesTax;
+  }
+
+  async updateSalesTax(id: number, salesTaxUpdate: Partial<SalesTax>): Promise<SalesTax | undefined> {
+    const salesTax = this.salesTaxes.get(id);
+    if (!salesTax) return undefined;
+
+    const updatedSalesTax = { ...salesTax, ...salesTaxUpdate };
+    this.salesTaxes.set(id, updatedSalesTax);
+    return updatedSalesTax;
+  }
+
+  async deleteSalesTax(id: number): Promise<boolean> {
+    if (!this.salesTaxes.has(id)) return false;
+    return this.salesTaxes.delete(id);
   }
 
   // Contact Methods

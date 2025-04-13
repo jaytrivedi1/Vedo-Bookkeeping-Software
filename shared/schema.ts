@@ -169,6 +169,21 @@ export type InsertLineItem = z.infer<typeof insertLineItemSchema>;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
 
+// Sales Tax Schema
+export const salesTaxSchema = pgTable('sales_taxes', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  rate: doublePrecision('rate').notNull().default(0),
+  accountId: integer('account_id').references(() => accounts.id),
+  isActive: boolean('is_active').default(true),
+});
+
+export const insertSalesTaxSchema = createInsertSchema(salesTaxSchema).omit({ id: true });
+
+export type SalesTax = typeof salesTaxSchema.$inferSelect;
+export type InsertSalesTax = z.infer<typeof insertSalesTaxSchema>;
+
 export type Invoice = z.infer<typeof invoiceSchema>;
 export type Expense = z.infer<typeof expenseSchema>;
 export type JournalEntry = z.infer<typeof journalEntrySchema>;

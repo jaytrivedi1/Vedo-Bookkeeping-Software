@@ -7,6 +7,7 @@ import {
   insertTransactionSchema, 
   insertLineItemSchema, 
   insertLedgerEntrySchema,
+  insertSalesTaxSchema,
   invoiceSchema,
   expenseSchema,
   journalEntrySchema,
@@ -449,6 +450,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid deposit data", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create deposit" });
+    }
+  });
+
+  // Sales Tax routes
+  apiRouter.get("/sales-taxes", async (req: Request, res: Response) => {
+    try {
+      const salesTaxes = await storage.getSalesTaxes();
+      res.json(salesTaxes);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sales taxes" });
+    }
+  });
+
+  apiRouter.get("/sales-taxes/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const salesTax = await storage.getSalesTax(id);
+      
+      if (!salesTax) {
+        return res.status(404).json({ message: "Sales tax not found" });
+      }
+      
+      res.json(salesTax);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch sales tax" });
+    }
+  });
+
+  apiRouter.post("/sales-taxes", async (req: Request, res: Response) => {
+    try {
+      const salesTaxData = insertSalesTaxSchema.parse(req.body);
+      const salesTax = await storage.createSalesTax(salesTaxData);
+      res.status(201).json(salesTax);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sales tax data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create sales tax" });
+    }
+  });
+
+  apiRouter.patch("/sales-taxes/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Allow partial data for update (don't require all fields)
+      const salesTaxData = insertSalesTaxSchema.partial().parse(req.body);
+      const salesTax = await storage.updateSalesTax(id, salesTaxData);
+      
+      if (!salesTax) {
+        return res.status(404).json({ message: "Sales tax not found" });
+      }
+      
+      res.json(salesTax);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid sales tax data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update sales tax" });
+    }
+  });
+
+  apiRouter.delete("/sales-taxes/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteSalesTax(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Sales tax not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete sales tax" });
     }
   });
 
