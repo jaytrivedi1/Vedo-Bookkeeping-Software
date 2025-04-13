@@ -12,7 +12,8 @@ import {
   BookOpenIcon,
   BuildingIcon,
   PlusIcon,
-  PercentIcon
+  PercentIcon,
+  PackageIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/account-books", label: "Account Books", icon: <BookOpenIcon className="w-5 h-5 mr-3" /> },
     { path: "/chart-of-accounts", label: "Chart of Accounts", icon: <DatabaseIcon className="w-5 h-5 mr-3" /> },
     { path: "/sales-taxes", label: "Sales Taxes", icon: <PercentIcon className="w-5 h-5 mr-3" /> },
+    { path: "/products", label: "Products & Services", icon: <PackageIcon className="w-5 h-5 mr-3" /> },
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-5 h-5 mr-3" /> },
   ];
   
