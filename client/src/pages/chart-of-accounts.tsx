@@ -68,7 +68,8 @@ export default function ChartOfAccounts() {
       code: "",
       name: "",
       type: "current_assets",
-      description: "",
+      currency: "CAD",
+      salesTaxType: "",
       isActive: true,
     },
   });
@@ -111,7 +112,7 @@ export default function ChartOfAccounts() {
       code: "",
       name: "",
       type: "current_assets",
-      currency: "USD",
+      currency: "CAD",
       salesTaxType: "",
       isActive: true,
     },
@@ -124,7 +125,7 @@ export default function ChartOfAccounts() {
       code: account.code,
       name: account.name,
       type: account.type,
-      currency: account.currency || "USD",
+      currency: account.currency || "CAD",
       salesTaxType: account.salesTaxType || "",
       isActive: account.isActive,
     });
@@ -352,19 +353,51 @@ export default function ChartOfAccounts() {
                     )}
                   />
                   
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl>
-                          <Textarea placeholder="Account description" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="currency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Currency</FormLabel>
+                          <FormControl>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select currency" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                                <SelectItem value="USD">USD - US Dollar</SelectItem>
+                                <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                                <SelectItem value="EUR">EUR - Euro</SelectItem>
+                                <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                                <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
+                                <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
+                                <SelectItem value="CNY">CNY - Chinese Yuan</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="salesTaxType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Sales Tax Type</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g. GST, HST, VAT" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                   
                   <DialogFooter>
                     <Button 
