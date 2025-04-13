@@ -56,6 +56,14 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
   // that suggest they're revenue accounts based on common naming patterns
   console.log("All accounts:", accounts);
   const revenueAccounts = accounts.filter((account: any) => {
+    // Exclude liability accounts like "Sales Tax Payable"
+    if (account.type === 'liability' || 
+        account.type === 'accounts_payable' || 
+        account.type === 'other_current_liabilities' ||
+        account.type === 'long_term_liabilities') {
+      return false;
+    }
+    
     const isRevenueType = account.type === 'revenue' || 
                          account.type === 'other_income' ||
                          account.type === 'income';
@@ -63,7 +71,9 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     const isRevenueByName = typeof account.name === 'string' && (
                            account.name.toLowerCase().includes('income') ||
                            account.name.toLowerCase().includes('revenue') ||
-                           account.name.toLowerCase().includes('sales'));
+                           account.name.toLowerCase().includes('sales')) &&
+                           // Explicitly exclude "Sales Tax Payable" by name
+                           !account.name.toLowerCase().includes('tax payable');
     
     return isRevenueType || isRevenueByName;
   });
