@@ -4,7 +4,9 @@ import { z } from "zod";
 
 // Enums for transaction types
 export const accountTypeEnum = pgEnum('account_type', [
-  'asset', 'liability', 'equity', 'income', 'expense'
+  'accounts_receivable', 'current_assets', 'bank', 'property_plant_equipment', 'long_term_assets',
+  'accounts_payable', 'credit_card', 'other_current_liabilities', 'long_term_liabilities',
+  'equity', 'income', 'other_income', 'cost_of_goods_sold', 'expenses', 'other_expense'
 ]);
 
 export const transactionTypeEnum = pgEnum('transaction_type', [

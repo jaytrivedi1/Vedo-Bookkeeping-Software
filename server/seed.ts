@@ -1,55 +1,97 @@
 import { db } from "./db";
 import { accounts, contacts } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Seeding database with initial data...");
   
   // Check if accounts already exist
   const existingAccounts = await db.select().from(accounts);
+  
+  // Function to update account types
+  async function updateAccountTypes() {
+    console.log("Updating account types to new classification...");
+    
+    // Define mapping from old to new types
+    const accountTypeMapping = [
+      { id: 1, code: "1000", name: "Cash", oldType: "asset", newType: "bank" },
+      { id: 2, code: "1100", name: "Accounts Receivable", oldType: "asset", newType: "accounts_receivable" },
+      { id: 3, code: "1200", name: "Inventory", oldType: "asset", newType: "current_assets" },
+      { id: 4, code: "2000", name: "Accounts Payable", oldType: "liability", newType: "accounts_payable" },
+      { id: 5, code: "2100", name: "Sales Tax Payable", oldType: "liability", newType: "other_current_liabilities" },
+      { id: 6, code: "2200", name: "Accrued Expenses", oldType: "liability", newType: "other_current_liabilities" },
+      { id: 7, code: "3000", name: "Owner's Equity", oldType: "equity", newType: "equity" },
+      { id: 8, code: "3100", name: "Retained Earnings", oldType: "equity", newType: "equity" },
+      { id: 9, code: "4000", name: "Sales Revenue", oldType: "income", newType: "income" },
+      { id: 10, code: "4100", name: "Service Revenue", oldType: "income", newType: "income" },
+      { id: 11, code: "4200", name: "Interest Income", oldType: "income", newType: "other_income" },
+      { id: 12, code: "5000", name: "Cost of Goods Sold", oldType: "expense", newType: "cost_of_goods_sold" },
+      { id: 13, code: "5100", name: "Salary Expense", oldType: "expense", newType: "expenses" },
+      { id: 14, code: "5200", name: "Rent Expense", oldType: "expense", newType: "expenses" },
+      { id: 15, code: "5300", name: "Utilities Expense", oldType: "expense", newType: "expenses" },
+      { id: 16, code: "5400", name: "Office Supplies", oldType: "expense", newType: "expenses" }
+    ];
+    
+    // Update each account with its new type
+    for (const mapping of accountTypeMapping) {
+      await db.update(accounts)
+        .set({ type: mapping.newType })
+        .where(eq(accounts.id, mapping.id));
+    }
+    
+    console.log("Account types updated successfully.");
+  }
+  
   if (existingAccounts.length === 0) {
     console.log("Creating default accounts...");
     
     // Create default Chart of Accounts
     await db.insert(accounts).values([
-      // Asset Accounts
+      // Bank Accounts
       {
         code: "1000",
         name: "Cash",
-        type: "asset",
+        type: "bank",
         description: "Cash on hand and in banking accounts",
         balance: 0,
         isActive: true
       },
+      
+      // Accounts Receivable
       {
         code: "1100",
         name: "Accounts Receivable",
-        type: "asset",
+        type: "accounts_receivable",
         description: "Amounts owed to the company by customers",
         balance: 0,
         isActive: true
       },
+      
+      // Current Assets
       {
         code: "1200",
         name: "Inventory",
-        type: "asset",
+        type: "current_assets",
         description: "Value of goods in inventory",
         balance: 0,
         isActive: true
       },
       
-      // Liability Accounts
+      // Accounts Payable
       {
         code: "2000",
         name: "Accounts Payable",
-        type: "liability",
+        type: "accounts_payable",
         description: "Amounts owed by the company to suppliers",
         balance: 0,
         isActive: true
       },
+      
+      // Other Current Liabilities
       {
         code: "2100",
         name: "Sales Tax Payable",
-        type: "liability",
+        type: "other_current_liabilities",
         description: "Sales tax collected but not yet remitted",
         balance: 0,
         isActive: true
@@ -57,7 +99,7 @@ async function seed() {
       {
         code: "2200",
         name: "Accrued Expenses",
-        type: "liability",
+        type: "other_current_liabilities",
         description: "Expenses recognized but not yet paid",
         balance: 0,
         isActive: true
@@ -98,28 +140,32 @@ async function seed() {
         balance: 0,
         isActive: true
       },
+      
+      // Other Income
       {
         code: "4200",
         name: "Interest Income",
-        type: "income",
+        type: "other_income",
         description: "Revenue from interest earned",
+        balance: 0,
+        isActive: true
+      },
+      
+      // Cost of Goods Sold
+      {
+        code: "5000",
+        name: "Cost of Goods Sold",
+        type: "cost_of_goods_sold",
+        description: "Direct costs of goods sold",
         balance: 0,
         isActive: true
       },
       
       // Expense Accounts
       {
-        code: "5000",
-        name: "Cost of Goods Sold",
-        type: "expense",
-        description: "Direct costs of goods sold",
-        balance: 0,
-        isActive: true
-      },
-      {
         code: "5100",
         name: "Salary Expense",
-        type: "expense",
+        type: "expenses",
         description: "Employee salaries and wages",
         balance: 0,
         isActive: true
@@ -127,7 +173,7 @@ async function seed() {
       {
         code: "5200",
         name: "Rent Expense",
-        type: "expense",
+        type: "expenses",
         description: "Rent for office or retail space",
         balance: 0,
         isActive: true
@@ -135,7 +181,7 @@ async function seed() {
       {
         code: "5300",
         name: "Utilities Expense",
-        type: "expense",
+        type: "expenses",
         description: "Electricity, water, internet, etc.",
         balance: 0,
         isActive: true
@@ -143,7 +189,7 @@ async function seed() {
       {
         code: "5400",
         name: "Office Supplies",
-        type: "expense",
+        type: "expenses",
         description: "Office supplies and materials",
         balance: 0,
         isActive: true
@@ -152,7 +198,8 @@ async function seed() {
     
     console.log("Default accounts created successfully.");
   } else {
-    console.log(`Found ${existingAccounts.length} existing accounts, skipping account creation.`);
+    console.log(`Found ${existingAccounts.length} existing accounts, updating account types...`);
+    await updateAccountTypes();
   }
   
   // Check if contacts already exist
