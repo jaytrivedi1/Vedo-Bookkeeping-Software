@@ -13,6 +13,7 @@ import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
 import Banking from "@/pages/banking";
 import SalesTaxes from "@/pages/sales-taxes";
+import Products from "@/pages/products";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/chart-of-accounts" component={ChartOfAccounts} />
       <Route path="/account-books" component={AccountBooks} />
       <Route path="/sales-taxes" component={SalesTaxes} />
+      <Route path="/products" component={Products} />
       <Route path="/reports" component={Reports} />
       <Route component={NotFound} />
     </Switch>

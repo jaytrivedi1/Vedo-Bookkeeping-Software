@@ -414,6 +414,40 @@ export class MemStorage implements IStorage {
     
     return { assets, liabilities, equity };
   }
+
+  // Product Methods
+  async getProducts(): Promise<Product[]> {
+    return Array.from(this.products.values());
+  }
+
+  async getProduct(id: number): Promise<Product | undefined> {
+    return this.products.get(id);
+  }
+
+  async createProduct(product: InsertProduct): Promise<Product> {
+    const id = this.productIdCounter++;
+    const newProduct: Product = {
+      ...product,
+      id,
+      isActive: product.isActive ?? true
+    };
+    this.products.set(id, newProduct);
+    return newProduct;
+  }
+
+  async updateProduct(id: number, productUpdate: Partial<Product>): Promise<Product | undefined> {
+    const product = this.products.get(id);
+    if (!product) return undefined;
+
+    const updatedProduct = { ...product, ...productUpdate };
+    this.products.set(id, updatedProduct);
+    return updatedProduct;
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    if (!this.products.has(id)) return false;
+    return this.products.delete(id);
+  }
 }
 
 // Use DatabaseStorage instead of MemStorage for persistence
