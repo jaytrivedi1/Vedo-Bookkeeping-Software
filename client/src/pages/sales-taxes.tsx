@@ -66,7 +66,14 @@ import { Badge } from "@/components/ui/badge";
 const salesTaxFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   description: z.string().nullable().optional(),
-  rate: z.coerce.number().min(0, { message: "Rate must be a positive number." }).max(100, { message: "Rate cannot exceed 100%." }),
+  rate: z.coerce.number().min(0, { message: "Rate must be a positive number." }).max(100, { message: "Rate cannot exceed 100%." }).refine(
+    (val) => {
+      // Allow 3 decimal places for precision (e.g., 9.975%)
+      const rounded = parseFloat(val.toFixed(3));
+      return Math.abs(val - rounded) < 0.0001;
+    },
+    { message: "Rate can have up to 3 decimal places." }
+  ),
   accountId: z.coerce.number().nullable().optional(),
   isActive: z.boolean().default(true),
 });
@@ -229,7 +236,9 @@ export default function SalesTaxes() {
 
   // Format rate as percentage
   const formatRate = (rate: number) => {
-    return `${rate.toFixed(2)}%`;
+    // Check if the rate has a fractional part that needs 3 decimal places
+    const hasThreeDecimals = (rate * 1000) % 10 !== 0;
+    return `${rate.toFixed(hasThreeDecimals ? 3 : 2)}%`;
   };
 
   return (
@@ -372,15 +381,15 @@ export default function SalesTaxes() {
                     <FormControl>
                       <Input
                         type="number"
-                        step="0.01"
+                        step="0.001"
                         min="0"
                         max="100"
-                        placeholder="5.00"
+                        placeholder="5.000"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      The percentage rate (e.g., 5.00 for 5%)
+                      The percentage rate (e.g., 5.00 for 5%, 9.975 for 9.975%)
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
