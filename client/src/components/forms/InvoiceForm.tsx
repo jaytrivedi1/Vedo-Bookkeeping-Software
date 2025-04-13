@@ -51,7 +51,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
   const [subTotal, setSubTotal] = useState(0);
   const [taxRate, setTaxRate] = useState(0);
-  const [salesTaxId, setSalesTaxId] = useState<number | null>(null);
+  const [salesTaxId, setSalesTaxId] = useState<number | undefined>(undefined);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const { toast } = useToast();
@@ -195,7 +195,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       taxAmount,
       totalAmount,
       paymentTerms,
-      salesTaxId
+      // Only include salesTaxId if it has a value (convert null to undefined)
+      ...(salesTaxId ? { salesTaxId } : {})
     };
     
     console.log("Submitting invoice:", enrichedData);
@@ -637,7 +638,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     <span className="text-sm">Sales Tax:</span>
                     <div className="w-48">
                       <Select
-                        value={salesTaxId ? salesTaxId.toString() : "0"}
+                        value={salesTaxId !== undefined ? salesTaxId.toString() : "0"}
                         onValueChange={(value) => {
                           const taxId = parseInt(value);
                           if (taxId > 0 && salesTaxes) {
@@ -648,7 +649,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                               calculateTotals();
                             }
                           } else {
-                            setSalesTaxId(null);
+                            setSalesTaxId(undefined);
                             setTaxRate(0);
                             calculateTotals();
                           }

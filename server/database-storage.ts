@@ -185,22 +185,45 @@ export class DatabaseStorage implements IStorage {
   // Reports
   async getAccountBalances(): Promise<{ account: Account; balance: number }[]> {
     const allAccounts = await this.getAccounts();
-    return allAccounts.map(account => ({ 
-      account, 
-      balance: account.balance 
+    const allLedgerEntries = await this.getAllLedgerEntries();
+    
+    // Create a map to store balances for each account
+    const balanceMap = new Map<number, number>();
+    
+    // Initialize all account balances to 0
+    allAccounts.forEach(account => {
+      balanceMap.set(account.id, 0);
+    });
+    
+    // Calculate balances from ledger entries
+    allLedgerEntries.forEach(entry => {
+      const currentBalance = balanceMap.get(entry.accountId) || 0;
+      // Calculate balance based on normal balance of account type
+      balanceMap.set(entry.accountId, currentBalance + (entry.debit - entry.credit));
+    });
+    
+    // Create result array with account and balance
+    return allAccounts.map(account => ({
+      account,
+      balance: balanceMap.get(account.id) || 0
     }));
   }
 
   async getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }> {
-    const allAccounts = await this.getAccounts();
+    const accountBalances = await this.getAccountBalances();
     
-    // Filter revenue accounts
-    const revenueAccounts = allAccounts.filter(account => account.type === 'income');
-    const revenues = revenueAccounts.reduce((sum, account) => sum + account.balance, 0);
+    // For income accounts, credit increases the balance (revenue)
+    const revenueAccounts = accountBalances.filter(item => 
+      item.account.type === 'income' || item.account.type === 'other_income'
+    );
+    // Revenue accounts have credit balances, so we negate the balance
+    const revenues = revenueAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
     
-    // Filter expense accounts
-    const expenseAccounts = allAccounts.filter(account => account.type === 'expense');
-    const expenses = expenseAccounts.reduce((sum, account) => sum + account.balance, 0);
+    // For expense accounts, debit increases the balance (expense)
+    const expenseAccounts = accountBalances.filter(item => 
+      item.account.type === 'expenses' || item.account.type === 'cost_of_goods_sold'
+    );
+    const expenses = expenseAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     return {
       revenues,
@@ -210,19 +233,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }> {
-    const allAccounts = await this.getAccounts();
+    const accountBalances = await this.getAccountBalances();
     
-    // Calculate total assets
-    const assetAccounts = allAccounts.filter(account => account.type === 'asset');
-    const assets = assetAccounts.reduce((sum, account) => sum + account.balance, 0);
+    // Asset accounts have debit balances
+    const assetAccounts = accountBalances.filter(item => 
+      item.account.type === 'current_assets' || 
+      item.account.type === 'bank' || 
+      item.account.type === 'accounts_receivable' ||
+      item.account.type === 'fixed_assets'
+    );
+    const assets = assetAccounts.reduce((sum, item) => sum + item.balance, 0);
     
-    // Calculate total liabilities
-    const liabilityAccounts = allAccounts.filter(account => account.type === 'liability');
-    const liabilities = liabilityAccounts.reduce((sum, account) => sum + account.balance, 0);
+    // Liability accounts have credit balances (negative in our ledger system)
+    const liabilityAccounts = accountBalances.filter(item => 
+      item.account.type === 'accounts_payable' || 
+      item.account.type === 'credit_card' || 
+      item.account.type === 'other_current_liabilities' ||
+      item.account.type === 'long_term_liabilities'
+    );
+    // Liability accounts have credit balances, so we negate the balance
+    const liabilities = liabilityAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
     
-    // Calculate total equity
-    const equityAccounts = allAccounts.filter(account => account.type === 'equity');
-    const equity = equityAccounts.reduce((sum, account) => sum + account.balance, 0);
+    // Equity accounts have credit balances (negative in our ledger system)
+    const equityAccounts = accountBalances.filter(item => 
+      item.account.type === 'equity'
+    );
+    // Equity accounts have credit balances, so we negate the balance
+    const equity = equityAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
     
     return { assets, liabilities, equity };
   }
