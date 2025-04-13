@@ -149,11 +149,15 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>{product ? "Edit Product" : "Add New Product"}</DialogTitle>
+          <DialogTitle>
+            {product 
+              ? `Edit ${product.type === "service" ? "Service" : "Product"}` 
+              : `Add New ${defaultType === "service" ? "Service" : "Product"}`}
+          </DialogTitle>
           <DialogDescription>
             {product 
-              ? "Update the details for this product or service." 
-              : "Fill in the details to create a new product or service."}
+              ? `Update the details for this ${product.type === "service" ? "service" : "product"}.` 
+              : `Fill in the details to create a new ${defaultType === "service" ? "service" : "product"}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -167,7 +171,7 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                 <FormItem>
                   <FormLabel>Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter product name" {...field} />
+                    <Input placeholder={`Enter ${product ? (product.type === "service" ? "service" : "product") : (defaultType === "service" ? "service" : "product")} name`} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -302,7 +306,7 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    The default sales tax applied to this product
+                    The default sales tax applied to this {product ? (product.type === "service" ? "service" : "product") : (defaultType === "service" ? "service" : "product")}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -318,7 +322,7 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                   <div className="space-y-0.5">
                     <FormLabel className="text-base">Active</FormLabel>
                     <FormDescription>
-                      Inactive products won't appear in dropdown lists
+                      Inactive {product ? (product.type === "service" ? "services" : "products") : (defaultType === "service" ? "services" : "products")} won't appear in dropdown lists
                     </FormDescription>
                   </div>
                   <FormControl>
@@ -343,8 +347,8 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                 {isSubmitting
                   ? "Saving..."
                   : product
-                  ? "Update Product"
-                  : "Create Product"}
+                  ? `Update ${product.type === "service" ? "Service" : "Product"}`
+                  : `Create ${defaultType === "service" ? "Service" : "Product"}`}
               </Button>
             </div>
           </form>
