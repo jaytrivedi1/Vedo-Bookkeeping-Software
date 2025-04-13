@@ -1,8 +1,8 @@
 import { db } from "./db";
 import { 
-  Account, Contact, Transaction, LineItem, LedgerEntry,
-  InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry,
-  accounts, contacts, transactions, lineItems, ledgerEntries
+  Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax,
+  InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax,
+  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { IStorage } from "./storage";
