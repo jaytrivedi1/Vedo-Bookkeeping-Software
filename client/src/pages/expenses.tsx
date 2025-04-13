@@ -37,7 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
 export default function Expenses() {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const [searchQuery, setSearchQuery] = useState<string>("");
   
   // Fetch all transactions
@@ -50,16 +50,11 @@ export default function Expenses() {
     ? transactions
         .filter((transaction) => transaction.type === "expense")
         .filter((expense) => {
-          if (statusFilter === "all") return true;
-          return expense.status === statusFilter;
-        })
-        .filter((expense) => {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
           return (
             expense.reference.toLowerCase().includes(query) ||
-            expense.description?.toLowerCase().includes(query) ||
-            expense.status.toLowerCase().includes(query)
+            expense.description?.toLowerCase().includes(query)
           );
         })
     : [];
@@ -148,21 +143,7 @@ export default function Expenses() {
               </div>
             </div>
             
-            <Select
-              value={statusFilter}
-              onValueChange={setStatusFilter}
-            >
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
+
           </div>
           
           {/* Tabbed Content - Expenses and Vendors */}

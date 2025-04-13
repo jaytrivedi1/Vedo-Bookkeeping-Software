@@ -37,7 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
 export default function Invoices() {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const [searchQuery, setSearchQuery] = useState<string>("");
   
   // Fetch all transactions
