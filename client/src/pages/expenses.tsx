@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, UserPlus } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import TransactionForm from "@/components/transactions/TransactionForm";
+import VendorDialog from "@/components/vendors/VendorDialog";
+import VendorList from "@/components/vendors/VendorList";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +21,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
@@ -66,6 +80,22 @@ export default function Expenses() {
         <h1 className="text-2xl font-semibold text-gray-900">Expenses</h1>
         <div className="flex items-center space-x-3">
           <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <VendorDialog 
+                    buttonLabel="Add Vendor" 
+                    buttonVariant="secondary"
+                    onSuccess={() => refetch()}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add a new vendor</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <TransactionForm onSuccess={refetch} />
         </div>
       </div>
@@ -135,10 +165,23 @@ export default function Expenses() {
             </Select>
           </div>
           
-          {/* Expenses Table */}
-          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-            <TransactionTable transactions={expenses} loading={isLoading} />
-          </div>
+          {/* Tabbed Content - Expenses and Vendors */}
+          <Tabs defaultValue="expenses" className="mb-6">
+            <TabsList>
+              <TabsTrigger value="expenses">Expenses</TabsTrigger>
+              <TabsTrigger value="vendors">Vendors</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="expenses" className="mt-4">
+              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                <TransactionTable transactions={expenses} loading={isLoading} />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="vendors" className="mt-4">
+              <VendorList />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
