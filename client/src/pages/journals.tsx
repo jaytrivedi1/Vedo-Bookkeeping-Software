@@ -104,7 +104,11 @@ export default function Journals() {
           
           {/* Journal Entries Table */}
           <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-            <TransactionTable transactions={journalEntries} loading={transactionsLoading} />
+            <TransactionTable 
+              transactions={journalEntries} 
+              loading={transactionsLoading} 
+              onDeleteSuccess={() => refetch()}
+            />
           </div>
         </div>
       </div>

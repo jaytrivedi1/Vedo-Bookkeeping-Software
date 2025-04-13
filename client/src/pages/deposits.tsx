@@ -102,7 +102,11 @@ export default function Deposits() {
           
           {/* Deposits Table */}
           <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-            <TransactionTable transactions={deposits} loading={isLoading} />
+            <TransactionTable 
+              transactions={deposits} 
+              loading={isLoading} 
+              onDeleteSuccess={() => refetch()}
+            />
           </div>
         </div>
       </div>

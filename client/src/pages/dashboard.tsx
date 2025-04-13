@@ -159,7 +159,11 @@ export default function Dashboard() {
                 </div>
                 
                 <TabsContent value={activeTab} className="mt-0">
-                  <TransactionTable transactions={filteredTransactions} loading={isLoading} />
+                  <TransactionTable 
+                    transactions={filteredTransactions} 
+                    loading={isLoading} 
+                    onDeleteSuccess={() => refetch()}
+                  />
                 </TabsContent>
               </Tabs>
             </div>

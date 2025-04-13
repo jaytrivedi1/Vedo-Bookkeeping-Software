@@ -155,7 +155,11 @@ export default function Expenses() {
             
             <TabsContent value="expenses" className="mt-4">
               <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-                <TransactionTable transactions={expenses} loading={isLoading} />
+                <TransactionTable 
+                  transactions={expenses} 
+                  loading={isLoading} 
+                  onDeleteSuccess={() => refetch()}
+                />
               </div>
             </TabsContent>
             
