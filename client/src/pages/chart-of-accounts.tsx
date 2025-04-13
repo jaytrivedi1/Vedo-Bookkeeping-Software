@@ -65,14 +65,14 @@ export default function ChartOfAccounts() {
     defaultValues: {
       code: "",
       name: "",
-      type: "asset",
+      type: "current_assets",
       description: "",
       isActive: true,
     },
   });
   
   const createAccount = useMutation({
-    mutationFn: async (data: typeof form.getValues) => {
+    mutationFn: async (data: any) => {
       return await apiRequest('POST', '/api/accounts', data);
     },
     onSuccess: () => {
@@ -86,7 +86,7 @@ export default function ChartOfAccounts() {
     },
   });
   
-  const onSubmit = (data: typeof form.getValues) => {
+  const onSubmit = (data: any) => {
     createAccount.mutate(data);
   };
   
@@ -110,24 +110,90 @@ export default function ChartOfAccounts() {
   
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'asset': return 'Asset';
-      case 'liability': return 'Liability';
+      // Assets
+      case 'accounts_receivable': return 'Accounts Receivable';
+      case 'current_assets': return 'Current Assets';
+      case 'bank': return 'Bank';
+      case 'property_plant_equipment': return 'Property, Plant & Equipment';
+      case 'long_term_assets': return 'Long-term Assets';
+      
+      // Liabilities
+      case 'accounts_payable': return 'Accounts Payable';
+      case 'credit_card': return 'Credit Card';
+      case 'other_current_liabilities': return 'Other Current Liabilities';
+      case 'long_term_liabilities': return 'Long-term Liabilities';
+      
+      // Standard types
       case 'equity': return 'Equity';
       case 'income': return 'Income';
+      case 'other_income': return 'Other Income';
+      case 'cost_of_goods_sold': return 'Cost of Goods Sold';
+      case 'expenses': return 'Expenses';
+      case 'other_expense': return 'Other Expense';
+      
+      // Legacy types
+      case 'asset': return 'Asset';
+      case 'liability': return 'Liability';
       case 'expense': return 'Expense';
-      default: return type;
+      
+      default: return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
   };
   
   const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'asset': return 'bg-blue-100 text-blue-800';
-      case 'liability': return 'bg-red-100 text-red-800';
-      case 'equity': return 'bg-green-100 text-green-800';
-      case 'income': return 'bg-purple-100 text-purple-800';
-      case 'expense': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+    // Asset-like accounts (blues)
+    if (type === 'accounts_receivable' || type === 'current_assets' || 
+        type === 'bank' || type === 'property_plant_equipment' || 
+        type === 'long_term_assets' || type === 'asset') {
+      switch (type) {
+        case 'accounts_receivable': return 'bg-sky-100 text-sky-800';
+        case 'current_assets': return 'bg-blue-100 text-blue-800';
+        case 'bank': return 'bg-indigo-100 text-indigo-800';
+        case 'property_plant_equipment': return 'bg-cyan-100 text-cyan-800';
+        case 'long_term_assets': return 'bg-teal-100 text-teal-800';
+        case 'asset': return 'bg-blue-100 text-blue-800';
+      }
     }
+    
+    // Liability-like accounts (reds/oranges)
+    if (type === 'accounts_payable' || type === 'credit_card' || 
+        type === 'other_current_liabilities' || type === 'long_term_liabilities' || 
+        type === 'liability') {
+      switch (type) {
+        case 'accounts_payable': return 'bg-red-100 text-red-800';
+        case 'credit_card': return 'bg-orange-100 text-orange-800';
+        case 'other_current_liabilities': return 'bg-rose-100 text-rose-800';
+        case 'long_term_liabilities': return 'bg-pink-100 text-pink-800';
+        case 'liability': return 'bg-red-100 text-red-800';
+      }
+    }
+    
+    // Equity (green)
+    if (type === 'equity') {
+      return 'bg-green-100 text-green-800';
+    }
+    
+    // Income-like accounts (purples)
+    if (type === 'income' || type === 'other_income') {
+      switch (type) {
+        case 'income': return 'bg-purple-100 text-purple-800';
+        case 'other_income': return 'bg-violet-100 text-violet-800';
+      }
+    }
+    
+    // Expense-like accounts (yellows/ambers)
+    if (type === 'cost_of_goods_sold' || type === 'expenses' || 
+        type === 'other_expense' || type === 'expense') {
+      switch (type) {
+        case 'cost_of_goods_sold': return 'bg-amber-100 text-amber-800';
+        case 'expenses': return 'bg-yellow-100 text-yellow-800';
+        case 'other_expense': return 'bg-lime-100 text-lime-800';
+        case 'expense': return 'bg-yellow-100 text-yellow-800';
+      }
+    }
+    
+    // Default fallback
+    return 'bg-gray-100 text-gray-800';
   };
   
   return (
@@ -153,7 +219,7 @@ export default function ChartOfAccounts() {
               </DialogHeader>
               
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <form onSubmit={form.handleSubmit((data) => onSubmit(data))} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -295,25 +361,40 @@ export default function ChartOfAccounts() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 
-                <SelectLabel>Assets</SelectLabel>
-                <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
-                <SelectItem value="current_assets">Current Assets</SelectItem>
-                <SelectItem value="bank">Bank</SelectItem>
-                <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
-                <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Assets</SelectLabel>
+                  <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
+                  <SelectItem value="current_assets">Current Assets</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
+                  <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
+                  <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
+                </SelectGroup>
                 
-                <SelectLabel>Liabilities</SelectLabel>
-                <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
-                <SelectItem value="credit_card">Credit Card</SelectItem>
-                <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
-                <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Liabilities</SelectLabel>
+                  <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                  <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
+                  <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
+                </SelectGroup>
                 
-                <SelectItem value="equity">Equity</SelectItem>
-                <SelectItem value="income">Income</SelectItem>
-                <SelectItem value="other_income">Other Income</SelectItem>
-                <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
-                <SelectItem value="expenses">Expenses</SelectItem>
-                <SelectItem value="other_expense">Other Expense</SelectItem>
+                <SelectGroup>
+                  <SelectLabel>Equity</SelectLabel>
+                  <SelectItem value="equity">Equity</SelectItem>
+                </SelectGroup>
+                
+                <SelectGroup>
+                  <SelectLabel>Income</SelectLabel>
+                  <SelectItem value="income">Income</SelectItem>
+                  <SelectItem value="other_income">Other Income</SelectItem>
+                </SelectGroup>
+                
+                <SelectGroup>
+                  <SelectLabel>Expenses</SelectLabel>
+                  <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
+                  <SelectItem value="expenses">Expenses</SelectItem>
+                  <SelectItem value="other_expense">Other Expense</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>
