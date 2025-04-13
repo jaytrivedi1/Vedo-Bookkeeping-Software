@@ -202,9 +202,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create ledger entries - Double Entry Accounting
       // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable
-      const receivableAccount = await storage.getAccountByCode('1200'); // Accounts Receivable
+      const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
       const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
-      const taxPayableAccount = await storage.getAccountByCode('2200'); // Sales Tax Payable
+      
+      // Get the sales tax account from the sales tax record if available
+      let taxPayableAccount = null;
+      if (invoiceData.salesTaxId) {
+        const salesTax = await storage.getSalesTax(invoiceData.salesTaxId);
+        if (salesTax && salesTax.accountId) {
+          taxPayableAccount = await storage.getAccount(salesTax.accountId);
+        }
+      }
+      
+      // Fallback to default sales tax payable account if none found
+      if (!taxPayableAccount) {
+        taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+      }
       
       if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
