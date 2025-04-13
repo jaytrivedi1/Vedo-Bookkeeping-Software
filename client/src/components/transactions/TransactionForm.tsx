@@ -56,50 +56,54 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
           New Transaction
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>New Transaction</DialogTitle>
-          <DialogDescription>
-            Create a new transaction of your chosen type.
-          </DialogDescription>
-        </DialogHeader>
-        
-        <div className="my-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Transaction Type
-          </label>
-          <Select
-            value={transactionType}
-            onValueChange={(value) => setTransactionType(value as TransactionType)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select transaction type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="invoice">Invoice</SelectItem>
-              <SelectItem value="expense">Expense</SelectItem>
-              <SelectItem value="journal_entry">Journal Entry</SelectItem>
-              <SelectItem value="deposit">Deposit</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {transactionType === "invoice" && (
+      
+      {/* Remove DialogContent and show forms in full screen for Invoice */}
+      {open && transactionType === "invoice" ? (
+        <div className="fixed inset-0 z-50 bg-background">
           <InvoiceForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
-        )}
-        
-        {transactionType === "expense" && (
-          <ExpenseForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
-        )}
-        
-        {transactionType === "journal_entry" && (
-          <JournalEntryForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
-        )}
-        
-        {transactionType === "deposit" && (
-          <DepositForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
-        )}
-      </DialogContent>
+        </div>
+      ) : (
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>New Transaction</DialogTitle>
+            <DialogDescription>
+              Create a new transaction of your chosen type.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="my-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Transaction Type
+            </label>
+            <Select
+              value={transactionType}
+              onValueChange={(value) => setTransactionType(value as TransactionType)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select transaction type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="invoice">Invoice</SelectItem>
+                <SelectItem value="expense">Expense</SelectItem>
+                <SelectItem value="journal_entry">Journal Entry</SelectItem>
+                <SelectItem value="deposit">Deposit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {transactionType === "expense" && (
+            <ExpenseForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
+          )}
+          
+          {transactionType === "journal_entry" && (
+            <JournalEntryForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
+          )}
+          
+          {transactionType === "deposit" && (
+            <DepositForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
+          )}
+        </DialogContent>
+      )}
     </Dialog>
   );
 }
