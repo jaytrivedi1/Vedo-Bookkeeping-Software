@@ -23,7 +23,10 @@ const productFormSchema = insertProductSchema.extend({
   description: z.string().nullable().optional(),
   sku: z.string().nullable().optional(),
   // Use coerce to ensure these are always numbers
-  accountId: z.coerce.number().int().nonnegative(),
+  accountId: z.coerce.number().int().nonnegative()
+    .refine(val => val !== 0, { 
+      message: "Revenue Account is required" 
+    }),
   salesTaxId: z.coerce.number().int().nonnegative(),
 });
 
@@ -265,7 +268,7 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="0">None</SelectItem>
+                      <SelectItem value="0">Select a Revenue Account (Required)</SelectItem>
                       {revenueAccounts.map((account: any) => (
                         <SelectItem key={account.id} value={account.id.toString()}>
                           {account.name}
