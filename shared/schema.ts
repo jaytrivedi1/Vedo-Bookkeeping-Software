@@ -107,6 +107,7 @@ export const invoiceSchema = z.object({
   totalAmount: z.number().optional(),
   dueDate: z.date().optional(),
   paymentTerms: z.string().optional(),
+  salesTaxId: z.number().optional(),
 });
 
 export const expenseSchema = z.object({

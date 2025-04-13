@@ -51,6 +51,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
   const [subTotal, setSubTotal] = useState(0);
   const [taxRate, setTaxRate] = useState(0);
+  const [salesTaxId, setSalesTaxId] = useState<number | null>(null);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const { toast } = useToast();
@@ -193,7 +194,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       taxRate,
       taxAmount,
       totalAmount,
-      paymentTerms
+      paymentTerms,
+      salesTaxId
     };
     
     console.log("Submitting invoice:", enrichedData);
@@ -635,10 +637,21 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     <span className="text-sm">Sales Tax:</span>
                     <div className="w-48">
                       <Select
-                        value={taxRate.toString()}
+                        value={salesTaxId ? salesTaxId.toString() : "0"}
                         onValueChange={(value) => {
-                          setTaxRate(parseFloat(value) || 0);
-                          calculateTotals();
+                          const taxId = parseInt(value);
+                          if (taxId > 0 && salesTaxes) {
+                            const selectedTax = salesTaxes.find(tax => tax.id === taxId);
+                            if (selectedTax) {
+                              setSalesTaxId(taxId);
+                              setTaxRate(selectedTax.rate);
+                              calculateTotals();
+                            }
+                          } else {
+                            setSalesTaxId(null);
+                            setTaxRate(0);
+                            calculateTotals();
+                          }
                         }}
                       >
                         <SelectTrigger className="w-full">
@@ -652,7 +665,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                             salesTaxes
                               .filter(tax => tax.isActive)
                               .map((tax) => (
-                                <SelectItem key={tax.id} value={tax.rate.toString()}>
+                                <SelectItem key={tax.id} value={tax.id.toString()}>
                                   {tax.name} ({tax.rate}%)
                                 </SelectItem>
                               ))
