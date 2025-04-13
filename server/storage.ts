@@ -55,6 +55,7 @@ export interface IStorage {
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction, lineItems: InsertLineItem[], ledgerEntries: InsertLedgerEntry[]): Promise<Transaction>;
   updateTransaction(id: number, transaction: Partial<Transaction>): Promise<Transaction | undefined>;
+  deleteTransaction(id: number): Promise<boolean>;
 
   // Line Items
   getLineItemsByTransaction(transactionId: number): Promise<LineItem[]>;
@@ -305,6 +306,51 @@ export class MemStorage implements IStorage {
     const updatedTransaction = { ...transaction, ...transactionUpdate };
     this.transactions.set(id, updatedTransaction);
     return updatedTransaction;
+  }
+
+  async deleteTransaction(id: number): Promise<boolean> {
+    // Check if transaction exists
+    if (!this.transactions.has(id)) return false;
+
+    // Get ledger entries to reverse account balances
+    const ledgerEntries = await this.getLedgerEntriesByTransaction(id);
+    
+    // Reverse the effect on account balances - subtract debits and add credits
+    for (const entry of ledgerEntries) {
+      const account = await this.getAccount(entry.accountId);
+      if (account) {
+        let balanceChange = 0;
+        
+        if (account.type === 'asset' || account.type === 'expense') {
+          // Debits increase assets and expenses, so subtract them for deletion
+          balanceChange = -(entry.debit - entry.credit);
+        } else {
+          // Credits increase liabilities, equity, and income, so subtract them for deletion
+          balanceChange = -(entry.credit - entry.debit);
+        }
+        
+        await this.updateAccount(entry.accountId, { balance: account.balance + balanceChange });
+      }
+    }
+    
+    // Delete related ledger entries
+    const ledgerEntriesToDelete = Array.from(this.ledgerEntries.values())
+      .filter(entry => entry.transactionId === id);
+    
+    for (const entry of ledgerEntriesToDelete) {
+      this.ledgerEntries.delete(entry.id);
+    }
+    
+    // Delete related line items
+    const lineItemsToDelete = Array.from(this.lineItems.values())
+      .filter(item => item.transactionId === id);
+    
+    for (const item of lineItemsToDelete) {
+      this.lineItems.delete(item.id);
+    }
+    
+    // Delete the transaction
+    return this.transactions.delete(id);
   }
 
   // Line Item Methods
