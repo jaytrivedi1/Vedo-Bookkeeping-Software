@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { Invoice, invoiceSchema, Contact } from "@shared/schema";
+import { Invoice, invoiceSchema, Contact, SalesTax } from "@shared/schema";
 import { CalendarIcon, Plus, Trash2, SendIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
+  });
+  
+  const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
+    queryKey: ['/api/sales-taxes'],
   });
 
   const form = useForm<Invoice>({
@@ -650,19 +654,36 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Tax Rate (%):</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      className="w-20 text-right"
-                      value={taxRate}
-                      onChange={(e) => {
-                        setTaxRate(parseFloat(e.target.value) || 0);
-                        calculateTotals();
-                      }}
-                    />
+                    <span className="text-sm">Sales Tax:</span>
+                    <div className="w-48">
+                      <Select
+                        value={taxRate.toString()}
+                        onValueChange={(value) => {
+                          setTaxRate(parseFloat(value) || 0);
+                          calculateTotals();
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select tax rate" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">None (0%)</SelectItem>
+                          {salesTaxesLoading ? (
+                            <SelectItem value="loading" disabled>Loading tax rates...</SelectItem>
+                          ) : salesTaxes && salesTaxes.length > 0 ? (
+                            salesTaxes
+                              .filter(tax => tax.isActive)
+                              .map((tax) => (
+                                <SelectItem key={tax.id} value={tax.rate.toString()}>
+                                  {tax.name} ({tax.rate}%)
+                                </SelectItem>
+                              ))
+                          ) : (
+                            <SelectItem value="none" disabled>No tax rates available</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   
                   <div className="flex justify-between">
