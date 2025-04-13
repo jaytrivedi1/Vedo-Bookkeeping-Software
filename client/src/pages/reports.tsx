@@ -641,17 +641,22 @@ export default function Reports() {
                               <TableRow>
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
-                            ) : accountsByType['equity'] && accountsByType['equity'].length > 0 ? (
-                              accountsByType['equity'].map((account: any) => (
-                                <TableRow key={account.id}>
-                                  <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
-                                </TableRow>
-                              ))
                             ) : (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">No equity accounts found</TableCell>
-                              </TableRow>
+                              <>
+                                {/* Existing equity accounts */}
+                                {accountsByType['equity'] && accountsByType['equity'].map((account: any) => (
+                                  <TableRow key={account.id}>
+                                    <TableCell>{account.name}</TableCell>
+                                    <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                ))}
+                                
+                                {/* Add Retained Earnings (Net Income) */}
+                                <TableRow>
+                                  <TableCell>Retained Earnings</TableCell>
+                                  <TableCell className="text-right">${incomeStatement?.netIncome.toFixed(2)}</TableCell>
+                                </TableRow>
+                              </>
                             )}
                           </TableBody>
                         </Table>
