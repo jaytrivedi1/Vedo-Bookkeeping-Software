@@ -51,9 +51,7 @@ export default function ProductsPage() {
     if (!productToDelete) return;
     
     try {
-      await apiRequest(`/api/products/${productToDelete.id}`, {
-        method: 'DELETE',
-      });
+      await apiRequest(`/api/products/${productToDelete.id}`, 'DELETE');
       
       toast({
         title: "Product deleted",
@@ -122,7 +120,7 @@ export default function ProductsPage() {
                   <TableRow key={product.id}>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.type}</TableCell>
-                    <TableCell>${product.price.toFixed(2)}</TableCell>
+                    <TableCell>${typeof product.price === 'string' ? parseFloat(product.price).toFixed(2) : product.price.toFixed(2)}</TableCell>
                     <TableCell>{getAccountName(product.accountId)}</TableCell>
                     <TableCell>{getSalesTaxName(product.salesTaxId)}</TableCell>
                     <TableCell>

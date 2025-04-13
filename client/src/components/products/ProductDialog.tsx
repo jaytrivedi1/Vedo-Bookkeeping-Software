@@ -14,10 +14,17 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Product, insertProductSchema } from "@shared/schema";
 
-// Create Zod schema for form validation
+// Create Zod schema for form validation with improved handling for numeric values
 const productFormSchema = insertProductSchema.extend({
-  // Extend with any additional validation rules
-  price: z.coerce.number().min(0, "Price must be a positive number"),
+  name: z.string().min(1, { message: "Name is required" }),
+  type: z.enum(["product", "service"]),
+  price: z.coerce.number().min(0),
+  isActive: z.boolean().default(true),
+  description: z.string().nullable().optional(),
+  sku: z.string().nullable().optional(),
+  // Use coerce to ensure these are always numbers
+  accountId: z.coerce.number().int().nonnegative(),
+  salesTaxId: z.coerce.number().int().nonnegative(),
 });
 
 type ProductFormValues = z.infer<typeof productFormSchema>;
@@ -29,26 +36,26 @@ interface ProductDialogProps {
 }
 
 export function ProductDialog({ open, onOpenChange, product }: ProductDialogProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get accounts for dropdown
+  // Get all revenue accounts for dropdown
   const { data: accounts = [] } = useQuery({
     queryKey: ['/api/accounts'],
   });
 
-  // Get sales taxes for dropdown
+  // Get all sales taxes for dropdown
   const { data: salesTaxes = [] } = useQuery({
     queryKey: ['/api/sales-taxes'],
   });
 
-  // Filter revenue accounts
-  const revenueAccounts = accounts.filter(
-    account => account.type === 'income' || account.type === 'other_income'
+  // Filter only revenue accounts
+  const revenueAccounts = accounts.filter((account: any) => 
+    account.type === 'revenue' || 
+    account.type === 'other_income'
   );
 
-  // Set up form with validation
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues: {
@@ -57,22 +64,24 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
       type: "product",
       price: 0,
       isActive: true,
-      accountId: null,
-      salesTaxId: null,
+      accountId: 0,
+      salesTaxId: 0,
     },
   });
 
-  // Update form when product changes
+  // Update form when editing an existing product
   useEffect(() => {
     if (product) {
       form.reset({
         name: product.name,
-        description: product.description || "",
+        description: product.description,
         type: product.type,
-        price: product.price,
+        sku: product.sku,
+        price: typeof product.price === 'string' ? parseFloat(product.price) : product.price,
+        cost: product.cost,
         isActive: product.isActive,
-        accountId: product.accountId,
-        salesTaxId: product.salesTaxId,
+        accountId: product.accountId || 0,
+        salesTaxId: product.salesTaxId || 0,
       });
     } else {
       form.reset({
@@ -81,31 +90,38 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
         type: "product",
         price: 0,
         isActive: true,
-        accountId: null,
-        salesTaxId: null,
+        accountId: 0,
+        salesTaxId: 0,
       });
     }
   }, [product, form]);
 
   const onSubmit = async (data: ProductFormValues) => {
+    console.log("Form data before submission:", data);
     setIsSubmitting(true);
     try {
+      // Ensure consistent data format
+      const formattedData = {
+        ...data,
+        // Convert price to string for DB if needed
+        price: typeof data.price === 'number' ? data.price.toString() : data.price,
+        // Ensure accountId and salesTaxId are numbers
+        accountId: Number(data.accountId),
+        salesTaxId: Number(data.salesTaxId),
+      };
+
+      console.log("Formatted data for submission:", formattedData);
+
       if (product) {
         // Update existing product
-        await apiRequest(`/api/products/${product.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(data),
-        });
+        await apiRequest(`/api/products/${product.id}`, 'PATCH', formattedData);
         toast({
           title: "Product updated",
           description: "Product has been updated successfully.",
         });
       } else {
         // Create new product
-        await apiRequest('/api/products', {
-          method: 'POST',
-          body: JSON.stringify(data),
-        });
+        await apiRequest('/api/products', 'POST', formattedData);
         toast({
           title: "Product created",
           description: "New product has been created successfully.",
@@ -115,6 +131,7 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
       queryClient.invalidateQueries({ queryKey: ['/api/products'] });
       onOpenChange(false);
     } catch (error) {
+      console.error("Error saving product:", error);
       toast({
         title: "Error",
         description: product 
@@ -231,9 +248,9 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                 <FormItem>
                   <FormLabel>Revenue Account</FormLabel>
                   <Select 
-                    onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} 
-                    defaultValue={field.value?.toString() || ""}
-                    value={field.value?.toString() || ""}
+                    onValueChange={(value) => field.onChange(Number(value))} 
+                    defaultValue={field.value?.toString() || "0"}
+                    value={field.value?.toString() || "0"}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -241,8 +258,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {revenueAccounts.map((account) => (
+                      <SelectItem value="0">None</SelectItem>
+                      {revenueAccounts.map((account: any) => (
                         <SelectItem key={account.id} value={account.id.toString()}>
                           {account.name}
                         </SelectItem>
@@ -265,9 +282,9 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                 <FormItem>
                   <FormLabel>Sales Tax</FormLabel>
                   <Select 
-                    onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} 
-                    defaultValue={field.value?.toString() || ""}
-                    value={field.value?.toString() || ""}
+                    onValueChange={(value) => field.onChange(Number(value))} 
+                    defaultValue={field.value?.toString() || "0"}
+                    value={field.value?.toString() || "0"}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -275,8 +292,8 @@ export function ProductDialog({ open, onOpenChange, product }: ProductDialogProp
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {salesTaxes.map((tax) => (
+                      <SelectItem value="0">None</SelectItem>
+                      {salesTaxes.map((tax: any) => (
                         <SelectItem key={tax.id} value={tax.id.toString()}>
                           {tax.name} ({tax.rate}%)
                         </SelectItem>
