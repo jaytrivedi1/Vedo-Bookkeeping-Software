@@ -643,19 +643,33 @@ export default function Reports() {
                               </TableRow>
                             ) : (
                               <>
-                                {/* Existing equity accounts */}
-                                {accountsByType['equity'] && accountsByType['equity'].map((account: any) => (
-                                  <TableRow key={account.id}>
-                                    <TableCell>{account.name}</TableCell>
-                                    <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
-                                  </TableRow>
-                                ))}
-                                
-                                {/* Add Retained Earnings (Net Income) */}
-                                <TableRow>
-                                  <TableCell>Retained Earnings</TableCell>
-                                  <TableCell className="text-right">${incomeStatement?.netIncome.toFixed(2)}</TableCell>
-                                </TableRow>
+                                {/* Show all equity accounts */}
+                                {(() => {
+                                  // Check if a Retained Earnings account already exists
+                                  const hasRetainedEarnings = accountsByType['equity'] && 
+                                    accountsByType['equity'].some((account: any) => 
+                                      account.name.toLowerCase().includes('retained earnings'));
+                                  
+                                  // Map and show all equity accounts
+                                  return (
+                                    <>
+                                      {accountsByType['equity'] && accountsByType['equity'].map((account: any) => (
+                                        <TableRow key={account.id}>
+                                          <TableCell>{account.name}</TableCell>
+                                          <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                      
+                                      {/* Only add Retained Earnings if it doesn't already exist */}
+                                      {!hasRetainedEarnings && (
+                                        <TableRow>
+                                          <TableCell>Retained Earnings</TableCell>
+                                          <TableCell className="text-right">${incomeStatement?.netIncome.toFixed(2)}</TableCell>
+                                        </TableRow>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </>
                             )}
                           </TableBody>
