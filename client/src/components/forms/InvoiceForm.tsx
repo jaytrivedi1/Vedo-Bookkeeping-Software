@@ -70,7 +70,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       contactId: undefined,
       reference: `INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
       description: '',
-      status: 'draft',
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0 }],
     },
   });
@@ -189,6 +188,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       // Make sure we're passing Date objects and not strings
       date: data.date instanceof Date ? data.date : new Date(data.date),
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
+      status: 'draft' as const, // Default status since we removed the field
       subTotal,
       taxRate,
       taxAmount,
@@ -403,29 +403,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     </Select>
                   </div>
                   
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="paid">Paid</SelectItem>
-                            <SelectItem value="overdue">Overdue</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+
                 </div>
 
                 <FormField

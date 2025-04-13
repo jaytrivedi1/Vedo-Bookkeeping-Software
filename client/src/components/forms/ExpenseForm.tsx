@@ -61,7 +61,6 @@ export default function ExpenseForm({ onSuccess, onCancel }: ExpenseFormProps) {
       contactId: undefined,
       reference: `EXP-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
       description: '',
-      status: 'pending',
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0 }],
     },
   });
@@ -113,6 +112,7 @@ export default function ExpenseForm({ onSuccess, onCancel }: ExpenseFormProps) {
     // Add the calculated totals and tax to the expense data
     const enrichedData = {
       ...data,
+      status: 'pending' as const, // Default status since we removed the field
       subTotal,
       taxRate,
       taxAmount,
@@ -249,29 +249,7 @@ export default function ExpenseForm({ onSuccess, onCancel }: ExpenseFormProps) {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a status" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+
 
           <div>
             <h3 className="text-md font-medium mb-2">Line Items</h3>
