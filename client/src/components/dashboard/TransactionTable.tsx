@@ -81,14 +81,13 @@ export default function TransactionTable({ transactions, loading = false }: Tran
                 <TableHead>Type</TableHead>
                 <TableHead>Reference</TableHead>
                 <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-6">
+                  <TableCell colSpan={6} className="text-center py-6">
                     No transactions found
                   </TableCell>
                 </TableRow>
@@ -120,11 +119,6 @@ export default function TransactionTable({ transactions, loading = false }: Tran
                       {transaction.type === 'expense' 
                         ? '-$' + transaction.amount.toFixed(2) 
                         : '$' + transaction.amount.toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(transaction.status)}`}>
-                        {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
-                      </span>
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium">
                       <Link 

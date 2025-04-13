@@ -50,16 +50,11 @@ export default function Invoices() {
     ? transactions
         .filter((transaction) => transaction.type === "invoice")
         .filter((invoice) => {
-          if (statusFilter === "all") return true;
-          return invoice.status === statusFilter;
-        })
-        .filter((invoice) => {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
           return (
             invoice.reference.toLowerCase().includes(query) ||
-            invoice.description?.toLowerCase().includes(query) ||
-            invoice.status.toLowerCase().includes(query)
+            invoice.description?.toLowerCase().includes(query)
           );
         })
     : [];
@@ -148,21 +143,7 @@ export default function Invoices() {
               </div>
             </div>
             
-            <Select
-              value={statusFilter}
-              onValueChange={setStatusFilter}
-            >
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-              </SelectContent>
-            </Select>
+
           </div>
           
           {/* Tabbed Content - Invoices and Customers */}
