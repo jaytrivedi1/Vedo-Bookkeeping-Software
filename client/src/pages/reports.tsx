@@ -48,76 +48,124 @@ import {
 import { Account, LedgerEntry } from "@shared/schema";
 
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState("");
-  const [startDate, setStartDate] = useState<Date | undefined>(startOfMonth(subMonths(new Date(), 1)));
-  const [endDate, setEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
+  const [activeTab, setActiveTab] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 1));
+  const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   
-  
-  // Fetch income statement
+  // Fetch income statement data
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
-    queryKey: ['/api/reports/income-statement'],
+    queryKey: ['/api/reports/income-statement', startDate?.toISOString(), endDate?.toISOString()],
+    enabled: activeTab === 'income-statement' || activeTab === '',
   });
   
-  // Fetch balance sheet
+  // Fetch balance sheet data
   const { data: balanceSheet, isLoading: balanceLoading } = useQuery({
     queryKey: ['/api/reports/balance-sheet'],
+    enabled: activeTab === 'balance-sheet' || activeTab === '',
   });
   
-  // Fetch account balances
+  // Fetch account balances (for trial balance and detailed breakdowns)
   const { data: accountBalances, isLoading: accountsLoading } = useQuery({
     queryKey: ['/api/reports/account-balances'],
+    enabled: activeTab !== 'general-ledger',
   });
   
-  // Fetch general ledger entries with date filtering
-  const { data: generalLedger, isLoading: ledgerLoading } = useQuery<LedgerEntry[]>({
-    queryKey: ['/api/reports/general-ledger', { startDate, endDate }],
-    queryFn: async ({ queryKey }) => {
-      const [_path, params] = queryKey;
-      const urlParams = new URLSearchParams();
-      
-      if (params && typeof params === 'object' && 'startDate' in params && params.startDate) {
-        urlParams.append('startDate', params.startDate.toISOString());
-      }
-      
-      if (params && typeof params === 'object' && 'endDate' in params && params.endDate) {
-        urlParams.append('endDate', params.endDate.toISOString());
-      }
-      
-      const response = await fetch(`/api/reports/general-ledger?${urlParams.toString()}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch general ledger data');
-      }
-      return response.json();
-    },
-    enabled: activeTab === 'general-ledger'
+  // Fetch ledger entries (for general ledger)
+  const { data: ledgerEntries, isLoading: ledgerLoading } = useQuery<LedgerEntry[]>({
+    queryKey: ['/api/ledger-entries'],
+    enabled: activeTab === 'general-ledger',
   });
   
   // Prepare data for charts
-  const incomeData = [
-    { name: 'Revenue', value: incomeStatement?.revenues || 0 },
-    { name: 'Expenses', value: incomeStatement?.expenses || 0 },
-    { name: 'Net Income', value: incomeStatement?.netIncome || 0 },
-  ];
+  const incomeData = incomeStatement 
+    ? [
+        { name: 'Revenues', value: incomeStatement.revenues },
+        { name: 'Expenses', value: incomeStatement.expenses },
+        { name: 'Net Income', value: incomeStatement.netIncome }
+      ]
+    : [];
   
-  const balanceData = [
-    { name: 'Assets', value: balanceSheet?.assets || 0 },
-    { name: 'Liabilities', value: balanceSheet?.liabilities || 0 },
-    { name: 'Equity', value: balanceSheet?.equity || 0 },
-  ];
+  const balanceData = balanceSheet
+    ? [
+        { name: 'Assets', value: balanceSheet.assets },
+        { name: 'Liabilities', value: balanceSheet.liabilities },
+        { name: 'Equity', value: balanceSheet.equity }
+      ]
+    : [];
   
   // Colors for the pie chart
   const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
   
-  // Group accounts by type for detailed reports
-  const accountsByType = accountBalances
-    ? accountBalances.reduce((acc, { account }) => {
-        if (!acc[account.type]) {
-          acc[account.type] = [];
-        }
-        acc[account.type].push(account);
-        return acc;
-      }, {} as Record<string, Account[]>)
-    : {};
+  // Group accounts by their types for various reports
+  const accountsByType: Record<string, any[]> = {};
+  
+  if (accountBalances) {
+    // Group accounts by their types
+    // Asset accounts
+    accountsByType['asset'] = accountBalances.filter(({ account }) => 
+      account.type === 'accounts_receivable' || 
+      account.type === 'current_assets' || 
+      account.type === 'bank' || 
+      account.type === 'property_plant_equipment' || 
+      account.type === 'long_term_assets'
+    ).map(({ account, balance }) => ({
+      ...account,
+      balance: Math.abs(balance)
+    }));
+    
+    // Liability accounts
+    accountsByType['liability'] = accountBalances.filter(({ account }) => 
+      account.type === 'accounts_payable' || 
+      account.type === 'credit_card' || 
+      account.type === 'other_current_liabilities' ||
+      account.type === 'long_term_liabilities'
+    ).map(({ account, balance }) => ({
+      ...account,
+      balance: Math.abs(balance)
+    }));
+    
+    // Equity accounts
+    accountsByType['equity'] = accountBalances.filter(({ account }) => 
+      account.type === 'equity'
+    ).map(({ account, balance }) => ({
+      ...account,
+      balance: Math.abs(balance)
+    }));
+    
+    // Income accounts
+    accountsByType['income'] = accountBalances.filter(({ account }) => 
+      account.type === 'income' || 
+      account.type === 'other_income'
+    ).map(({ account, balance }) => ({
+      ...account, 
+      balance: Math.abs(balance)
+    }));
+    
+    // Expense accounts
+    accountsByType['expense'] = accountBalances.filter(({ account }) => 
+      account.type === 'expenses' || 
+      account.type === 'cost_of_goods_sold' ||
+      account.type === 'other_expense'
+    ).map(({ account, balance }) => ({
+      ...account,
+      balance: Math.abs(balance)
+    }));
+  }
+  
+  // Transform account balances for pie chart
+  const expenseAccounts = accountsByType['expense'] 
+    ? accountsByType['expense'].map(account => ({
+        name: account.name,
+        value: account.balance,
+      }))
+    : [];
+  
+  const revenueAccounts = accountsByType['income']
+    ? accountsByType['income'].map(account => ({
+        name: account.name, 
+        value: account.balance,
+      }))
+    : [];
   
   // Helper function to get report title
   const getReportTitle = (tab: string): string => {
@@ -138,25 +186,6 @@ export default function Reports() {
         return 'Financial Reports';
     }
   };
-  
-  // Transform account balances for pie chart
-  const expenseAccounts = accountBalances
-    ? accountBalances
-        .filter(({ account }) => account.type === 'expense')
-        .map(({ account, balance }) => ({
-          name: account.name,
-          value: balance,
-        }))
-    : [];
-  
-  const revenueAccounts = accountBalances
-    ? accountBalances
-        .filter(({ account }) => account.type === 'income')
-        .map(({ account, balance }) => ({
-          name: account.name,
-          value: balance,
-        }))
-    : [];
   
   return (
     <div className="py-6">
@@ -368,7 +397,7 @@ export default function Reports() {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" />
                           <YAxis />
-                          <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
                           <Bar dataKey="value" fill="#3b82f6" />
                         </BarChart>
                       </ResponsiveContainer>
@@ -399,7 +428,7 @@ export default function Reports() {
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
                             ) : accountsByType['income'] && accountsByType['income'].length > 0 ? (
-                              accountsByType['income'].map((account) => (
+                              accountsByType['income'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
                                   <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
@@ -430,7 +459,7 @@ export default function Reports() {
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
                             ) : accountsByType['expense'] && accountsByType['expense'].length > 0 ? (
-                              accountsByType['expense'].map((account) => (
+                              accountsByType['expense'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
                                   <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
@@ -474,19 +503,19 @@ export default function Reports() {
                           </TableHeader>
                           <TableBody>
                             <TableRow>
-                              <TableCell className="font-medium">Total Assets</TableCell>
+                              <TableCell className="font-medium">Assets</TableCell>
                               <TableCell className="text-right">${balanceSheet?.assets.toFixed(2)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell className="font-medium">Total Liabilities</TableCell>
+                              <TableCell className="font-medium">Liabilities</TableCell>
                               <TableCell className="text-right">${balanceSheet?.liabilities.toFixed(2)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell className="font-medium">Total Equity</TableCell>
+                              <TableCell className="font-medium">Equity</TableCell>
                               <TableCell className="text-right">${balanceSheet?.equity.toFixed(2)}</TableCell>
                             </TableRow>
                             <TableRow>
-                              <TableCell className="font-bold">Total Liabilities & Equity</TableCell>
+                              <TableCell className="font-bold">Liabilities + Equity</TableCell>
                               <TableCell className="text-right font-bold">
                                 ${(balanceSheet?.liabilities + balanceSheet?.equity).toFixed(2)}
                               </TableCell>
@@ -500,7 +529,7 @@ export default function Reports() {
                 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Balance Sheet Distribution</CardTitle>
+                    <CardTitle>Balance Sheet Visualization</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="h-60">
@@ -514,20 +543,21 @@ export default function Reports() {
                             outerRadius={80}
                             fill="#8884d8"
                             dataKey="value"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                           >
-                            {balanceData.map((entry, index) => (
+                            {balanceData.map((entry: any, index: number) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                          <Legend />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
                   </CardContent>
                 </Card>
                 
-                {/* Detailed asset, liability, and equity breakdown */}
+                {/* Detailed balance sheet breakdown */}
                 <Card className="lg:col-span-3">
                   <CardHeader>
                     <CardTitle>Detailed Balance Sheet Breakdown</CardTitle>
@@ -550,7 +580,7 @@ export default function Reports() {
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
                             ) : accountsByType['asset'] && accountsByType['asset'].length > 0 ? (
-                              accountsByType['asset'].map((account) => (
+                              accountsByType['asset'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
                                   <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
@@ -581,7 +611,7 @@ export default function Reports() {
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
                             ) : accountsByType['liability'] && accountsByType['liability'].length > 0 ? (
-                              accountsByType['liability'].map((account) => (
+                              accountsByType['liability'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
                                   <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
@@ -612,7 +642,7 @@ export default function Reports() {
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
                             ) : accountsByType['equity'] && accountsByType['equity'].length > 0 ? (
-                              accountsByType['equity'].map((account) => (
+                              accountsByType['equity'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
                                   <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
@@ -650,14 +680,14 @@ export default function Reports() {
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
-                              variant="outline"
+                              variant={"outline"}
                               className={cn(
                                 "w-[200px] justify-start text-left font-normal",
                                 !startDate && "text-muted-foreground"
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
-                              {startDate ? format(startDate, "PPP") : "Select date"}
+                              {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
@@ -677,14 +707,14 @@ export default function Reports() {
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
-                              variant="outline"
+                              variant={"outline"}
                               className={cn(
                                 "w-[200px] justify-start text-left font-normal",
                                 !endDate && "text-muted-foreground"
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
-                              {endDate ? format(endDate, "PPP") : "Select date"}
+                              {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
@@ -701,33 +731,47 @@ export default function Reports() {
                   </CardHeader>
                   <CardContent>
                     {ledgerLoading ? (
-                      <div className="text-center py-6">Loading ledger entries...</div>
-                    ) : !generalLedger || generalLedger.length === 0 ? (
-                      <div className="text-center py-6">No ledger entries found for the selected period</div>
+                      <div className="text-center py-6">Loading general ledger...</div>
                     ) : (
                       <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Date</TableHead>
-                              <TableHead>Account</TableHead>
                               <TableHead>Description</TableHead>
+                              <TableHead>Account</TableHead>
                               <TableHead className="text-right">Debit</TableHead>
                               <TableHead className="text-right">Credit</TableHead>
-                              <TableHead>Reference</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {generalLedger.map((entry) => (
-                              <TableRow key={entry.id}>
-                                <TableCell>{format(new Date(entry.date), "yyyy-MM-dd")}</TableCell>
-                                <TableCell>{entry.account?.name || `Account #${entry.accountId}`}</TableCell>
-                                <TableCell>{entry.description || entry.transaction?.description || "—"}</TableCell>
-                                <TableCell className="text-right">{entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : ""}</TableCell>
-                                <TableCell className="text-right">{entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : ""}</TableCell>
-                                <TableCell>{entry.transaction?.reference || "—"}</TableCell>
+                            {ledgerEntries && ledgerEntries.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
+                                  No entries found in the general ledger
+                                </TableCell>
                               </TableRow>
-                            ))}
+                            ) : (
+                              ledgerEntries && ledgerEntries.map((entry: any) => {
+                                const accountName = accountBalances?.find(
+                                  ({ account }) => account.id === entry.accountId
+                                )?.account.name || 'Unknown Account';
+                                
+                                return (
+                                  <TableRow key={entry.id}>
+                                    <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                    <TableCell>{entry.description}</TableCell>
+                                    <TableCell>{accountName}</TableCell>
+                                    <TableCell className="text-right">
+                                      {entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : ''}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })
+                            )}
                           </TableBody>
                         </Table>
                       </div>
@@ -741,32 +785,16 @@ export default function Reports() {
             <TabsContent value="trial-balance">
               <div className="grid grid-cols-1 gap-6">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardHeader>
+                    <CardTitle>Trial Balance</CardTitle>
+                    <CardDescription>
+                      As of {format(new Date(), "MMMM d, yyyy")}
+                    </CardDescription>
                     <div>
-                      <CardTitle>Trial Balance</CardTitle>
-                      <CardDescription>
-                        Account balances organized in debit and credit columns
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant={"outline"}
-                            className="w-[240px] justify-start text-left font-normal"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {format(new Date(), "PPP")}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={new Date()}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <Button variant="outline" className="mt-2">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        Select Date
+                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -807,7 +835,7 @@ export default function Reports() {
                                 <TableRow key={index}>
                                   <TableCell>{account.code}</TableCell>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="capitalize">{account.type}</TableCell>
+                                  <TableCell className="capitalize">{account.type.replace(/_/g, ' ')}</TableCell>
                                   <TableCell className="text-right">
                                     {debitAmount > 0 ? `$${debitAmount.toFixed(2)}` : ''}
                                   </TableCell>
@@ -823,23 +851,25 @@ export default function Reports() {
                               let totalDebit = 0;
                               let totalCredit = 0;
                               
-                              accountBalances.forEach(({ account, balance }) => {
-                                const isDebitAccount = 
-                                  account.type === 'accounts_receivable' || 
-                                  account.type === 'current_assets' || 
-                                  account.type === 'bank' || 
-                                  account.type === 'property_plant_equipment' || 
-                                  account.type === 'long_term_assets' ||
-                                  account.type === 'expenses' || 
-                                  account.type === 'cost_of_goods_sold' ||
-                                  account.type === 'other_expense';
-                                
-                                if (isDebitAccount) {
-                                  totalDebit += Math.abs(balance);
-                                } else {
-                                  totalCredit += Math.abs(balance);
-                                }
-                              });
+                              if (accountBalances) {
+                                accountBalances.forEach(({ account, balance }) => {
+                                  const isDebitAccount = 
+                                    account.type === 'accounts_receivable' || 
+                                    account.type === 'current_assets' || 
+                                    account.type === 'bank' || 
+                                    account.type === 'property_plant_equipment' || 
+                                    account.type === 'long_term_assets' ||
+                                    account.type === 'expenses' || 
+                                    account.type === 'cost_of_goods_sold' ||
+                                    account.type === 'other_expense';
+                                  
+                                  if (isDebitAccount) {
+                                    totalDebit += Math.abs(balance);
+                                  } else {
+                                    totalCredit += Math.abs(balance);
+                                  }
+                                });
+                              }
                               
                               return (
                                 <TableRow className="font-bold">
@@ -902,13 +932,13 @@ export default function Reports() {
                             outerRadius={100}
                             fill="#8884d8"
                             dataKey="value"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                           >
-                            {expenseAccounts.map((entry, index) => (
+                            {expenseAccounts.map((entry: any, index: number) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -935,12 +965,12 @@ export default function Reports() {
                             <TableCell colSpan={3} className="text-center">Loading...</TableCell>
                           </TableRow>
                         ) : expenseAccounts.length > 0 ? (
-                          expenseAccounts.map((item, index) => (
+                          expenseAccounts.map((item: any, index: number) => (
                             <TableRow key={index}>
                               <TableCell>{item.name}</TableCell>
                               <TableCell className="text-right">${item.value.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
-                                {((item.value / incomeStatement?.expenses) * 100).toFixed(1)}%
+                                {((item.value / (incomeStatement?.expenses || 1)) * 100).toFixed(1)}%
                               </TableCell>
                             </TableRow>
                           ))
@@ -976,13 +1006,13 @@ export default function Reports() {
                             outerRadius={100}
                             fill="#8884d8"
                             dataKey="value"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                           >
-                            {revenueAccounts.map((entry, index) => (
+                            {revenueAccounts.map((entry: any, index: number) => (
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -1009,12 +1039,12 @@ export default function Reports() {
                             <TableCell colSpan={3} className="text-center">Loading...</TableCell>
                           </TableRow>
                         ) : revenueAccounts.length > 0 ? (
-                          revenueAccounts.map((item, index) => (
+                          revenueAccounts.map((item: any, index: number) => (
                             <TableRow key={index}>
                               <TableCell>{item.name}</TableCell>
                               <TableCell className="text-right">${item.value.toFixed(2)}</TableCell>
                               <TableCell className="text-right">
-                                {((item.value / incomeStatement?.revenues) * 100).toFixed(1)}%
+                                {((item.value / (incomeStatement?.revenues || 1)) * 100).toFixed(1)}%
                               </TableCell>
                             </TableRow>
                           ))
