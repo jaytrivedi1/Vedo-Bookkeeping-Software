@@ -62,6 +62,11 @@ export default function ChartOfAccounts() {
     queryKey: ['/api/accounts'],
   });
   
+  // Fetch all sales taxes for dropdown
+  const { data: salesTaxes } = useQuery<any[]>({
+    queryKey: ['/api/sales-taxes'],
+  });
+  
   const form = useForm({
     resolver: zodResolver(insertAccountSchema),
     defaultValues: {
@@ -392,9 +397,25 @@ export default function ChartOfAccounts() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Sales Tax Type</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. GST, HST, VAT" {...field} />
-                          </FormControl>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a tax type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="">None</SelectItem>
+                              {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
+                                <SelectItem key={tax.id} value={tax.name}>
+                                  {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -675,9 +696,25 @@ export default function ChartOfAccounts() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Sales Tax Type</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g. GST, HST, VAT" {...field} />
-                      </FormControl>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a tax type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
+                            <SelectItem key={tax.id} value={tax.name}>
+                              {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
