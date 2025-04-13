@@ -210,9 +210,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="h-screen flex flex-col">
         {/* Header */}
-        <div className="bg-white border-b px-4 py-4 flex justify-between items-center">
+        <div className="bg-white border-b px-4 py-4 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-medium">Invoice no.{defaultInvoiceNumber}</h1>
           </div>
@@ -229,7 +229,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-grow">
           {/* Main content area */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Left column */}
@@ -649,11 +649,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           </div>
         </div>
         
-        {/* Add padding at the bottom to ensure content doesn't get hidden behind the fixed footer */}
-        <div className="pb-24"></div>
-        
-        {/* Fixed footer */}
-        <div className="fixed bottom-0 left-0 right-0 border-t bg-gray-50 py-4 px-4 md:px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-md">
+        {/* Fixed footer - now a flex item in our flex column layout */}
+        <div className="border-t bg-gray-100 py-4 px-4 md:px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-md sticky bottom-0 mt-auto">
           <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full">
             Cancel
           </Button>

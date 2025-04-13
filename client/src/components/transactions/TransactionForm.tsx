@@ -59,7 +59,7 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
       
       {/* Remove DialogContent and show forms in full screen for Invoice */}
       {open && transactionType === "invoice" ? (
-        <div className="fixed inset-0 z-50 bg-background">
+        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
           <InvoiceForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
         </div>
       ) : (
