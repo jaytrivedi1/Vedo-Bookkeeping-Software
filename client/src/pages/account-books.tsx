@@ -115,7 +115,8 @@ export default function AccountBooks() {
         return (
           account.code.toLowerCase().includes(query) ||
           account.name.toLowerCase().includes(query) ||
-          account.description?.toLowerCase().includes(query)
+          (account.currency && account.currency.toLowerCase().includes(query)) ||
+          (account.salesTaxType && account.salesTaxType.toLowerCase().includes(query))
         );
       }
       

@@ -88,8 +88,57 @@ export default function ChartOfAccounts() {
     },
   });
   
+  // Handler for editing an account
+  const updateAccount = useMutation({
+    mutationFn: async (data: any) => {
+      return await apiRequest('PATCH', `/api/accounts/${currentAccount?.id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      setEditAccountOpen(false);
+      setCurrentAccount(null);
+      toast({
+        title: "Account updated",
+        description: "The account has been updated successfully.",
+      });
+    },
+  });
+  
+  // Form for editing account
+  const editForm = useForm({
+    resolver: zodResolver(insertAccountSchema),
+    defaultValues: {
+      code: "",
+      name: "",
+      type: "current_assets",
+      currency: "USD",
+      salesTaxType: "",
+      isActive: true,
+    },
+  });
+  
+  // Handler for clicking the edit button
+  const handleEditAccount = (account: Account) => {
+    setCurrentAccount(account);
+    editForm.reset({
+      code: account.code,
+      name: account.name,
+      type: account.type,
+      currency: account.currency || "USD",
+      salesTaxType: account.salesTaxType || "",
+      isActive: account.isActive,
+    });
+    setEditAccountOpen(true);
+  };
+  
+  // Handler for creating an account
   const onSubmit = (data: any) => {
     createAccount.mutate(data);
+  };
+  
+  // Handler for updating an account
+  const onUpdate = (data: any) => {
+    updateAccount.mutate(data);
   };
   
   // Filter accounts
@@ -105,7 +154,8 @@ export default function ChartOfAccounts() {
           return (
             account.code.toLowerCase().includes(query) ||
             account.name.toLowerCase().includes(query) ||
-            account.description?.toLowerCase().includes(query)
+            (account.salesTaxType && account.salesTaxType.toLowerCase().includes(query)) ||
+            (account.currency && account.currency.toLowerCase().includes(query))
           );
         })
     : [];
@@ -460,6 +510,161 @@ export default function ChartOfAccounts() {
           </div>
         </div>
       </div>
+      
+      {/* Edit Account Dialog */}
+      <Dialog open={editAccountOpen} onOpenChange={setEditAccountOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Account</DialogTitle>
+            <DialogDescription>
+              Modify the account details.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit((data) => onUpdate(data))} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="code"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Account Code</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. 1000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Account Type</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>Assets</SelectLabel>
+                            <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
+                            <SelectItem value="current_assets">Current Assets</SelectItem>
+                            <SelectItem value="bank">Bank</SelectItem>
+                            <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
+                            <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel>Liabilities</SelectLabel>
+                            <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
+                            <SelectItem value="credit_card">Credit Card</SelectItem>
+                            <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
+                            <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel>Equity</SelectLabel>
+                            <SelectItem value="equity">Equity</SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel>Income</SelectLabel>
+                            <SelectItem value="income">Income</SelectItem>
+                            <SelectItem value="other_income">Other Income</SelectItem>
+                          </SelectGroup>
+                          <SelectGroup>
+                            <SelectLabel>Expenses</SelectLabel>
+                            <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
+                            <SelectItem value="expenses">Expenses</SelectItem>
+                            <SelectItem value="other_expense">Other Expense</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Cash" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={editForm.control}
+                  name="currency"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Currency</FormLabel>
+                      <FormControl>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select currency" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="USD">USD - US Dollar</SelectItem>
+                            <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                            <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                            <SelectItem value="EUR">EUR - Euro</SelectItem>
+                            <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                            <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
+                            <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
+                            <SelectItem value="CNY">CNY - Chinese Yuan</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={editForm.control}
+                  name="salesTaxType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sales Tax Type</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. GST, HST, VAT" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <DialogFooter>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setEditAccountOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateAccount.isPending}>
+                  {updateAccount.isPending ? "Updating..." : "Update Account"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

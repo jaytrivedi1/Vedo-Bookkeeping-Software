@@ -47,14 +47,15 @@ async function migrate() {
       )
     `);
 
-    // Recreate the accounts table
+    // Recreate the accounts table with new fields (currency and salesTaxType) instead of description
     await db.execute(sql`
       CREATE TABLE accounts (
         id SERIAL PRIMARY KEY,
         code TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         type account_type NOT NULL,
-        description TEXT,
+        currency TEXT DEFAULT 'USD',
+        sales_tax_type TEXT,
         balance DOUBLE PRECISION NOT NULL DEFAULT 0,
         is_active BOOLEAN NOT NULL DEFAULT true
       )
@@ -80,8 +81,8 @@ async function migrate() {
       let newType = specificMappings[account.code] || typeMapping[account.type] || 'current_assets';
       
       await db.execute(sql`
-        INSERT INTO accounts (id, code, name, type, description, balance, is_active)
-        VALUES (${account.id}, ${account.code}, ${account.name}, ${newType}::account_type, ${account.description}, ${account.balance}, ${account.is_active})
+        INSERT INTO accounts (id, code, name, type, currency, sales_tax_type, balance, is_active)
+        VALUES (${account.id}, ${account.code}, ${account.name}, ${newType}::account_type, 'USD', NULL, ${account.balance}, ${account.is_active})
       `);
     }
 
