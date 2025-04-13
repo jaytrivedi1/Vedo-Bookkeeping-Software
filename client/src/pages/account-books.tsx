@@ -168,295 +168,82 @@ export default function AccountBooks() {
             </CardContent>
           </Card>
           
-          {/* Tabs for different views */}
-          <Tabs defaultValue="accounts" className="mb-6">
-            <TabsList className="mb-4">
-              <TabsTrigger value="accounts" className="flex items-center">
-                <BookOpen className="h-4 w-4 mr-2" />
-                Account Book View
-              </TabsTrigger>
-              <TabsTrigger value="general-ledger" className="flex items-center">
-                <Book className="h-4 w-4 mr-2" />
-                General Ledger View
-              </TabsTrigger>
-            </TabsList>
-            
-            {/* Account Book View */}
-            <TabsContent value="accounts">
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 mb-4">
-                <div className="relative w-full sm:w-64">
-                  <Input
-                    className="pl-10"
-                    placeholder="Search accounts..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Search className="h-4 w-4 text-gray-400" />
-                  </div>
-                </div>
-                
-                <Select
-                  value={accountTypeFilter}
-                  onValueChange={setAccountTypeFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-48">
-                    <SelectValue placeholder="Filter by type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Account Types</SelectItem>
-                    <SelectGroup>
-                      <SelectLabel>Assets</SelectLabel>
-                      <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
-                      <SelectItem value="current_assets">Current Assets</SelectItem>
-                      <SelectItem value="bank">Bank</SelectItem>
-                      <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
-                      <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Liabilities</SelectLabel>
-                      <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
-                      <SelectItem value="credit_card">Credit Card</SelectItem>
-                      <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
-                      <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Equity</SelectLabel>
-                      <SelectItem value="equity">Equity</SelectItem>
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Income</SelectLabel>
-                      <SelectItem value="income">Income</SelectItem>
-                      <SelectItem value="other_income">Other Income</SelectItem>
-                    </SelectGroup>
-                    <SelectGroup>
-                      <SelectLabel>Expenses</SelectLabel>
-                      <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
-                      <SelectItem value="expenses">Expenses</SelectItem>
-                      <SelectItem value="other_expense">Other Expense</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+          {/* General Ledger View */}
+          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            {isLoading ? (
+              <div className="p-6 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-sm text-gray-500">Loading general ledger...</p>
               </div>
-              
-              {/* Accounts List with Collapsible Ledger Entries */}
-              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-                {isLoading ? (
-                  <div className="p-6 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                    <p className="mt-2 text-sm text-gray-500">Loading account books...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-12"></TableHead>
-                            <TableHead className="w-24">Code</TableHead>
-                            <TableHead>Account</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead className="text-right">Balance</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredAccounts.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                No accounts found
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            filteredAccounts.map((account) => (
-                              <Collapsible 
-                                key={account.id}
-                                open={expandedAccounts.includes(account.id)}
-                                onOpenChange={() => toggleAccount(account.id)}
-                                className="w-full"
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Account</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Debit</TableHead>
+                      <TableHead className="text-right">Credit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ledgerEntries && ledgerEntries.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-6 text-gray-500">
+                          No entries found in the general ledger
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      // Group entries by transaction ID and sort by date
+                      ledgerEntries && 
+                      Array.from(new Set(ledgerEntries.map(entry => entry.transactionId)))
+                        .map(transactionId => {
+                          const entriesForTransaction = ledgerEntries
+                            .filter(entry => entry.transactionId === transactionId)
+                            .sort((a, b) => {
+                              // Sort by account type and code
+                              const accountA = accountBooks.find(acc => acc.id === a.accountId);
+                              const accountB = accountBooks.find(acc => acc.id === b.accountId);
+                              if (!accountA || !accountB) return 0;
+                              return accountA.code.localeCompare(accountB.code);
+                            });
+
+                          // Get the date from the first entry (they all have the same date)
+                          const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
+
+                          // Return the entries for display
+                          return entriesForTransaction.map((entry, index) => {
+                            const account = accountBooks.find(acc => acc.id === entry.accountId);
+                            return (
+                              <TableRow 
+                                key={entry.id}
+                                className={index > 0 && index < entriesForTransaction.length ? "border-t-0" : ""}
                               >
-                                <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => toggleAccount(account.id)}>
-                                  <TableCell>
-                                    <CollapsibleTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="p-0 h-6 w-6">
-                                        {expandedAccounts.includes(account.id) ? (
-                                          <ChevronDown className="h-4 w-4" />
-                                        ) : (
-                                          <ChevronRight className="h-4 w-4" />
-                                        )}
-                                      </Button>
-                                    </CollapsibleTrigger>
-                                  </TableCell>
-                                  <TableCell className="font-medium">{account.code}</TableCell>
-                                  <TableCell>{account.name}</TableCell>
-                                  <TableCell className="capitalize">{account.type}</TableCell>
-                                  <TableCell className="text-right font-medium">
-                                    {formatCurrency(account.balance)}
-                                  </TableCell>
-                                </TableRow>
-                                
-                                <CollapsibleContent>
-                                  <TableRow>
-                                    <TableCell colSpan={5} className="p-0 border-t-0">
-                                      <div className="bg-gray-50 p-4">
-                                        <h4 className="text-sm font-medium mb-2">Ledger Entries</h4>
-                                        
-                                        {account.ledgerEntries.length === 0 ? (
-                                          <p className="text-sm text-gray-500 italic py-2">No ledger entries found</p>
-                                        ) : (
-                                          <Table>
-                                            <TableHeader>
-                                              <TableRow>
-                                                <TableHead className="text-xs">Date</TableHead>
-                                                <TableHead className="text-xs">Reference</TableHead>
-                                                <TableHead className="text-xs">Description</TableHead>
-                                                <TableHead className="text-xs text-right">Debit</TableHead>
-                                                <TableHead className="text-xs text-right">Credit</TableHead>
-                                                <TableHead className="text-xs text-right">Balance</TableHead>
-                                              </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                              {account.ledgerEntries.sort((a, b) => 
-                                                new Date(a.date).getTime() - new Date(b.date).getTime()
-                                              ).map((entry, index, entries) => {
-                                                // Calculate running balance
-                                                let runningBalance = 0;
-                                                
-                                                // For asset and expense accounts, debits increase the balance
-                                                // For liability, equity, and revenue accounts, credits increase the balance
-                                                const assetTypes = ['accounts_receivable', 'current_assets', 'bank', 'property_plant_equipment', 'long_term_assets'];
-                                                const expenseTypes = ['cost_of_goods_sold', 'expenses', 'other_expense'];
-                                                const isDebitNormal = assetTypes.includes(account.type) || expenseTypes.includes(account.type);
-                                                
-                                                // Calculate balance up to this entry
-                                                for (let i = 0; i <= index; i++) {
-                                                  const e = entries[i];
-                                                  const change = isDebitNormal ? 
-                                                    (e.debit - e.credit) : 
-                                                    (e.credit - e.debit);
-                                                  runningBalance += change;
-                                                }
-                                                
-                                                return (
-                                                  <TableRow key={entry.id}>
-                                                    <TableCell className="text-xs">
-                                                      {format(new Date(entry.date), 'MMM dd, yyyy')}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs">
-                                                      {transactions ? transactions.find(t => t.id === entry.transactionId)?.reference || '-' : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs">
-                                                      {entry.description}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs text-right">
-                                                      {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs text-right">
-                                                      {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs text-right font-medium">
-                                                      {formatCurrency(runningBalance)}
-                                                    </TableCell>
-                                                  </TableRow>
-                                                );
-                                              })}
-                                            </TableBody>
-                                          </Table>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
-                )}
+                                {/* Only show date for the first row of the transaction */}
+                                <TableCell>
+                                  {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
+                                </TableCell>
+                                <TableCell>{account?.code || ''}</TableCell>
+                                <TableCell>{account?.name || 'Unknown Account'}</TableCell>
+                                <TableCell>{entry.description || ''}</TableCell>
+                                <TableCell className="text-right">
+                                  {entry.debit > 0 ? entry.debit.toFixed(2) : ''}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {entry.credit > 0 ? entry.credit.toFixed(2) : ''}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          });
+                        }).flat()
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-            </TabsContent>
-            
-            {/* General Ledger View */}
-            <TabsContent value="general-ledger">
-              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-                {isLoading ? (
-                  <div className="p-6 text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                    <p className="mt-2 text-sm text-gray-500">Loading general ledger...</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Code</TableHead>
-                          <TableHead>Account</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Debit</TableHead>
-                          <TableHead className="text-right">Credit</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ledgerEntries && ledgerEntries.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-center py-6 text-gray-500">
-                              No entries found in the general ledger
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          // Group entries by transaction ID and sort by date
-                          ledgerEntries && 
-                          Array.from(new Set(ledgerEntries.map(entry => entry.transactionId)))
-                            .map(transactionId => {
-                              const entriesForTransaction = ledgerEntries
-                                .filter(entry => entry.transactionId === transactionId)
-                                .sort((a, b) => {
-                                  // Sort by account type and code
-                                  const accountA = accountBooks.find(acc => acc.id === a.accountId);
-                                  const accountB = accountBooks.find(acc => acc.id === b.accountId);
-                                  if (!accountA || !accountB) return 0;
-                                  return accountA.code.localeCompare(accountB.code);
-                                });
-
-                              // Get the date from the first entry (they all have the same date)
-                              const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
-
-                              // Return the entries for display
-                              return entriesForTransaction.map((entry, index) => {
-                                const account = accountBooks.find(acc => acc.id === entry.accountId);
-                                return (
-                                  <TableRow 
-                                    key={entry.id}
-                                    className={index > 0 && index < entriesForTransaction.length ? "border-t-0" : ""}
-                                  >
-                                    {/* Only show date for the first row of the transaction */}
-                                    <TableCell>
-                                      {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
-                                    </TableCell>
-                                    <TableCell>{account?.code || ''}</TableCell>
-                                    <TableCell>{account?.name || 'Unknown Account'}</TableCell>
-                                    <TableCell>{entry.description || ''}</TableCell>
-                                    <TableCell className="text-right">
-                                      {entry.debit > 0 ? entry.debit.toFixed(2) : ''}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      {entry.credit > 0 ? entry.credit.toFixed(2) : ''}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              });
-                            }).flat()
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
         </div>
       </div>
     </div>
