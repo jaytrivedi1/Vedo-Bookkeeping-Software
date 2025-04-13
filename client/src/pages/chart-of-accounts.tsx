@@ -76,6 +76,7 @@ export default function ChartOfAccounts() {
   
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
+      console.log("Creating account with data:", data);
       return await apiRequest('POST', '/api/accounts', data);
     },
     onSuccess: () => {
@@ -92,6 +93,7 @@ export default function ChartOfAccounts() {
   // Handler for editing an account
   const updateAccount = useMutation({
     mutationFn: async (data: any) => {
+      console.log("Updating account with data:", data);
       return await apiRequest('PATCH', `/api/accounts/${currentAccount?.id}`, data);
     },
     onSuccess: () => {
