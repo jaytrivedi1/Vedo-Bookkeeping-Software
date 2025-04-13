@@ -152,7 +152,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllLedgerEntries(): Promise<LedgerEntry[]> {
-    return await db.select().from(ledgerEntries).orderBy(desc(ledgerEntries.date));
+    const result = await db.select().from(ledgerEntries).orderBy(desc(ledgerEntries.date));
+    return result as LedgerEntry[];
   }
 
   async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
@@ -166,7 +167,8 @@ export class DatabaseStorage implements IStorage {
       query = query.where(lte(ledgerEntries.date, endDate));
     }
     
-    return await query.orderBy(ledgerEntries.date);
+    const result = await query.orderBy(ledgerEntries.date);
+    return result as LedgerEntry[];
   }
 
   async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
@@ -240,7 +242,8 @@ export class DatabaseStorage implements IStorage {
       item.account.type === 'current_assets' || 
       item.account.type === 'bank' || 
       item.account.type === 'accounts_receivable' ||
-      item.account.type === 'fixed_assets'
+      item.account.type === 'property_plant_equipment' || 
+      item.account.type === 'long_term_assets'
     );
     const assets = assetAccounts.reduce((sum, item) => sum + item.balance, 0);
     
@@ -261,7 +264,28 @@ export class DatabaseStorage implements IStorage {
     // Equity accounts have credit balances, so we negate the balance
     const equity = equityAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
     
-    return { assets, liabilities, equity };
+    // Include income and expense accounts in equity (net income)
+    const incomeAccounts = accountBalances.filter(item => 
+      item.account.type === 'income' || 
+      item.account.type === 'other_income'
+    );
+    const revenueTotal = incomeAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
+    
+    const expenseAccounts = accountBalances.filter(item => 
+      item.account.type === 'expenses' || 
+      item.account.type === 'cost_of_goods_sold' ||
+      item.account.type === 'other_expense'
+    );
+    const expenseTotal = expenseAccounts.reduce((sum, item) => sum + item.balance, 0);
+    
+    // Net income is part of equity
+    const netIncome = revenueTotal - expenseTotal;
+    
+    return { 
+      assets, 
+      liabilities, 
+      equity: equity + netIncome 
+    };
   }
 
   // Sales Taxes
@@ -289,6 +313,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSalesTax(id: number): Promise<boolean> {
     const result = await db.delete(salesTaxSchema).where(eq(salesTaxSchema.id, id));
-    return result.rowCount > 0;
+    return result.rowCount !== null && result.rowCount > 0;
   }
 }
