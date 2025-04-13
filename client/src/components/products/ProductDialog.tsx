@@ -51,9 +51,8 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     queryKey: ['/api/sales-taxes'],
   });
 
-  // Filter only revenue accounts - show all income-related accounts
-  // By default use the revenue type, but also include accounts that have names
-  // that suggest they're revenue accounts based on common naming patterns
+  // Filter only revenue accounts - show only primary revenue accounts
+  // (excluding other income and liability accounts)
   console.log("All accounts:", accounts);
   const revenueAccounts = accounts.filter((account: any) => {
     // Exclude liability accounts like "Sales Tax Payable"
@@ -64,16 +63,20 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
       return false;
     }
     
+    // Exclude other_income accounts like "Interest Income"
+    if (account.type === 'other_income') {
+      return false;
+    }
+    
     const isRevenueType = account.type === 'revenue' || 
-                         account.type === 'other_income' ||
                          account.type === 'income';
     
     const isRevenueByName = typeof account.name === 'string' && (
-                           account.name.toLowerCase().includes('income') ||
                            account.name.toLowerCase().includes('revenue') ||
                            account.name.toLowerCase().includes('sales')) &&
-                           // Explicitly exclude "Sales Tax Payable" by name
-                           !account.name.toLowerCase().includes('tax payable');
+                           // Exclude accounts with these terms
+                           !account.name.toLowerCase().includes('tax payable') &&
+                           !account.name.toLowerCase().includes('interest');
     
     return isRevenueType || isRevenueByName;
   });
