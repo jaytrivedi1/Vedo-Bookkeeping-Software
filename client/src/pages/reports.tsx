@@ -787,11 +787,21 @@ export default function Reports() {
                           <TableBody>
                             {accountBalances.map(({ account, balance }, index) => {
                               // For trial balance:
-                              // - Assets and Expenses have debit balances
-                              // - Liabilities, Equity, and Income have credit balances
-                              const isDebitAccount = account.type === 'asset' || account.type === 'expense';
-                              const debitAmount = isDebitAccount && balance > 0 ? balance : 0;
-                              const creditAmount = !isDebitAccount && balance > 0 ? balance : 0;
+                              // - Assets and Expenses have debit balances (positive in our system)
+                              // - Liabilities, Equity, and Income have credit balances (negative in our system)
+                              const isDebitAccount = 
+                                account.type === 'accounts_receivable' || 
+                                account.type === 'current_assets' || 
+                                account.type === 'bank' || 
+                                account.type === 'property_plant_equipment' || 
+                                account.type === 'long_term_assets' ||
+                                account.type === 'expenses' || 
+                                account.type === 'cost_of_goods_sold' ||
+                                account.type === 'other_expense';
+                              
+                              // Display absolute values in the appropriate columns
+                              const debitAmount = isDebitAccount ? Math.abs(balance) : 0;
+                              const creditAmount = !isDebitAccount ? Math.abs(balance) : 0;
                               
                               return (
                                 <TableRow key={index}>
@@ -814,11 +824,20 @@ export default function Reports() {
                               let totalCredit = 0;
                               
                               accountBalances.forEach(({ account, balance }) => {
-                                const isDebitAccount = account.type === 'asset' || account.type === 'expense';
-                                if (isDebitAccount && balance > 0) {
-                                  totalDebit += balance;
-                                } else if (!isDebitAccount && balance > 0) {
-                                  totalCredit += balance;
+                                const isDebitAccount = 
+                                  account.type === 'accounts_receivable' || 
+                                  account.type === 'current_assets' || 
+                                  account.type === 'bank' || 
+                                  account.type === 'property_plant_equipment' || 
+                                  account.type === 'long_term_assets' ||
+                                  account.type === 'expenses' || 
+                                  account.type === 'cost_of_goods_sold' ||
+                                  account.type === 'other_expense';
+                                
+                                if (isDebitAccount) {
+                                  totalDebit += Math.abs(balance);
+                                } else {
+                                  totalCredit += Math.abs(balance);
                                 }
                               });
                               
