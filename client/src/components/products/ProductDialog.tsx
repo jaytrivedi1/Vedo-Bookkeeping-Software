@@ -51,11 +51,24 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     queryKey: ['/api/sales-taxes'],
   });
 
-  // Filter only revenue accounts
-  const revenueAccounts = accounts.filter((account: any) => 
-    account.type === 'revenue' || 
-    account.type === 'other_income'
-  );
+  // Filter only revenue accounts - show all income-related accounts
+  // By default use the revenue type, but also include accounts that have names
+  // that suggest they're revenue accounts based on common naming patterns
+  console.log("All accounts:", accounts);
+  const revenueAccounts = accounts.filter((account: any) => {
+    const isRevenueType = account.type === 'revenue' || 
+                         account.type === 'other_income' ||
+                         account.type === 'income';
+    
+    const isRevenueByName = typeof account.name === 'string' && (
+                           account.name.toLowerCase().includes('income') ||
+                           account.name.toLowerCase().includes('revenue') ||
+                           account.name.toLowerCase().includes('sales'));
+    
+    return isRevenueType || isRevenueByName;
+  });
+  
+  console.log("Filtered revenue accounts:", revenueAccounts);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -197,32 +210,8 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
               )}
             />
 
-            {/* Type */}
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="product">Product</SelectItem>
-                      <SelectItem value="service">Service</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Type is hidden and automatically set based on what option was selected */}
+            <input type="hidden" {...form.register("type")} />
 
             {/* Price */}
             <FormField
