@@ -95,9 +95,16 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
 
   const createInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
+      console.log("Submitting invoice with data:", JSON.stringify(data, null, 2));
       return await apiRequest('/api/invoices', 'POST', data);
     },
     onSuccess: () => {
+      toast({
+        title: "Invoice saved",
+        description: "Invoice has been saved successfully",
+        variant: "default",
+      });
+      
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       if (onSuccess) onSuccess();
       
@@ -108,6 +115,14 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
         });
       }
     },
+    onError: (error: any) => {
+      console.error("Error saving invoice:", error);
+      toast({
+        title: "Error saving invoice",
+        description: error?.message || "There was a problem saving the invoice. Please try again.",
+        variant: "destructive",
+      });
+    }
   });
 
   const calculateLineItemAmount = (quantity: number, unitPrice: number) => {
@@ -228,6 +243,22 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const onSubmit = (data: Invoice) => {
     console.log("Form data before submit:", data);
     
+    // Filter out empty line items
+    const filteredLineItems = data.lineItems.filter(item => 
+      item.description && item.description.trim() !== "" && 
+      item.quantity > 0 && 
+      item.unitPrice > 0
+    );
+    
+    if (filteredLineItems.length === 0) {
+      toast({
+        title: "Cannot save invoice",
+        description: "Please add at least one valid line item with description, quantity and price",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Add the calculated totals and payment terms to the invoice data before submitting
     const enrichedData = {
       ...data,
@@ -245,25 +276,27 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     };
     
     // Calculate the line item amounts and ensure salesTaxId is properly handled
-    enrichedData.lineItems = enrichedData.lineItems.map(item => {
-      // Get the tax details for this line item
-      let taxInfo = {};
+    enrichedData.lineItems = filteredLineItems.map(item => {
+      // Calculate the correct amount for this line item
+      const amount = calculateLineItemAmount(item.quantity, item.unitPrice);
+      
+      // Transform into a properly formatted line item with correct salesTaxId handling
+      const formattedItem: any = {
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        amount: amount
+      };
+      
+      // Add salesTaxId only if it exists and is not zero/undefined
       if (item.salesTaxId) {
-        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
-        if (salesTax) {
-          taxInfo = {
-            salesTaxId: salesTax.id
-          };
-        }
+        formattedItem.salesTaxId = item.salesTaxId;
       }
       
-      return {
-        ...item,
-        ...taxInfo,
-        amount: calculateLineItemAmount(item.quantity, item.unitPrice)
-      };
+      return formattedItem;
     });
     
+    console.log("Sending to server:", enrichedData);
     createInvoice.mutate(enrichedData);
   };
 

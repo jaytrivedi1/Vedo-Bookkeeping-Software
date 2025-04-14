@@ -11,16 +11,54 @@ export async function apiRequest(
   url: string,
   method: string = 'GET',
   data?: unknown | undefined,
-): Promise<Response> {
-  const res = await fetch(url, {
-    method: method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
-  await throwIfResNotOk(res);
-  return res;
+): Promise<any> {
+  try {
+    console.log(`API Request to ${url} (${method}):`, data);
+    
+    const res = await fetch(url, {
+      method: method,
+      headers: data ? { "Content-Type": "application/json" } : {},
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+    
+    // Log the response status
+    console.log(`API Response from ${url} (${method}):`, {
+      status: res.status,
+      statusText: res.statusText
+    });
+    
+    // Clone the response to read it twice
+    const resClone = res.clone();
+    
+    try {
+      // Try to parse the response as JSON
+      const responseData = await resClone.json();
+      console.log(`API Response data from ${url}:`, responseData);
+      
+      if (!res.ok) {
+        console.error(`API Error (${res.status}) from ${url}:`, responseData);
+        throw new Error(responseData.message || 'Something went wrong');
+      }
+      
+      // For successful response, await throwIfResNotOk to maintain compatibility
+      await throwIfResNotOk(res);
+      return responseData;
+    } catch (jsonError) {
+      // If JSON parsing fails, handle as text
+      const textResponse = await res.text();
+      console.log(`Non-JSON response from ${url}:`, textResponse);
+      
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${textResponse || res.statusText}`);
+      }
+      
+      return textResponse;
+    }
+  } catch (error) {
+    console.error(`API Request Error (${url}):`, error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
