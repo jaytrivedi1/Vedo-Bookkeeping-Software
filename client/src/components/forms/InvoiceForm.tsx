@@ -52,9 +52,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxRate, setTaxRate] = useState(0);
   const [salesTaxId, setSalesTaxId] = useState<number | undefined>(undefined);
   const [taxAmount, setTaxAmount] = useState(0);
-  
-  // Store line item taxes in a map using the index as key
-  const [lineItemTaxes, setLineItemTaxes] = useState<{[key: number]: {taxId: number, rate: number}}>({});
   const [totalAmount, setTotalAmount] = useState(0);
   const { toast } = useToast();
 
@@ -454,19 +451,18 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   {/* Header */}
                   <div className="bg-gray-50 grid grid-cols-12 text-xs font-medium p-2 border-b">
                     <div className="col-span-1 text-center">#</div>
-                    <div className="col-span-4">PRODUCT/SERVICE</div>
+                    <div className="col-span-5">PRODUCT/SERVICE</div>
                     <div className="col-span-3">DESCRIPTION</div>
                     <div className="col-span-1 text-center">QTY</div>
                     <div className="col-span-1 text-center">RATE (CAD)</div>
                     <div className="col-span-1 text-center">AMOUNT (CAD)</div>
-                    <div className="col-span-1 text-center">SALES TAX</div>
                   </div>
                   
                   {/* Line Items */}
                   {fields.map((field, index) => (
                     <div key={field.id} className="grid grid-cols-12 p-2 border-b items-center hover:bg-gray-50">
                       <div className="col-span-1 text-center">{index + 1}</div>
-                      <div className="col-span-4">
+                      <div className="col-span-5">
                         <FormField
                           control={form.control}
                           name={`lineItems.${index}.description`}
@@ -486,20 +482,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                         field.onChange(product.name);
                                         form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
                                         
-                                        // Set sales tax if product has one
+                                        // When a product with tax is selected, set the global tax dropdown
                                         if (product.salesTaxId) {
                                           const selectedTax = salesTaxes?.find(tax => tax.id === product.salesTaxId);
                                           if (selectedTax) {
-                                            console.log("Setting tax from product:", selectedTax);
-                                            
-                                            // Update line item tax map
-                                            const updatedTaxes = {...lineItemTaxes};
-                                            updatedTaxes[index] = {
-                                              taxId: selectedTax.id,
-                                              rate: selectedTax.rate
-                                            };
-                                            setLineItemTaxes(updatedTaxes);
-                                            
+                                            console.log("Setting global tax from product:", selectedTax);
                                             setSalesTaxId(selectedTax.id);
                                             setTaxRate(selectedTax.rate);
                                             // Force a total recalculation
@@ -622,66 +609,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           )}
                         />
                       </div>
-                      <div className="col-span-1 text-center">
-                        <FormItem>
-                          <FormControl>
-                            <Select
-                              value={lineItemTaxes[index]?.taxId.toString() || "0"}
-                              onValueChange={(value) => {
-                                const numValue = parseInt(value);
-                                
-                                // Update line item tax map
-                                const updatedTaxes = {...lineItemTaxes};
-                                
-                                if (numValue === 0) {
-                                  // Remove tax for this line item
-                                  delete updatedTaxes[index];
-                                  setTaxRate(0);
-                                  setSalesTaxId(undefined);
-                                } else {
-                                  const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
-                                  if (selectedTax) {
-                                    console.log("Selected tax:", selectedTax);
-                                    
-                                    // Store tax for this line item
-                                    updatedTaxes[index] = {
-                                      taxId: selectedTax.id,
-                                      rate: selectedTax.rate
-                                    };
-                                    
-                                    setSalesTaxId(selectedTax.id);
-                                    setTaxRate(selectedTax.rate);
-                                  }
-                                }
-                                
-                                // Update tax map
-                                setLineItemTaxes(updatedTaxes);
-                                
-                                // Recalculate totals
-                                setTimeout(() => calculateTotals(), 0);
-                              }}
-                            >
-                              <SelectTrigger className="bg-transparent border-0 focus:ring-0 h-8 w-full p-0 text-center justify-center">
-                                <SelectValue placeholder="Tax" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">None</SelectItem>
-                                {salesTaxesLoading ? (
-                                  <SelectItem value="loading" disabled>Loading taxes...</SelectItem>
-                                ) : salesTaxes && salesTaxes.length > 0 ? (
-                                  salesTaxes.map((tax) => (
-                                    <SelectItem key={tax.id} value={tax.id.toString()}>
-                                      {tax.name} ({tax.rate}%)
-                                    </SelectItem>
-                                  ))
-                                ) : (
-                                  <SelectItem value="none" disabled>No taxes available</SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                        </FormItem>
-                      </div>
                       
                       <div className="col-span-1 flex justify-center">
                         <Button
@@ -734,18 +661,53 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                 
                 {/* Totals */}
                 <div className="flex justify-end mt-4">
-                  <div className="w-48 space-y-1 text-right">
-                    <div className="flex justify-between">
+                  <div className="w-64 space-y-3">
+                    <div className="flex justify-between items-center">
                       <span className="text-sm">Subtotal</span>
                       <span>${subTotal.toFixed(2)}</span>
                     </div>
-                    {taxRate > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-sm">Tax ({taxRate}%)</span>
-                        <span>${taxAmount.toFixed(2)}</span>
+                    
+                    {/* Global Tax Selection */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <span className="text-sm mr-2">Tax</span>
+                        <Select
+                          value={salesTaxId ? salesTaxId.toString() : "0"}
+                          onValueChange={(value) => {
+                            const numValue = parseInt(value);
+                            if (numValue === 0) {
+                              setTaxRate(0);
+                              setSalesTaxId(undefined);
+                            } else {
+                              const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
+                              if (selectedTax) {
+                                console.log("Selected global tax:", selectedTax);
+                                setSalesTaxId(selectedTax.id);
+                                setTaxRate(selectedTax.rate);
+                              }
+                            }
+                            setTimeout(() => calculateTotals(), 0);
+                          }}
+                        >
+                          <SelectTrigger className="w-32 h-8">
+                            <SelectValue placeholder="Select Tax" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">None</SelectItem>
+                            {salesTaxes?.map((tax) => (
+                              <SelectItem key={tax.id} value={tax.id.toString()}>
+                                {tax.name} ({tax.rate}%)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    )}
-                    <div className="flex justify-between">
+                      {taxRate > 0 && (
+                        <span>${taxAmount.toFixed(2)}</span>
+                      )}
+                    </div>
+                    
+                    <div className="flex justify-between border-t pt-2">
                       <span className="text-sm">Total</span>
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
