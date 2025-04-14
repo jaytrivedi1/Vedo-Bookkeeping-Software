@@ -451,18 +451,19 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   {/* Header */}
                   <div className="bg-gray-50 grid grid-cols-12 text-xs font-medium p-2 border-b">
                     <div className="col-span-1 text-center">#</div>
-                    <div className="col-span-5">PRODUCT/SERVICE</div>
-                    <div className="col-span-3">DESCRIPTION</div>
+                    <div className="col-span-4">PRODUCT/SERVICE</div>
+                    <div className="col-span-2">DESCRIPTION</div>
                     <div className="col-span-1 text-center">QTY</div>
                     <div className="col-span-1 text-center">RATE (CAD)</div>
                     <div className="col-span-1 text-center">AMOUNT (CAD)</div>
+                    <div className="col-span-2 text-center">SALES TAX</div>
                   </div>
                   
                   {/* Line Items */}
                   {fields.map((field, index) => (
                     <div key={field.id} className="grid grid-cols-12 p-2 border-b items-center hover:bg-gray-50">
                       <div className="col-span-1 text-center">{index + 1}</div>
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <FormField
                           control={form.control}
                           name={`lineItems.${index}.description`}
@@ -482,16 +483,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                         field.onChange(product.name);
                                         form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
                                         
-                                        // When a product with tax is selected, set the global tax dropdown
+                                        // When a product with tax is selected, set the line item tax
                                         if (product.salesTaxId) {
-                                          const selectedTax = salesTaxes?.find(tax => tax.id === product.salesTaxId);
-                                          if (selectedTax) {
-                                            console.log("Setting global tax from product:", selectedTax);
-                                            setSalesTaxId(selectedTax.id);
-                                            setTaxRate(selectedTax.rate);
-                                            // Force a total recalculation
-                                            setTimeout(() => calculateTotals(), 0);
-                                          }
+                                          form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
                                         }
                                         
                                         // Update the amount calculations
@@ -537,7 +531,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           )}
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <Input 
                           className="bg-transparent border-0 p-1 focus:ring-0" 
                           placeholder="Enter description" 
@@ -603,6 +597,46 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                   readOnly
                                   value={field.value.toFixed(2)}
                                 />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      
+                      {/* Sales Tax dropdown for each line item */}
+                      <div className="col-span-2">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.salesTaxId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Select
+                                  value={field.value?.toString() || "0"}
+                                  onValueChange={(value) => {
+                                    const numValue = parseInt(value);
+                                    if (numValue === 0) {
+                                      field.onChange(undefined);
+                                    } else {
+                                      field.onChange(numValue);
+                                    }
+                                    updateLineItemAmount(index);
+                                    calculateTotals();
+                                  }}
+                                >
+                                  <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
+                                    <SelectValue placeholder="Select Tax" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">None</SelectItem>
+                                    {salesTaxes?.map((tax) => (
+                                      <SelectItem key={tax.id} value={tax.id.toString()}>
+                                        {tax.name} ({tax.rate}%)
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </FormControl>
                               <FormMessage />
                             </FormItem>
