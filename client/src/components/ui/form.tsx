@@ -107,6 +107,10 @@ const FormControl = React.forwardRef<
 >(({ ...props }, ref) => {
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
 
+  // Make sure we only have a single React child
+  const child = React.Children.only(props.children) as React.ReactElement
+
+  // Clone the child with additional properties
   return (
     <Slot
       ref={ref}
@@ -117,8 +121,12 @@ const FormControl = React.forwardRef<
           : `${formDescriptionId} ${formMessageId}`
       }
       aria-invalid={!!error}
-      {...props}
-    />
+    >
+      {React.cloneElement(child, {
+        ...props,
+        children: child.props.children,
+      })}
+    </Slot>
   )
 })
 FormControl.displayName = "FormControl"
