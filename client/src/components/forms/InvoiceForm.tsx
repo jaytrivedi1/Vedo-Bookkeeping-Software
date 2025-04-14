@@ -746,14 +746,27 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                 <div className="mt-4">
                   <FormLabel className="text-sm font-medium block mb-1">Attach documents</FormLabel>
                   <div className="border border-dashed border-gray-300 rounded p-4 text-center">
-                    <Button type="button" variant="outline" size="sm" className="mb-2">
-                      Select files
+                    <div className="relative inline-block">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        className="mb-2"
+                        onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                      >
+                        Select files
+                      </Button>
                       <input
                         type="file"
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        id="file-upload-invoice"
+                        className="hidden"
                         multiple
+                        onChange={(e) => {
+                          // Handle file selection here
+                          console.log("Files selected:", e.target.files);
+                        }}
                       />
-                    </Button>
+                    </div>
                     <p className="text-xs text-gray-500">Drag and drop files here</p>
                     <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
                   </div>
