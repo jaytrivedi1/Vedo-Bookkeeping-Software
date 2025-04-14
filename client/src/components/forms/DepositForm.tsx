@@ -57,7 +57,7 @@ export default function DepositForm({ onSuccess, onCancel }: DepositFormProps) {
 
   const createDeposit = useMutation({
     mutationFn: async (data: Deposit) => {
-      return await apiRequest('POST', '/api/deposits', data);
+      return await apiRequest('/api/deposits', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });

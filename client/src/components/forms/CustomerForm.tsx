@@ -84,7 +84,7 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
   const createCustomer = useMutation({
     mutationFn: async (data: CustomerFormValues) => {
       // Handle file upload logic here if needed
-      const response = await apiRequest('POST', '/api/contacts', data);
+      const response = await apiRequest('/api/contacts', 'POST', data);
       return response;
     },
     onSuccess: () => {

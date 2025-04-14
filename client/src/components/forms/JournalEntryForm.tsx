@@ -64,7 +64,7 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
 
   const createJournalEntry = useMutation({
     mutationFn: async (data: JournalEntry) => {
-      return await apiRequest('POST', '/api/journal-entries', data);
+      return await apiRequest('/api/journal-entries', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });

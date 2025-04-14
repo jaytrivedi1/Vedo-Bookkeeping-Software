@@ -95,7 +95,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
 
   const createInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
-      return await apiRequest('/api/invoices', { method: 'POST' }, data);
+      return await apiRequest('/api/invoices', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
