@@ -250,34 +250,34 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           <FormLabel className="text-sm font-medium">Customer</FormLabel>
                           <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
                         </div>
-                        <Select 
-                          onValueChange={(value) => {
-                            field.onChange(parseInt(value));
-                            handleContactChange(parseInt(value));
-                          }} 
-                          defaultValue={field.value?.toString()}
-                        >
-                          <FormControl>
+                        <FormControl>
+                          <Select 
+                            onValueChange={(value) => {
+                              field.onChange(parseInt(value));
+                              handleContactChange(parseInt(value));
+                            }} 
+                            defaultValue={field.value?.toString()}
+                          >
                             <SelectTrigger className="bg-white border-gray-300">
                               <SelectValue placeholder="Select a customer" />
                             </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {contactsLoading ? (
-                              <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                            ) : contacts && contacts.length > 0 ? (
-                              contacts
-                                .filter(contact => contact.type === 'customer' || contact.type === 'both')
-                                .map((contact) => (
-                                  <SelectItem key={contact.id} value={contact.id.toString()}>
-                                    {contact.name}
-                                  </SelectItem>
-                                ))
-                            ) : (
-                              <SelectItem value="none" disabled>No customers available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                            <SelectContent>
+                              {contactsLoading ? (
+                                <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
+                              ) : contacts && contacts.length > 0 ? (
+                                contacts
+                                  .filter(contact => contact.type === 'customer' || contact.type === 'both')
+                                  .map((contact) => (
+                                    <SelectItem key={contact.id} value={contact.id.toString()}>
+                                      {contact.name}
+                                    </SelectItem>
+                                  ))
+                              ) : (
+                                <SelectItem value="none" disabled>No customers available</SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -329,21 +329,25 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     <FormLabel className="text-sm font-medium">Terms</FormLabel>
                     <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
                   </div>
-                  <Select 
-                    value={paymentTerms} 
-                    onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                  >
-                    <SelectTrigger className="bg-white border-gray-300">
-                      <SelectValue placeholder="Select payment terms" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">Net 7</SelectItem>
-                      <SelectItem value="14">Net 14</SelectItem>
-                      <SelectItem value="30">Net 30</SelectItem>
-                      <SelectItem value="60">Net 60</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormItem>
+                    <FormControl>
+                      <Select 
+                        value={paymentTerms} 
+                        onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                      >
+                        <SelectTrigger className="bg-white border-gray-300">
+                          <SelectValue placeholder="Select payment terms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="7">Net 7</SelectItem>
+                          <SelectItem value="14">Net 14</SelectItem>
+                          <SelectItem value="30">Net 30</SelectItem>
+                          <SelectItem value="60">Net 60</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                  </FormItem>
                   
                   {/* Recurring invoice option removed as requested */}
                 </div>
@@ -410,16 +414,20 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <div className="text-sm">Amounts are</div>
-                  <Select defaultValue="exclusive">
-                    <SelectTrigger className="w-40 bg-white border-gray-300">
-                      <SelectValue placeholder="Tax setting" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                      <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                      <SelectItem value="no-tax">No Tax</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormItem>
+                    <FormControl>
+                      <Select defaultValue="exclusive">
+                        <SelectTrigger className="w-40 bg-white border-gray-300">
+                          <SelectValue placeholder="Tax setting" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                          <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                          <SelectItem value="no-tax">No Tax</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                  </FormItem>
                 </div>
                 
                 <div className="border rounded-sm overflow-hidden">
