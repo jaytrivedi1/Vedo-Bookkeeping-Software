@@ -17,6 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import InvoiceForm from "@/components/forms/InvoiceForm";
@@ -75,20 +83,22 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Transaction Type
             </label>
-            <Select
-              value={transactionType}
-              onValueChange={(value) => setTransactionType(value as TransactionType)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select transaction type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="invoice">Invoice</SelectItem>
-                <SelectItem value="expense">Expense</SelectItem>
-                <SelectItem value="journal_entry">Journal Entry</SelectItem>
-                <SelectItem value="deposit">Deposit</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="relative">
+              <Select
+                value={transactionType}
+                onValueChange={(value) => setTransactionType(value as TransactionType)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select transaction type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="invoice">Invoice</SelectItem>
+                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="journal_entry">Journal Entry</SelectItem>
+                  <SelectItem value="deposit">Deposit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           
           {transactionType === "expense" && (
