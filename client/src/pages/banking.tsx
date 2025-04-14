@@ -289,8 +289,8 @@ export default function Banking() {
   const { mutate: saveTransactions, isPending: isSaving } = useMutation({
     mutationFn: async (classifiedTransactions: BankTransaction[]) => {
       return await apiRequest(
-        'POST',
-        '/api/banking/classify', 
+        '/api/banking/classify',
+        'POST', 
         { 
           transactions: classifiedTransactions,
           accountType: selectedAccount?.type,

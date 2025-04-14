@@ -72,7 +72,7 @@ export default function ExpenseForm({ onSuccess, onCancel }: ExpenseFormProps) {
 
   const createExpense = useMutation({
     mutationFn: async (data: Expense) => {
-      return await apiRequest('POST', '/api/expenses', data);
+      return await apiRequest('/api/expenses', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });

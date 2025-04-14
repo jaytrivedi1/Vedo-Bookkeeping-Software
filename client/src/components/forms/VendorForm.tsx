@@ -57,10 +57,7 @@ export default function VendorForm({
   // Mutation for creating a new vendor
   const createVendor = useMutation({
     mutationFn: (data: VendorFormValues) => {
-      return apiRequest("/api/contacts", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return apiRequest("/api/contacts", "POST", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -85,10 +82,7 @@ export default function VendorForm({
   // Mutation for updating an existing vendor
   const updateVendor = useMutation({
     mutationFn: (data: { id: number; vendor: VendorFormValues }) => {
-      return apiRequest(`/api/contacts/${data.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data.vendor),
-      });
+      return apiRequest(`/api/contacts/${data.id}`, "PATCH", data.vendor);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
