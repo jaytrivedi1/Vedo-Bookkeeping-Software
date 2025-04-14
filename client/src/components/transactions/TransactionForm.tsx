@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -17,14 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { PlusIcon } from "lucide-react";
 import InvoiceForm from "@/components/forms/InvoiceForm";
@@ -65,7 +55,6 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
         </Button>
       </DialogTrigger>
       
-      {/* Remove DialogContent and show forms in full screen for Invoice */}
       {open && transactionType === "invoice" ? (
         <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
           <InvoiceForm onSuccess={handleSuccess} onCancel={() => setOpen(false)} />
@@ -80,25 +69,23 @@ export default function TransactionForm({ onSuccess }: TransactionFormProps) {
           </DialogHeader>
           
           <div className="my-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <div className="block text-sm font-medium text-gray-700 mb-1">
               Transaction Type
-            </label>
-            <div className="relative">
-              <Select
-                value={transactionType}
-                onValueChange={(value) => setTransactionType(value as TransactionType)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select transaction type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="invoice">Invoice</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="journal_entry">Journal Entry</SelectItem>
-                  <SelectItem value="deposit">Deposit</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
+            <Select
+              value={transactionType}
+              onValueChange={(value) => setTransactionType(value as TransactionType)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select transaction type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="invoice">Invoice</SelectItem>
+                <SelectItem value="expense">Expense</SelectItem>
+                <SelectItem value="journal_entry">Journal Entry</SelectItem>
+                <SelectItem value="deposit">Deposit</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           
           {transactionType === "expense" && (
