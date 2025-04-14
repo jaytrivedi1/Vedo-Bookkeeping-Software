@@ -118,7 +118,7 @@ export default function SalesTaxes() {
         ...values,
         accountId: values.accountId === 0 ? null : values.accountId
       };
-      return await apiRequest("POST", "/api/sales-taxes", processedValues);
+      return await apiRequest("/api/sales-taxes", "POST", processedValues);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -147,7 +147,7 @@ export default function SalesTaxes() {
         ...values,
         accountId: values.accountId === 0 ? null : values.accountId
       };
-      return await apiRequest("PATCH", `/api/sales-taxes/${id}`, processedValues);
+      return await apiRequest(`/api/sales-taxes/${id}`, "PATCH", processedValues);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
@@ -172,7 +172,7 @@ export default function SalesTaxes() {
   // Delete a sales tax
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
-      return await apiRequest("DELETE", `/api/sales-taxes/${id}`);
+      return await apiRequest(`/api/sales-taxes/${id}`, "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/sales-taxes"] });
