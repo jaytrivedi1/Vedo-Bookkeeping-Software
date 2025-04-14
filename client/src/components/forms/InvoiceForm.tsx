@@ -51,6 +51,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [subTotal, setSubTotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [taxNames, setTaxNames] = useState<string[]>([]);
   const { toast } = useToast();
 
   // Extract next invoice number
@@ -129,6 +130,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     // Calculate tax amount based on the per-line item tax rates
     let totalTaxAmount = 0;
+    const usedTaxes = new Map<number, SalesTax>();
     
     // Loop through each line item and calculate its tax
     lineItems.forEach((item) => {
@@ -139,23 +141,31 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
           const itemTaxRate = salesTax.rate;
           const itemTaxAmount = (item.amount || 0) * (itemTaxRate / 100);
           totalTaxAmount += itemTaxAmount;
+          
+          // Track which taxes are being used
+          usedTaxes.set(salesTax.id, salesTax);
         }
       }
     });
     
     const total = subtotal + totalTaxAmount;
     
+    // Get all unique tax names used in this invoice
+    const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
+    
     console.log("Calculating totals:", { 
       subtotal, 
       totalTaxAmount, 
       total,
-      lineItems
+      lineItems,
+      taxNames: taxNameList
     });
     
     // Make sure to persist these values
     setSubTotal(subtotal);
     setTaxAmount(totalTaxAmount);
     setTotalAmount(total);
+    setTaxNames(taxNameList);
   };
 
   const updateLineItemAmount = (index: number) => {
@@ -725,7 +735,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     
                     {/* Tax Summary */}
                     <div className="flex justify-between items-center">
-                      <span className="text-sm">Tax</span>
+                      <span className="text-sm">
+                        {taxNames.length > 0 
+                          ? taxNames.join(', ')  
+                          : 'Tax'}
+                      </span>
                       <span>${taxAmount.toFixed(2)}</span>
                     </div>
                     
