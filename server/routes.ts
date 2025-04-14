@@ -162,10 +162,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const body = {
         ...req.body,
         date: new Date(req.body.date),
-        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
+        // Ensure these fields exist even if they weren't sent
+        reference: req.body.reference || `INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
+        status: req.body.status || 'draft',
+        description: req.body.description || ''
       };
       
-      // Validate invoice data
+      // Validate invoice data - with detailed logging
+      console.log("Validating invoice data:", JSON.stringify(body));
       const result = invoiceSchema.safeParse(body);
       if (!result.success) {
         console.log("Invoice validation errors:", JSON.stringify(result.error));
@@ -176,6 +181,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const invoiceData = result.data;
+      
+      // More detailed logging for debugging
+      console.log("Invoice data passed validation:", JSON.stringify(invoiceData));
       
       // Calculate amount from line items or use provided total amount
       const totalAmount = invoiceData.totalAmount || 
@@ -192,41 +200,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: invoiceData.status
       };
       
-      // Create line items
-      const lineItems = invoiceData.lineItems.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
-        transactionId: 0 // Will be set by createTransaction
-      }));
+      // Create line items with proper handling of salesTaxId
+      const lineItems = invoiceData.lineItems.map(item => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          transactionId: 0 // Will be set by createTransaction
+        };
+        
+        // Only add salesTaxId if it exists and is not undefined/null
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+          console.log(`Line item has sales tax ID: ${item.salesTaxId}`);
+        }
+        
+        return lineItem;
+      });
       
       // Create ledger entries - Double Entry Accounting
       // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable
       const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
       const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
       
-      // Get the sales tax account from the sales tax record if available
-      let taxPayableAccount = null;
-      if (invoiceData.salesTaxId) {
-        const salesTax = await storage.getSalesTax(invoiceData.salesTaxId);
-        if (salesTax && salesTax.accountId) {
-          taxPayableAccount = await storage.getAccount(salesTax.accountId);
-        }
-      }
-      
-      // Fallback to default sales tax payable account if none found
-      if (!taxPayableAccount) {
-        taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
-      }
+      // Get the default sales tax payable account
+      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
       
       if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
       
-      // Calculate subtotal (revenue) and tax amounts
-      const subTotal = invoiceData.subTotal || totalAmount / (1 + (invoiceData.taxRate || 0) / 100);
-      const taxAmount = invoiceData.taxAmount || (totalAmount - subTotal);
+      // Use the provided subtotal and tax amount from the client
+      const subTotal = invoiceData.subTotal || totalAmount;
+      const taxAmount = invoiceData.taxAmount || 0;
       
       const ledgerEntries = [
         {
@@ -264,7 +271,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
         // Additional invoice details
         subTotal: invoiceData.subTotal,
-        taxRate: invoiceData.taxRate,
         taxAmount: invoiceData.taxAmount,
         totalAmount: invoiceData.totalAmount || totalAmount,
         dueDate: invoiceData.dueDate,
