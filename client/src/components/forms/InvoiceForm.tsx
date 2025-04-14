@@ -462,13 +462,15 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                 <Select
                                   onValueChange={(value) => {
                                     if (value === 'custom') {
-                                      field.onChange(field.value);
+                                      // Handle custom product
+                                      field.onChange('');
                                     } else {
                                       const productId = parseInt(value);
                                       const product = typedProducts.find(p => p.id === productId);
                                       if (product) {
+                                        // Set the product name as the description
                                         field.onChange(product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, product.price);
+                                        form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
                                         
                                         // Set sales tax if product has one
                                         if (product.salesTaxId) {
@@ -484,7 +486,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                       }
                                     }
                                   }}
-                                  value={field.value ? field.value : ''}
                                 >
                                   <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
                                     <SelectValue placeholder="Select a product/service" />
@@ -692,6 +693,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span className="text-sm">Subtotal</span>
                       <span>${subTotal.toFixed(2)}</span>
                     </div>
+                    {taxRate > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-sm">Tax ({taxRate}%)</span>
+                        <span>${taxAmount.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-sm">Total</span>
                       <span>${totalAmount.toFixed(2)}</span>
