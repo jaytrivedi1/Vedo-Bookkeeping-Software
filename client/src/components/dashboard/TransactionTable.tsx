@@ -51,8 +51,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
     try {
       await apiRequest(
         `/api/transactions/${transactionToDelete.id}`, 
-        { method: 'DELETE' }, 
-        null
+        'DELETE'
       );
       
       // Clear the transaction to delete
