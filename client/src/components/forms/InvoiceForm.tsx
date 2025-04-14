@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { Invoice, invoiceSchema, Contact, SalesTax } from "@shared/schema";
+import { Invoice, invoiceSchema, Contact, SalesTax, Product } from "@shared/schema";
 import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     queryKey: ['/api/sales-taxes'],
   });
   
-  const { data: products, isLoading: productsLoading } = useQuery({
+  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
 
@@ -450,10 +450,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                     if (value === 'custom') {
                                       field.onChange(field.value);
                                     } else {
-                                      const product = products?.find(p => p.id.toString() === value);
+                                      const productId = parseInt(value);
+                                      const product = products?.find(p => p.id === productId);
                                       if (product) {
                                         field.onChange(product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, product.price || 0);
+                                        form.setValue(`lineItems.${index}.unitPrice`, typeof product.price === 'number' ? product.price : 0);
                                         
                                         // Set sales tax if product has one
                                         if (product.salesTaxId) {
@@ -482,7 +483,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                         <SelectItem value="custom">Enter custom item</SelectItem>
                                         {products.map((product) => (
                                           <SelectItem key={product.id} value={product.id.toString()}>
-                                            {product.name} (${product.price?.toFixed(2) || '0.00'})
+                                            {product.name} (${typeof product.price === 'number' ? product.price.toFixed(2) : '0.00'})
                                           </SelectItem>
                                         ))}
                                       </>
@@ -580,6 +581,43 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           )}
                         />
                       </div>
+                      <div className="col-span-1 text-center">
+                        <Select
+                          onValueChange={(value) => {
+                            const numValue = parseInt(value);
+                            if (numValue === 0) {
+                              setTaxRate(0);
+                            } else {
+                              const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
+                              if (selectedTax) {
+                                setSalesTaxId(selectedTax.id);
+                                setTaxRate(selectedTax.rate);
+                                calculateTotals();
+                              }
+                            }
+                          }}
+                          defaultValue="0"
+                        >
+                          <SelectTrigger className="bg-transparent border-0 focus:ring-0 h-8 w-full p-0 text-center justify-center">
+                            <SelectValue placeholder="Tax" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">None</SelectItem>
+                            {salesTaxesLoading ? (
+                              <SelectItem value="loading" disabled>Loading taxes...</SelectItem>
+                            ) : salesTaxes && salesTaxes.length > 0 ? (
+                              salesTaxes.map((tax) => (
+                                <SelectItem key={tax.id} value={tax.id.toString()}>
+                                  {tax.name} ({tax.rate}%)
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="none" disabled>No taxes available</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
                       <div className="col-span-1 flex justify-center">
                         <Button
                           type="button"
@@ -685,6 +723,23 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     )}
                   />
                 </div>
+                
+                {/* File upload section */}
+                <div className="mt-4">
+                  <FormLabel className="text-sm font-medium block mb-1">Attach documents</FormLabel>
+                  <div className="border border-dashed border-gray-300 rounded p-4 text-center">
+                    <Button type="button" variant="outline" size="sm" className="mb-2">
+                      Select files
+                      <input
+                        type="file"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        multiple
+                      />
+                    </Button>
+                    <p className="text-xs text-gray-500">Drag and drop files here</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -711,9 +766,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             <div className="hidden md:flex md:space-x-2 flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
                 Print or Preview
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
-                Make recurring
               </Button>
               <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
                 Customize
