@@ -84,7 +84,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       contactId: undefined,
       reference: `INV-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`,
       description: '',
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0 }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
   });
 
@@ -129,21 +129,34 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     const lineItems = form.getValues('lineItems');
     const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
     
-    // Calculate tax amount based on the selected tax rate
-    // This approach uses a single tax rate for the entire invoice
-    const calculatedTaxAmount = subtotal * (taxRate / 100);
-    const total = subtotal + calculatedTaxAmount;
+    // Calculate tax amount based on the per-line item tax rates
+    let totalTaxAmount = 0;
+    
+    // Loop through each line item and calculate its tax
+    lineItems.forEach((item) => {
+      if (item.salesTaxId) {
+        // Find the tax rate for this line item
+        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+        if (salesTax) {
+          const itemTaxRate = salesTax.rate;
+          const itemTaxAmount = (item.amount || 0) * (itemTaxRate / 100);
+          totalTaxAmount += itemTaxAmount;
+        }
+      }
+    });
+    
+    const total = subtotal + totalTaxAmount;
     
     console.log("Calculating totals:", { 
       subtotal, 
-      taxRate, 
-      calculatedTaxAmount, 
-      total 
+      totalTaxAmount, 
+      total,
+      lineItems
     });
     
     // Make sure to persist these values
     setSubTotal(subtotal);
-    setTaxAmount(calculatedTaxAmount);
+    setTaxAmount(totalTaxAmount);
     setTotalAmount(total);
   };
 
@@ -212,19 +225,30 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       status: 'draft' as const, // Default status since we removed the field
       subTotal,
-      taxRate,
       taxAmount,
       totalAmount,
-      paymentTerms,
-      // Only include salesTaxId if it has a value (convert null to undefined)
-      ...(salesTaxId ? { salesTaxId } : {})
+      paymentTerms
     };
     
-    // Ensure the line items have the correct amount calculated
-    enrichedData.lineItems = enrichedData.lineItems.map(item => ({
-      ...item,
-      amount: calculateLineItemAmount(item.quantity, item.unitPrice)
-    }));
+    // Calculate the line item amounts and ensure salesTaxId is properly handled
+    enrichedData.lineItems = enrichedData.lineItems.map(item => {
+      // Get the tax details for this line item
+      let taxInfo = {};
+      if (item.salesTaxId) {
+        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+        if (salesTax) {
+          taxInfo = {
+            salesTaxId: salesTax.id
+          };
+        }
+      }
+      
+      return {
+        ...item,
+        ...taxInfo,
+        amount: calculateLineItemAmount(item.quantity, item.unitPrice)
+      };
+    });
     
     createInvoice.mutate(enrichedData);
   };
@@ -701,44 +725,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span>${subTotal.toFixed(2)}</span>
                     </div>
                     
-                    {/* Global Tax Selection */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <span className="text-sm mr-2">Tax</span>
-                        <Select
-                          value={salesTaxId ? salesTaxId.toString() : "0"}
-                          onValueChange={(value) => {
-                            const numValue = parseInt(value);
-                            if (numValue === 0) {
-                              setTaxRate(0);
-                              setSalesTaxId(undefined);
-                            } else {
-                              const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
-                              if (selectedTax) {
-                                console.log("Selected global tax:", selectedTax);
-                                setSalesTaxId(selectedTax.id);
-                                setTaxRate(selectedTax.rate);
-                              }
-                            }
-                            setTimeout(() => calculateTotals(), 0);
-                          }}
-                        >
-                          <SelectTrigger className="w-32 h-8">
-                            <SelectValue placeholder="Select Tax" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">None</SelectItem>
-                            {salesTaxes?.map((tax) => (
-                              <SelectItem key={tax.id} value={tax.id.toString()}>
-                                {tax.name} ({tax.rate}%)
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {taxRate > 0 && (
-                        <span>${taxAmount.toFixed(2)}</span>
-                      )}
+                    {/* Tax Summary */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm">Tax</span>
+                      <span>${taxAmount.toFixed(2)}</span>
                     </div>
                     
                     <div className="flex justify-between border-t pt-2">
