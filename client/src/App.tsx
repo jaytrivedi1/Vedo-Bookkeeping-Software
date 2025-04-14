@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Invoices from "@/pages/invoices";
+import NewInvoice from "@/pages/invoice-new";
 import Expenses from "@/pages/expenses";
 import Journals from "@/pages/journals";
 import Deposits from "@/pages/deposits";
@@ -21,6 +22,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/invoices" component={Invoices} />
+      <Route path="/invoices/new" component={NewInvoice} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
