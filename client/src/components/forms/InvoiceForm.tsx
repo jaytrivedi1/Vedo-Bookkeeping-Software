@@ -81,8 +81,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     defaultValues: {
       date: today,
       contactId: undefined,
-      reference: `INV-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`,
+      reference: defaultInvoiceNumber,
       description: '',
+      status: 'draft' as const,
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
   });
@@ -225,13 +226,18 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   }, [form.watch, paymentTerms]);
 
   const onSubmit = (data: Invoice) => {
+    console.log("Form data before submit:", data);
+    
     // Add the calculated totals and payment terms to the invoice data before submitting
     const enrichedData = {
       ...data,
       // Make sure we're passing Date objects and not strings
       date: data.date instanceof Date ? data.date : new Date(data.date),
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
+      // Ensure required fields are present
+      reference: data.reference || defaultInvoiceNumber,
       status: 'draft' as const, // Default status since we removed the field
+      description: data.description || '',
       subTotal,
       taxAmount,
       totalAmount,
