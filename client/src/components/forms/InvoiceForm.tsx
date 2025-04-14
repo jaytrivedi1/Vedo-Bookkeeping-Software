@@ -89,7 +89,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
 
   const createInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
-      return await apiRequest('POST', '/api/invoices', data);
+      return await apiRequest('/api/invoices', { method: 'POST' }, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
@@ -345,9 +345,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     </SelectContent>
                   </Select>
                   
-                  <div className="mt-3 text-xs text-blue-600">
-                    <button type="button" className="underline">Create recurring invoice</button>
-                  </div>
+                  {/* Recurring invoice option removed as requested */}
                 </div>
                 
                 <div className="space-y-4">
@@ -406,20 +404,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                 </div>
               </div>
               
-              {/* Tags */}
-              <div>
-                <div className="flex items-center mb-1">
-                  <FormLabel className="text-sm font-medium">Tags</FormLabel>
-                  <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
-                </div>
-                <Input 
-                  className="bg-white border-gray-300" 
-                  placeholder="Start typing to add a tag" 
-                />
-                <div className="flex justify-end mt-1">
-                  <button type="button" className="text-xs text-blue-600 underline">Manage tags</button>
-                </div>
-              </div>
+              {/* Tags section removed as requested */}
               
               {/* Line Items */}
               <div>
@@ -460,11 +445,63 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Input 
-                                  className="bg-transparent border-0 p-1 focus:ring-0" 
-                                  placeholder="Enter item name" 
-                                  {...field} 
-                                />
+                                <Select
+                                  onValueChange={(value) => {
+                                    if (value === 'custom') {
+                                      field.onChange(field.value);
+                                    } else {
+                                      const product = products?.find(p => p.id.toString() === value);
+                                      if (product) {
+                                        field.onChange(product.name);
+                                        form.setValue(`lineItems.${index}.unitPrice`, product.price || 0);
+                                        
+                                        // Set sales tax if product has one
+                                        if (product.salesTaxId) {
+                                          const selectedTax = salesTaxes?.find(tax => tax.id === product.salesTaxId);
+                                          if (selectedTax) {
+                                            setSalesTaxId(selectedTax.id);
+                                            setTaxRate(selectedTax.rate);
+                                          }
+                                        }
+                                        
+                                        // Update the amount calculations
+                                        updateLineItemAmount(index);
+                                      }
+                                    }
+                                  }}
+                                  value={field.value ? field.value : ''}
+                                >
+                                  <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
+                                    <SelectValue placeholder="Select a product/service" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {productsLoading ? (
+                                      <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                                    ) : products && products.length > 0 ? (
+                                      <>
+                                        <SelectItem value="custom">Enter custom item</SelectItem>
+                                        {products.map((product) => (
+                                          <SelectItem key={product.id} value={product.id.toString()}>
+                                            {product.name} (${product.price?.toFixed(2) || '0.00'})
+                                          </SelectItem>
+                                        ))}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <SelectItem value="custom">Enter custom item</SelectItem>
+                                        <SelectItem value="none" disabled>No products available</SelectItem>
+                                      </>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                                {field.value === 'custom' && (
+                                  <Input 
+                                    className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
+                                    placeholder="Enter item name" 
+                                    value={field.value === 'custom' ? '' : field.value}
+                                    onChange={(e) => field.onChange(e.target.value)}
+                                  />
+                                )}
                               </FormControl>
                               <FormMessage />
                             </FormItem>
