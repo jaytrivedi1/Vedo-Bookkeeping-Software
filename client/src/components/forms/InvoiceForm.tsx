@@ -49,8 +49,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('30');
   const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
   const [subTotal, setSubTotal] = useState(0);
-  const [taxRate, setTaxRate] = useState(0);
-  const [salesTaxId, setSalesTaxId] = useState<number | undefined>(undefined);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const { toast } = useToast();
@@ -195,10 +193,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     }
   };
 
-  // Update totals whenever line items or tax rate changes
+  // Update totals whenever line items change
   useEffect(() => {
     calculateTotals();
-  }, [fields, taxRate]);
+  }, [fields]);
 
   // Update due date when invoice date changes
   useEffect(() => {
