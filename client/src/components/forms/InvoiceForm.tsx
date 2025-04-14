@@ -70,6 +70,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
+  
+  // Ensure products are properly typed
+  const typedProducts = products?.map(product => ({
+    ...product,
+    price: typeof product.price === 'number' ? product.price : 0
+  })) || [];
 
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
@@ -459,10 +465,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                       field.onChange(field.value);
                                     } else {
                                       const productId = parseInt(value);
-                                      const product = products?.find(p => p.id === productId);
+                                      const product = typedProducts.find(p => p.id === productId);
                                       if (product) {
                                         field.onChange(product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, typeof product.price === 'number' ? product.price : 0);
+                                        form.setValue(`lineItems.${index}.unitPrice`, product.price);
                                         
                                         // Set sales tax if product has one
                                         if (product.salesTaxId) {
@@ -486,12 +492,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                   <SelectContent>
                                     {productsLoading ? (
                                       <SelectItem value="loading" disabled>Loading products...</SelectItem>
-                                    ) : products && products.length > 0 ? (
+                                    ) : typedProducts && typedProducts.length > 0 ? (
                                       <>
                                         <SelectItem value="custom">Enter custom item</SelectItem>
-                                        {products.map((product) => (
+                                        {typedProducts.map((product) => (
                                           <SelectItem key={product.id} value={product.id.toString()}>
-                                            {product.name} (${typeof product.price === 'number' ? product.price.toFixed(2) : '0.00'})
+                                            {product.name} (${product.price.toFixed(2)})
                                           </SelectItem>
                                         ))}
                                       </>
@@ -590,40 +596,44 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                         />
                       </div>
                       <div className="col-span-1 text-center">
-                        <Select
-                          onValueChange={(value) => {
-                            const numValue = parseInt(value);
-                            if (numValue === 0) {
-                              setTaxRate(0);
-                            } else {
-                              const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
-                              if (selectedTax) {
-                                setSalesTaxId(selectedTax.id);
-                                setTaxRate(selectedTax.rate);
-                                calculateTotals();
-                              }
-                            }
-                          }}
-                          defaultValue="0"
-                        >
-                          <SelectTrigger className="bg-transparent border-0 focus:ring-0 h-8 w-full p-0 text-center justify-center">
-                            <SelectValue placeholder="Tax" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">None</SelectItem>
-                            {salesTaxesLoading ? (
-                              <SelectItem value="loading" disabled>Loading taxes...</SelectItem>
-                            ) : salesTaxes && salesTaxes.length > 0 ? (
-                              salesTaxes.map((tax) => (
-                                <SelectItem key={tax.id} value={tax.id.toString()}>
-                                  {tax.name} ({tax.rate}%)
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>No taxes available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <FormItem>
+                          <FormControl>
+                            <Select
+                              onValueChange={(value) => {
+                                const numValue = parseInt(value);
+                                if (numValue === 0) {
+                                  setTaxRate(0);
+                                } else {
+                                  const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
+                                  if (selectedTax) {
+                                    setSalesTaxId(selectedTax.id);
+                                    setTaxRate(selectedTax.rate);
+                                    calculateTotals();
+                                  }
+                                }
+                              }}
+                              defaultValue="0"
+                            >
+                              <SelectTrigger className="bg-transparent border-0 focus:ring-0 h-8 w-full p-0 text-center justify-center">
+                                <SelectValue placeholder="Tax" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">None</SelectItem>
+                                {salesTaxesLoading ? (
+                                  <SelectItem value="loading" disabled>Loading taxes...</SelectItem>
+                                ) : salesTaxes && salesTaxes.length > 0 ? (
+                                  salesTaxes.map((tax) => (
+                                    <SelectItem key={tax.id} value={tax.id.toString()}>
+                                      {tax.name} ({tax.rate}%)
+                                    </SelectItem>
+                                  ))
+                                ) : (
+                                  <SelectItem value="none" disabled>No taxes available</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
                       </div>
                       
                       <div className="col-span-1 flex justify-center">
@@ -787,23 +797,27 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                   {createInvoice.isPending ? 'Saving...' : 'Save'}
                 </Button>
                 <div className="relative ml-px">
-                  <Select 
-                    defaultValue="save" 
-                    onValueChange={(value) => {
-                      if (value === "save_send") {
-                        setSendInvoiceEmail(true);
-                        form.handleSubmit(onSubmit)();
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent align="end">
-                      <SelectItem value="save">Save</SelectItem>
-                      <SelectItem value="save_send">Save and send</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormItem>
+                    <FormControl>
+                      <Select 
+                        defaultValue="save" 
+                        onValueChange={(value) => {
+                          if (value === "save_send") {
+                            setSendInvoiceEmail(true);
+                            form.handleSubmit(onSubmit)();
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="end">
+                          <SelectItem value="save">Save</SelectItem>
+                          <SelectItem value="save_send">Save and send</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                  </FormItem>
                 </div>
               </div>
             </div>
