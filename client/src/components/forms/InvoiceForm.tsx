@@ -128,11 +128,20 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const calculateTotals = () => {
     const lineItems = form.getValues('lineItems');
     const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
-    const tax = subtotal * (taxRate / 100);
-    const total = subtotal + tax;
+    
+    // Calculate tax amount based on the tax rate percentage
+    const calculatedTaxAmount = subtotal * (taxRate / 100);
+    const total = subtotal + calculatedTaxAmount;
+    
+    console.log("Calculating totals:", { 
+      subtotal, 
+      taxRate, 
+      calculatedTaxAmount, 
+      total 
+    });
     
     setSubTotal(subtotal);
-    setTaxAmount(tax);
+    setTaxAmount(calculatedTaxAmount);
     setTotalAmount(total);
   };
 
@@ -171,10 +180,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     }
   };
 
-  // Update totals whenever line items change
+  // Update totals whenever line items or tax rate changes
   useEffect(() => {
     calculateTotals();
-  }, [fields]);
+  }, [fields, taxRate]);
 
   // Update due date when invoice date changes
   useEffect(() => {
@@ -476,8 +485,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                         if (product.salesTaxId) {
                                           const selectedTax = salesTaxes?.find(tax => tax.id === product.salesTaxId);
                                           if (selectedTax) {
+                                            console.log("Setting tax from product:", selectedTax);
                                             setSalesTaxId(selectedTax.id);
                                             setTaxRate(selectedTax.rate);
+                                            // Force a total recalculation
+                                            setTimeout(() => calculateTotals(), 0);
                                           }
                                         }
                                         
@@ -604,14 +616,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                 const numValue = parseInt(value);
                                 if (numValue === 0) {
                                   setTaxRate(0);
+                                  setSalesTaxId(undefined);
                                 } else {
                                   const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
                                   if (selectedTax) {
+                                    console.log("Selected tax:", selectedTax);
                                     setSalesTaxId(selectedTax.id);
                                     setTaxRate(selectedTax.rate);
-                                    calculateTotals();
                                   }
                                 }
+                                // Always calculate totals after changing tax
+                                setTimeout(() => calculateTotals(), 0);
                               }}
                               defaultValue="0"
                             >
