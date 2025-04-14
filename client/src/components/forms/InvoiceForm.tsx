@@ -66,6 +66,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+  
+  const { data: products, isLoading: productsLoading } = useQuery({
+    queryKey: ['/api/products'],
+  });
 
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
