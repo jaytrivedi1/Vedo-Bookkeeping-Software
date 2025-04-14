@@ -52,6 +52,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxRate, setTaxRate] = useState(0);
   const [salesTaxId, setSalesTaxId] = useState<number | undefined>(undefined);
   const [taxAmount, setTaxAmount] = useState(0);
+  
+  // Store line item taxes in a map using the index as key
+  const [lineItemTaxes, setLineItemTaxes] = useState<{[key: number]: {taxId: number, rate: number}}>({});
   const [totalAmount, setTotalAmount] = useState(0);
   const { toast } = useToast();
 
@@ -129,7 +132,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     const lineItems = form.getValues('lineItems');
     const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
     
-    // Calculate tax amount based on the tax rate percentage
+    // Calculate tax amount based on the selected tax rate
+    // This approach uses a single tax rate for the entire invoice
     const calculatedTaxAmount = subtotal * (taxRate / 100);
     const total = subtotal + calculatedTaxAmount;
     
@@ -140,6 +144,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       total 
     });
     
+    // Make sure to persist these values
     setSubTotal(subtotal);
     setTaxAmount(calculatedTaxAmount);
     setTotalAmount(total);
@@ -486,6 +491,15 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                           const selectedTax = salesTaxes?.find(tax => tax.id === product.salesTaxId);
                                           if (selectedTax) {
                                             console.log("Setting tax from product:", selectedTax);
+                                            
+                                            // Update line item tax map
+                                            const updatedTaxes = {...lineItemTaxes};
+                                            updatedTaxes[index] = {
+                                              taxId: selectedTax.id,
+                                              rate: selectedTax.rate
+                                            };
+                                            setLineItemTaxes(updatedTaxes);
+                                            
                                             setSalesTaxId(selectedTax.id);
                                             setTaxRate(selectedTax.rate);
                                             // Force a total recalculation
@@ -612,23 +626,40 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                         <FormItem>
                           <FormControl>
                             <Select
+                              value={lineItemTaxes[index]?.taxId.toString() || "0"}
                               onValueChange={(value) => {
                                 const numValue = parseInt(value);
+                                
+                                // Update line item tax map
+                                const updatedTaxes = {...lineItemTaxes};
+                                
                                 if (numValue === 0) {
+                                  // Remove tax for this line item
+                                  delete updatedTaxes[index];
                                   setTaxRate(0);
                                   setSalesTaxId(undefined);
                                 } else {
                                   const selectedTax = salesTaxes?.find(tax => tax.id === numValue);
                                   if (selectedTax) {
                                     console.log("Selected tax:", selectedTax);
+                                    
+                                    // Store tax for this line item
+                                    updatedTaxes[index] = {
+                                      taxId: selectedTax.id,
+                                      rate: selectedTax.rate
+                                    };
+                                    
                                     setSalesTaxId(selectedTax.id);
                                     setTaxRate(selectedTax.rate);
                                   }
                                 }
-                                // Always calculate totals after changing tax
+                                
+                                // Update tax map
+                                setLineItemTaxes(updatedTaxes);
+                                
+                                // Recalculate totals
                                 setTimeout(() => calculateTotals(), 0);
                               }}
-                              defaultValue="0"
                             >
                               <SelectTrigger className="bg-transparent border-0 focus:ring-0 h-8 w-full p-0 text-center justify-center">
                                 <SelectValue placeholder="Tax" />
