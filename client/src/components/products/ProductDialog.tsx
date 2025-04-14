@@ -135,9 +135,10 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
         ...data,
         // Convert price to string for DB if needed
         price: typeof data.price === 'number' ? data.price.toString() : data.price,
-        // Ensure accountId and salesTaxId are numbers
+        // Ensure accountId is a number
         accountId: Number(data.accountId),
-        salesTaxId: Number(data.salesTaxId),
+        // Handle salesTaxId: if 0, set to null (no sales tax)
+        salesTaxId: data.salesTaxId === 0 ? null : Number(data.salesTaxId),
       };
 
       console.log("Formatted data for submission:", formattedData);
