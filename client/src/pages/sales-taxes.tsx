@@ -457,42 +457,45 @@ export default function SalesTaxes() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="accountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tax Liability Account</FormLabel>
-                    <Select
-                      onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
-                      value={field.value?.toString() || "0"}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="0">None</SelectItem>
-                        {accounts && accounts
-                          .filter(account => 
-                            account.type === "accounts_payable" || 
-                            account.type === "other_current_liabilities"
-                          )
-                          .map((account) => (
-                            <SelectItem key={account.id} value={account.id.toString()}>
-                              {account.code} - {account.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      The account where collected tax will be recorded
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Only show tax liability account for non-composite taxes */}
+              {!form.watch('isComposite') && (
+                <FormField
+                  control={form.control}
+                  name="accountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tax Liability Account</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                        value={field.value?.toString() || "0"}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select account" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="0">None</SelectItem>
+                          {accounts && accounts
+                            .filter(account => 
+                              account.type === "accounts_payable" || 
+                              account.type === "other_current_liabilities"
+                            )
+                            .map((account) => (
+                              <SelectItem key={account.id} value={account.id.toString()}>
+                                {account.code} - {account.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        The account where collected tax will be recorded
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="isActive"
@@ -532,12 +535,18 @@ export default function SalesTaxes() {
                           field.onChange(value);
                           setIsComposite(value);
                           
-                          // If enabling composite tax, initialize components array
-                          if (value && (!form.getValues().componentTaxes || form.getValues().componentTaxes.length === 0)) {
-                            form.setValue('componentTaxes', [
-                              { name: 'GST', rate: 5, accountId: null },
-                              { name: 'QST', rate: 9.975, accountId: null }
-                            ]);
+                          // If enabling composite tax
+                          if (value) {
+                            // Clear the main tax liability account since it's not used for composite taxes
+                            form.setValue('accountId', null);
+                            
+                            // Initialize components array if empty
+                            if (!form.getValues().componentTaxes || form.getValues().componentTaxes.length === 0) {
+                              form.setValue('componentTaxes', [
+                                { name: 'GST', rate: 5, accountId: null },
+                                { name: 'QST', rate: 9.975, accountId: null }
+                              ]);
+                            }
                           }
                         }}
                       />
