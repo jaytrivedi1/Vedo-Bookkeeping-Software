@@ -169,6 +169,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
       
+      // Check if invoice reference already exists
+      const transactions = await storage.getTransactions();
+      const existingInvoice = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'invoice'
+      );
+      
+      if (existingInvoice) {
+        return res.status(400).json({ 
+          message: "Invoice reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "An invoice with this reference number already exists" 
+          }] 
+        });
+      }
+      
       // Validate invoice data - with detailed logging
       console.log("Validating invoice data:", JSON.stringify(body));
       const result = invoiceSchema.safeParse(body);
@@ -293,6 +310,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: new Date(req.body.date)
       };
       
+      // Check if expense reference already exists
+      const transactions = await storage.getTransactions();
+      const existingExpense = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'expense'
+      );
+      
+      if (existingExpense) {
+        return res.status(400).json({ 
+          message: "Expense reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "An expense with this reference number already exists" 
+          }] 
+        });
+      }
+      
       const expenseData = expenseSchema.parse(body);
       
       // Create transaction
@@ -368,6 +402,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: new Date(req.body.date)
       };
       
+      // Check if journal entry reference already exists
+      const transactions = await storage.getTransactions();
+      const existingJournal = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'journal_entry'
+      );
+      
+      if (existingJournal) {
+        return res.status(400).json({ 
+          message: "Journal entry reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A journal entry with this reference number already exists" 
+          }] 
+        });
+      }
+      
       const journalData = journalEntrySchema.parse(body);
       
       // Validate debits = credits
@@ -424,6 +475,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         date: new Date(req.body.date)
       };
+      
+      // Check if deposit reference already exists
+      const transactions = await storage.getTransactions();
+      const existingDeposit = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'deposit'
+      );
+      
+      if (existingDeposit) {
+        return res.status(400).json({ 
+          message: "Deposit reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A deposit with this reference number already exists" 
+          }] 
+        });
+      }
       
       const depositData = depositSchema.parse(body);
       
