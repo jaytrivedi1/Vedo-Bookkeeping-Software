@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -43,6 +43,21 @@ interface InvoiceFormProps {
 
 type PaymentTerms = '7' | '14' | '30' | '60' | 'custom';
 
+// Define the tax component info type
+interface TaxComponentInfo {
+  id: number;
+  name: string;
+  rate: number;
+  amount: number;
+  isComponent: boolean;
+  parentId?: number;
+}
+
+// Extend UseFormReturn to include our custom property
+interface InvoiceFormType extends UseFormReturn<Invoice> {
+  taxComponentsInfo?: TaxComponentInfo[];
+}
+
 export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -76,6 +91,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
 
+  // Use our custom form type that includes taxComponentsInfo
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
@@ -86,7 +102,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       status: 'draft' as const,
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
-  });
+  }) as InvoiceFormType;
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -148,18 +164,95 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     let totalTaxAmount = 0;
     const usedTaxes = new Map<number, SalesTax>();
     
+    // Track tax components separately for display
+    const taxComponents = new Map<number, {
+      id: number,
+      name: string,
+      rate: number,
+      amount: number,
+      isComponent: boolean,
+      parentId?: number
+    }>();
+    
     // Loop through each line item and calculate its tax
     lineItems.forEach((item) => {
       if (item.salesTaxId) {
         // Find the tax rate for this line item
         const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
         if (salesTax) {
-          const itemTaxRate = salesTax.rate;
-          const itemTaxAmount = (item.amount || 0) * (itemTaxRate / 100);
-          totalTaxAmount += itemTaxAmount;
-          
-          // Track which taxes are being used
-          usedTaxes.set(salesTax.id, salesTax);
+          // Check if it's a composite tax with components
+          if (salesTax.isComposite) {
+            const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+            
+            if (components.length > 0) {
+              // Calculate each component separately
+              components.forEach(component => {
+                const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
+                totalTaxAmount += componentTaxAmount;
+                
+                // Add/update component in the tax components map
+                const existingComponent = taxComponents.get(component.id);
+                if (existingComponent) {
+                  existingComponent.amount += componentTaxAmount;
+                  taxComponents.set(component.id, existingComponent);
+                } else {
+                  taxComponents.set(component.id, {
+                    id: component.id,
+                    name: component.name,
+                    rate: component.rate,
+                    amount: componentTaxAmount,
+                    isComponent: true,
+                    parentId: salesTax.id
+                  });
+                }
+              });
+              
+              // Also track the parent/composite tax
+              usedTaxes.set(salesTax.id, salesTax);
+            } else {
+              // If no components found, use the composite tax itself
+              const itemTaxAmount = (item.amount || 0) * (salesTax.rate / 100);
+              totalTaxAmount += itemTaxAmount;
+              usedTaxes.set(salesTax.id, salesTax);
+              
+              // Add to components map for display
+              const existingTax = taxComponents.get(salesTax.id);
+              if (existingTax) {
+                existingTax.amount += itemTaxAmount;
+                taxComponents.set(salesTax.id, existingTax);
+              } else {
+                taxComponents.set(salesTax.id, {
+                  id: salesTax.id,
+                  name: salesTax.name,
+                  rate: salesTax.rate,
+                  amount: itemTaxAmount,
+                  isComponent: false
+                });
+              }
+            }
+          } else {
+            // Regular non-composite tax
+            const itemTaxAmount = (item.amount || 0) * (salesTax.rate / 100);
+            totalTaxAmount += itemTaxAmount;
+            
+            // Track which taxes are being used
+            usedTaxes.set(salesTax.id, salesTax);
+            
+            // Add to components map for display
+            const existingTax = taxComponents.get(salesTax.id);
+            if (existingTax) {
+              existingTax.amount += itemTaxAmount;
+              taxComponents.set(salesTax.id, existingTax);
+            } else {
+              taxComponents.set(salesTax.id, {
+                id: salesTax.id,
+                name: salesTax.name,
+                rate: salesTax.rate,
+                amount: itemTaxAmount,
+                isComponent: false
+              });
+            }
+          }
         }
       }
     });
@@ -169,12 +262,19 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     
+    // Convert tax components map to array and sort by displayOrder if available
+    const taxComponentsArray = Array.from(taxComponents.values());
+    
+    // Store in a property accessible during form rendering
+    form.taxComponentsInfo = taxComponentsArray;
+    
     console.log("Calculating totals:", { 
       subtotal, 
       totalTaxAmount, 
       total,
       lineItems,
-      taxNames: taxNameList
+      taxNames: taxNameList,
+      taxComponents: taxComponentsArray
     });
     
     // Make sure to persist these values
@@ -773,14 +873,27 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                     </div>
                     
                     {/* Tax Summary */}
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">
-                        {taxNames.length > 0 
-                          ? taxNames.join(', ')  
-                          : 'Tax'}
-                      </span>
-                      <span>${taxAmount.toFixed(2)}</span>
-                    </div>
+                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+                      // Display each tax component separately for composite taxes
+                      form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                        <div key={taxComponent.id} className="flex justify-between items-center">
+                          <span className="text-sm">
+                            {taxComponent.name} ({taxComponent.rate}%)
+                          </span>
+                          <span>${taxComponent.amount.toFixed(2)}</span>
+                        </div>
+                      ))
+                    ) : (
+                      // Fallback to the original tax display if no components
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm">
+                          {taxNames.length > 0 
+                            ? taxNames.join(', ')  
+                            : 'Tax'}
+                        </span>
+                        <span>${taxAmount.toFixed(2)}</span>
+                      </div>
+                    )}
                     
                     <div className="flex justify-between border-t pt-2">
                       <span className="text-sm">Total</span>
