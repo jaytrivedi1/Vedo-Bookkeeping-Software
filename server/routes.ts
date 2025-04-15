@@ -19,6 +19,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
+import { companyRouter } from "./company-routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // API routes
