@@ -1102,6 +1102,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Use company router for company management endpoints
+  apiRouter.use("/companies", companyRouter);
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

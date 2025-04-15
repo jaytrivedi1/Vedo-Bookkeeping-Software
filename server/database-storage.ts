@@ -1,11 +1,11 @@
 import { db } from "./db";
 import { 
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
-  CompanySettings, Preferences,
+  CompanySettings, Preferences, Company,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
-  InsertCompanySettings, InsertPreferences,
+  InsertCompanySettings, InsertPreferences, InsertCompany,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
-  companySchema, preferencesSchema
+  companySchema, preferencesSchema, companiesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -415,6 +415,50 @@ export class DatabaseStorage implements IStorage {
   async deleteProduct(id: number): Promise<boolean> {
     const result = await db.delete(productsSchema).where(eq(productsSchema.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Companies
+  async getCompanies(): Promise<Company[]> {
+    return await db.select().from(companiesSchema).orderBy(companiesSchema.name);
+  }
+
+  async getCompany(id: number): Promise<Company | undefined> {
+    const result = await db.select().from(companiesSchema).where(eq(companiesSchema.id, id));
+    return result[0];
+  }
+
+  async getDefaultCompany(): Promise<Company | undefined> {
+    const result = await db.select().from(companiesSchema).where(eq(companiesSchema.isDefault, true));
+    return result[0];
+  }
+
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const [newCompany] = await db.insert(companiesSchema).values(company).returning();
+    return newCompany;
+  }
+
+  async updateCompany(id: number, companyUpdate: Partial<Company>): Promise<Company | undefined> {
+    const [updatedCompany] = await db.update(companiesSchema)
+      .set(companyUpdate)
+      .where(eq(companiesSchema.id, id))
+      .returning();
+    return updatedCompany;
+  }
+
+  async setDefaultCompany(id: number): Promise<Company | undefined> {
+    // Use a transaction to ensure all operations succeed or fail together
+    return await db.transaction(async (tx) => {
+      // First, reset isDefault to false for all companies
+      await tx.update(companiesSchema).set({ isDefault: false });
+      
+      // Then, set isDefault to true for the specified company
+      const [updatedCompany] = await tx.update(companiesSchema)
+        .set({ isDefault: true })
+        .where(eq(companiesSchema.id, id))
+        .returning();
+      
+      return updatedCompany;
+    });
   }
 
   // Company Settings
