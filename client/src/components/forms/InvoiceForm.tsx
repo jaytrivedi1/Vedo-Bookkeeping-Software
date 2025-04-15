@@ -133,11 +133,37 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     },
     onError: (error: any) => {
       console.error("Error saving invoice:", error);
-      toast({
-        title: "Error saving invoice",
-        description: error?.message || "There was a problem saving the invoice. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Check if the error is due to a duplicate invoice reference
+      if (error?.message === "Invoice reference must be unique" || 
+          error?.errors?.some((err: any) => err.path?.includes("reference"))) {
+        
+        // Show a specific error message for duplicate invoice references
+        toast({
+          title: "Duplicate Invoice Number",
+          description: "An invoice with this reference number already exists. Please use a different reference number.",
+          variant: "destructive",
+        });
+        
+        // Focus on the reference field so user can change it
+        form.setError("reference", {
+          type: "manual",
+          message: "This invoice number is already in use"
+        });
+        
+        // Scroll to the reference field
+        const referenceField = document.querySelector("[name='reference']");
+        if (referenceField) {
+          referenceField.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } else {
+        // Show a generic error message for other errors
+        toast({
+          title: "Error saving invoice",
+          description: error?.message || "There was a problem saving the invoice. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   });
 
