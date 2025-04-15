@@ -132,30 +132,56 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       }
     },
     onError: (error: any) => {
+      // Log the complete error object to debug
       console.error("Error saving invoice:", error);
       
-      // Check if the error is due to a duplicate invoice reference
-      if (error?.message === "Invoice reference must be unique" || 
-          error?.errors?.some((err: any) => err.path?.includes("reference"))) {
-        
-        // Show a specific error message for duplicate invoice references
+      // Extract error message and details from the response
+      let errorMessage = "";
+      let referenceError = false;
+      
+      try {
+        // Try to parse the error response if it's a string
+        if (typeof error.message === 'string' && error.message.includes('Invoice reference must be unique')) {
+          errorMessage = "An invoice with this reference number already exists. Please use a different reference number.";
+          referenceError = true;
+        } 
+        // Check if the error has structured data from our API
+        else if (error.errors && Array.isArray(error.errors)) {
+          // Find reference-specific errors
+          const refError = error.errors.find((err: any) => 
+            Array.isArray(err.path) && err.path.includes('reference')
+          );
+          
+          if (refError) {
+            errorMessage = refError.message || "Invoice reference number must be unique";
+            referenceError = true;
+          }
+        }
+      } catch (e) {
+        console.error("Error parsing error response:", e);
+      }
+      
+      if (referenceError) {
+        // Show a specific UI error message for duplicate reference
         toast({
           title: "Duplicate Invoice Number",
-          description: "An invoice with this reference number already exists. Please use a different reference number.",
+          description: errorMessage,
           variant: "destructive",
         });
         
-        // Focus on the reference field so user can change it
+        // Set form field error
         form.setError("reference", {
           type: "manual",
           message: "This invoice number is already in use"
         });
         
         // Scroll to the reference field
-        const referenceField = document.querySelector("[name='reference']");
-        if (referenceField) {
-          referenceField.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
+        setTimeout(() => {
+          const referenceField = document.querySelector("[name='reference']");
+          if (referenceField) {
+            referenceField.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 100);
       } else {
         // Show a generic error message for other errors
         toast({
