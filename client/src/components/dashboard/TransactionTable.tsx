@@ -28,7 +28,7 @@ import {
   PaginationNext, 
   PaginationPrevious 
 } from "@/components/ui/pagination";
-import { Trash2 } from "lucide-react";
+import { Trash2, Edit2 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { apiRequest } from "@/lib/queryClient";

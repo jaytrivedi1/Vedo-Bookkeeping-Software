@@ -14,6 +14,8 @@ import AccountBooks from "@/pages/account-books";
 import Banking from "@/pages/banking";
 import SalesTaxes from "@/pages/sales-taxes";
 import Products from "@/pages/products";
+import InvoiceNew from "@/pages/invoice-new";
+import InvoiceEdit from "@/pages/invoice-edit";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -21,6 +23,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/invoices" component={Invoices} />
+      <Route path="/invoice-new" component={InvoiceNew} />
+      <Route path="/invoice-edit/:id" component={InvoiceEdit} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
