@@ -1,28 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useToast } from "@/hooks/use-toast";
-import { 
-  Plus, 
-  CalendarIcon, 
-  ChevronUp, 
-  ChevronDown, 
-  Trash2, 
-  File, 
-  Printer, 
-  Settings, 
-  HelpCircle, 
-  X as XIcon 
-} from "lucide-react";
-import { format, addDays } from "date-fns";
-import { LineItem, Transaction, invoiceSchema, Invoice, Contact, Product, SalesTax, Account } from "@shared/schema";
-import { cn } from "@/lib/utils";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction, LineItem } from "@shared/schema";
+import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings, Printer, File } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Popover,
   PopoverContent,
@@ -43,8 +31,9 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { format, addDays } from "date-fns";
+import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 
 // Payment terms options
@@ -75,7 +64,6 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   );
   
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Get contacts
   const { data: contacts = [] } = useQuery<Contact[]>({
@@ -234,10 +222,8 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     }
     
     setDueDate(newDueDate);
-    form.setValue('dueDate', newDueDate);
   };
 
-  // Handle contact change
   const handleContactChange = (contactId: number) => {
     if (!contacts) return;
     
@@ -257,9 +243,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     const subscription = form.watch((value, { name }) => {
       if (name === 'date' && value.date) {
         const days = paymentTerms === 'custom' ? 30 : parseInt(paymentTerms);
-        const newDueDate = addDays(value.date as Date, days);
-        setDueDate(newDueDate);
-        form.setValue('dueDate', newDueDate);
+        setDueDate(addDays(value.date as Date, days));
       }
       
       if (name === 'contactId' && value.contactId) {
@@ -298,8 +282,6 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   });
 
   const onSubmit = (data: Invoice) => {
-    setIsSubmitting(true);
-    
     // Filter out empty line items
     const filteredLineItems = data.lineItems.filter(item => 
       item.description.trim() !== '' && 
@@ -324,7 +306,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || invoice.reference,
-      status: data.status || 'draft',
+      status: 'draft' as const, // Default status since we removed the field
       description: data.description || '',
       subTotal,
       taxAmount,
@@ -351,7 +333,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       return formattedItem;
     });
     
-    invoiceMutation.mutate(enrichedData as any);
+    invoiceMutation.mutate(enrichedData);
   };
 
   return (
@@ -360,7 +342,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
         {/* Header */}
         <div className="bg-white border-b px-4 py-4 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-medium">Edit Invoice: {invoice.reference}</h1>
+            <h1 className="text-xl font-medium">Invoice no.{invoice.reference}</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="icon">
@@ -426,33 +408,6 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="paid">Paid</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -775,34 +730,32 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
             {/* Right column */}
             <div className="space-y-6">
               {/* Summary card */}
-              <Card>
-                <CardContent className="p-6 space-y-4">
-                  <h3 className="text-lg font-medium mb-4">Summary</h3>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Subtotal</span>
-                      <span>${subTotal.toFixed(2)}</span>
-                    </div>
-                    
-                    {taxNames.length > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">
-                          {taxNames.join(', ')}
-                        </span>
-                        <span>${taxAmount.toFixed(2)}</span>
-                      </div>
-                    )}
-                    
-                    <Separator className="my-2" />
-                    
-                    <div className="flex justify-between">
-                      <span className="font-medium">Total</span>
-                      <span className="font-medium">${totalAmount.toFixed(2)}</span>
-                    </div>
+              <div className="bg-white rounded-md border p-6 space-y-4">
+                <h3 className="text-lg font-medium mb-4">Summary</h3>
+                
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Subtotal</span>
+                    <span>${subTotal.toFixed(2)}</span>
                   </div>
-                </CardContent>
-              </Card>
+                  
+                  {taxNames.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">
+                        {taxNames.join(', ')}
+                      </span>
+                      <span>${taxAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  
+                  <Separator className="my-2" />
+                  
+                  <div className="flex justify-between">
+                    <span className="font-medium">Total</span>
+                    <span className="font-medium">${totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

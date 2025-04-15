@@ -65,7 +65,7 @@ export default function EditInvoice() {
   }
 
   return (
-    <div className="h-full">
+    <div className="h-screen flex flex-col">
       <InvoiceFormEdit
         invoice={data.transaction}
         lineItems={data.lineItems}
