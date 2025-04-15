@@ -6,6 +6,8 @@ import {
   ledgerEntries,
   salesTaxSchema,
   productsSchema,
+  companySchema,
+  preferencesSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -20,6 +22,10 @@ import {
   type InsertSalesTax,
   type Product,
   type InsertProduct,
+  type CompanySettings,
+  type InsertCompanySettings,
+  type Preferences,
+  type InsertPreferences,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -72,6 +78,12 @@ export interface IStorage {
   getAccountBalances(): Promise<{ account: Account; balance: number }[]>;
   getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
   getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
+  
+  // Settings
+  getCompanySettings(): Promise<CompanySettings | undefined>;
+  saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings>;
+  getPreferences(): Promise<Preferences | undefined>;
+  savePreferences(preferences: InsertPreferences): Promise<Preferences>;
 }
 
 export class MemStorage implements IStorage {
@@ -493,6 +505,54 @@ export class MemStorage implements IStorage {
   async deleteProduct(id: number): Promise<boolean> {
     if (!this.products.has(id)) return false;
     return this.products.delete(id);
+  }
+  
+  // Settings Methods
+  private companySettings: CompanySettings | undefined;
+  private preferences: Preferences | undefined;
+  
+  async getCompanySettings(): Promise<CompanySettings | undefined> {
+    return this.companySettings;
+  }
+  
+  async saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings> {
+    const now = new Date();
+    if (!this.companySettings) {
+      this.companySettings = {
+        id: 1,
+        ...settings,
+        updatedAt: now
+      };
+    } else {
+      this.companySettings = {
+        ...this.companySettings,
+        ...settings,
+        updatedAt: now
+      };
+    }
+    return this.companySettings;
+  }
+  
+  async getPreferences(): Promise<Preferences | undefined> {
+    return this.preferences;
+  }
+  
+  async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
+    const now = new Date();
+    if (!this.preferences) {
+      this.preferences = {
+        id: 1,
+        ...preferences,
+        updatedAt: now
+      };
+    } else {
+      this.preferences = {
+        ...this.preferences,
+        ...preferences,
+        updatedAt: now
+      };
+    }
+    return this.preferences;
   }
 }
 
