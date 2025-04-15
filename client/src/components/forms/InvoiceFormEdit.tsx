@@ -85,6 +85,11 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
 
+  // Log initial data to help with debugging
+  console.log("Initial invoice data:", invoice);
+  console.log("Initial line items:", lineItems);
+  console.log("Available products:", typedProducts);
+  
   // Initialize form with the existing invoice data
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
@@ -600,11 +605,26 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                     }
                                   }}
                                   defaultValue={(() => {
-                                    // Try to find a matching product based on description
-                                    const matchingProduct = typedProducts.find(
+                                    // Try to find a matching product based on description - check for exact matches first
+                                    let matchingProduct = typedProducts.find(
                                       p => p.name === field.value
                                     );
-                                    return matchingProduct ? matchingProduct.id.toString() : undefined;
+                                    
+                                    // If no exact match, look for products that contain the description or vice versa
+                                    if (!matchingProduct && field.value) {
+                                      matchingProduct = typedProducts.find(p => 
+                                        field.value.includes(p.name) || p.name.includes(field.value)
+                                      );
+                                    }
+                                    
+                                    // If we found a match, return its ID
+                                    if (matchingProduct) {
+                                      console.log("Found matching product:", matchingProduct.name);
+                                      return matchingProduct.id.toString();
+                                    }
+                                    
+                                    // If still no match, return undefined which will show the placeholder
+                                    return undefined;
                                   })()}
                                 >
                                   <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
