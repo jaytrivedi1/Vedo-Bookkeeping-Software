@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { X, Plus, CalendarIcon, CreditCard, ChevronUp, ChevronDown, Trash2, File, Printer, Send } from "lucide-react";
 import { format } from "date-fns";
-import { LineItem, Transaction, invoiceSchema, Invoice, InsertLineItem } from "@shared/schema";
+import { LineItem, Transaction, invoiceSchema, Invoice, InsertLineItem, Contact, Product, SalesTax, Account } from "@shared/schema";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -70,22 +70,22 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   const queryClient = useQueryClient();
 
   // Get contacts
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
 
   // Get sales taxes
-  const { data: salesTaxes = [] } = useQuery({
+  const { data: salesTaxes = [] } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
 
   // Get products
-  const { data: products = [] } = useQuery({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
 
   // Get accounts
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
 
@@ -331,9 +331,9 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                               </FormControl>
                               <SelectContent>
                                 <SelectItem value="0">None</SelectItem>
-                                {contacts.map((contact) => (
+                                {contacts.map((contact: Contact) => (
                                   <SelectItem key={contact.id} value={contact.id.toString()}>
-                                    {contact.name} {contact.company ? `(${contact.company})` : ''}
+                                    {contact.name} {contact.contactName ? `(${contact.contactName})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
