@@ -90,6 +90,31 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   console.log("Initial line items:", lineItems);
   console.log("Available products:", typedProducts);
   
+  // Map each line item description to the appropriate product ID if a match is found
+  const [descriptionToProductIdMap, setDescriptionToProductIdMap] = useState<Record<string, string>>({});
+  
+  // Initialize the product mapping when products are loaded
+  useEffect(() => {
+    if (!typedProducts || typedProducts.length === 0 || !lineItems || lineItems.length === 0) return;
+    
+    // Create a map of descriptions to product IDs
+    const newMap: Record<string, string> = {};
+    
+    lineItems.forEach((item, index) => {
+      const matchingProduct = typedProducts.find(p => p.name.trim() === item.description.trim());
+      
+      if (matchingProduct) {
+        console.log(`Found product match for line ${index + 1}: "${item.description}" → ID: ${matchingProduct.id}`);
+        newMap[`lineItems.${index}.description`] = matchingProduct.id.toString();
+      } else {
+        console.log(`No product match for line ${index + 1}: "${item.description}"`);
+        newMap[`lineItems.${index}.description`] = "custom";
+      }
+    });
+    
+    setDescriptionToProductIdMap(newMap);
+  }, [typedProducts, lineItems]);
+  
   // Initialize form with the existing invoice data
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
@@ -605,6 +630,14 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                     }
                                   }}
                                   value={(() => {
+                                    // Use our pre-calculated mapping if available
+                                    const mappedValue = descriptionToProductIdMap[`lineItems.${index}.description`];
+                                    if (mappedValue) {
+                                      console.log(`Using mapped product ID for line ${index + 1}:`, mappedValue);
+                                      return mappedValue;
+                                    }
+                                    
+                                    // Fall back to the previous logic if no mapping exists
                                     // Try to find a matching product based on description - check for exact matches first
                                     let matchingProduct = typedProducts.find(
                                       p => p.name === field.value
