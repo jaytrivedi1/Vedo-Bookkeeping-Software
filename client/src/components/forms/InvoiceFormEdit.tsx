@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -232,15 +232,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   // Handle form submission
   const invoiceMutation = useMutation({
     mutationFn: async (data: Invoice) => {
-      const url = `/api/invoices/${invoice.id || 0}`;
-      const options = {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      };
-      return apiRequest(url, options);
+      return apiRequest(`/api/invoices/${invoice.id || 0}`, 'PATCH', data);
     },
     onSuccess: () => {
       toast({
@@ -310,7 +302,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <TabsContent value="details" className="space-y-6 mt-0">
+              <div className={selectedTab === "details" ? "block space-y-6 mt-0" : "hidden"}>
                 {/* Customer Section */}
                 <Card>
                   <div 
@@ -758,9 +750,9 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                     </CardContent>
                   )}
                 </Card>
-              </TabsContent>
+              </div>
 
-              <TabsContent value="accounting" className="space-y-6 mt-0">
+              <div className={selectedTab === "accounting" ? "block space-y-6 mt-0" : "hidden"}>
                 {/* Accounting references would go here */}
                 <Card>
                   <CardContent className="p-6">
@@ -771,7 +763,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                     </p>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </div>
             </form>
           </Form>
         </div>
