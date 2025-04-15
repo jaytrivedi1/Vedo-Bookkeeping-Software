@@ -231,7 +231,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Create new line items
-        const lineItems = body.lineItems.map(item => {
+        const lineItems = body.lineItems.map((item: {
+          description: string;
+          quantity: number;
+          unitPrice: number;
+          amount: number;
+          salesTaxId?: number;
+        }) => {
           const lineItem: any = {
             description: item.description,
             quantity: item.quantity,

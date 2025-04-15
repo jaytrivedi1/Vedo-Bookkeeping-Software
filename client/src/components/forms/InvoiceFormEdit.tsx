@@ -180,17 +180,18 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     if (!productId) return;
     
     const product = Array.isArray(products) 
-      ? products.find((p: any) => p.id === productId) 
+      ? products.find((p: Product) => p.id === productId) 
       : null;
     if (!product) return;
 
     const currentValues = form.getValues(`lineItems.${index}`);
     form.setValue(`lineItems.${index}.description`, product.name);
-    form.setValue(`lineItems.${index}.unitPrice`, product.price || 0);
+    form.setValue(`lineItems.${index}.unitPrice`, typeof product.price === 'number' ? product.price : 0);
     form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId || 0);
     
     // Recalculate amount
-    const amount = (product.price || 0) * currentValues.quantity;
+    const price = typeof product.price === 'number' ? product.price : 0;
+    const amount = price * (currentValues.quantity || 0);
     form.setValue(`lineItems.${index}.amount`, amount);
     
     // Update totals
@@ -555,7 +556,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="0">Custom Item</SelectItem>
-                                    {products.map((product) => (
+                                    {products.map((product: Product) => (
                                       <SelectItem key={product.id} value={product.id.toString()}>
                                         {product.name}
                                       </SelectItem>
@@ -648,7 +649,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                       </FormControl>
                                       <SelectContent>
                                         <SelectItem value="0">No Tax</SelectItem>
-                                        {salesTaxes.map((tax) => (
+                                        {salesTaxes.map((tax: SalesTax) => (
                                           <SelectItem key={tax.id} value={tax.id.toString()}>
                                             {tax.name} ({tax.rate}%)
                                           </SelectItem>
