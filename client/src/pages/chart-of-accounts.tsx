@@ -58,9 +58,17 @@ export default function ChartOfAccounts() {
   const { toast } = useToast();
   
   // Fetch all accounts
-  const { data: accounts, isLoading } = useQuery<Account[]>({
+  const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
+  
+  // Fetch account balances
+  const { data: accountBalances, isLoading: balancesLoading } = useQuery<{account: Account, balance: number}[]>({
+    queryKey: ['/api/reports/account-balances'],
+  });
+  
+  // Combine the loading states
+  const isLoading = accountsLoading || balancesLoading;
   
   // Fetch all sales taxes for dropdown
   const { data: salesTaxes } = useQuery<any[]>({
@@ -86,6 +94,7 @@ export default function ChartOfAccounts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
       setNewAccountOpen(false);
       form.reset();
       toast({
@@ -103,6 +112,7 @@ export default function ChartOfAccounts() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
       setEditAccountOpen(false);
       setCurrentAccount(null);
       toast({
@@ -262,6 +272,40 @@ export default function ChartOfAccounts() {
     
     // Default fallback
     return 'bg-gray-100 text-gray-800';
+  };
+  
+  // Determine if an account type is normally a debit balance account
+  const isDebitAccount = (type: string) => {
+    return type === 'accounts_receivable' || 
+           type === 'current_assets' || 
+           type === 'bank' || 
+           type === 'property_plant_equipment' || 
+           type === 'long_term_assets' || 
+           type === 'asset' ||
+           type === 'cost_of_goods_sold' || 
+           type === 'expenses' || 
+           type === 'other_expense' || 
+           type === 'expense';
+  };
+  
+  // Format account balance according to accounting convention
+  // Debit accounts (Assets, Expenses) show positive balances when they have debit balances
+  // Credit accounts (Liabilities, Equity, Income) show negative balances when they have credit balances
+  const formatAccountBalance = (account: Account, balance: number) => {
+    // Get the balance for this account from accountBalances
+    const accountBalance = accountBalances?.find(
+      (ab) => ab.account.id === account.id
+    )?.balance || 0;
+    
+    // For debit accounts (Assets, Expenses), we display as positive
+    // For credit accounts (Liabilities, Equity, Revenue), we display as negative
+    const displayBalance = isDebitAccount(account.type) 
+      ? accountBalance  // Keep as is for debit accounts (positive means debit balance)
+      : -accountBalance; // Invert for credit accounts (negative means credit balance)
+    
+    // For the display, show absolute value with debit/credit indicator
+    const formattedBalance = Math.abs(displayBalance).toFixed(2);
+    return `$${formattedBalance} ${displayBalance < 0 ? 'CR' : 'DR'}`;
   };
   
   return (
@@ -555,7 +599,7 @@ export default function ChartOfAccounts() {
                       <TableCell>{account.currency || 'USD'}</TableCell>
                       <TableCell>{account.salesTaxType || '-'}</TableCell>
                       <TableCell className="text-right font-medium">
-                        ${account.balance.toFixed(2)}
+                        {formatAccountBalance(account, 0)}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button 
