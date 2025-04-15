@@ -42,53 +42,131 @@ async function migrateSalesTaxComponents() {
       console.log('display_order column already exists. Skipping.');
     }
 
-    // Create GST and QST accounts if they don't exist
-    const existingQstTaxAccount = await db.select().from(accounts).where(eq(accounts.name, 'QST Payable')).execute();
-    const existingGstTaxAccount = await db.select().from(accounts).where(eq(accounts.name, 'GST Payable')).execute();
+    // Check for GST, QST, and Sales Tax Payable accounts by name or code
+    const existingQstTaxAccount = await db.select().from(accounts)
+      .where(eq(accounts.name, 'QST Payable')).execute();
+    const existingGstTaxAccount = await db.select().from(accounts)
+      .where(eq(accounts.name, 'GST Payable')).execute();
+    const existingSalesTaxAccount = await db.select().from(accounts)
+      .where(eq(accounts.name, 'Sales Tax Payable')).execute();
     
-    // Check if we have the main Sales Tax Payable account
-    const existingSalesTaxAccount = await db.select().from(accounts).where(eq(accounts.name, 'Sales Tax Payable')).execute();
+    // Also check for accounts with these codes
+    const existingCode2100 = await db.select().from(accounts)
+      .where(eq(accounts.code, '2100')).execute();
+    const existingCode2110 = await db.select().from(accounts)
+      .where(eq(accounts.code, '2110')).execute();
+    const existingCode2120 = await db.select().from(accounts)
+      .where(eq(accounts.code, '2120')).execute();
+    
+    // Determine the account IDs to use
+    let gstAccountId = existingGstTaxAccount.length > 0 ? existingGstTaxAccount[0].id : 
+                       (existingCode2110.length > 0 ? existingCode2110[0].id : null);
+    let qstAccountId = existingQstTaxAccount.length > 0 ? existingQstTaxAccount[0].id : 
+                       (existingCode2120.length > 0 ? existingCode2120[0].id : null);
+    let salesTaxAccountId = existingSalesTaxAccount.length > 0 ? existingSalesTaxAccount[0].id : 
+                           (existingCode2100.length > 0 ? existingCode2100[0].id : null);
     
     // Create accounts if they don't exist
-    const accountsToCreate = [];
-    let gstAccountId = existingGstTaxAccount.length > 0 ? existingGstTaxAccount[0].id : null;
-    let qstAccountId = existingQstTaxAccount.length > 0 ? existingQstTaxAccount[0].id : null;
-    let salesTaxAccountId = existingSalesTaxAccount.length > 0 ? existingSalesTaxAccount[0].id : null;
-    
     if (!gstAccountId) {
+      console.log('Creating GST Payable account...');
+      // Find an available code for GST Payable
+      let gstCode = '2110';
+      if (existingCode2110.length > 0) {
+        // Find the next available code
+        const existingLiabilityCodes = await db.select({ code: accounts.code })
+          .from(accounts)
+          .where(eq(accounts.type, 'other_current_liabilities'))
+          .execute();
+        
+        // Convert these to numbers and find the max
+        const liabilityCodes = existingLiabilityCodes
+          .map(a => parseInt(a.code))
+          .filter(code => !isNaN(code) && code >= 2000 && code < 3000);
+        
+        if (liabilityCodes.length > 0) {
+          gstCode = String(Math.max(...liabilityCodes) + 1);
+        }
+      }
+      
       const newGstAccount = await db.insert(accounts).values({
-        code: '2110',
+        code: gstCode,
         name: 'GST Payable',
         type: 'other_current_liabilities',
         currency: 'CAD',
       }).returning().execute();
       
       gstAccountId = newGstAccount[0].id;
-      console.log('Created GST Payable account with ID:', gstAccountId);
+      console.log('Created GST Payable account with ID:', gstAccountId, 'and code:', gstCode);
+    } else {
+      console.log('Using existing GST Payable account with ID:', gstAccountId);
     }
     
     if (!qstAccountId) {
+      console.log('Creating QST Payable account...');
+      // Find an available code for QST Payable
+      let qstCode = '2120';
+      if (existingCode2120.length > 0) {
+        // Find the next available code
+        const existingLiabilityCodes = await db.select({ code: accounts.code })
+          .from(accounts)
+          .where(eq(accounts.type, 'other_current_liabilities'))
+          .execute();
+        
+        // Convert these to numbers and find the max
+        const liabilityCodes = existingLiabilityCodes
+          .map(a => parseInt(a.code))
+          .filter(code => !isNaN(code) && code >= 2000 && code < 3000);
+        
+        if (liabilityCodes.length > 0) {
+          qstCode = String(Math.max(...liabilityCodes) + 2);
+        }
+      }
+      
       const newQstAccount = await db.insert(accounts).values({
-        code: '2120',
+        code: qstCode,
         name: 'QST Payable',
         type: 'other_current_liabilities',
         currency: 'CAD',
       }).returning().execute();
       
       qstAccountId = newQstAccount[0].id;
-      console.log('Created QST Payable account with ID:', qstAccountId);
+      console.log('Created QST Payable account with ID:', qstAccountId, 'and code:', qstCode);
+    } else {
+      console.log('Using existing QST Payable account with ID:', qstAccountId);
     }
     
     if (!salesTaxAccountId) {
+      console.log('Creating Sales Tax Payable account...');
+      // Find an available code for Sales Tax Payable
+      let salesTaxCode = '2100';
+      if (existingCode2100.length > 0) {
+        // Find the next available code
+        const existingLiabilityCodes = await db.select({ code: accounts.code })
+          .from(accounts)
+          .where(eq(accounts.type, 'other_current_liabilities'))
+          .execute();
+        
+        // Convert these to numbers and find the max
+        const liabilityCodes = existingLiabilityCodes
+          .map(a => parseInt(a.code))
+          .filter(code => !isNaN(code) && code >= 2000 && code < 3000);
+        
+        if (liabilityCodes.length > 0) {
+          salesTaxCode = String(Math.max(...liabilityCodes) + 3);
+        }
+      }
+      
       const newSalesTaxAccount = await db.insert(accounts).values({
-        code: '2100',
+        code: salesTaxCode,
         name: 'Sales Tax Payable',
         type: 'other_current_liabilities',
         currency: 'CAD',
       }).returning().execute();
       
       salesTaxAccountId = newSalesTaxAccount[0].id;
-      console.log('Created Sales Tax Payable account with ID:', salesTaxAccountId);
+      console.log('Created Sales Tax Payable account with ID:', salesTaxAccountId, 'and code:', salesTaxCode);
+    } else {
+      console.log('Using existing Sales Tax Payable account with ID:', salesTaxAccountId);
     }
     
     // Create QST+GST composite tax if it doesn't exist
