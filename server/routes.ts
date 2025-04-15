@@ -1,6 +1,8 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { 
   insertAccountSchema, 
   insertContactSchema, 
@@ -15,7 +17,9 @@ import {
   expenseSchema,
   journalEntrySchema,
   depositSchema,
-  Transaction
+  Transaction,
+  salesTaxSchema,
+  salesTaxComponentsSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
@@ -810,10 +814,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.post("/sales-taxes", async (req: Request, res: Response) => {
     try {
+      console.log("Create sales tax request:", req.body);
+      
+      // Extract componentTaxes before parsing with Zod
+      const componentTaxes = req.body.componentTaxes;
+      
       const salesTaxData = insertSalesTaxSchema.parse(req.body);
       const salesTax = await storage.createSalesTax(salesTaxData);
+      
+      // Handle component taxes if provided and this is a composite tax
+      if (salesTax.isComposite && componentTaxes && Array.isArray(componentTaxes)) {
+        console.log("Processing component taxes:", componentTaxes);
+        
+        try {
+          // Process and save each component tax
+          for (let index = 0; index < componentTaxes.length; index++) {
+            const component = componentTaxes[index];
+            console.log(`Processing component ${index}:`, component);
+            
+            // Create child tax in the main sales_taxes table
+            const childTaxResult = await db
+              .insert(salesTaxSchema)
+              .values({
+                name: component.name,
+                description: `Component of ${salesTax.name}`,
+                rate: component.rate,
+                accountId: component.accountId ? parseInt(component.accountId.toString()) : null,
+                isActive: true,
+                isComposite: false,
+                parentId: salesTax.id,
+                displayOrder: index
+              })
+              .execute();
+              
+            console.log(`Created component tax: ${component.name}`, childTaxResult);
+          }
+          
+          console.log("All component taxes saved successfully");
+        } catch (err) {
+          console.error("Error saving component taxes:", err);
+        }
+      }
+      
       res.status(201).json(salesTax);
     } catch (error) {
+      console.error("Error creating sales tax:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid sales tax data", errors: error.errors });
       }
@@ -824,16 +869,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.patch("/sales-taxes/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      console.log("Sales tax update request:", req.body);
+      
+      // Extract componentTaxes before parsing with Zod
+      const componentTaxes = req.body.componentTaxes;
+      
       // Allow partial data for update (don't require all fields)
       const salesTaxData = insertSalesTaxSchema.partial().parse(req.body);
+      
+      // First update the main sales tax
       const salesTax = await storage.updateSalesTax(id, salesTaxData);
       
       if (!salesTax) {
         return res.status(404).json({ message: "Sales tax not found" });
       }
       
+      // Handle component taxes if provided and this is a composite tax
+      if (salesTax.isComposite && componentTaxes && Array.isArray(componentTaxes)) {
+        console.log("Processing component taxes:", componentTaxes);
+        
+        try {
+          // First, delete all existing components for this tax
+          await db
+            .delete(salesTaxComponentsSchema)
+            .where(eq(salesTaxComponentsSchema.parentTaxId, id))
+            .execute();
+          
+          console.log("Deleted existing component taxes for parent ID:", id);
+          
+          // Process and save each component tax
+          for (let index = 0; index < componentTaxes.length; index++) {
+            const component = componentTaxes[index];
+            console.log(`Processing component ${index}:`, component);
+            
+            // Create child tax in the main sales_taxes table first
+            const childTaxResult = await db
+              .insert(salesTaxSchema)
+              .values({
+                name: component.name,
+                description: `Component of ${salesTax.name}`,
+                rate: component.rate,
+                accountId: component.accountId ? parseInt(component.accountId.toString()) : null,
+                isActive: true,
+                isComposite: false,
+                parentId: id,
+                displayOrder: index
+              })
+              .execute();
+              
+            console.log(`Created/updated component tax: ${component.name}`, childTaxResult);
+          }
+          
+          console.log("All component taxes saved successfully");
+        } catch (err) {
+          console.error("Error saving component taxes:", err);
+        }
+      }
+      
       res.json(salesTax);
     } catch (error) {
+      console.error("Error updating sales tax:", error);
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid sales tax data", errors: error.errors });
       }
