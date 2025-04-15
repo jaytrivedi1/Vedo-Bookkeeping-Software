@@ -31,8 +31,9 @@ import {
 import { Trash2, Edit2 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Transaction } from "@shared/schema";
+import { Transaction, Contact } from "@shared/schema";
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -43,6 +44,20 @@ interface TransactionTableProps {
 export default function TransactionTable({ transactions, loading = false, onDeleteSuccess }: TransactionTableProps) {
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  
+  // Fetch contacts to display their names instead of just IDs
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
+  });
+  
+  // Function to get contact name by ID
+  const getContactName = (contactId: number | null): string => {
+    if (!contactId) return 'No client';
+    if (!contacts) return `ID: ${contactId}`;
+    
+    const contact = contacts.find(c => c.id === contactId);
+    return contact ? contact.name : `ID: ${contactId}`;
+  };
   
   const handleDelete = async () => {
     if (!transactionToDelete) return;
@@ -120,10 +135,10 @@ export default function TransactionTable({ transactions, loading = false, onDele
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Reference</TableHead>
+                <TableHead>Client Name</TableHead>
                 <TableHead>Amount</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -140,28 +155,26 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     <TableCell className="text-sm text-gray-500">
                       {format(new Date(transaction.date), 'MMM dd, yyyy')}
                     </TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium text-gray-900">
-                        {transaction.description || 'No description'}
-                      </div>
-                      {transaction.contactId && (
-                        <div className="text-xs text-gray-500">
-                          ID: {transaction.contactId}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
-                        {formatType(transaction.type)}
-                      </span>
-                    </TableCell>
                     <TableCell className="text-sm text-gray-500">
                       {transaction.reference}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium text-gray-900">
+                        {getContactName(transaction.contactId)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {transaction.description || 'No description'}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
                       {transaction.type === 'expense' 
                         ? '-$' + transaction.amount.toFixed(2) 
                         : '$' + transaction.amount.toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
+                        {formatType(transaction.type)}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
                       <Link 
