@@ -214,3 +214,34 @@ export type Invoice = z.infer<typeof invoiceSchema>;
 export type Expense = z.infer<typeof expenseSchema>;
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 export type Deposit = z.infer<typeof depositSchema>;
+
+// Settings schema for company details
+export const companySchema = pgTable('company_settings', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  address: text('address'),
+  phone: text('phone'),
+  email: text('email'),
+  website: text('website'),
+  taxId: text('tax_id'),
+  logoUrl: text('logo_url'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// Settings schema for application preferences
+export const preferencesSchema = pgTable('preferences', {
+  id: serial('id').primaryKey(),
+  darkMode: boolean('dark_mode').default(false),
+  foreignCurrency: boolean('foreign_currency').default(false),
+  defaultCurrency: text('default_currency').default('USD'),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const insertCompanySchema = createInsertSchema(companySchema).omit({ id: true, updatedAt: true });
+export const insertPreferencesSchema = createInsertSchema(preferencesSchema).omit({ id: true, updatedAt: true });
+
+export type CompanySettings = typeof companySchema.$inferSelect;
+export type InsertCompanySettings = z.infer<typeof insertCompanySchema>;
+
+export type Preferences = typeof preferencesSchema.$inferSelect;
+export type InsertPreferences = z.infer<typeof insertPreferencesSchema>;

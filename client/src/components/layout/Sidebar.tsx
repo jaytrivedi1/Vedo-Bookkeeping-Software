@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import SettingsButton from "@/components/settings/SettingsButton";
 
 interface SidebarProps {
   open: boolean;
@@ -114,9 +115,12 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Account section */}
+      {/* Settings and Account section */}
       <div className="absolute bottom-0 w-full border-t border-gray-200">
-        <div className="flex items-center px-4 py-3 hover:bg-gray-50">
+        <div className="px-2 py-3">
+          <SettingsButton />
+        </div>
+        <div className="flex items-center px-4 py-3 hover:bg-gray-50 border-t border-gray-200">
           <div className="flex-shrink-0">
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-medium">
               JD
