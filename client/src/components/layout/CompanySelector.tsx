@@ -32,17 +32,17 @@ export function CompanySelector() {
 
   const { data: companies, isLoading } = useQuery({ 
     queryKey: ['/api/companies'], 
-    queryFn: () => apiRequest<Company[]>('/api/companies')
+    queryFn: () => apiRequest('/api/companies')
   });
 
   const { data: defaultCompany } = useQuery({ 
     queryKey: ['/api/companies/default'], 
-    queryFn: () => apiRequest<Company | null>('/api/companies/default')
+    queryFn: () => apiRequest('/api/companies/default')
   });
 
   const setDefaultMutation = useMutation({
     mutationFn: (companyId: number) => 
-      apiRequest(`/api/companies/${companyId}/set-default`, { method: 'POST' }),
+      apiRequest(`/api/companies/${companyId}/set-default`, 'POST'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
@@ -94,7 +94,7 @@ export function CompanySelector() {
           <CommandInput placeholder="Search company..." />
           <CommandEmpty>No company found.</CommandEmpty>
           <CommandGroup>
-            {companies?.map((company) => (
+            {companies?.map((company: Company) => (
               <CommandItem
                 key={company.id}
                 value={company.name}

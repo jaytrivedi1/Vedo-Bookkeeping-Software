@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import SettingsButton from "@/components/settings/SettingsButton";
+import { CompanySelector } from "@/components/layout/CompanySelector";
 
 interface SidebarProps {
   open: boolean;
@@ -72,6 +73,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
         </button>
+      </div>
+      
+      {/* Company selector */}
+      <div className="px-4 py-2">
+        <CompanySelector />
       </div>
 
       {/* Navigation links */}
