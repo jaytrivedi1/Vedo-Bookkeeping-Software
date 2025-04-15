@@ -252,10 +252,10 @@ export default function AccountBooks() {
                                 <TableCell>{account?.name || 'Unknown Account'}</TableCell>
                                 <TableCell>{entry.description || ''}</TableCell>
                                 <TableCell className="text-right">
-                                  {entry.debit > 0 ? entry.debit.toFixed(2) : ''}
+                                  {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  {entry.credit > 0 ? entry.credit.toFixed(2) : ''}
+                                  {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
                                 </TableCell>
                               </TableRow>
                             );
