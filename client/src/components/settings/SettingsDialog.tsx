@@ -88,23 +88,26 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   // Query user preferences
   const preferencesQuery = useQuery({
     queryKey: ['/api/settings/preferences'],
-    enabled: open,
-    onSuccess: (data: any) => {
-      if (data && Object.keys(data).length > 0) {
-        setSettings({
-          darkMode: data.darkMode || false,
-          foreignCurrency: data.foreignCurrency || false
-        });
-        
-        // Apply dark mode if it's enabled
-        if (data.darkMode) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
+    enabled: open
+  });
+  
+  // Process preferences data when it loads
+  useEffect(() => {
+    if (preferencesQuery.data && Object.keys(preferencesQuery.data).length > 0) {
+      const data = preferencesQuery.data as any;
+      setSettings({
+        darkMode: data.darkMode || false,
+        foreignCurrency: data.foreignCurrency || false
+      });
+      
+      // Apply dark mode if it's enabled
+      if (data.darkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
       }
     }
-  });
+  }, [preferencesQuery.data]);
   
   // Setup form for company details
   const form = useForm<z.infer<typeof companyFormSchema>>({
@@ -140,6 +143,9 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       return await apiRequest('/api/settings/company', 'POST', values);
     },
     onSuccess: () => {
+      // Invalidate company settings query to refetch the data
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
+      
       toast({
         title: "Company details saved",
         description: "Your company information has been updated successfully.",
@@ -160,6 +166,9 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       return await apiRequest('/api/settings/preferences', 'POST', values);
     },
     onSuccess: () => {
+      // Invalidate preferences query to refetch the data
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/preferences'] });
+      
       toast({
         title: "Preferences saved",
         description: "Your preferences have been updated successfully.",
