@@ -90,10 +90,10 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       date: invoiceDate,
-      contactId: invoice.contactId,
+      contactId: invoice.contactId ?? 0,
       reference: invoiceNumber,
       description: invoice.description || '',
-      status: invoice.status,
+      status: invoice.status as "draft" | "pending" | "paid" | "overdue",
       lineItems: lineItems.length > 0 
         ? lineItems.map(item => ({
             description: item.description,
@@ -599,6 +599,13 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                       }
                                     }
                                   }}
+                                  defaultValue={(() => {
+                                    // Try to find a matching product based on description
+                                    const matchingProduct = typedProducts.find(
+                                      p => p.name === field.value
+                                    );
+                                    return matchingProduct ? matchingProduct.id.toString() : undefined;
+                                  })()}
                                 >
                                   <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
                                     <SelectValue placeholder="Select a product/service" />
