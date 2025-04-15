@@ -386,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Create ledger entries - Double Entry Accounting
-      // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable
+      // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable accounts
       const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
       const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
       
@@ -401,6 +401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subTotal = invoiceData.subTotal || totalAmount;
       const taxAmount = invoiceData.taxAmount || 0;
       
+      // Create base ledger entries (will add tax entries after)
       const ledgerEntries = [
         {
           accountId: receivableAccount.id,
@@ -417,16 +418,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
           credit: subTotal,  // Revenue amount (subtotal)
           date: transaction.date,
           transactionId: 0 // Will be set by createTransaction
-        },
-        {
+        }
+      ];
+      
+      // Handle tax allocation with proper accounts for composite taxes
+      // Initialize tax ledger entries map to combine entries for same account
+      const taxLedgerMap = new Map<number, { accountId: number, amount: number }>();
+      
+      // Process each line item to determine tax allocation
+      for (const item of invoiceData.lineItems) {
+        if (item.salesTaxId) {
+          // Get the tax information for the line item
+          const salesTax = await storage.getSalesTax(item.salesTaxId);
+          
+          if (salesTax) {
+            // Check if it's a composite tax (has components)
+            if (salesTax.isComposite) {
+              // Get all component taxes for this composite tax
+              const componentTaxes = await db
+                .select()
+                .from(salesTaxSchema)
+                .where(eq(salesTaxSchema.parentId, salesTax.id))
+                .execute();
+                
+              console.log(`Fetched ${componentTaxes.length} component taxes for parent ID ${salesTax.id}:`, componentTaxes);
+              
+              if (componentTaxes.length > 0) {
+                // Process each component tax separately
+                for (const component of componentTaxes) {
+                  // Calculate tax amount for this component
+                  const componentTaxAmount = (item.amount * (component.rate / 100));
+                  
+                  // Get the proper account ID for this component
+                  const accountId = component.accountId || taxPayableAccount.id;
+                  
+                  // Add to the tax ledger map for this account
+                  if (taxLedgerMap.has(accountId)) {
+                    // Add to existing amount for this account
+                    const entry = taxLedgerMap.get(accountId)!;
+                    entry.amount += componentTaxAmount;
+                    taxLedgerMap.set(accountId, entry);
+                  } else {
+                    // Create new entry for this account
+                    taxLedgerMap.set(accountId, { accountId, amount: componentTaxAmount });
+                  }
+                }
+              } else {
+                // No components found, use the main tax account
+                const taxAmount = (item.amount * (salesTax.rate / 100));
+                const accountId = salesTax.accountId || taxPayableAccount.id;
+                
+                if (taxLedgerMap.has(accountId)) {
+                  const entry = taxLedgerMap.get(accountId)!;
+                  entry.amount += taxAmount;
+                  taxLedgerMap.set(accountId, entry);
+                } else {
+                  taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
+                }
+              }
+            } else {
+              // Regular non-composite tax
+              const taxAmount = (item.amount * (salesTax.rate / 100));
+              const accountId = salesTax.accountId || taxPayableAccount.id;
+              
+              if (taxLedgerMap.has(accountId)) {
+                const entry = taxLedgerMap.get(accountId)!;
+                entry.amount += taxAmount;
+                taxLedgerMap.set(accountId, entry);
+              } else {
+                taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
+              }
+            }
+          }
+        }
+      }
+      
+      // Add tax ledger entries from the map
+      console.log('Creating tax ledger entries:', Array.from(taxLedgerMap.values()));
+      
+      // If no tax entries were created (or calculation issue), use the total tax amount
+      if (taxLedgerMap.size === 0 && taxAmount > 0) {
+        ledgerEntries.push({
           accountId: taxPayableAccount.id,
           description: `Invoice ${transaction.reference} - Sales Tax`,
           debit: 0,
-          credit: taxAmount,  // Tax amount only
+          credit: taxAmount,
           date: transaction.date,
           transactionId: 0 // Will be set by createTransaction
+        });
+      } else {
+        // Add the tax entries from our map - convert to array first to avoid iterator issues
+        const taxEntries = Array.from(taxLedgerMap.values());
+        for (const entry of taxEntries) {
+          ledgerEntries.push({
+            accountId: entry.accountId,
+            description: `Invoice ${transaction.reference} - Sales Tax`,
+            debit: 0,
+            credit: parseFloat(entry.amount.toFixed(2)), // Round to 2 decimal places
+            date: transaction.date,
+            transactionId: 0 // Will be set by createTransaction
+          });
         }
-      ];
+      }
       
       const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
       
