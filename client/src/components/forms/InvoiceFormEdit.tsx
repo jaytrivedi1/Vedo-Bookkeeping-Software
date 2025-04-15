@@ -100,8 +100,8 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             amount: item.amount,
-            salesTaxId: item.salesTaxId,
-            productId: item.productId
+            // Type handling for salesTaxId
+            salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined
           }))
         : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
