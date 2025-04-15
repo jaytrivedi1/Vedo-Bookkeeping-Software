@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -39,7 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, Info, Languages, Moon, Sun, DollarSign } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 // Define schema for company details
 const companyFormSchema = z.object({
@@ -79,6 +79,33 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     foreignCurrency: false
   });
   
+  // Query company settings
+  const companyQuery = useQuery({
+    queryKey: ['/api/settings/company'],
+    enabled: open,
+  });
+  
+  // Query user preferences
+  const preferencesQuery = useQuery({
+    queryKey: ['/api/settings/preferences'],
+    enabled: open,
+    onSuccess: (data: any) => {
+      if (data && Object.keys(data).length > 0) {
+        setSettings({
+          darkMode: data.darkMode || false,
+          foreignCurrency: data.foreignCurrency || false
+        });
+        
+        // Apply dark mode if it's enabled
+        if (data.darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+    }
+  });
+  
   // Setup form for company details
   const form = useForm<z.infer<typeof companyFormSchema>>({
     resolver: zodResolver(companyFormSchema),
@@ -91,6 +118,21 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       taxId: "12-3456789"
     },
   });
+  
+  // Update form when company data is loaded
+  useEffect(() => {
+    if (companyQuery.data && Object.keys(companyQuery.data).length > 0) {
+      const data = companyQuery.data as any;
+      form.reset({
+        name: data.name || "Your Company Name",
+        address: data.address || "",
+        phone: data.phone || "",
+        email: data.email || "",
+        website: data.website || "",
+        taxId: data.taxId || "",
+      });
+    }
+  }, [companyQuery.data, form]);
   
   // Handle saving company details
   const saveCompanyDetails = useMutation({
