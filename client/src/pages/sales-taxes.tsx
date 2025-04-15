@@ -225,7 +225,7 @@ export default function SalesTaxes() {
   };
 
   // Open edit dialog with tax data
-  const handleEditTax = (tax: SalesTax) => {
+  const handleEditTax = async (tax: SalesTax) => {
     setEditingTax(tax);
     // First set the basic tax properties
     form.reset({
@@ -243,29 +243,60 @@ export default function SalesTaxes() {
     
     // If it's a composite tax, fetch the component taxes
     if (tax.isComposite) {
-      // In a real implementation, we would fetch the tax components from the API
-      // For now, we'll use the component data we know exists in the database
-      let componentTaxes = [];
-      
-      if (tax.name.includes("QST+GST")) {
-        componentTaxes = [
-          { name: 'GST', rate: 5, accountId: 24 }, // GST Payable account
-          { name: 'QST', rate: 9.975, accountId: 25 } // QST Payable account
-        ];
-      } else if (tax.name.includes("HST")) {
-        componentTaxes = [
-          { name: 'Federal Portion', rate: 5, accountId: 24 },
-          { name: 'Provincial Portion', rate: 8, accountId: 25 }
-        ];
-      } else {
-        // Default components if we don't recognize the tax
-        componentTaxes = [
-          { name: 'Component 1', rate: tax.rate / 2, accountId: null },
-          { name: 'Component 2', rate: tax.rate / 2, accountId: null }
-        ];
+      try {
+        // Fetch component taxes from the API - these are stored as child taxes with parentId=tax.id
+        const response = await fetch(`/api/sales-taxes?parentId=${tax.id}`);
+        
+        if (response.ok) {
+          const childTaxes = await response.json();
+          console.log("Fetched component taxes:", childTaxes);
+          
+          // Map the child taxes to component taxes format
+          const componentTaxes = childTaxes.map((childTax: any) => ({
+            name: childTax.name,
+            rate: childTax.rate,
+            accountId: childTax.accountId
+          }));
+          
+          form.setValue('componentTaxes', componentTaxes);
+        } else {
+          // If we can't fetch the components from API, we'll use some defaults
+          console.log("Couldn't fetch component taxes, using defaults");
+          let componentTaxes = [];
+          
+          if (tax.name.includes("QST+GST")) {
+            // Try to get the actual component taxes with accurate account IDs
+            const allTaxes = await queryClient.getQueryData(["/api/sales-taxes"]) as SalesTax[];
+            const gstTax = allTaxes?.find(t => t.name === "GST");
+            const qstTax = allTaxes?.find(t => t.name === "QST");
+            
+            componentTaxes = [
+              { name: 'GST', rate: 5, accountId: gstTax?.accountId || 24 }, // GST Payable account
+              { name: 'QST', rate: 9.975, accountId: qstTax?.accountId || 25 } // QST Payable account
+            ];
+          } else if (tax.name.includes("HST")) {
+            componentTaxes = [
+              { name: 'Federal Portion', rate: 5, accountId: null },
+              { name: 'Provincial Portion', rate: 8, accountId: null }
+            ];
+          } else {
+            // Default components if we don't recognize the tax
+            componentTaxes = [
+              { name: 'Component 1', rate: tax.rate / 2, accountId: null },
+              { name: 'Component 2', rate: tax.rate / 2, accountId: null }
+            ];
+          }
+          
+          form.setValue('componentTaxes', componentTaxes);
+        }
+      } catch (error) {
+        console.error("Error fetching component taxes:", error);
+        toast({
+          title: "Warning",
+          description: "Couldn't load tax components. You may need to re-configure them.",
+          variant: "destructive",
+        });
       }
-      
-      form.setValue('componentTaxes', componentTaxes);
     }
     
     setIsDialogOpen(true);
@@ -541,7 +572,8 @@ export default function SalesTaxes() {
                             form.setValue('accountId', null);
                             
                             // Initialize components array if empty
-                            if (!form.getValues().componentTaxes || form.getValues().componentTaxes.length === 0) {
+                            const currentComponentTaxes = form.getValues().componentTaxes;
+                            if (!currentComponentTaxes || currentComponentTaxes.length === 0) {
                               form.setValue('componentTaxes', [
                                 { name: 'GST', rate: 5, accountId: null },
                                 { name: 'QST', rate: 9.975, accountId: null }
@@ -660,7 +692,7 @@ export default function SalesTaxes() {
                       Add Component
                     </Button>
                     
-                    {form.watch('componentTaxes')?.length > 1 && (
+                    {(form.watch('componentTaxes') || []).length > 1 && (
                       <Button
                         type="button"
                         variant="outline"

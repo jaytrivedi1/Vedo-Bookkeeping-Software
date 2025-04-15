@@ -789,9 +789,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sales Tax routes
   apiRouter.get("/sales-taxes", async (req: Request, res: Response) => {
     try {
+      // Handle query for component taxes by parent ID
+      if (req.query.parentId) {
+        const parentId = parseInt(req.query.parentId as string);
+        
+        // Fetch child taxes directly from the database
+        const childTaxes = await db
+          .select()
+          .from(salesTaxSchema)
+          .where(eq(salesTaxSchema.parentId, parentId))
+          .execute();
+          
+        console.log(`Fetched ${childTaxes.length} component taxes for parent ID ${parentId}:`, childTaxes);
+        return res.json(childTaxes);
+      }
+      
+      // Default: fetch all parent-level taxes (not components)
       const salesTaxes = await storage.getSalesTaxes();
       res.json(salesTaxes);
     } catch (error) {
+      console.error("Error fetching sales taxes:", error);
       res.status(500).json({ message: "Failed to fetch sales taxes" });
     }
   });
