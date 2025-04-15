@@ -525,6 +525,84 @@ export class MemStorage implements IStorage {
     return this.products.delete(id);
   }
   
+  // Company Methods
+  private initializeDefaultCompany() {
+    const defaultCompany: InsertCompany = {
+      name: 'FinLedger, Inc.',
+      address: '123 Financial Way, Suite 100',
+      phone: '(555) 123-4567',
+      email: 'info@finledger.com',
+      website: 'www.finledger.com',
+      taxId: '12-3456789',
+      logoUrl: '/assets/finledger-logo.svg',
+      isActive: true
+    };
+    
+    this.createCompany(defaultCompany)
+      .then(company => this.setDefaultCompany(company.id))
+      .catch(err => console.error('Failed to create default company:', err));
+  }
+  
+  async getCompanies(): Promise<Company[]> {
+    return Array.from(this.companies.values());
+  }
+  
+  async getCompany(id: number): Promise<Company | undefined> {
+    return this.companies.get(id);
+  }
+  
+  async getDefaultCompany(): Promise<Company | undefined> {
+    return Array.from(this.companies.values()).find(company => company.isDefault);
+  }
+  
+  async createCompany(company: InsertCompany): Promise<Company> {
+    const id = this.companyIdCounter++;
+    const now = new Date();
+    
+    const newCompany: Company = {
+      ...company,
+      id,
+      isDefault: false, // Will be set separately if needed
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    this.companies.set(id, newCompany);
+    return newCompany;
+  }
+  
+  async updateCompany(id: number, companyUpdate: Partial<Company>): Promise<Company | undefined> {
+    const company = this.companies.get(id);
+    if (!company) return undefined;
+    
+    const updatedCompany = { 
+      ...company, 
+      ...companyUpdate,
+      updatedAt: new Date()
+    };
+    
+    this.companies.set(id, updatedCompany);
+    return updatedCompany;
+  }
+  
+  async setDefaultCompany(id: number): Promise<Company | undefined> {
+    const company = this.companies.get(id);
+    if (!company) return undefined;
+    
+    // Reset all companies to non-default
+    for (const [companyId, companyData] of this.companies.entries()) {
+      if (companyData.isDefault) {
+        this.companies.set(companyId, { ...companyData, isDefault: false });
+      }
+    }
+    
+    // Set the new default company
+    const updatedCompany = { ...company, isDefault: true };
+    this.companies.set(id, updatedCompany);
+    
+    return updatedCompany;
+  }
+  
   // Settings Methods
   private companySettings: CompanySettings | undefined;
   private preferences: Preferences | undefined;
