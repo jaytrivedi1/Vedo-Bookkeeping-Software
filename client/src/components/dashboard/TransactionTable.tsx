@@ -162,9 +162,6 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       <div className="text-sm font-medium text-gray-900">
                         {getContactName(transaction.contactId)}
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {transaction.description || 'No description'}
-                      </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
                       {transaction.type === 'expense' 
