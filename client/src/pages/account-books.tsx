@@ -34,7 +34,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Account, LedgerEntry, Transaction } from "@shared/schema";
+import { Account, LedgerEntry, Transaction, Contact } from "@shared/schema";
 
 // Types for account books
 interface AccountWithLedger extends Account {
@@ -66,8 +66,13 @@ export default function AccountBooks() {
     queryKey: ['/api/transactions'],
   });
   
+  // Fetch all contacts
+  const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
+  });
+  
   // Loading state
-  const isLoading = accountsLoading || ledgerLoading || transactionsLoading;
+  const isLoading = accountsLoading || ledgerLoading || transactionsLoading || contactsLoading;
   
   // Process and combine data
   const accountBooks: AccountWithLedger[] = [];
@@ -182,7 +187,8 @@ export default function AccountBooks() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>
-                      <TableHead>Code</TableHead>
+                      <TableHead>Reference</TableHead>
+                      <TableHead>Name</TableHead>
                       <TableHead>Account</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead className="text-right">Debit</TableHead>
@@ -192,7 +198,7 @@ export default function AccountBooks() {
                   <TableBody>
                     {ledgerEntries && ledgerEntries.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-6 text-gray-500">
+                        <TableCell colSpan={7} className="text-center py-6 text-gray-500">
                           No entries found in the general ledger
                         </TableCell>
                       </TableRow>
@@ -211,8 +217,19 @@ export default function AccountBooks() {
                               return accountA.code.localeCompare(accountB.code);
                             });
 
-                          // Get the date from the first entry (they all have the same date)
+                          // Get the date and transaction details from the first entry
                           const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
+                          const transaction = transactions?.find(t => t.id === transactionId);
+                          // Find contact name if available
+                          const contactId = transaction?.contactId;
+                          let contactName = "System Entry";
+                          
+                          if (contactId && contacts) {
+                            const contact = contacts.find(c => c.id === contactId);
+                            if (contact) {
+                              contactName = contact.name;
+                            }
+                          }
 
                           // Return the entries for display
                           return entriesForTransaction.map((entry, index) => {
@@ -226,7 +243,12 @@ export default function AccountBooks() {
                                 <TableCell>
                                   {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
                                 </TableCell>
-                                <TableCell>{account?.code || ''}</TableCell>
+                                <TableCell>
+                                  {index === 0 ? transaction?.reference || '' : ''}
+                                </TableCell>
+                                <TableCell>
+                                  {index === 0 ? contactName : ''}
+                                </TableCell>
                                 <TableCell>{account?.name || 'Unknown Account'}</TableCell>
                                 <TableCell>{entry.description || ''}</TableCell>
                                 <TableCell className="text-right">
