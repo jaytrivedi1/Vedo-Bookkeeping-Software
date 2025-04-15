@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { seed } from "./seed";
 import migrateLineItems from "./migrate-line-items";
+import { migrateCompanyTable } from "./migrate-company";
 
 const app = express();
 app.use(express.json());
@@ -47,6 +48,9 @@ app.use((req, res, next) => {
     
     // Run the line items migration to add sales_tax_id column
     await migrateLineItems();
+    
+    // Run company table migration to create companies and set up default company
+    await migrateCompanyTable();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
