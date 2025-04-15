@@ -4,29 +4,24 @@ import { useQuery } from "@tanstack/react-query";
 import InvoiceFormEdit from "@/components/forms/InvoiceFormEdit";
 import { Transaction, LineItem } from "@shared/schema";
 
+interface InvoiceResponse {
+  transaction: Transaction;
+  lineItems: LineItem[];
+  ledgerEntries: any[];
+}
+
 export default function EditInvoice() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ id: string }>("/invoice-edit/:id");
   const invoiceId = params?.id ? parseInt(params.id) : null;
 
-  // Get transaction data and line items
-  const { data: transaction, isLoading: transactionLoading } = useQuery<Transaction>({
+  // Get transaction data including line items
+  const { data, isLoading } = useQuery<InvoiceResponse>({
     queryKey: ['/api/transactions', invoiceId],
     queryFn: async () => {
       if (!invoiceId) return null;
       const response = await fetch(`/api/transactions/${invoiceId}`);
-      if (!response.ok) throw new Error("Failed to fetch invoice");
-      return response.json();
-    },
-    enabled: !!invoiceId
-  });
-
-  const { data: lineItems, isLoading: lineItemsLoading } = useQuery<LineItem[]>({
-    queryKey: ['/api/transactions', invoiceId, 'line-items'],
-    queryFn: async () => {
-      if (!invoiceId) return [];
-      const response = await fetch(`/api/transactions/${invoiceId}/line-items`);
-      if (!response.ok) throw new Error("Failed to fetch line items");
+      if (!response.ok) throw new Error("Failed to fetch invoice data");
       return response.json();
     },
     enabled: !!invoiceId
@@ -37,19 +32,19 @@ export default function EditInvoice() {
     setLocation("/invoices");
   };
 
-  if (transactionLoading || lineItemsLoading) {
+  if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading invoice data...</div>;
   }
 
-  if (!transaction || transaction.type !== 'invoice') {
+  if (!data || data.transaction.type !== 'invoice') {
     return <div className="flex items-center justify-center h-screen">Invoice not found or invalid type</div>;
   }
 
   return (
     <div className="h-screen flex flex-col">
       <InvoiceFormEdit 
-        invoice={transaction}
-        lineItems={lineItems || []}
+        invoice={data.transaction}
+        lineItems={data.lineItems || []}
         onSuccess={handleSuccess} 
         onCancel={() => setLocation("/invoices")} 
       />

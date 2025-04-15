@@ -12,7 +12,8 @@ import {
   invoiceSchema,
   expenseSchema,
   journalEntrySchema,
-  depositSchema
+  depositSchema,
+  Transaction
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
@@ -216,7 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // This is a simple approach, a more sophisticated one would update existing items
         
         // Calculate the new subtotal from line items
-        const subTotal = body.lineItems.reduce((sum, item) => sum + item.amount, 0);
+        const subTotal = body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0);
         const taxAmount = body.taxAmount || 0;
         
         // Update transaction amount

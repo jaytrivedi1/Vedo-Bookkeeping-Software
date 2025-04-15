@@ -170,6 +170,24 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       >
                         View
                       </Link>
+                      
+                      {/* Edit button - only for invoices for now */}
+                      {transaction.type === 'invoice' && (
+                        <Link 
+                          href={`/invoice-edit/${transaction.id}`}
+                          className="text-blue-500 hover:text-blue-600"
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                        </Link>
+                      )}
+                      
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
