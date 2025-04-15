@@ -128,7 +128,12 @@ export default function SalesTaxes() {
       // Handle the case where accountId is 0 (meaning "None")
       const processedValues = {
         ...values,
-        accountId: values.accountId === 0 ? null : values.accountId
+        accountId: values.accountId === 0 ? null : values.accountId,
+        // Process component tax accountIds
+        componentTaxes: values.isComposite ? values.componentTaxes?.map(comp => ({
+          ...comp,
+          accountId: comp.accountId === 0 ? null : comp.accountId
+        })) : []
       };
       return await apiRequest("/api/sales-taxes", "POST", processedValues);
     },
@@ -157,7 +162,12 @@ export default function SalesTaxes() {
       // Handle the case where accountId is 0 (meaning "None")
       const processedValues = {
         ...values,
-        accountId: values.accountId === 0 ? null : values.accountId
+        accountId: values.accountId === 0 ? null : values.accountId,
+        // Process component tax accountIds
+        componentTaxes: values.isComposite ? values.componentTaxes?.map(comp => ({
+          ...comp,
+          accountId: comp.accountId === 0 ? null : comp.accountId
+        })) : []
       };
       return await apiRequest(`/api/sales-taxes/${id}`, "PATCH", processedValues);
     },
@@ -217,13 +227,32 @@ export default function SalesTaxes() {
   // Open edit dialog with tax data
   const handleEditTax = (tax: SalesTax) => {
     setEditingTax(tax);
+    // First set the basic tax properties
     form.reset({
       name: tax.name,
       description: tax.description,
       rate: tax.rate,
       accountId: tax.accountId,
       isActive: tax.isActive === true,
+      isComposite: tax.isComposite === true,
+      componentTaxes: []
     });
+    
+    // Update composite state to match the tax
+    setIsComposite(tax.isComposite === true);
+    
+    // If it's a composite tax, we need to find and load its components
+    if (tax.isComposite) {
+      // In a real implementation, we would fetch the component taxes from the API
+      // For now, we'll use placeholder values for GST and QST
+      const componentTaxes = [
+        { name: 'GST', rate: 5, accountId: 24 }, // GST Payable account
+        { name: 'QST', rate: 9.975, accountId: 25 } // QST Payable account
+      ];
+      
+      form.setValue('componentTaxes', componentTaxes);
+    }
+    
     setIsDialogOpen(true);
   };
 
@@ -236,7 +265,13 @@ export default function SalesTaxes() {
       rate: 0,
       accountId: null,
       isActive: true,
+      isComposite: false,
+      componentTaxes: []
     });
+    
+    // Reset the composite state
+    setIsComposite(false);
+    
     setIsDialogOpen(true);
   };
 
@@ -495,6 +530,131 @@ export default function SalesTaxes() {
                   </FormItem>
                 )}
               />
+              
+              {/* Component Taxes Section (Only displayed when isComposite is true) */}
+              {form.watch('isComposite') && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="mb-3">
+                    <h3 className="text-md font-medium">Tax Components</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Define individual tax components with their own tax liability accounts
+                    </p>
+                  </div>
+                  
+                  {form.watch('componentTaxes')?.map((_, index) => (
+                    <div key={index} className="space-y-4 rounded-lg border p-3">
+                      <h4 className="text-sm font-medium">Component {index + 1}</h4>
+                      
+                      <FormField
+                        control={form.control}
+                        name={`componentTaxes.${index}.name`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Component Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="GST" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`componentTaxes.${index}.rate`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Rate (%)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.001"
+                                min="0"
+                                max="100"
+                                placeholder="5.000"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={form.control}
+                        name={`componentTaxes.${index}.accountId`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tax Liability Account</FormLabel>
+                            <Select
+                              onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                              value={field.value?.toString() || "0"}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select account" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="0">None</SelectItem>
+                                {accounts && accounts
+                                  .filter(account => 
+                                    account.type === "accounts_payable" || 
+                                    account.type === "other_current_liabilities"
+                                  )
+                                  .map((account) => (
+                                    <SelectItem key={account.id} value={account.id.toString()}>
+                                      {account.code} - {account.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              The account where this component's collected tax will be recorded
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  ))}
+                  
+                  <div className="flex justify-between">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const currentComponents = form.getValues().componentTaxes || [];
+                        form.setValue('componentTaxes', [
+                          ...currentComponents,
+                          { name: '', rate: 0, accountId: null }
+                        ]);
+                      }}
+                    >
+                      <PlusIcon className="h-4 w-4 mr-2" />
+                      Add Component
+                    </Button>
+                    
+                    {form.watch('componentTaxes')?.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const currentComponents = form.getValues().componentTaxes || [];
+                          if (currentComponents.length > 1) {
+                            form.setValue('componentTaxes', currentComponents.slice(0, -1));
+                          }
+                        }}
+                      >
+                        <TrashIcon className="h-4 w-4 mr-2" />
+                        Remove Last
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
               <DialogFooter>
                 <Button
                   type="button"

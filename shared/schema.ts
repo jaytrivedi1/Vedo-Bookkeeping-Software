@@ -185,8 +185,29 @@ export const salesTaxSchema = pgTable('sales_taxes', {
 
 export const insertSalesTaxSchema = createInsertSchema(salesTaxSchema).omit({ id: true });
 
+// Tax Component Schema (to store component taxes for composite taxes like GST+QST)
+export const salesTaxComponentsSchema = pgTable('sales_tax_components', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  rate: doublePrecision('rate').notNull().default(0),
+  accountId: integer('account_id').references(() => accounts.id),
+  parentTaxId: integer('parent_tax_id').notNull().references(() => salesTaxSchema.id),
+  displayOrder: integer('display_order').default(0),
+});
+
+export const insertSalesTaxComponentSchema = createInsertSchema(salesTaxComponentsSchema).omit({ id: true });
+
 export type SalesTax = typeof salesTaxSchema.$inferSelect;
 export type InsertSalesTax = z.infer<typeof insertSalesTaxSchema>;
+export type SalesTaxComponent = typeof salesTaxComponentsSchema.$inferSelect;
+export type InsertSalesTaxComponent = z.infer<typeof insertSalesTaxComponentSchema>;
+
+// Interface for tax component information in forms
+export interface TaxComponentInfo {
+  name: string;
+  rate: number;
+  accountId: number | null;
+}
 
 // Products & Services schema
 export const productsSchema = pgTable('products', {
