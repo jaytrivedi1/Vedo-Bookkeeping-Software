@@ -8,6 +8,7 @@ import {
   productsSchema,
   companySchema,
   preferencesSchema,
+  companiesSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -26,6 +27,8 @@ import {
   type InsertCompanySettings,
   type Preferences,
   type InsertPreferences,
+  type Company,
+  type InsertCompany,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -79,6 +82,14 @@ export interface IStorage {
   getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
   getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
   
+  // Companies
+  getCompanies(): Promise<Company[]>;
+  getCompany(id: number): Promise<Company | undefined>;
+  getDefaultCompany(): Promise<Company | undefined>;
+  createCompany(company: InsertCompany): Promise<Company>;
+  updateCompany(id: number, company: Partial<Company>): Promise<Company | undefined>;
+  setDefaultCompany(id: number): Promise<Company | undefined>;
+  
   // Settings
   getCompanySettings(): Promise<CompanySettings | undefined>;
   saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings>;
@@ -94,6 +105,7 @@ export class MemStorage implements IStorage {
   private ledgerEntries: Map<number, LedgerEntry>;
   private salesTaxes: Map<number, SalesTax>;
   private products: Map<number, Product>;
+  private companies: Map<number, Company>;
   
   private accountIdCounter: number;
   private contactIdCounter: number;
@@ -102,6 +114,7 @@ export class MemStorage implements IStorage {
   private ledgerEntryIdCounter: number;
   private salesTaxIdCounter: number;
   private productIdCounter: number;
+  private companyIdCounter: number;
 
   constructor() {
     this.accounts = new Map();
@@ -111,6 +124,7 @@ export class MemStorage implements IStorage {
     this.ledgerEntries = new Map();
     this.salesTaxes = new Map();
     this.products = new Map();
+    this.companies = new Map();
     
     this.accountIdCounter = 1;
     this.contactIdCounter = 1;
@@ -119,6 +133,10 @@ export class MemStorage implements IStorage {
     this.ledgerEntryIdCounter = 1;
     this.salesTaxIdCounter = 1;
     this.productIdCounter = 1;
+    this.companyIdCounter = 1;
+    
+    // Create a default company
+    this.initializeDefaultCompany();
 
     // Initialize with default chart of accounts
     this.initializeDefaultAccounts();

@@ -1,0 +1,22 @@
+<svg width="200" height="50" viewBox="0 0 200 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Main background with gradient -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Text elements -->
+  <text x="10" y="35" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="url(#gradient)">
+    FinLedger
+  </text>
+
+  <!-- Dollar symbol icon -->
+  <circle cx="175" cy="25" r="15" fill="url(#gradient)" />
+  <text x="170" y="33" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="white">$</text>
+  
+  <!-- Accounting book icon elements -->
+  <rect x="145" y="15" width="20" height="25" rx="2" fill="#4F46E5" opacity="0.7" />
+  <rect x="140" y="12" width="20" height="25" rx="2" fill="#7C3AED" opacity="0.7" />
+</svg>

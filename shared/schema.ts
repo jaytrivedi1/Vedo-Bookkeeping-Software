@@ -215,6 +215,22 @@ export type Expense = z.infer<typeof expenseSchema>;
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 export type Deposit = z.infer<typeof depositSchema>;
 
+// Companies schema to manage multiple company books
+export const companiesSchema = pgTable('companies', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  address: text('address'),
+  phone: text('phone'),
+  email: text('email'),
+  website: text('website'),
+  taxId: text('tax_id'),
+  logoUrl: text('logo_url'),
+  isActive: boolean('is_active').default(true),
+  isDefault: boolean('is_default').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Settings schema for company details
 export const companySchema = pgTable('company_settings', {
   id: serial('id').primaryKey(),
@@ -239,9 +255,18 @@ export const preferencesSchema = pgTable('preferences', {
 
 export const insertCompanySchema = createInsertSchema(companySchema).omit({ id: true, updatedAt: true });
 export const insertPreferencesSchema = createInsertSchema(preferencesSchema).omit({ id: true, updatedAt: true });
+export const insertCompaniesSchema = createInsertSchema(companiesSchema).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  isDefault: true
+});
 
 export type CompanySettings = typeof companySchema.$inferSelect;
 export type InsertCompanySettings = z.infer<typeof insertCompanySchema>;
 
 export type Preferences = typeof preferencesSchema.$inferSelect;
 export type InsertPreferences = z.infer<typeof insertPreferencesSchema>;
+
+export type Company = typeof companiesSchema.$inferSelect;
+export type InsertCompany = z.infer<typeof insertCompaniesSchema>;
