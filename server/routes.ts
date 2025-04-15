@@ -9,6 +9,8 @@ import {
   insertLedgerEntrySchema,
   insertSalesTaxSchema,
   insertProductSchema,
+  insertCompanySchema,
+  insertPreferencesSchema,
   invoiceSchema,
   expenseSchema,
   journalEntrySchema,
@@ -1047,6 +1049,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error classifying bank transactions:", error);
       res.status(500).json({ message: "Failed to process bank transactions" });
+    }
+  });
+
+  // Settings routes
+  apiRouter.get("/settings/company", async (req: Request, res: Response) => {
+    try {
+      const companySettings = await storage.getCompanySettings();
+      res.json(companySettings || {});
+    } catch (error) {
+      console.error("Error fetching company settings:", error);
+      res.status(500).json({ message: "Failed to get company settings" });
+    }
+  });
+
+  apiRouter.post("/settings/company", async (req: Request, res: Response) => {
+    try {
+      const companyData = insertCompanySchema.parse(req.body);
+      const result = await storage.saveCompanySettings(companyData);
+      res.json(result);
+    } catch (error) {
+      console.error("Error saving company settings:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid company data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to save company settings" });
+    }
+  });
+
+  apiRouter.get("/settings/preferences", async (req: Request, res: Response) => {
+    try {
+      const preferences = await storage.getPreferences();
+      res.json(preferences || {});
+    } catch (error) {
+      console.error("Error fetching preferences:", error);
+      res.status(500).json({ message: "Failed to get preferences" });
+    }
+  });
+
+  apiRouter.post("/settings/preferences", async (req: Request, res: Response) => {
+    try {
+      const preferencesData = insertPreferencesSchema.parse(req.body);
+      const result = await storage.savePreferences(preferencesData);
+      res.json(result);
+    } catch (error) {
+      console.error("Error saving preferences:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid preferences data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to save preferences" });
     }
   });
 

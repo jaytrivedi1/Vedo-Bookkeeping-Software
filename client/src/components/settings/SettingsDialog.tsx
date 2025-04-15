@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { 
   Dialog, 
   DialogContent, 
+  DialogDescription,
   DialogHeader, 
   DialogTitle,
   DialogFooter
@@ -181,6 +182,9 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
             <Settings className="h-5 w-5" />
             Settings
           </DialogTitle>
+          <DialogDescription>
+            Configure application settings and company information
+          </DialogDescription>
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
