@@ -289,23 +289,36 @@ export default function ChartOfAccounts() {
   };
   
   // Format account balance according to accounting convention
-  // Debit accounts (Assets, Expenses) show positive balances when they have debit balances
-  // Credit accounts (Liabilities, Equity, Income) show negative balances when they have credit balances
+  // For the Chart of Accounts:
+  // - Assets and Expenses have normal debit balances and show as "DR"
+  // - Liabilities, Equity, and Income have normal credit balances and show as "CR"
   const formatAccountBalance = (account: Account, balance: number) => {
     // Get the balance for this account from accountBalances
     const accountBalance = accountBalances?.find(
       (ab) => ab.account.id === account.id
     )?.balance || 0;
     
-    // For debit accounts (Assets, Expenses), we display as positive
-    // For credit accounts (Liabilities, Equity, Revenue), we display as negative
-    const displayBalance = isDebitAccount(account.type) 
-      ? accountBalance  // Keep as is for debit accounts (positive means debit balance)
-      : -accountBalance; // Invert for credit accounts (negative means credit balance)
+    // Check if the account is a debit-normal or credit-normal account
+    const isDebitNormal = isDebitAccount(account.type);
     
-    // For the display, show absolute value with debit/credit indicator
-    const formattedBalance = Math.abs(displayBalance).toFixed(2);
-    return `$${formattedBalance} ${displayBalance < 0 ? 'CR' : 'DR'}`;
+    // For debits: positive balance = DR, negative balance = CR
+    // For credits: positive balance = CR, negative balance = DR
+    // Note: Our backend stores debits as positive and credits as negative
+    
+    // Calculate absolute value for display
+    const absBalance = Math.abs(accountBalance);
+    
+    // Determine if the account has its normal balance
+    // For debit accounts: positive balance means normal (DR)
+    // For credit accounts: negative balance means normal (CR)
+    const hasNormalBalance = isDebitNormal ? accountBalance >= 0 : accountBalance <= 0;
+    
+    // Display based on normal balance
+    const indicator = hasNormalBalance 
+      ? (isDebitNormal ? 'DR' : 'CR')
+      : (isDebitNormal ? 'CR' : 'DR');
+    
+    return `$${absBalance.toFixed(2)} ${indicator}`;
   };
   
   return (
