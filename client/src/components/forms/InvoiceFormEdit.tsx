@@ -331,6 +331,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     });
     
     console.log("Sending to server:", enrichedData);
+    if (updateInvoice.isPending) return; // Prevent double submission
     updateInvoice.mutate(enrichedData);
   };
 
@@ -857,7 +858,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                           <Input 
                             className="bg-white border-gray-300" 
                             {...field}
-                            value={defaultInvoiceNumber} 
+                            value={invoiceNumber} 
                           />
                         </FormControl>
                         <FormMessage />
@@ -911,10 +912,10 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
               {/* Mobile save button */}
               <Button 
                 type="submit"
-                disabled={createInvoice.isPending}
+                disabled={updateInvoice.isPending}
                 className="w-full md:w-auto"
               >
-                {createInvoice.isPending ? 'Saving...' : 'Save and send'}
+                {updateInvoice.isPending ? 'Saving...' : 'Save and send'}
               </Button>
             </div>
             
@@ -929,9 +930,9 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
               <div className="flex">
                 <Button 
                   type="submit"
-                  disabled={createInvoice.isPending}
+                  disabled={updateInvoice.isPending}
                 >
-                  {createInvoice.isPending ? 'Saving...' : 'Save'}
+                  {updateInvoice.isPending ? 'Saving...' : 'Save'}
                 </Button>
                 <div className="relative ml-px">
                   <FormItem>
