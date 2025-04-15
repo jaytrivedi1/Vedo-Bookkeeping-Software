@@ -306,7 +306,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
         {/* Header */}
         <div className="bg-white border-b px-4 py-4 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-medium">Invoice no.{defaultInvoiceNumber}</h1>
+            <h1 className="text-xl font-medium">Invoice no.{form.watch('reference')}</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="icon">
@@ -823,7 +823,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           <Input 
                             className="bg-white border-gray-300" 
                             {...field}
-                            value={defaultInvoiceNumber} 
                           />
                         </FormControl>
                         <FormMessage />
