@@ -604,7 +604,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                       }
                                     }
                                   }}
-                                  defaultValue={(() => {
+                                  value={(() => {
                                     // Try to find a matching product based on description - check for exact matches first
                                     let matchingProduct = typedProducts.find(
                                       p => p.name === field.value
@@ -623,8 +623,9 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                       return matchingProduct.id.toString();
                                     }
                                     
-                                    // If still no match, return undefined which will show the placeholder
-                                    return undefined;
+                                    // If still no match, use custom
+                                    console.log("No matching product found for:", field.value);
+                                    return field.value ? "custom" : "";
                                   })()}
                                 >
                                   <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
@@ -650,14 +651,30 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                     )}
                                   </SelectContent>
                                 </Select>
-                                {field.value === 'custom' && (
-                                  <Input 
-                                    className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
-                                    placeholder="Enter item name" 
-                                    value={field.value === 'custom' ? '' : field.value}
-                                    onChange={(e) => field.onChange(e.target.value)}
-                                  />
-                                )}
+                                {/* Input field for custom items - check if we're in "custom" mode */}
+                                {(() => {
+                                  // Check if we need to show the input field for custom entries
+                                  const selectValue = (() => {
+                                    // If there's a matching product, we found the ID earlier
+                                    const matchingProduct = typedProducts.find(p => p.name === field.value);
+                                    if (matchingProduct) return matchingProduct.id.toString();
+                                    
+                                    // Otherwise, if there's a value, it's custom
+                                    return field.value ? "custom" : "";
+                                  })();
+                                  
+                                  if (selectValue === "custom") {
+                                    return (
+                                      <Input 
+                                        className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
+                                        placeholder="Enter item name" 
+                                        value={field.value} 
+                                        onChange={(e) => field.onChange(e.target.value)}
+                                      />
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </FormControl>
                               <FormMessage />
                             </FormItem>
