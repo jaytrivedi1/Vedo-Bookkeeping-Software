@@ -76,6 +76,13 @@ const salesTaxFormSchema = z.object({
   ),
   accountId: z.coerce.number().nullable().optional(),
   isActive: z.boolean().default(true),
+  isComposite: z.boolean().default(false),
+  componentTaxes: z.array(z.object({
+    id: z.number().optional(),
+    name: z.string().min(2, { message: "Component name must be at least 2 characters." }),
+    rate: z.coerce.number().min(0, { message: "Rate must be a positive number." }).max(100, { message: "Rate cannot exceed 100%." }),
+    accountId: z.coerce.number().nullable().optional()
+  })).optional(),
 });
 
 type SalesTaxFormValues = z.infer<typeof salesTaxFormSchema>;
@@ -98,6 +105,9 @@ export default function SalesTaxes() {
     queryKey: ["/api/accounts"],
   });
 
+  // State to manage UI flow for composite taxes
+  const [isComposite, setIsComposite] = useState(false);
+  
   // Form setup
   const form = useForm<SalesTaxFormValues>({
     resolver: zodResolver(salesTaxFormSchema),
@@ -107,6 +117,8 @@ export default function SalesTaxes() {
       rate: 0,
       accountId: null,
       isActive: true,
+      isComposite: false,
+      componentTaxes: []
     },
   });
 
@@ -446,6 +458,38 @@ export default function SalesTaxes() {
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={form.control}
+                name="isComposite"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Composite Tax</FormLabel>
+                      <FormDescription>
+                        Enable for taxes with multiple components (e.g., GST+QST)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={(value) => {
+                          field.onChange(value);
+                          setIsComposite(value);
+                          
+                          // If enabling composite tax, initialize components array
+                          if (value && (!form.getValues().componentTaxes || form.getValues().componentTaxes.length === 0)) {
+                            form.setValue('componentTaxes', [
+                              { name: 'GST', rate: 5, accountId: null },
+                              { name: 'QST', rate: 9.975, accountId: null }
+                            ]);
+                          }
+                        }}
                       />
                     </FormControl>
                   </FormItem>
