@@ -38,7 +38,14 @@ export async function apiRequest(
       
       if (!res.ok) {
         console.error(`API Error (${res.status}) from ${url}:`, responseData);
-        throw new Error(responseData.message || 'Something went wrong');
+        
+        // Create a custom error object with the full error details
+        const errorObj = new Error(responseData.message || 'Something went wrong');
+        
+        // Attach the original error data from the server
+        Object.assign(errorObj, responseData);
+        
+        throw errorObj;
       }
       
       // For successful response, await throwIfResNotOk to maintain compatibility
