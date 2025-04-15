@@ -423,6 +423,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     });
     
     console.log("Sending to server:", enrichedData);
+    if (createInvoice.isPending) return; // Prevent double submission
     createInvoice.mutate(enrichedData);
   };
 
