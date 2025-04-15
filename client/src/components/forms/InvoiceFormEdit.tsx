@@ -1,17 +1,19 @@
-import { useState, useEffect } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import React, { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { X, Plus, CalendarIcon, CreditCard, ChevronUp, ChevronDown, Trash2, File, Printer, Send } from "lucide-react";
+import { format } from "date-fns";
+import { LineItem, Transaction, invoiceSchema, Invoice, InsertLineItem } from "@shared/schema";
+import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
-import { queryClient } from "@/lib/queryClient";
-import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction, LineItem } from "@shared/schema";
-import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
@@ -27,401 +29,377 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { format, addDays } from "date-fns";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
+// Payment terms options
 type PaymentTerms = '7' | '14' | '30' | '60' | 'custom';
 
+// Extended transaction type for invoices
+interface InvoiceTransaction extends Transaction {
+  dueDate?: string | Date;
+}
+
+// Invoice form props
 interface InvoiceFormEditProps {
-  invoice: Transaction;
+  invoice: InvoiceTransaction;
   lineItems: LineItem[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
 export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCancel }: InvoiceFormEditProps) {
-  const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('30');
-  const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
-  const [subTotal, setSubTotal] = useState(0);
-  const [taxAmount, setTaxAmount] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [taxNames, setTaxNames] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedTab, setSelectedTab] = useState("details");
+  const [expandedSections, setExpandedSections] = useState({
+    customer: true,
+    invoice: true,
+    summary: true,
+  });
+  
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
+  // Get contacts
+  const { data: contacts = [] } = useQuery({
     queryKey: ['/api/contacts'],
   });
-  
-  const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
+
+  // Get sales taxes
+  const { data: salesTaxes = [] } = useQuery({
     queryKey: ['/api/sales-taxes'],
   });
-  
-  const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
+
+  // Get products
+  const { data: products = [] } = useQuery({
     queryKey: ['/api/products'],
   });
-  
-  // Ensure products are properly typed
-  const typedProducts = products?.map(product => ({
-    ...product,
-    price: typeof product.price === 'number' ? product.price : 0
-  })) || [];
 
-  // Find default selected contact
-  useEffect(() => {
-    if (contacts && invoice.contactId) {
-      const contact = contacts.find(c => c.id === invoice.contactId);
-      if (contact) {
-        setSelectedContact(contact);
-      }
-    }
-  }, [contacts, invoice.contactId]);
+  // Get accounts
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['/api/accounts'],
+  });
 
-  // Set initial form values based on the invoice data
+  // Create initial form values from existing invoice and line items
+  const defaultValues: Invoice = {
+    reference: invoice.reference,
+    date: invoice.date ? new Date(invoice.date) : new Date(),
+    dueDate: invoice.dueDate ? new Date(invoice.dueDate) : undefined,
+    description: invoice.description || "",
+    status: (invoice.status as any) || "draft",
+    contactId: invoice.contactId || 0,
+    lineItems: lineItems.map(item => ({
+      id: item.id,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      amount: item.amount,
+      salesTaxId: item.salesTaxId || 0
+    })),
+    subTotal: lineItems.reduce((sum, item) => sum + item.amount, 0),
+    taxAmount: lineItems.reduce((sum, item) => {
+      const salesTax = salesTaxes && Array.isArray(salesTaxes) 
+        ? salesTaxes.find((tax: any) => tax.id === item.salesTaxId)
+        : null;
+      return sum + (salesTax ? item.amount * (salesTax.rate / 100) : 0);
+    }, 0),
+    totalAmount: invoice.amount,
+    paymentTerms: "30"
+  };
+
+  // Initialize form
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
-    defaultValues: {
-      date: new Date(invoice.date),
-      contactId: invoice.contactId || undefined,
-      reference: invoice.reference,
-      description: invoice.description || '',
-      status: invoice.status as any,
-      lineItems: lineItems.length > 0 
-        ? lineItems.map(item => ({ 
-            description: item.description, 
-            quantity: item.quantity, 
-            unitPrice: item.unitPrice, 
-            amount: item.amount,
-            salesTaxId: item.salesTaxId || undefined
-          }))
-        : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
-    },
+    defaultValues,
+    mode: "onChange"
   });
 
+  // Access form line items as a field array
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: "lineItems",
+    name: "lineItems"
   });
 
-  // Calculate subtotal, tax amount, and total when line items change
-  useEffect(() => {
-    const values = form.getValues();
-    const items = values.lineItems || [];
+  // Calculate totals
+  const calculateTotals = () => {
+    const lineItems = form.getValues("lineItems");
     
-    const calculatedSubTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
-    setSubTotal(calculatedSubTotal);
+    // Calculate subtotal
+    const subTotal = lineItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+    form.setValue("subTotal", subTotal);
     
-    // Calculate tax amount based on the sales tax rates of each line item
-    let calculatedTaxAmount = 0;
-    const taxNamesArray: string[] = [];
+    // Calculate tax amount
+    let taxAmount = 0;
+    lineItems.forEach((item: any) => {
+      const salesTaxId = item.salesTaxId;
+      if (salesTaxId) {
+        const taxRate = Array.isArray(salesTaxes) 
+          ? salesTaxes.find((tax: any) => tax.id === salesTaxId)?.rate || 0
+          : 0;
+        taxAmount += (item.amount || 0) * (taxRate / 100);
+      }
+    });
+    form.setValue("taxAmount", taxAmount);
     
-    if (salesTaxes) {
-      items.forEach(item => {
-        if (item.salesTaxId) {
-          const tax = salesTaxes.find(t => t.id === item.salesTaxId);
-          if (tax) {
-            const itemTax = (item.amount || 0) * (tax.rate / 100);
-            calculatedTaxAmount += itemTax;
-            
-            if (!taxNamesArray.includes(tax.name)) {
-              taxNamesArray.push(tax.name);
-            }
-          }
-        }
-      });
+    // Calculate total amount
+    form.setValue("totalAmount", subTotal + taxAmount);
+  };
+
+  // Watch for changes to line items and recalculate totals
+  React.useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name?.includes('lineItems')) {
+        calculateTotals();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form.watch, salesTaxes]);
+
+  // Add new line item
+  const addLineItem = () => {
+    append({
+      description: "",
+      quantity: 1,
+      unitPrice: 0,
+      amount: 0,
+      salesTaxId: 0
+    });
+  };
+
+  // Handle item selection
+  const handleProductSelect = (index: number, productId: number) => {
+    if (!productId) return;
+    
+    const product = Array.isArray(products) 
+      ? products.find((p: any) => p.id === productId) 
+      : null;
+    if (!product) return;
+
+    const currentValues = form.getValues(`lineItems.${index}`);
+    form.setValue(`lineItems.${index}.description`, product.name);
+    form.setValue(`lineItems.${index}.unitPrice`, product.price || 0);
+    form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId || 0);
+    
+    // Recalculate amount
+    const amount = (product.price || 0) * currentValues.quantity;
+    form.setValue(`lineItems.${index}.amount`, amount);
+    
+    // Update totals
+    calculateTotals();
+  };
+
+  // Calculate amount when quantity or unit price changes
+  const updateLineItemAmount = (index: number) => {
+    const lineItem = form.getValues(`lineItems.${index}`);
+    const amount = (lineItem.quantity || 0) * (lineItem.unitPrice || 0);
+    form.setValue(`lineItems.${index}.amount`, amount);
+    calculateTotals();
+  };
+
+  // Set due date based on payment terms
+  const updateDueDate = (terms: PaymentTerms) => {
+    const currentDate = form.getValues("date");
+    if (!currentDate) return;
+    
+    const dueDate = new Date(currentDate);
+    if (terms === 'custom') {
+      // Don't update, let user pick
+      return;
     }
     
-    setTaxAmount(calculatedTaxAmount);
-    setTotalAmount(calculatedSubTotal + calculatedTaxAmount);
-    setTaxNames(taxNamesArray);
-    
-    // Update form fields
-    form.setValue('subTotal', calculatedSubTotal);
-    form.setValue('taxAmount', calculatedTaxAmount);
-    form.setValue('totalAmount', calculatedSubTotal + calculatedTaxAmount);
-  }, [form.watch('lineItems'), salesTaxes]);
+    // Add days to current date
+    dueDate.setDate(dueDate.getDate() + parseInt(terms));
+    form.setValue("dueDate", dueDate);
+  };
 
-  const updateInvoice = useMutation({
+  // Toggle section expansion
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  // Handle form submission
+  const invoiceMutation = useMutation({
     mutationFn: async (data: Invoice) => {
-      console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
-      return await apiRequest(`/api/invoices/${invoice.id}`, 'PATCH', data);
+      const url = `/api/invoices/${invoice.id || 0}`;
+      const options = {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      };
+      return apiRequest(url, options);
     },
     onSuccess: () => {
       toast({
         title: "Invoice updated",
-        description: "Invoice has been updated successfully",
-        variant: "default",
+        description: "Invoice was successfully updated.",
       });
       
+      // Invalidate relevant queries
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
       
-      if (sendInvoiceEmail && selectedContact?.email) {
-        toast({
-          title: "Invoice sent",
-          description: `Invoice has been sent to ${selectedContact.email}`,
-        });
-      }
+      // Call success callback
+      if (onSuccess) onSuccess();
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       console.error("Error updating invoice:", error);
       toast({
         title: "Error updating invoice",
-        description: error?.message || "There was a problem updating the invoice. Please try again.",
+        description: error.message || "There was an error updating the invoice. Please try again.",
         variant: "destructive",
       });
     }
   });
 
   const onSubmit = (data: Invoice) => {
-    // Enrich data with calculated values
-    const enrichedData = {
+    setIsSubmitting(true);
+    
+    // Format dates for API
+    const submissionData = {
       ...data,
-      subTotal,
-      taxAmount,
-      totalAmount,
-      dueDate,
-      paymentTerms,
+      // Pass the dates as they are - the API will handle conversion
     };
-    
-    console.log("Form data before submit:", enrichedData);
-    
-    updateInvoice.mutate(enrichedData);
-  };
 
-  // Calculate line item amount when quantity or unit price changes
-  const calculateLineItemAmount = (index: number) => {
-    const values = form.getValues();
-    const lineItem = values.lineItems[index];
-    const amount = lineItem.quantity * lineItem.unitPrice;
-    form.setValue(`lineItems.${index}.amount`, amount);
-  };
-
-  // Handle payment terms change
-  const handlePaymentTermsChange = (value: string) => {
-    setPaymentTerms(value as PaymentTerms);
-    const days = parseInt(value);
-    if (!isNaN(days)) {
-      setDueDate(addDays(form.getValues().date, days));
-    }
-  };
-
-  // Find product by ID
-  const findProduct = (productId: number) => {
-    return typedProducts.find(p => p.id === productId);
+    invoiceMutation.mutate(submissionData as any);
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="h-screen flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b px-4 py-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-medium">Edit Invoice - {invoice.reference}</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="icon">
-              <Settings className="h-5 w-5 text-gray-500" />
+    <div className="h-full flex flex-col bg-gray-50">
+      <div className="bg-white shadow-sm z-10">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-semibold text-gray-900">Edit Invoice</h1>
+          <div className="flex space-x-2">
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
             </Button>
-            <Button type="button" variant="ghost" size="icon">
-              <HelpCircle className="h-5 w-5 text-gray-500" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={onCancel}>
-              <XIcon className="h-5 w-5 text-gray-500" />
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={form.handleSubmit(onSubmit)}
+            >
+              {isSubmitting ? "Saving..." : "Save Invoice"}
             </Button>
           </div>
         </div>
-        
-        {/* Main content */}
-        <div className="flex-1 overflow-auto bg-gray-50 p-6">
-          <div className="max-w-5xl mx-auto">
-            {/* Invoice Form */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              {/* Customer info section */}
-              <div className="p-6 border-b">
-                <h2 className="text-lg font-medium mb-4">Customer Information</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <FormField
-                      control={form.control}
-                      name="contactId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-medium">Customer</FormLabel>
-                          <FormControl>
+        <Tabs
+          value={selectedTab}
+          onValueChange={setSelectedTab}
+          className="container mx-auto px-4 sm:px-6 lg:px-8"
+        >
+          <TabsList className="grid grid-cols-2 w-60">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="accounting">Accounting</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div className="flex-grow overflow-auto">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <TabsContent value="details" className="space-y-6 mt-0">
+                {/* Customer Section */}
+                <Card>
+                  <div 
+                    className="px-6 py-4 flex justify-between items-center cursor-pointer"
+                    onClick={() => toggleSection('customer')}
+                  >
+                    <h3 className="text-lg font-medium">Customer</h3>
+                    {expandedSections.customer ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                  {expandedSections.customer && (
+                    <CardContent className="pt-0">
+                      <FormField
+                        control={form.control}
+                        name="contactId"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Customer</FormLabel>
                             <Select
-                              value={field.value?.toString()}
-                              onValueChange={(value) => {
-                                field.onChange(parseInt(value));
-                                const contact = contacts?.find(c => c.id === parseInt(value));
-                                setSelectedContact(contact || null);
-                              }}
-                              disabled={contactsLoading}
+                              onValueChange={(value) => field.onChange(parseInt(value))}
+                              value={field.value?.toString() || ""}
                             >
-                              <SelectTrigger className="bg-white border-gray-300">
-                                <SelectValue placeholder="Select a customer" />
-                              </SelectTrigger>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a customer" />
+                                </SelectTrigger>
+                              </FormControl>
                               <SelectContent>
-                                {contacts?.map((contact) => (
+                                <SelectItem value="0">None</SelectItem>
+                                {contacts.map((contact) => (
                                   <SelectItem key={contact.id} value={contact.id.toString()}>
-                                    {contact.name}
+                                    {contact.name} {contact.company ? `(${contact.company})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    {selectedContact && (
-                      <div className="mt-2 text-sm text-gray-600">
-                        <p>{selectedContact.contactName}</p>
-                        <p>{selectedContact.email}</p>
-                        <p>{selectedContact.phone}</p>
-                        <p>{selectedContact.address}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="flex flex-col gap-4">
-                      <FormField
-                        control={form.control}
-                        name="date"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-col">
-                            <FormLabel className="text-sm font-medium">Invoice Date</FormLabel>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Button
-                                    variant="outline"
-                                    className="bg-white border-gray-300 text-left font-normal"
-                                  >
-                                    {field.value ? (
-                                      format(field.value, "PPP")
-                                    ) : (
-                                      <span>Pick a date</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4" />
-                                  </Button>
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value}
-                                  onSelect={(date) => {
-                                    field.onChange(date);
-                                    // Update due date based on payment terms
-                                    if (date && paymentTerms !== 'custom') {
-                                      const days = parseInt(paymentTerms);
-                                      setDueDate(addDays(date, days));
-                                    }
-                                  }}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <FormLabel className="text-sm font-medium block mb-1">Payment Terms</FormLabel>
-                          <Select
-                            value={paymentTerms}
-                            onValueChange={handlePaymentTermsChange}
-                          >
-                            <SelectTrigger className="bg-white border-gray-300">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="7">Net 7</SelectItem>
-                              <SelectItem value="14">Net 14</SelectItem>
-                              <SelectItem value="30">Net 30</SelectItem>
-                              <SelectItem value="60">Net 60</SelectItem>
-                              <SelectItem value="custom">Custom</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div>
-                          <FormLabel className="text-sm font-medium block mb-1">Due Date</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-full bg-white border-gray-300 text-left font-normal justify-start"
-                              >
-                                {format(dueDate, "PPP")}
-                                <CalendarIcon className="ml-auto h-4 w-4" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={dueDate}
-                                onSelect={(date) => {
-                                  if (date) {
-                                    setDueDate(date);
-                                    setPaymentTerms('custom');
-                                  }
-                                }}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
+                    </CardContent>
+                  )}
+                </Card>
+
+                {/* Invoice Details Section */}
+                <Card>
+                  <div 
+                    className="px-6 py-4 flex justify-between items-center cursor-pointer"
+                    onClick={() => toggleSection('invoice')}
+                  >
+                    <h3 className="text-lg font-medium">Invoice Details</h3>
+                    {expandedSections.invoice ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                  {expandedSections.invoice && (
+                    <CardContent className="pt-0 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField
                           control={form.control}
                           name="reference"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-sm font-medium">Invoice Number</FormLabel>
+                              <FormLabel>Invoice Number</FormLabel>
                               <FormControl>
-                                <Input 
-                                  className="bg-white border-gray-300" 
-                                  {...field}
-                                />
+                                <Input {...field} />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        
+
                         <FormField
                           control={form.control}
                           name="status"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-sm font-medium">Status</FormLabel>
+                              <FormLabel>Status</FormLabel>
                               <Select
-                                value={field.value}
                                 onValueChange={field.onChange}
+                                value={field.value}
                               >
-                                <SelectTrigger className="bg-white border-gray-300">
-                                  <SelectValue />
-                                </SelectTrigger>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                </FormControl>
                                 <SelectContent>
                                   <SelectItem value="draft">Draft</SelectItem>
                                   <SelectItem value="pending">Pending</SelectItem>
                                   <SelectItem value="paid">Paid</SelectItem>
-                                  <SelectItem value="overdue">Overdue</SelectItem>
+                                  <SelectItem value="cancelled">Cancelled</SelectItem>
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -429,347 +407,403 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                           )}
                         />
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* File upload section */}
-              <div className="p-6 border-b">
-                <FormLabel className="text-sm font-medium block mb-1">Attach documents</FormLabel>
-                <div className="border border-dashed border-gray-300 rounded p-4 text-center">
-                  <div className="relative inline-block">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      className="mb-2"
-                      onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                    >
-                      Select files
-                    </Button>
-                    <input
-                      type="file"
-                      id="file-upload-invoice"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => {
-                        // Handle file selection here
-                        console.log("Files selected:", e.target.files);
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    PDF, Word, Excel, or image files
-                  </p>
-                </div>
-              </div>
-              
-              {/* Line items section */}
-              <div className="p-6 border-b">
-                <h2 className="text-lg font-medium mb-4">Items</h2>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/5">
-                          Description
-                        </th>
-                        <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Qty
-                        </th>
-                        <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Price
-                        </th>
-                        <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Tax
-                        </th>
-                        <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Amount
-                        </th>
-                        <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {fields.map((field, index) => (
-                        <tr key={field.id}>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-col space-y-1">
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Date</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant={"outline"}
+                                      className={cn(
+                                        "pl-3 text-left font-normal",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {field.value ? (
+                                        format(field.value, "PP")
+                                      ) : (
+                                        <span>Pick a date</span>
+                                      )}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="paymentTerms"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Payment Terms</FormLabel>
+                              <Select
+                                onValueChange={(value) => {
+                                  field.onChange(value);
+                                  updateDueDate(value as PaymentTerms);
+                                }}
+                                value={field.value?.toString()}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select terms" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="7">Net 7 Days</SelectItem>
+                                  <SelectItem value="14">Net 14 Days</SelectItem>
+                                  <SelectItem value="30">Net 30 Days</SelectItem>
+                                  <SelectItem value="60">Net 60 Days</SelectItem>
+                                  <SelectItem value="custom">Custom</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="dueDate"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                              <FormLabel>Due Date</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant={"outline"}
+                                      className={cn(
+                                        "pl-3 text-left font-normal",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      {field.value ? (
+                                        format(field.value, "PP")
+                                      ) : (
+                                        <span>Pick a date</span>
+                                      )}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} rows={2} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </CardContent>
+                  )}
+                </Card>
+
+                {/* Line Items Section */}
+                <Card>
+                  <CardContent className="p-0">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-5/12">Item Description</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">Quantity</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">Price</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">Tax</th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">Amount</th>
+                          <th className="px-6 py-3 text-right w-1/12"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {fields.map((field, index) => (
+                          <tr key={field.id}>
+                            <td className="px-6 py-4">
+                              <div className="space-y-1">
+                                <Select
+                                  onValueChange={(value) => handleProductSelect(index, parseInt(value))}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select product/service" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">Custom Item</SelectItem>
+                                    {products.map((product) => (
+                                      <SelectItem key={product.id} value={product.id.toString()}>
+                                        {product.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                
+                                <FormField
+                                  control={form.control}
+                                  name={`lineItems.${index}.description`}
+                                  render={({ field }) => (
+                                    <FormItem className="mb-0">
+                                      <FormControl>
+                                        <Input {...field} placeholder="Description" />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            </td>
+                            
+                            <td className="px-6 py-4 text-right">
                               <FormField
                                 control={form.control}
-                                name={`lineItems.${index}.description`}
+                                name={`lineItems.${index}.quantity`}
                                 render={({ field }) => (
-                                  <FormControl>
-                                    <div className="relative">
-                                      <Input 
-                                        className="bg-white border-gray-300" 
-                                        placeholder="Enter item description" 
-                                        {...field} 
+                                  <FormItem className="mb-0">
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        type="number" 
+                                        min="0" 
+                                        step="1"
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value) || 0);
+                                          updateLineItemAmount(index);
+                                        }}
+                                        className="text-right" 
                                       />
-                                      <div className="absolute inset-y-0 right-0 flex items-center">
-                                        <Select
-                                          onValueChange={(value) => {
-                                            const product = findProduct(parseInt(value));
-                                            if (product) {
-                                              form.setValue(`lineItems.${index}.description`, product.name);
-                                              form.setValue(`lineItems.${index}.unitPrice`, product.price);
-                                              form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
-                                              calculateLineItemAmount(index);
-                                            }
-                                          }}
-                                        >
-                                          <SelectTrigger className="border-0 bg-transparent h-9 w-[35px] p-0 focus:ring-0">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {typedProducts.map((product) => (
-                                              <SelectItem key={product.id} value={product.id.toString()}>
-                                                {product.name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    </div>
-                                  </FormControl>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
                                 )}
                               />
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <FormField
-                              control={form.control}
-                              name={`lineItems.${index}.quantity`}
-                              render={({ field }) => (
-                                <FormControl>
-                                  <Input 
-                                    className="bg-white border-gray-300 w-20" 
-                                    type="number" 
-                                    min="1" 
-                                    {...field} 
-                                    onChange={(e) => {
-                                      field.onChange(parseFloat(e.target.value));
-                                      calculateLineItemAmount(index);
-                                    }}
-                                  />
-                                </FormControl>
-                              )}
-                            />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <FormField
-                              control={form.control}
-                              name={`lineItems.${index}.unitPrice`}
-                              render={({ field }) => (
-                                <FormControl>
-                                  <Input 
-                                    className="bg-white border-gray-300 w-24" 
-                                    type="number" 
-                                    min="0" 
-                                    step="0.01" 
-                                    {...field} 
-                                    onChange={(e) => {
-                                      field.onChange(parseFloat(e.target.value));
-                                      calculateLineItemAmount(index);
-                                    }}
-                                  />
-                                </FormControl>
-                              )}
-                            />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <FormField
-                              control={form.control}
-                              name={`lineItems.${index}.salesTaxId`}
-                              render={({ field }) => (
-                                <FormControl>
-                                  <Select
-                                    value={field.value?.toString() || "0"}
-                                    onValueChange={(value) => {
-                                      field.onChange(value === "0" ? undefined : parseInt(value));
-                                    }}
-                                    disabled={salesTaxesLoading}
-                                  >
-                                    <SelectTrigger className="bg-white border-gray-300 w-32">
-                                      <SelectValue placeholder="No tax" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="0">No tax</SelectItem>
-                                      {salesTaxes?.map((tax) => (
-                                        <SelectItem key={tax.id} value={tax.id.toString()}>
-                                          {tax.name} ({tax.rate}%)
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </FormControl>
-                              )}
-                            />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap">
-                            <FormField
-                              control={form.control}
-                              name={`lineItems.${index}.amount`}
-                              render={({ field }) => (
-                                <FormControl>
-                                  <Input 
-                                    className="bg-white border-gray-300 w-24" 
-                                    readOnly 
-                                    value={field.value?.toFixed(2) || "0.00"} 
-                                  />
-                                </FormControl>
-                              )}
-                            />
-                          </td>
-                          <td className="px-3 py-2 whitespace-nowrap text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-9 w-9 p-0 text-red-500"
-                              onClick={() => {
-                                if (fields.length > 1) {
-                                  remove(index);
-                                }
-                              }}
-                              disabled={fields.length <= 1}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Remove</span>
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                <div className="mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-primary"
-                    onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined })}
+                            </td>
+                            
+                            <td className="px-6 py-4 text-right">
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.unitPrice`}
+                                render={({ field }) => (
+                                  <FormItem className="mb-0">
+                                    <FormControl>
+                                      <Input
+                                        {...field}
+                                        type="number" 
+                                        min="0" 
+                                        step="0.01"
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value) || 0);
+                                          updateLineItemAmount(index);
+                                        }}
+                                        className="text-right" 
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </td>
+                            
+                            <td className="px-6 py-4 text-right">
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.salesTaxId`}
+                                render={({ field }) => (
+                                  <FormItem className="mb-0">
+                                    <Select
+                                      onValueChange={(value) => {
+                                        field.onChange(parseInt(value));
+                                        calculateTotals();
+                                      }}
+                                      value={field.value?.toString() || "0"}
+                                    >
+                                      <FormControl>
+                                        <SelectTrigger>
+                                          <SelectValue placeholder="No Tax" />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        <SelectItem value="0">No Tax</SelectItem>
+                                        {salesTaxes.map((tax) => (
+                                          <SelectItem key={tax.id} value={tax.id.toString()}>
+                                            {tax.name} ({tax.rate}%)
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </td>
+                            
+                            <td className="px-6 py-4 text-right">
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.amount`}
+                                render={({ field }) => (
+                                  <FormItem className="mb-0">
+                                    <FormControl>
+                                      <Input 
+                                        {...field} 
+                                        readOnly
+                                        value={field.value?.toFixed(2) || "0.00"}
+                                        className="text-right bg-gray-50" 
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </td>
+                            
+                            <td className="px-6 py-4 text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => remove(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete</span>
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    
+                    <div className="px-6 py-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addLineItem}
+                        className="flex items-center"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Line
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Invoice Summary Section */}
+                <Card>
+                  <div 
+                    className="px-6 py-4 flex justify-between items-center cursor-pointer"
+                    onClick={() => toggleSection('summary')}
                   >
-                    <Plus className="h-4 w-4 mr-1" /> Add Item
-                  </Button>
-                </div>
-                
-                <div className="mt-6 flex justify-end">
-                  <div className="w-72">
-                    <div className="flex justify-between py-2 text-sm">
-                      <span className="font-medium text-gray-600">Subtotal:</span>
-                      <span>${subTotal.toFixed(2)}</span>
-                    </div>
-                    {taxAmount > 0 && (
-                      <div className="flex justify-between py-2 text-sm">
-                        <span className="font-medium text-gray-600">
-                          {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}:
-                        </span>
-                        <span>${taxAmount.toFixed(2)}</span>
+                    <h3 className="text-lg font-medium">Summary</h3>
+                    {expandedSections.summary ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                  {expandedSections.summary && (
+                    <CardContent className="pt-0">
+                      <div className="flex flex-col space-y-2">
+                        <div className="flex justify-between pt-4">
+                          <span className="font-medium">Subtotal</span>
+                          <span>
+                            ${form.watch("subTotal")?.toFixed(2) || "0.00"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span className="font-medium">Tax</span>
+                          <span>
+                            ${form.watch("taxAmount")?.toFixed(2) || "0.00"}
+                          </span>
+                        </div>
+
+                        <Separator className="my-2" />
+
+                        <div className="flex justify-between pt-2">
+                          <span className="text-lg font-semibold">Total</span>
+                          <span className="text-lg font-semibold">
+                            ${form.watch("totalAmount")?.toFixed(2) || "0.00"}
+                          </span>
+                        </div>
                       </div>
-                    )}
-                    <div className="flex justify-between py-2 text-base font-semibold border-t mt-2 pt-2">
-                      <span>Total:</span>
-                      <span>${totalAmount.toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Notes section */}
-              <div className="p-6">
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium">Notes</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          className="bg-white border-gray-300" 
-                          placeholder="Add any relevant notes or payment instructions" 
-                          {...field} 
-                        />
-                      </FormControl>
-                    </FormItem>
+                    </CardContent>
                   )}
-                />
-                
-                {selectedContact?.email && (
-                  <div className="mt-4 flex items-center space-x-2">
-                    <Checkbox 
-                      id="send-email" 
-                      className="data-[state=checked]:bg-primary"
-                      checked={sendInvoiceEmail}
-                      onCheckedChange={(value) => setSendInvoiceEmail(value === true)}
-                    />
-                    <label
-                      htmlFor="send-email"
-                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      Send to customer ({selectedContact.email})
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="accounting" className="space-y-6 mt-0">
+                {/* Accounting references would go here */}
+                <Card>
+                  <CardContent className="p-6">
+                    <p className="text-sm text-gray-500">
+                      This invoice will be recorded in the ledger according to the
+                      accounting settings. The entries are automatically generated based
+                      on the invoice details.
+                    </p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </form>
+          </Form>
         </div>
-        
-        {/* Footer - Save button section */}
-        <div className="bg-white border-t px-4 py-3 flex items-center justify-between sticky bottom-0 z-10">
-          <div className="flex items-center space-x-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onCancel}
-            >
+      </div>
+
+      {/* Fixed bottom panel */}
+      <div className="bg-white p-4 border-t border-gray-200 shadow-sm">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+          <div className="flex space-x-2">
+            <Button variant="outline" size="sm">
+              <File className="mr-2 h-4 w-4" />
+              Save as Draft
+            </Button>
+            <Button variant="outline" size="sm">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
+          </div>
+          <div className="flex space-x-2">
+            <Button variant="outline" onClick={onCancel}>
               Cancel
             </Button>
-            
-            <div className="text-sm text-gray-500">
-              Last edited on {format(new Date(), "MMMM d, yyyy 'at' h:mm a")}
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="text-primary border-primary"
-            >
-              Preview
-            </Button>
-            
-            {selectedContact?.email && (
-              <Button
-                type="submit"
-                className="bg-primary hover:bg-primary/90 text-white space-x-1"
-                onClick={() => {
-                  setSendInvoiceEmail(true);
-                  // Save the form will happen with submit
-                }}
-              >
-                <SendIcon className="h-4 w-4" />
-                <span>Send & Save</span>
-              </Button>
-            )}
-            
             <Button
               type="submit"
-              className="bg-primary hover:bg-primary/90 text-white"
-              disabled={updateInvoice.isPending}
+              disabled={isSubmitting}
+              onClick={form.handleSubmit(onSubmit)}
             >
-              {updateInvoice.isPending ? "Saving..." : "Save and Close"}
+              {isSubmitting ? "Saving..." : "Save Invoice"}
             </Button>
           </div>
         </div>
-      </form>
-    </Form>
+      </div>
+    </div>
   );
 }

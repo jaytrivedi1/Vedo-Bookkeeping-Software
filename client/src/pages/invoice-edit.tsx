@@ -1,52 +1,76 @@
 import React from "react";
-import { useRoute, useLocation } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import InvoiceFormEdit from "@/components/forms/InvoiceFormEdit";
-import { Transaction, LineItem } from "@shared/schema";
+import { Loader2 } from "lucide-react";
 
 interface InvoiceResponse {
-  transaction: Transaction;
-  lineItems: LineItem[];
+  transaction: any;
+  lineItems: any[];
   ledgerEntries: any[];
 }
 
 export default function EditInvoice() {
   const [, setLocation] = useLocation();
-  const [, params] = useRoute<{ id: string }>("/invoice-edit/:id");
-  const invoiceId = params?.id ? parseInt(params.id) : null;
+  const params = useParams();
+  const invoiceId = params.id;
 
-  // Get transaction data including line items
-  const { data, isLoading } = useQuery<InvoiceResponse>({
+  // Fetch invoice data
+  const { data, isLoading, error } = useQuery<InvoiceResponse>({
     queryKey: ['/api/transactions', invoiceId],
     queryFn: async () => {
-      if (!invoiceId) return null;
       const response = await fetch(`/api/transactions/${invoiceId}`);
-      if (!response.ok) throw new Error("Failed to fetch invoice data");
+      if (!response.ok) {
+        throw new Error("Failed to fetch invoice");
+      }
       return response.json();
     },
-    enabled: !!invoiceId
   });
 
-  // Navigate back to invoices after success or cancel
-  const handleSuccess = () => {
-    setLocation("/invoices");
-  };
-
   if (isLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading invoice data...</div>;
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading invoice...</span>
+      </div>
+    );
   }
 
-  if (!data || data.transaction.type !== 'invoice') {
-    return <div className="flex items-center justify-center h-screen">Invoice not found or invalid type</div>;
+  if (error) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-destructive">
+        <p className="text-lg">Error loading invoice: {String(error)}</p>
+        <button
+          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
+          onClick={() => setLocation("/invoices")}
+        >
+          Back to Invoices
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center">
+        <p className="text-lg">Invoice not found</p>
+        <button
+          className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
+          onClick={() => setLocation("/invoices")}
+        >
+          Back to Invoices
+        </button>
+      </div>
+    );
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      <InvoiceFormEdit 
+    <div className="h-full">
+      <InvoiceFormEdit
         invoice={data.transaction}
-        lineItems={data.lineItems || []}
-        onSuccess={handleSuccess} 
-        onCancel={() => setLocation("/invoices")} 
+        lineItems={data.lineItems}
+        onSuccess={() => setLocation("/invoices")}
+        onCancel={() => setLocation("/invoices")}
       />
     </div>
   );
