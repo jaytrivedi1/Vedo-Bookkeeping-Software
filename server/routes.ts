@@ -18,8 +18,7 @@ import {
   journalEntrySchema,
   depositSchema,
   Transaction,
-  salesTaxSchema,
-  salesTaxComponentsSchema
+  salesTaxSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
@@ -847,7 +846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
               .execute();
               
-            console.log(`Created component tax: ${component.name}`, childTaxResult);
+            console.log(`Created component tax: ${component.name} with accountId: ${component.accountId}`, childTaxResult);
           }
           
           console.log("All component taxes saved successfully");
@@ -889,10 +888,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log("Processing component taxes:", componentTaxes);
         
         try {
-          // First, delete all existing components for this tax
+          // First, delete all existing components for this tax by querying the sales_taxes table
+          // Components are stored as child entries in the sales_taxes table with parentId field
           await db
-            .delete(salesTaxComponentsSchema)
-            .where(eq(salesTaxComponentsSchema.parentTaxId, id))
+            .delete(salesTaxSchema)
+            .where(eq(salesTaxSchema.parentId, id))
             .execute();
           
           console.log("Deleted existing component taxes for parent ID:", id);
@@ -902,7 +902,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const component = componentTaxes[index];
             console.log(`Processing component ${index}:`, component);
             
-            // Create child tax in the main sales_taxes table first
+            // Create child tax in the main sales_taxes table
             const childTaxResult = await db
               .insert(salesTaxSchema)
               .values({
@@ -917,7 +917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               })
               .execute();
               
-            console.log(`Created/updated component tax: ${component.name}`, childTaxResult);
+            console.log(`Created component tax: ${component.name} with accountId: ${component.accountId}`, childTaxResult);
           }
           
           console.log("All component taxes saved successfully");
