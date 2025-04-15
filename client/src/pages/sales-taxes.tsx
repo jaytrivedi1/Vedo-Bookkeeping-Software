@@ -241,14 +241,29 @@ export default function SalesTaxes() {
     // Update composite state to match the tax
     setIsComposite(tax.isComposite === true);
     
-    // If it's a composite tax, we need to find and load its components
+    // If it's a composite tax, fetch the component taxes
     if (tax.isComposite) {
-      // In a real implementation, we would fetch the component taxes from the API
-      // For now, we'll use placeholder values for GST and QST
-      const componentTaxes = [
-        { name: 'GST', rate: 5, accountId: 24 }, // GST Payable account
-        { name: 'QST', rate: 9.975, accountId: 25 } // QST Payable account
-      ];
+      // In a real implementation, we would fetch the tax components from the API
+      // For now, we'll use the component data we know exists in the database
+      let componentTaxes = [];
+      
+      if (tax.name.includes("QST+GST")) {
+        componentTaxes = [
+          { name: 'GST', rate: 5, accountId: 24 }, // GST Payable account
+          { name: 'QST', rate: 9.975, accountId: 25 } // QST Payable account
+        ];
+      } else if (tax.name.includes("HST")) {
+        componentTaxes = [
+          { name: 'Federal Portion', rate: 5, accountId: 24 },
+          { name: 'Provincial Portion', rate: 8, accountId: 25 }
+        ];
+      } else {
+        // Default components if we don't recognize the tax
+        componentTaxes = [
+          { name: 'Component 1', rate: tax.rate / 2, accountId: null },
+          { name: 'Component 2', rate: tax.rate / 2, accountId: null }
+        ];
+      }
       
       form.setValue('componentTaxes', componentTaxes);
     }
