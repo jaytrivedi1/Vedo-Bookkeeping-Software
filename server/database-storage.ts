@@ -1,8 +1,11 @@
 import { db } from "./db";
 import { 
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
+  CompanySettings, Preferences,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
-  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema
+  InsertCompanySettings, InsertPreferences,
+  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
+  companySchema, preferencesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -412,5 +415,69 @@ export class DatabaseStorage implements IStorage {
   async deleteProduct(id: number): Promise<boolean> {
     const result = await db.delete(productsSchema).where(eq(productsSchema.id, id));
     return result.rowCount !== null && result.rowCount > 0;
+  }
+
+  // Company Settings
+  async getCompanySettings(): Promise<CompanySettings | undefined> {
+    const result = await db.select().from(companySchema);
+    return result[0];
+  }
+
+  async saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings> {
+    // Check if company settings already exist
+    const existing = await this.getCompanySettings();
+    
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db.update(companySchema)
+        .set({
+          ...settings,
+          updatedAt: new Date()
+        })
+        .where(eq(companySchema.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new settings
+      const [newSettings] = await db.insert(companySchema)
+        .values({
+          ...settings,
+          updatedAt: new Date()
+        })
+        .returning();
+      return newSettings;
+    }
+  }
+
+  // User Preferences
+  async getPreferences(): Promise<Preferences | undefined> {
+    const result = await db.select().from(preferencesSchema);
+    return result[0];
+  }
+
+  async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
+    // Check if preferences already exist
+    const existing = await this.getPreferences();
+    
+    if (existing) {
+      // Update existing preferences
+      const [updated] = await db.update(preferencesSchema)
+        .set({
+          ...preferences,
+          updatedAt: new Date()
+        })
+        .where(eq(preferencesSchema.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new preferences
+      const [newPreferences] = await db.insert(preferencesSchema)
+        .values({
+          ...preferences,
+          updatedAt: new Date()
+        })
+        .returning();
+      return newPreferences;
+    }
   }
 }
