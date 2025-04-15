@@ -178,6 +178,9 @@ export const salesTaxSchema = pgTable('sales_taxes', {
   rate: doublePrecision('rate').notNull().default(0),
   accountId: integer('account_id').references(() => accounts.id),
   isActive: boolean('is_active').default(true),
+  isComposite: boolean('is_composite').default(false),
+  parentId: integer('parent_id').references(() => salesTaxSchema.id),
+  displayOrder: integer('display_order').default(0),
 });
 
 export const insertSalesTaxSchema = createInsertSchema(salesTaxSchema).omit({ id: true });

@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { seed } from "./seed";
 import migrateLineItems from "./migrate-line-items";
 import { migrateCompanyTable } from "./migrate-company";
+import migrateSalesTaxComponents from "./migrate-sales-tax-components";
 
 const app = express();
 app.use(express.json());
@@ -51,6 +52,9 @@ app.use((req, res, next) => {
     
     // Run company table migration to create companies and set up default company
     await migrateCompanyTable();
+    
+    // Run sales tax components migration for multi-component taxes (GST+QST)
+    await migrateSalesTaxComponents();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
