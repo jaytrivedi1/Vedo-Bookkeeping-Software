@@ -55,15 +55,15 @@ export default function PaymentView() {
     queryKey: ['/api/transactions', paymentId],
     queryFn: async () => {
       // Use apiRequest from queryClient to ensure proper error handling
-      const response = await apiRequest('GET', `/api/transactions/${paymentId}`);
-      return response.json();
+      const response = await apiRequest(`/api/transactions/${paymentId}`, 'GET');
+      return response;
     },
   });
   
   // Update payment mutation
   const updatePaymentMutation = useMutation({
     mutationFn: async (updatedPayment: any) => {
-      return await apiRequest('PATCH', `/api/transactions/${paymentId}`, updatedPayment);
+      return await apiRequest(`/api/transactions/${paymentId}`, 'PATCH', updatedPayment);
     },
     onSuccess: () => {
       toast({
