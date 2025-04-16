@@ -752,12 +752,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Update invoice balance and status
           // Calculate the new balance by subtracting payment from current balance
-          // Make sure balance can't go below 0 (overpayment protection)
-          const currentBalance = invoice.balance || invoice.amount || 0;
+          // Make sure we're working with the correct current balance
+          const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
+            ? invoice.balance 
+            : invoice.amount;
+          
+          // Don't allow negative balances (overpayment protection)
           const newBalance = Math.max(0, currentBalance - item.amount);
           
-          // Use 'partial' status for partially paid invoices, 'paid' for fully paid
-          const newStatus = newBalance <= 0 ? 'paid' : 'partial';
+          // For status, use 'paid' when balance is 0, 'partial' otherwise
+          // This ensures correct status for partially paid invoices
+          const newStatus = newBalance === 0 ? 'paid' : 'partial';
           
           console.log(`Updating invoice #${invoice.id} balance from ${currentBalance} to ${newBalance}, status: ${newStatus}`);
           
