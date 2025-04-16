@@ -285,9 +285,18 @@ export default function PaymentView() {
   const contact = contacts?.find(c => c.id === payment.contactId);
   const depositAccount = accounts?.find(a => a.id === selectedDepositAccountId);
   
-  // Calculate totals
-  const totalReceived = payment.amount;
-  const totalApplied = invoicePayments.reduce((sum, p) => sum + p.amount, 0);
+  // Calculate totals from current values
+  const totalReceived = isEditing 
+    ? parseFloat(amountReceived.replace(/,/g, '') || '0') || 0
+    : payment.amount;
+    
+  const totalApplied = invoicePayments.reduce((sum, p) => {
+    const amount = isEditing && p.amountString 
+      ? parseFloat(p.amountString.replace(/,/g, '') || '0') 
+      : p.amount;
+    return sum + (amount || 0);
+  }, 0);
+  
   const unappliedCredit = totalReceived - totalApplied;
 
   return (
