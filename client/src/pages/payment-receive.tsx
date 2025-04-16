@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { format } from "date-fns";
 import { 
-  CreditCard, 
   ArrowLeft,
   Save,
   Loader2,
@@ -23,7 +22,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -31,45 +29,68 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DatePicker } from "../components/ui/date-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import { AccountType, Account, Contact, Transaction } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { AccountType } from "@shared/schema";
 
+// Define the form schema for payment
 const paymentSchema = z.object({
-  contactId: z.coerce.number(),
-  date: z.date(),
-  paymentMethod: z.string().min(1, "Please select a payment method"),
+  contactId: z.number({
+    required_error: "Please select a customer",
+  }),
+  date: z.date({
+    required_error: "Please select a date",
+  }),
+  paymentMethod: z.string().optional(),
   reference: z.string().optional(),
-  depositAccountId: z.coerce.number(),
-  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  depositAccountId: z.number({
+    required_error: "Please select a deposit account",
+  }),
+  amount: z.number({
+    required_error: "Please enter an amount",
+  }).min(0.01, "Amount must be greater than 0"),
   note: z.string().optional(),
 });
 
-const paymentLineItemSchema = z.object({
-  transactionId: z.coerce.number(),
-  amount: z.coerce.number().min(0),
-  selected: z.boolean().default(false),
-});
-
+// Define types
 type PaymentFormValues = z.infer<typeof paymentSchema>;
-type PaymentLineItem = z.infer<typeof paymentLineItemSchema>;
+type PaymentLineItem = {
+  transactionId: number;
+  amount: number;
+  selected: boolean;
+};
 
 export default function PaymentReceive() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  
+  // Payment line items
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
-
+  
   // State for transaction ID when user clicks on an existing payment
   const [existingTransactionId, setExistingTransactionId] = useState<number | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoadingExistingPayment, setIsLoadingExistingPayment] = useState(false);
+  
+  // Create form
+  const form = useForm<PaymentFormValues>({
+    resolver: zodResolver(paymentSchema),
+    defaultValues: {
+      contactId: undefined,
+      date: new Date(),
+      paymentMethod: "",
+      reference: "",
+      amount: 0,
+      note: "",
+    },
+  });
   
   // Check URL for customer ID and transaction ID parameters
   useEffect(() => {
@@ -123,6 +144,8 @@ export default function PaymentReceive() {
       form.setValue('reference', paymentData.reference || '');
       form.setValue('amount', paymentData.amount);
       form.setValue('depositAccountId', paymentData.depositAccountId);
+      form.setValue('paymentMethod', paymentData.paymentMethod || '');
+      form.setValue('note', paymentData.note || '');
       
       // If the payment has line items, set those too
       if (paymentData.lineItems && paymentData.lineItems.length > 0) {
@@ -163,19 +186,6 @@ export default function PaymentReceive() {
   const depositAccounts = accounts?.filter(
     (account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
   ) || [];
-
-  // Create form
-  const form = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
-    defaultValues: {
-      contactId: initialCustomerId || undefined,
-      date: new Date(),
-      paymentMethod: "",
-      reference: "",
-      amount: 0,
-      note: "",
-    },
-  });
   
   // Set the customer ID in the form when initialCustomerId changes
   useEffect(() => {
@@ -200,19 +210,19 @@ export default function PaymentReceive() {
     enabled: !!watchContactId,
   });
 
-  // Reset payment line items when customer changes
+  // Reset payment line items when customer changes (but only in create mode)
   useEffect(() => {
-    if (customerInvoices && customerInvoices.length > 0) {
+    if (!isEditMode && customerInvoices && customerInvoices.length > 0) {
       const items = customerInvoices.map((invoice: any) => ({
         transactionId: invoice.id,
         amount: 0,
         selected: false,
       }));
       setPaymentLineItems(items);
-    } else {
+    } else if (!isEditMode) {
       setPaymentLineItems([]);
     }
-  }, [customerInvoices]);
+  }, [customerInvoices, isEditMode]);
 
   // Update totals when any value changes
   useEffect(() => {
@@ -319,7 +329,6 @@ export default function PaymentReceive() {
     }, 100);
   };
 
-  // Payment creation mutation
   // Payment create mutation
   const createPaymentMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -438,7 +447,7 @@ export default function PaymentReceive() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-semibold text-gray-900">Receive Payment</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">{isEditMode ? 'Edit Payment' : 'Receive Payment'}</h1>
           </div>
           <Button
             type="button"
@@ -473,7 +482,7 @@ export default function PaymentReceive() {
                         <Select 
                           onValueChange={(value) => field.onChange(parseInt(value))}
                           value={field.value?.toString() || ""}
-                          disabled={isContactsLoading}
+                          disabled={isContactsLoading || isEditMode}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -764,50 +773,30 @@ export default function PaymentReceive() {
                           </tbody>
                         </table>
                       </div>
-
-                      <div className="mt-6 rounded-md bg-gray-50 p-4">
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Total Received:</span>
-                          <span className="font-medium">
+                      
+                      {/* Payment Summary */}
+                      <div className="mt-6 text-right">
+                        <div className="text-sm text-gray-500">Total Applied: 
+                          <span className="ml-2 font-medium text-gray-900">
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500">Amount Received: 
+                          <span className="ml-2 font-medium text-gray-900">
                             {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center text-sm mt-2">
-                          <span>Total Applied:</span>
-                          <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                            {totalApplied > (watchAmount || 0) && (
-                              <span className="ml-2 text-xs">
-                                (exceeds received amount)
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <Separator className="my-3" />
-                        <div className="flex justify-between items-center font-medium">
-                          <span>Unapplied Credit:</span>
-                          <span className={
-                            totalApplied > (watchAmount || 0) 
-                              ? "text-red-600" 
-                              : unappliedCredit > 0 
-                                ? "text-green-600" 
-                                : ""
-                          }>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                              totalApplied > (watchAmount || 0) 
-                                ? (watchAmount || 0) - totalApplied // Show negative value
-                                : unappliedCredit
-                            )}
+                        <div className="text-sm font-medium">Unapplied Credit: 
+                          <span className={`ml-2 ${unappliedCredit > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
                           </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <Alert className="bg-blue-50 border-blue-200">
-                      <AlertDescription>
-                        No open invoices found for this customer.
-                      </AlertDescription>
-                    </Alert>
+                    <div className="text-center py-6 text-gray-500">
+                      No open invoices found for this customer.
+                    </div>
                   )}
                 </CardContent>
               </Card>
