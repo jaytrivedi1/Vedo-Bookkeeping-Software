@@ -69,7 +69,8 @@ export default function Invoices() {
       return sum + invoice.amount;
     }
     // For partially paid invoices, add the paid portion (original amount - balance)
-    else if (invoice.status === "pending" && invoice.balance !== null && invoice.balance !== undefined) {
+    else if ((invoice.status === "pending" || invoice.status === "partial") && 
+             invoice.balance !== null && invoice.balance !== undefined) {
       return sum + (invoice.amount - invoice.balance);
     }
     return sum;
@@ -77,10 +78,10 @@ export default function Invoices() {
   
   // Calculate pending amounts based on remaining balances
   const totalPending = invoices.reduce((sum, invoice) => {
-    if ((invoice.status === "pending" || invoice.status === "overdue") && 
+    if ((invoice.status === "pending" || invoice.status === "overdue" || invoice.status === "partial") && 
         invoice.balance !== null && invoice.balance !== undefined) {
       return sum + invoice.balance;
-    } else if ((invoice.status === "pending" || invoice.status === "overdue") && 
+    } else if ((invoice.status === "pending" || invoice.status === "overdue" || invoice.status === "partial") && 
                (invoice.balance === null || invoice.balance === undefined)) {
       return sum + invoice.amount;
     }

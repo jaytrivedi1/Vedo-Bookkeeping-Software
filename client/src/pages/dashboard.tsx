@@ -68,7 +68,7 @@ export default function Dashboard() {
   const unpaidInvoices = transactions
     ? transactions.filter(
         transaction => transaction.type === 'invoice' && 
-        (transaction.status === 'pending' || transaction.status === 'overdue')
+        (transaction.status === 'pending' || transaction.status === 'overdue' || transaction.status === 'partial')
       )
     : [];
   
