@@ -79,7 +79,13 @@ export default function CustomerList({ className }: CustomerListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedCustomer.id)
     : [];
     
-  // Filter invoices
+  // Filter transactions for the Invoices tab (invoices + payments)
+  const customerInvoicesAndPayments = customerTransactions
+    ? customerTransactions.filter(transaction => 
+        transaction.type === 'invoice' || transaction.type === 'payment')
+    : [];
+    
+  // Filter just invoices (for calculations and counts)
   const customerInvoices = customerTransactions
     ? customerTransactions.filter(transaction => transaction.type === 'invoice')
     : [];
@@ -207,7 +213,7 @@ export default function CustomerList({ className }: CustomerListProps) {
               <Tabs defaultValue="invoices" className="px-6">
                 <TabsList>
                   <TabsTrigger value="invoices">
-                    Invoices ({customerInvoices.length})
+                    Transactions ({customerInvoicesAndPayments.length})
                   </TabsTrigger>
                   <TabsTrigger value="expenses">
                     Expenses ({customerExpenses.length})
@@ -217,33 +223,62 @@ export default function CustomerList({ className }: CustomerListProps) {
                 <TabsContent value="invoices">
                   <div className="mt-4">
                     <ScrollArea className="h-[400px]">
-                      {customerInvoices.length === 0 ? (
+                      {customerInvoicesAndPayments.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
-                          No invoices found for this customer.
+                          No transactions found for this customer.
                         </div>
                       ) : (
                         <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Date</TableHead>
-                              <TableHead>Invoice #</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Reference</TableHead>
                               <TableHead>Amount</TableHead>
+                              <TableHead>Balance</TableHead>
                               <TableHead>Status</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {customerInvoices
+                            {customerInvoicesAndPayments
                               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((invoice) => (
-                                <TableRow key={invoice.id}>
-                                  <TableCell>
-                                    {format(new Date(invoice.date), "MMM dd, yyyy")}
-                                  </TableCell>
-                                  <TableCell>{invoice.reference}</TableCell>
-                                  <TableCell>{formatCurrency(invoice.amount)}</TableCell>
-                                  <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                                </TableRow>
-                              ))}
+                              .map((transaction) => {
+                                // Format transaction type for display
+                                const typeDisplay = transaction.type === 'invoice' 
+                                  ? 'Invoice'
+                                  : transaction.type === 'payment'
+                                    ? 'Payment'
+                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                
+                                // Only show balance for invoices, not for payments
+                                const showBalance = transaction.type === 'invoice';
+                                
+                                // For invoices, show "Open" badge if there's a balance
+                                const statusBadge = transaction.type === 'invoice' && 
+                                                   transaction.balance !== null && 
+                                                   transaction.balance !== undefined &&
+                                                   transaction.balance > 0 && 
+                                                   transaction.status !== 'draft'
+                                  ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
+                                  : getStatusBadge(transaction.status);
+                                  
+                                return (
+                                  <TableRow key={transaction.id}>
+                                    <TableCell>
+                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
+                                    </TableCell>
+                                    <TableCell>{typeDisplay}</TableCell>
+                                    <TableCell>{transaction.reference}</TableCell>
+                                    <TableCell>{formatCurrency(transaction.amount)}</TableCell>
+                                    <TableCell>
+                                      {showBalance && transaction.balance !== null 
+                                        ? formatCurrency(transaction.balance) 
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell>{statusBadge}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
                           </TableBody>
                         </Table>
                       )}
@@ -291,11 +326,24 @@ export default function CustomerList({ className }: CustomerListProps) {
               
               {/* Summary */}
               <div className="border-t mt-6 p-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
                     <p className="text-xl font-semibold">
                       {formatCurrency(customerInvoices.reduce((sum, i) => sum + i.amount, 0))}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Outstanding Balance</h3>
+                    <p className="text-xl font-semibold text-blue-700">
+                      {formatCurrency(customerInvoices.reduce((sum, i) => {
+                        // Add balance to the sum if it exists, otherwise add the full amount
+                        // This assumes invoices with no balance set are fully outstanding
+                        const outstandingAmount = (i.balance !== null && i.balance !== undefined) 
+                          ? i.balance 
+                          : i.amount;
+                        return sum + outstandingAmount;
+                      }, 0))}
                     </p>
                   </div>
                   <div>
