@@ -155,12 +155,11 @@ export default function PaymentReceive() {
       // If deselected, reset amount to 0
       if (!value) {
         updatedItems[index].amount = 0;
-      } else if (updatedItems[index].amount === 0) {
-        // If selected but amount is 0, auto-fill with remaining balance
+      } else {
+        // When selected, always auto-fill with the invoice balance
         const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-        const invoiceBalance = invoice?.balance || 0;
-        const remainingPaymentAmount = (watchAmount || 0) - totalApplied;
-        updatedItems[index].amount = Math.min(invoiceBalance, remainingPaymentAmount);
+        const invoiceBalance = invoice?.balance || invoice?.amount || 0;
+        updatedItems[index].amount = invoiceBalance;
       }
     }
     
@@ -537,7 +536,7 @@ export default function PaymentReceive() {
                                     disabled={!paymentLineItems[idx]?.selected}
                                     value={paymentLineItems[idx]?.amount || 0}
                                     onChange={(e) => 
-                                      handleLineItemChange(idx, 'amount', parseFloat(e.target.value) || 0)
+                                      handleLineItemChange(idx, 'amount', e.target.value ? parseFloat(e.target.value) : 0)
                                     }
                                     className="w-24"
                                   />
