@@ -307,6 +307,70 @@ export default function PaymentView() {
             <h1 className="text-2xl font-semibold text-gray-900">Payment Details</h1>
           </div>
           <div className="flex space-x-2">
+            {isEditing ? (
+              <Button
+                variant="default"
+                className="bg-primary text-white"
+                onClick={() => {
+                  // Make sure we have a valid amount
+                  const parsedAmount = parseFloat(amountReceived.replace(/,/g, ''));
+                  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+                    toast({
+                      title: "Invalid amount",
+                      description: "Please enter a valid amount greater than zero.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  // Make sure we have a valid deposit account
+                  if (!selectedDepositAccountId) {
+                    toast({
+                      title: "Missing deposit account",
+                      description: "Please select a deposit account.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  // Calculate total from invoice payments
+                  const totalAppliedFromInvoices = invoicePayments.reduce(
+                    (sum, p) => sum + (parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount || 0), 
+                    0
+                  );
+                  
+                  // Prepare the update data
+                  const updateData = {
+                    date: paymentDate,
+                    paymentMethod,
+                    reference: referenceNumber,
+                    amount: parsedAmount,
+                    description: notes,
+                    depositAccountId: selectedDepositAccountId,
+                    // Include invoice payment information for updating line items
+                    invoicePayments: invoicePayments.map(p => ({
+                      id: p.id,
+                      invoiceId: p.invoiceId,
+                      amount: parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount,
+                      invoiceReference: p.invoiceReference
+                    }))
+                  };
+                  
+                  // Submit the update
+                  updatePaymentMutation.mutate(updateData);
+                }}
+                disabled={updatePaymentMutation.isPending}
+              >
+                {updatePaymentMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               className="flex items-center"
@@ -484,73 +548,6 @@ export default function PaymentView() {
                 />
               )}
             </div>
-            
-            {isEditing && (
-              <div className="mt-6 flex justify-end">
-                <Button
-                  variant="default"
-                  className="bg-primary text-white"
-                  onClick={() => {
-                    // Make sure we have a valid amount
-                    const parsedAmount = parseFloat(amountReceived.replace(/,/g, ''));
-                    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-                      toast({
-                        title: "Invalid amount",
-                        description: "Please enter a valid amount greater than zero.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    
-                    // Make sure we have a valid deposit account
-                    if (!selectedDepositAccountId) {
-                      toast({
-                        title: "Missing deposit account",
-                        description: "Please select a deposit account.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    
-                    // Calculate total from invoice payments
-                    const totalAppliedFromInvoices = invoicePayments.reduce(
-                      (sum, p) => sum + (parseFloat(p.amountString?.replace(/,/g, '')) || p.amount || 0), 
-                      0
-                    );
-                    
-                    // Prepare the update data
-                    const updateData = {
-                      date: paymentDate,
-                      paymentMethod,
-                      reference: referenceNumber,
-                      amount: parsedAmount,
-                      description: notes,
-                      depositAccountId: selectedDepositAccountId,
-                      // Include invoice payment information for updating line items
-                      invoicePayments: invoicePayments.map(p => ({
-                        id: p.id,
-                        invoiceId: p.invoiceId,
-                        amount: parseFloat(p.amountString?.replace(/,/g, '')) || p.amount,
-                        invoiceReference: p.invoiceReference
-                      }))
-                    };
-                    
-                    // Submit the update
-                    updatePaymentMutation.mutate(updateData);
-                  }}
-                  disabled={updatePaymentMutation.isPending}
-                >
-                  {updatePaymentMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
 
