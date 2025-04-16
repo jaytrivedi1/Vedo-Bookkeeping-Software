@@ -155,11 +155,66 @@ export class DatabaseStorage implements IStorage {
           return false; // Transaction not found
         }
         
+        const transaction = transactionToDelete[0];
+        
         // Get the ledger entries to reverse account balances
         const ledgerEntriesToDelete = await tx
           .select()
           .from(ledgerEntries)
           .where(eq(ledgerEntries.transactionId, id));
+        
+        // Special handling for payments - need to update invoice balances
+        if (transaction.type === 'payment') {
+          console.log(`Deleting payment transaction: ${transaction.reference}`);
+          
+          // Find ledger entries related to Accounts Receivable (typically account ID 2)
+          // These entries indicate which invoices the payment was applied to
+          const invoicePaymentEntries = ledgerEntriesToDelete.filter(entry => 
+            entry.accountId === 2 && 
+            entry.credit > 0 && 
+            entry.description.includes('invoice')
+          );
+          
+          // Process each payment application to restore invoice balances
+          for (const entry of invoicePaymentEntries) {
+            // Extract invoice reference from description (e.g., "Payment applied to invoice #1002")
+            const invoiceRefMatch = entry.description.match(/invoice\s+#(\d+)/i);
+            
+            if (invoiceRefMatch && invoiceRefMatch[1]) {
+              const invoiceRef = invoiceRefMatch[1];
+              console.log(`Found payment applied to invoice: ${invoiceRef}`);
+              
+              // Find the invoice by reference number
+              const [invoice] = await tx
+                .select()
+                .from(transactions)
+                .where(
+                  and(
+                    eq(transactions.reference, invoiceRef),
+                    eq(transactions.type, 'invoice')
+                  )
+                );
+              
+              if (invoice) {
+                // Add the payment amount back to the invoice's balance
+                const newBalance = invoice.balance + entry.credit;
+                // If the invoice was paid and now has a balance, change status back to pending
+                const newStatus = newBalance > 0 && invoice.status === 'paid' ? 'pending' : invoice.status;
+                
+                console.log(`Updating invoice #${invoiceRef} balance from ${invoice.balance} to ${newBalance}, status from ${invoice.status} to ${newStatus}`);
+                
+                // Update the invoice
+                await tx
+                  .update(transactions)
+                  .set({ 
+                    balance: newBalance, 
+                    status: newStatus 
+                  })
+                  .where(eq(transactions.id, invoice.id));
+              }
+            }
+          }
+        }
         
         // Reverse the effect on account balances - subtract debits and add credits
         for (const entry of ledgerEntriesToDelete) {
