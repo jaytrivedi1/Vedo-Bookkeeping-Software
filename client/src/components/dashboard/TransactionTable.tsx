@@ -215,10 +215,14 @@ export default function TransactionTable({ transactions, loading = false, onDele
                         View
                       </Link>
                       
-                      {/* Edit button - only for invoices for now */}
-                      {transaction.type === 'invoice' && (
+                      {/* Edit buttons for transactions that support editing */}
+                      {(transaction.type === 'invoice' || transaction.type === 'payment') && (
                         <Link 
-                          href={`/invoice-edit/${transaction.id}`}
+                          href={
+                            transaction.type === 'invoice' 
+                              ? `/invoice-edit/${transaction.id}`
+                              : `/payment-receive/${transaction.id}`
+                          }
                           className="text-blue-500 hover:text-blue-600"
                         >
                           <Button
