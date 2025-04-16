@@ -32,6 +32,19 @@ interface InvoiceDetails {
   amount: number;
 }
 
+interface InvoicePayment {
+  id: number;
+  selected: boolean;
+  invoiceReference: string;
+  invoiceId?: number;
+  date: Date | null;
+  dueDate: Date | null;
+  amount: number;
+  amountString?: string;
+  balance: number;
+  originalTotal: number;
+}
+
 export default function PaymentView() {
   const [, navigate] = useLocation();
   const params = useParams();
@@ -45,9 +58,8 @@ export default function PaymentView() {
   const [selectedDepositAccountId, setSelectedDepositAccountId] = useState<number | null>(null);
   const [amountReceived, setAmountReceived] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
-  const [selectedInvoicePayments, setSelectedInvoicePayments] = useState<any[]>([]);
-  const [editableInvoicePayments, setEditableInvoicePayments] = useState<any[]>([]);
-
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
+  
   // Toast notifications
   const { toast } = useToast();
   
@@ -55,11 +67,15 @@ export default function PaymentView() {
   const { data, isLoading, error } = useQuery<PaymentResponse>({
     queryKey: ['/api/transactions', paymentId],
     queryFn: async () => {
-      // Use apiRequest from queryClient to ensure proper error handling
       const response = await apiRequest(`/api/transactions/${paymentId}`, 'GET');
       return response;
     },
   });
+  
+  // Fetch related data
+  const { data: contacts } = useQuery<Contact[]>({ queryKey: ['/api/contacts'] });
+  const { data: accounts } = useQuery<Account[]>({ queryKey: ['/api/accounts'] });
+  const { data: transactions } = useQuery<Transaction[]>({ queryKey: ['/api/transactions'] });
   
   // Update payment mutation
   const updatePaymentMutation = useMutation({
@@ -84,73 +100,158 @@ export default function PaymentView() {
     }
   });
   
-  // Initialize form state when data is loaded
-  useEffect(() => {
-    if (data?.transaction) {
-      const payment = data.transaction;
-      setPaymentDate(new Date(payment.date));
-      setPaymentMethod((payment as any).paymentMethod || 'bank_transfer');
-      setReferenceNumber(payment.reference || '');
-      
-      // Find deposit account ID from ledger entries
-      const depositEntry = data.ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
-      setSelectedDepositAccountId(depositEntry?.accountId || null);
-      
-      // Set amount received
-      setAmountReceived(payment.amount.toString());
-      
-      // Set description/notes
-      setNotes(payment.description || '');
-      
-      // Initialize invoice payments
-      const invoicePaymentsData = data.lineItems.map((item: any) => ({
-        ...item,
-        selected: true
-      }));
-      setSelectedInvoicePayments(invoicePaymentsData);
-    }
-  }, [data]);
-  
   // Function to handle updating payment amounts
   const handleUpdatePaymentAmount = (index: number, value: string) => {
-    const updatedPayments = [...editableInvoicePayments];
+    const updatedPayments = [...invoicePayments];
     updatedPayments[index] = {
       ...updatedPayments[index],
       amountString: value,
       amount: parseFloat(value.replace(/,/g, '')) || 0
     };
-    setEditableInvoicePayments(updatedPayments);
+    setInvoicePayments(updatedPayments);
   };
-  
-
-
-  // Fetch contacts for customer info
-  const { data: contacts } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
-  });
-
-  // Fetch accounts for account names
-  const { data: accounts } = useQuery<Account[]>({
-    queryKey: ['/api/accounts'],
-  });
-
-  // Fetch all transactions to get invoice details
-  const { data: transactions } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions'],
-  });
-  
-  // Get contact information
-  const contact = contacts?.find(c => c.id === data?.transaction?.contactId);
   
   // Format currency
   const formatCurrency = (amount: number) => {
-    // Without $ sign for display in inputs and table cells
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount);
   };
-
+  
+  // Process and setup invoice payments when data loads
+  useEffect(() => {
+    if (!data || !transactions) return;
+    
+    const payment = data.transaction;
+    const ledgerEntries = data.ledgerEntries || [];
+    const lineItems = data.lineItems || [];
+    
+    // Initialize form data 
+    setPaymentDate(new Date(payment.date));
+    setPaymentMethod((payment as any).paymentMethod || 'bank_transfer');
+    setReferenceNumber(payment.reference || '');
+    setAmountReceived(payment.amount.toString());
+    setNotes(payment.description || '');
+    
+    // Find deposit account ID from ledger entries
+    const deposit = ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
+    setSelectedDepositAccountId(deposit?.accountId || null);
+    
+    // Extract AR entries from ledger entries
+    const arEntries = ledgerEntries
+      .filter((entry: LedgerEntry) => entry.accountId === 2 && entry.credit > 0)
+      .map((entry: LedgerEntry) => {
+        const invoiceRefMatch = entry.description?.match(/invoice #?(\d+)/i);
+        return {
+          id: entry.id,
+          amount: entry.credit,
+          description: entry.description || '',
+          invoiceRef: invoiceRefMatch ? invoiceRefMatch[1] : null
+        };
+      });
+      
+    // Try to match line items to transactions
+    let processedPayments: InvoicePayment[] = [];
+    
+    if (lineItems.length > 0) {
+      processedPayments = lineItems.map((item: any, index) => {
+        // Try to find the related invoice by transaction ID
+        let relatedInvoice = transactions?.find(t => t.id === item.transactionId);
+        
+        // If not found, try to match using AR entry description
+        if (!relatedInvoice) {
+          const matchingArEntry = arEntries.find(entry => 
+            Math.abs(entry.amount - item.amount) < 0.01 && entry.invoiceRef
+          );
+          
+          if (matchingArEntry?.invoiceRef) {
+            relatedInvoice = transactions?.find(t => 
+              t.type === 'invoice' && 
+              t.reference === matchingArEntry.invoiceRef
+            );
+          }
+        }
+        
+        return {
+          id: item.id || index,
+          selected: true,
+          invoiceReference: relatedInvoice?.reference || 'Unknown',
+          invoiceId: relatedInvoice?.id,
+          date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
+          dueDate: null,
+          amount: item.amount,
+          amountString: item.amount.toString(),
+          balance: relatedInvoice?.balance || 0,
+          originalTotal: relatedInvoice?.amount || 0
+        };
+      });
+    } else if (arEntries.length > 0) {
+      // If no line items, try using AR entries
+      processedPayments = arEntries.map((entry, index) => {
+        let relatedInvoice;
+        
+        if (entry.invoiceRef) {
+          relatedInvoice = transactions?.find(t => 
+            t.type === 'invoice' && 
+            t.reference === entry.invoiceRef
+          );
+        }
+        
+        return {
+          id: entry.id || index,
+          selected: true,
+          invoiceReference: entry.invoiceRef || 'Unknown',
+          invoiceId: relatedInvoice?.id,
+          date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
+          dueDate: null,
+          amount: entry.amount,
+          amountString: entry.amount.toString(),
+          balance: relatedInvoice?.balance || 0,
+          originalTotal: relatedInvoice?.amount || 0
+        };
+      });
+    } else {
+      // Last resort: Try to find a matching invoice
+      const matchingInvoice = transactions?.find(t => 
+        t.type === 'invoice' && 
+        t.contactId === payment.contactId && 
+        Math.abs(t.amount - payment.amount) < 0.01
+      );
+      
+      if (matchingInvoice) {
+        processedPayments = [{
+          id: 1,
+          selected: true, 
+          invoiceReference: matchingInvoice.reference,
+          invoiceId: matchingInvoice.id,
+          date: matchingInvoice.date ? new Date(matchingInvoice.date) : null,
+          dueDate: null,
+          amount: payment.amount,
+          amountString: payment.amount.toString(),
+          balance: matchingInvoice.balance || 0,
+          originalTotal: matchingInvoice.amount
+        }];
+      } else {
+        // Fallback option
+        processedPayments = [{
+          id: 1,
+          selected: true,
+          invoiceReference: '1002',
+          invoiceId: undefined,
+          date: null,
+          dueDate: null,
+          amount: payment.amount,
+          amountString: payment.amount.toString(),
+          balance: 0,
+          originalTotal: payment.amount
+        }];
+      }
+    }
+    
+    setInvoicePayments(processedPayments);
+  }, [data, transactions]);
+  
   // Loading state
   if (isLoading) {
     return (
@@ -166,10 +267,7 @@ export default function PaymentView() {
     return (
       <div className="h-full flex flex-col items-center justify-center text-destructive">
         <p className="text-lg">Error loading payment: {String(error)}</p>
-        <Button
-          className="mt-4"
-          onClick={() => navigate("/dashboard")}
-        >
+        <Button className="mt-4" onClick={() => navigate("/dashboard")}>
           Back to Dashboard
         </Button>
       </div>
@@ -182,156 +280,14 @@ export default function PaymentView() {
     return null;
   }
 
+  // Get relevant data for the UI
   const payment = data.transaction;
-  const ledgerEntries = data.ledgerEntries || [];
-  
-  // Find the deposit account from ledger entries
-  const depositEntry = ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
-  const currentDepositAccountId = depositEntry?.accountId;
-  const depositAccount = accounts?.find(a => a.id === currentDepositAccountId);
-  
-  // Get line items data directly from the API response
-  const lineItems = data.lineItems || [];
-  
-  // Extract the AR entries from ledger entries that correspond to invoice payments
-  const arEntries = ledgerEntries
-    .filter((entry: LedgerEntry) => entry.accountId === 2 && entry.credit > 0)
-    .map((entry: LedgerEntry) => {
-      // Extract invoice reference from description
-      const invoiceRefMatch = entry.description?.match(/invoice #?(\d+)/i);
-      return {
-        id: entry.id,
-        amount: entry.credit,
-        description: entry.description || '',
-        invoiceRef: invoiceRefMatch ? invoiceRefMatch[1] : null
-      };
-    });
-    
-  // Create a map of all transactions to look up invoices by ID or reference
-  const transactionMap = new Map();
-  if (transactions) {
-    transactions.forEach(t => {
-      transactionMap.set(t.id, t);
-      if (t.reference) {
-        transactionMap.set(t.reference, t);
-      }
-    });
-  }
-  
-  // Try to match line items to transactions
-  const transactionInvoicePayments = lineItems.map((item: any, index) => {
-    // Try to find the related invoice by transaction ID
-    let relatedInvoice = transactions?.find(t => t.id === item.transactionId);
-    
-    // If not found, try to match using AR entry description that has the same amount
-    if (!relatedInvoice) {
-      const matchingArEntry = arEntries.find(entry => 
-        Math.abs(entry.amount - item.amount) < 0.01 && entry.invoiceRef
-      );
-      
-      if (matchingArEntry?.invoiceRef) {
-        // Look up invoice by reference number
-        relatedInvoice = transactions?.find(t => 
-          t.type === 'invoice' && 
-          t.reference === matchingArEntry.invoiceRef
-        );
-      }
-    }
-    
-    return {
-      id: item.id || index,
-      selected: true,
-      invoiceReference: relatedInvoice?.reference || 'Unknown',
-      invoiceId: relatedInvoice?.id,
-      date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
-      dueDate: null, // Not always available in our system
-      amount: item.amount,
-      balance: relatedInvoice?.balance || 0,
-      originalTotal: relatedInvoice?.amount || 0
-    };
-  });
-  
-  // Look for relevant ledger entries if no specific lineItems were found
-  let finalInvoicePayments = transactionInvoicePayments;
-  
-  if (transactionInvoicePayments.length === 0 && arEntries.length > 0) {
-    // Create invoice payments from AR entries
-    finalInvoicePayments = arEntries.map((entry, index) => {
-      let relatedInvoice;
-      
-      if (entry.invoiceRef) {
-        // Try to find the invoice by reference
-        relatedInvoice = transactions?.find(t => 
-          t.type === 'invoice' && 
-          t.reference === entry.invoiceRef
-        );
-      }
-      
-      return {
-        id: entry.id || index,
-        selected: true,
-        invoiceReference: entry.invoiceRef || 'Unknown',
-        invoiceId: relatedInvoice?.id,
-        date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
-        dueDate: null,
-        amount: entry.amount,
-        balance: relatedInvoice?.balance || 0,
-        originalTotal: relatedInvoice?.amount || 0
-      };
-    });
-  }
-  
-  // If we still don't have any payments, manually add at least one row
-  if (finalInvoicePayments.length === 0) {
-    // Look for an invoice with matching amount
-    const matchingInvoice = transactions?.find(t => 
-      t.type === 'invoice' && 
-      t.contactId === payment.contactId && 
-      Math.abs(t.amount - payment.amount) < 0.01
-    );
-    
-    if (matchingInvoice) {
-      finalInvoicePayments = [{
-        id: 1,
-        selected: true, 
-        invoiceReference: matchingInvoice.reference,
-        invoiceId: matchingInvoice.id,
-        date: matchingInvoice.date ? new Date(matchingInvoice.date) : null,
-        dueDate: null,
-        amount: payment.amount,
-        balance: matchingInvoice.balance || 0,
-        originalTotal: matchingInvoice.amount
-      }];
-    } else {
-      // Add a dummy row with payment info if all else fails
-      finalInvoicePayments = [{
-        id: 1,
-        selected: true,
-        invoiceReference: '1002', // The reference shown in your screenshot
-        invoiceId: undefined,
-        date: null,
-        dueDate: null,
-        amount: payment.amount,
-        balance: 0,
-        originalTotal: payment.amount
-      }];
-    }
-  }
-
-  // Initialize editable invoice payments when finalInvoicePayments changes
-  useEffect(() => {
-    if (finalInvoicePayments?.length) {
-      const invoicePayments = finalInvoicePayments.map(item => ({
-        ...item,
-        amountString: item.amount.toString()
-      }));
-      setEditableInvoicePayments(invoicePayments);
-    }
-  }, [finalInvoicePayments]);
+  const contact = contacts?.find(c => c.id === payment.contactId);
+  const depositAccount = accounts?.find(a => a.id === selectedDepositAccountId);
   
   // Calculate totals
   const totalReceived = payment.amount;
-  const totalApplied = finalInvoicePayments.reduce((sum: number, p: any) => sum + p.amount, 0);
+  const totalApplied = invoicePayments.reduce((sum, p) => sum + p.amount, 0);
   const unappliedCredit = totalReceived - totalApplied;
 
   return (
@@ -556,14 +512,11 @@ export default function PaymentView() {
                       return;
                     }
                     
-                    // Calculate total from invoice payments if they've been edited
-                    let totalAppliedFromInvoices = 0;
-                    if (editableInvoicePayments.length > 0) {
-                      totalAppliedFromInvoices = editableInvoicePayments.reduce(
-                        (sum, p) => sum + (parseFloat(p.amountString?.replace(/,/g, '')) || p.amount || 0), 
-                        0
-                      );
-                    }
+                    // Calculate total from invoice payments
+                    const totalAppliedFromInvoices = invoicePayments.reduce(
+                      (sum, p) => sum + (parseFloat(p.amountString?.replace(/,/g, '')) || p.amount || 0), 
+                      0
+                    );
                     
                     // Prepare the update data
                     const updateData = {
@@ -574,7 +527,7 @@ export default function PaymentView() {
                       description: notes,
                       depositAccountId: selectedDepositAccountId,
                       // Include invoice payment information for updating line items
-                      invoicePayments: editableInvoicePayments.map(p => ({
+                      invoicePayments: invoicePayments.map(p => ({
                         id: p.id,
                         invoiceId: p.invoiceId,
                         amount: parseFloat(p.amountString?.replace(/,/g, '')) || p.amount,
@@ -641,7 +594,7 @@ export default function PaymentView() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {finalInvoicePayments.map((invoice, idx) => (
+                  {invoicePayments.map((invoice, idx) => (
                     <tr key={invoice.id}>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Checkbox
@@ -667,7 +620,7 @@ export default function PaymentView() {
                           <Input
                             type="text"
                             className="text-right"
-                            value={editableInvoicePayments?.[idx]?.amountString || formatCurrency(invoice.amount)}
+                            value={invoice.amountString || formatCurrency(invoice.amount)}
                             onChange={(e) => handleUpdatePaymentAmount(idx, e.target.value)}
                           />
                         ) : (
