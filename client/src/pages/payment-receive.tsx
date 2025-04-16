@@ -198,12 +198,16 @@ export default function PaymentReceive() {
     queryKey: ['/api/transactions', { type: 'invoice', contactId: watchContactId }],
     queryFn: async () => {
       if (!watchContactId) return [];
+      if (isEditMode) {
+        // Don't fetch new invoices in edit mode - we'll use the line items from the payment data
+        return [];
+      }
       // Get all pending/overdue invoices
       const allInvoices = await apiRequest(`/api/transactions?type=invoice&status=pending,overdue`);
       // Filter by selected customer - ensure we only get invoices for this customer
       return allInvoices.filter((invoice: any) => invoice.contactId === watchContactId);
     },
-    enabled: !!watchContactId,
+    enabled: !!watchContactId && !isEditMode,
   });
 
   // Handle customer's invoices - different behavior for create vs edit mode
@@ -236,10 +240,17 @@ export default function PaymentReceive() {
     const updatedItems = [...paymentLineItems];
     
     if (field === 'amount' && typeof value === 'number') {
-      // Ensure amount doesn't exceed the invoice balance
-      const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-      const maxAmount = invoice?.balance || invoice?.amount || 0;
-      updatedItems[index].amount = Math.min(value, maxAmount);
+      // In edit mode, use the editModeInvoices for balance info
+      if (isEditMode) {
+        const invoice = editModeInvoices.find((inv: any) => inv.id === updatedItems[index].transactionId);
+        // In edit mode, we can modify up to the original amount in edit mode
+        updatedItems[index].amount = value;
+      } else {
+        // In create mode, use the customerInvoices for balance info
+        const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
+        const maxAmount = invoice?.balance || invoice?.amount || 0;
+        updatedItems[index].amount = Math.min(value, maxAmount);
+      }
       
       // If an amount is entered, auto-select the invoice
       if (value > 0 && !updatedItems[index].selected) {
@@ -257,10 +268,17 @@ export default function PaymentReceive() {
       if (!value) {
         updatedItems[index].amount = 0;
       } else {
-        // When selected, always auto-fill with the invoice balance
-        const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-        const invoiceBalance = invoice?.balance || invoice?.amount || 0;
-        updatedItems[index].amount = invoiceBalance;
+        if (isEditMode) {
+          // In edit mode, use the original amount from the payment
+          const invoice = editModeInvoices.find((inv: any) => inv.id === updatedItems[index].transactionId);
+          const originalAmount = updatedItems[index].amount; // Keep the original amount 
+          updatedItems[index].amount = originalAmount;
+        } else {
+          // When selected in create mode, auto-fill with the invoice balance
+          const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
+          const invoiceBalance = invoice?.balance || invoice?.amount || 0;
+          updatedItems[index].amount = invoiceBalance;
+        }
       }
     }
     

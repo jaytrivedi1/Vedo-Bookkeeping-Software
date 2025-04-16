@@ -206,7 +206,10 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
                       <Link 
-                        href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`} 
+                        href={transaction.type === 'payment' 
+                          ? `/payment-receive/${transaction.id}`
+                          : `/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`
+                        } 
                         className="text-primary hover:text-primary/90"
                       >
                         View
