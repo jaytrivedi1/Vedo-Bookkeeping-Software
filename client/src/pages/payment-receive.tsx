@@ -1,165 +1,68 @@
-import { useState, useEffect } from 'react';
-import { useLocation, useRoute } from 'wouter';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { format } from 'date-fns';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { format } from "date-fns";
+import { 
+  CreditCard, 
+  ArrowLeft,
+  Save,
+  Loader2
+} from "lucide-react";
 
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, ArrowLeft, CircleDollarSign, Loader2, Save } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DatePicker } from "../components/ui/date-picker";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { AccountType, Account, Contact, Transaction } from "@shared/schema";
 
-import { DatePicker } from '@/components/ui/date-picker';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-
-// Define account types directly in this file since we don't have many dependencies
-enum AccountType {
-  BANK = 'bank',
-  CREDIT = 'credit_card'
-}
-
-// Define the payment form validation schema
 const paymentSchema = z.object({
-  contactId: z.number({
-    required_error: "Customer is required",
-  }),
-  date: z.date({
-    required_error: "Payment date is required",
-  }),
+  contactId: z.coerce.number(),
+  date: z.date(),
+  paymentMethod: z.string().min(1, "Please select a payment method"),
   reference: z.string().optional(),
-  amount: z.number({
-    required_error: "Payment amount is required",
-  }).positive("Amount must be greater than 0"),
-  depositAccountId: z.number({
-    required_error: "Deposit account is required",
-  }),
-  paymentMethod: z.string().default('bank_transfer'),
+  depositAccountId: z.coerce.number(),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
   note: z.string().optional(),
 });
 
+const paymentLineItemSchema = z.object({
+  transactionId: z.coerce.number(),
+  amount: z.coerce.number().min(0),
+  selected: z.boolean().default(false),
+});
+
 type PaymentFormValues = z.infer<typeof paymentSchema>;
-type PaymentLineItem = {
-  transactionId: number;
-  amount: number;
-  selected: boolean;
-};
+type PaymentLineItem = z.infer<typeof paymentLineItemSchema>;
 
 export default function PaymentReceive() {
-  const [match, params] = useRoute('/payment-receive/:id?');
-  const existingTransactionId = params?.id ? parseInt(params.id) : undefined;
-  const isEditMode = !!existingTransactionId;
-  const [, setLocation] = useLocation();
-  const navigate = (path: string) => setLocation(path);
+  const [, navigate] = useLocation();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  // Form state
-  const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
-  const [editModeInvoices, setEditModeInvoices] = useState<any[]>([]);
-  
-  // Form definition
-  const form = useForm<PaymentFormValues>({
-    resolver: zodResolver(paymentSchema),
-    defaultValues: {
-      date: new Date(),
-      reference: '',
-      amount: 0,
-      paymentMethod: 'bank_transfer',
-      note: '',
-    },
-  });
-
-  // Fetch existing payment data if in edit mode
-  const { data: paymentData, isLoading: isPaymentDataLoading } = useQuery({
-    queryKey: ['/api/payments', existingTransactionId],
-    queryFn: async () => {
-      if (!existingTransactionId) return null;
-      const response = await fetch(`/api/payments/${existingTransactionId}`);
-      return await response.json(); // The response is already the payment object
-    },
-    enabled: isEditMode,
-  });
-  
-  // Populate form with existing payment data when in edit mode
-  useEffect(() => {
-    if (isEditMode && paymentData) {
-      // Set form values from payment data
-      form.setValue('contactId', paymentData.contactId);
-      form.setValue('date', new Date(paymentData.date));
-      form.setValue('reference', paymentData.reference || '');
-      form.setValue('amount', paymentData.amount);
-      form.setValue('depositAccountId', paymentData.depositAccountId);
-      form.setValue('paymentMethod', paymentData.paymentMethod || 'bank_transfer'); // Default to bank_transfer if none is set
-      form.setValue('note', paymentData.note || '');
-      
-      // Log the payment method for debugging
-      console.log("Payment method from data:", paymentData.paymentMethod);
-      
-      // Set initial customer ID
-      setInitialCustomerId(paymentData.contactId);
-      
-      // If the payment has line items, fetch the original invoices
-      if (paymentData.lineItems && paymentData.lineItems.length > 0) {
-        // Create line items from the payment data
-        const items = paymentData.lineItems.map((item: any) => ({
-          transactionId: item.transactionId,
-          amount: item.amount || item.total, // Use total as fallback
-          selected: true,
-        }));
-        setPaymentLineItems(items);
-        
-        // Calculate totals
-        const applied = items.reduce((sum: number, item: PaymentLineItem) => sum + item.amount, 0);
-        setTotalApplied(applied);
-        setUnappliedCredit(paymentData.unappliedAmount || 0);
-        
-        // Fetch the original invoices to display in the table
-        const fetchOriginalInvoices = async () => {
-          try {
-            const invoicePromises = paymentData.lineItems.map(async (item: any) => {
-              if (!item.transactionId) return null;
-              const response = await fetch(`/api/transactions/${item.transactionId}`);
-              if (!response.ok) return null;
-              const data = await response.json();
-              
-              // Return the transaction directly
-              return data || null;
-            });
-            
-            const invoices = await Promise.all(invoicePromises);
-            // Filter out any null results
-            const validInvoices = invoices.filter(Boolean);
-            
-            console.log("Fetched original invoices:", validInvoices);
-            
-            // Store the invoices for edit mode
-            if (validInvoices.length > 0) {
-              setEditModeInvoices(validInvoices);
-            }
-          } catch (error) {
-            console.error("Failed to fetch original invoices:", error);
-            toast({
-              title: "Error",
-              description: "Could not load the original invoices for this payment",
-              variant: "destructive"
-            });
-          }
-        };
-        
-        fetchOriginalInvoices();
-      }
-    }
-  }, [isEditMode, paymentData, form, toast]);
 
   // Fetch contacts (customers only)
   const { data: allContacts, isLoading: isContactsLoading } = useQuery({
@@ -167,9 +70,9 @@ export default function PaymentReceive() {
   });
   
   // Filter contacts to show only customers
-  const contacts = Array.isArray(allContacts) 
-    ? allContacts.filter((contact: any) => contact.type === 'customer') 
-    : [];
+  const contacts = allContacts?.filter((contact: any) => 
+    contact.type === 'customer'
+  ) || [];
 
   // Fetch accounts (for deposit accounts)
   const { data: accounts, isLoading: isAccountsLoading } = useQuery({
@@ -177,16 +80,21 @@ export default function PaymentReceive() {
   });
 
   // Filter for bank accounts and credit accounts
-  const depositAccounts = Array.isArray(accounts)
-    ? accounts.filter((account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT)
-    : [];
-  
-  // Set the customer ID in the form when initialCustomerId changes
-  useEffect(() => {
-    if (initialCustomerId) {
-      form.setValue('contactId', initialCustomerId);
-    }
-  }, [initialCustomerId, form]);
+  const depositAccounts = accounts?.filter(
+    (account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
+  ) || [];
+
+  // Create form
+  const form = useForm<PaymentFormValues>({
+    resolver: zodResolver(paymentSchema),
+    defaultValues: {
+      date: new Date(),
+      paymentMethod: "",
+      reference: "",
+      amount: 0,
+      note: "",
+    },
+  });
 
   const watchContactId = form.watch("contactId");
   const watchAmount = form.watch("amount");
@@ -196,33 +104,27 @@ export default function PaymentReceive() {
     queryKey: ['/api/transactions', { type: 'invoice', contactId: watchContactId }],
     queryFn: async () => {
       if (!watchContactId) return [];
-      if (isEditMode) {
-        // Don't fetch new invoices in edit mode - we'll use the line items from the payment data
-        return [];
-      }
       // Get all pending/overdue invoices
       const allInvoices = await apiRequest(`/api/transactions?type=invoice&status=pending,overdue`);
       // Filter by selected customer - ensure we only get invoices for this customer
       return allInvoices.filter((invoice: any) => invoice.contactId === watchContactId);
     },
-    enabled: !!watchContactId && !isEditMode,
+    enabled: !!watchContactId,
   });
 
-  // Handle customer's invoices - different behavior for create vs edit mode
+  // Reset payment line items when customer changes
   useEffect(() => {
-    if (!isEditMode && customerInvoices && customerInvoices.length > 0) {
-      // In create mode, show all pending invoices
+    if (customerInvoices && customerInvoices.length > 0) {
       const items = customerInvoices.map((invoice: any) => ({
         transactionId: invoice.id,
         amount: 0,
         selected: false,
       }));
       setPaymentLineItems(items);
-    } else if (!isEditMode) {
+    } else {
       setPaymentLineItems([]);
     }
-    // In edit mode, we don't use customerInvoices - we use the line items from the payment data
-  }, [customerInvoices, isEditMode]);
+  }, [customerInvoices]);
 
   // Update totals when any value changes
   useEffect(() => {
@@ -238,17 +140,10 @@ export default function PaymentReceive() {
     const updatedItems = [...paymentLineItems];
     
     if (field === 'amount' && typeof value === 'number') {
-      // In edit mode, use the editModeInvoices for balance info
-      if (isEditMode) {
-        const invoice = editModeInvoices.find((inv: any) => inv.id === updatedItems[index].transactionId);
-        // In edit mode, we can modify up to the original amount in edit mode
-        updatedItems[index].amount = value;
-      } else {
-        // In create mode, use the customerInvoices for balance info
-        const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-        const maxAmount = invoice?.balance || invoice?.amount || 0;
-        updatedItems[index].amount = Math.min(value, maxAmount);
-      }
+      // Ensure amount doesn't exceed the invoice balance
+      const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
+      const maxAmount = invoice?.balance || invoice?.amount || 0;
+      updatedItems[index].amount = Math.min(value, maxAmount);
       
       // If an amount is entered, auto-select the invoice
       if (value > 0 && !updatedItems[index].selected) {
@@ -266,17 +161,10 @@ export default function PaymentReceive() {
       if (!value) {
         updatedItems[index].amount = 0;
       } else {
-        if (isEditMode) {
-          // In edit mode, use the original amount from the payment
-          const invoice = editModeInvoices.find((inv: any) => inv.id === updatedItems[index].transactionId);
-          const originalAmount = updatedItems[index].amount; // Keep the original amount 
-          updatedItems[index].amount = originalAmount;
-        } else {
-          // When selected in create mode, auto-fill with the invoice balance
-          const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-          const invoiceBalance = invoice?.balance || invoice?.amount || 0;
-          updatedItems[index].amount = invoiceBalance;
-        }
+        // When selected, always auto-fill with the invoice balance
+        const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
+        const invoiceBalance = invoice?.balance || invoice?.amount || 0;
+        updatedItems[index].amount = invoiceBalance;
       }
     }
     
@@ -343,8 +231,8 @@ export default function PaymentReceive() {
     }, 100);
   };
 
-  // Payment create mutation
-  const createPaymentMutation = useMutation({
+  // Payment creation mutation
+  const paymentMutation = useMutation({
     mutationFn: async (data: any) => {
       return apiRequest('/api/payments', 'POST', data);
     },
@@ -362,30 +250,6 @@ export default function PaymentReceive() {
       toast({
         title: "Error",
         description: error.message || "Failed to record payment",
-        variant: "destructive",
-      });
-    },
-  });
-  
-  // Payment update mutation
-  const updatePaymentMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return apiRequest(`/api/payments/${existingTransactionId}`, 'PATCH', data);
-    },
-    onSuccess: () => {
-      toast({
-        title: "Payment Updated",
-        description: "The payment has been successfully updated",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
-      navigate("/dashboard");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update payment",
         variant: "destructive",
       });
     },
@@ -422,34 +286,14 @@ export default function PaymentReceive() {
       unappliedAmount: unappliedCredit,
     };
     
-    // Use the appropriate mutation based on whether we're in edit mode
-    if (isEditMode && existingTransactionId) {
-      updatePaymentMutation.mutate(paymentData);
-    } else {
-      createPaymentMutation.mutate(paymentData);
-    }
+    paymentMutation.mutate(paymentData);
   };
 
-  const isLoading = isContactsLoading || isAccountsLoading || createPaymentMutation.isPending || 
-                  updatePaymentMutation.isPending || isPaymentDataLoading;
+  const isLoading = isContactsLoading || isAccountsLoading || paymentMutation.isPending;
 
   return (
     <div className="py-6">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Alert for editing existing payment */}
-        {isEditMode && (
-          <div className="mb-6 border border-blue-100 bg-blue-50 rounded-md p-4 flex items-start">
-            <AlertCircle className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
-            <div>
-              <h3 className="text-sm font-medium text-blue-800">Payment details</h3>
-              <p className="text-sm text-blue-700 mt-1">
-                You're editing a payment transaction (ID: {existingTransactionId}).
-                Update the details and click "Update Payment" to save your changes.
-              </p>
-            </div>
-          </div>
-        )}
-        
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
             <Button 
@@ -461,7 +305,7 @@ export default function PaymentReceive() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-semibold text-gray-900">{isEditMode ? 'Edit Payment' : 'Receive Payment'}</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Receive Payment</h1>
           </div>
           <Button
             type="button"
@@ -469,12 +313,12 @@ export default function PaymentReceive() {
             disabled={isLoading || !form.formState.isValid}
             className="bg-primary text-white"
           >
-            {(createPaymentMutation.isPending || updatePaymentMutation.isPending) ? (
+            {paymentMutation.isPending ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            {isEditMode ? 'Update Payment' : 'Record Payment'}
+            Record Payment
           </Button>
         </div>
 
@@ -496,7 +340,7 @@ export default function PaymentReceive() {
                         <Select 
                           onValueChange={(value) => field.onChange(parseInt(value))}
                           value={field.value?.toString() || ""}
-                          disabled={isContactsLoading || isEditMode}
+                          disabled={isContactsLoading}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -519,9 +363,11 @@ export default function PaymentReceive() {
                   {watchContactId && contacts && (
                     <div>
                       <FormLabel>Email</FormLabel>
-                      <div className="h-10 px-3 py-2 rounded-md border border-input bg-background text-sm text-gray-500">
-                        {contacts.find((c: any) => c.id === watchContactId)?.email || 'No email available'}
-                      </div>
+                      <Input
+                        value={contacts.find((c: any) => c.id === watchContactId)?.email || ''}
+                        disabled
+                        className="bg-muted/50"
+                      />
                     </div>
                   )}
 
@@ -529,12 +375,42 @@ export default function PaymentReceive() {
                     control={form.control}
                     name="date"
                     render={({ field }) => (
-                      <FormItem className="flex flex-col">
+                      <FormItem>
                         <FormLabel>Payment Date</FormLabel>
-                        <DatePicker 
-                          date={field.value} 
-                          setDate={field.onChange}
-                        />
+                        <FormControl>
+                          <DatePicker
+                            date={field.value}
+                            setDate={field.onChange}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="paymentMethod"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Payment Method</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select method" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="credit_card">Credit Card</SelectItem>
+                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="cheque">Cheque</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -547,29 +423,7 @@ export default function PaymentReceive() {
                       <FormItem>
                         <FormLabel>Reference Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="Check/Reference #" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="amount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Amount Received</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="0.00" 
-                            {...field}
-                            onChange={(e) => {
-                              const value = parseFloat(e.target.value);
-                              field.onChange(isNaN(value) ? 0 : value);
-                            }}
-                          />
+                          <Input {...field} placeholder="e.g., Transaction ID or cheque number" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -593,9 +447,9 @@ export default function PaymentReceive() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {depositAccounts?.map((account: any) => (
+                            {depositAccounts.map((account: any) => (
                               <SelectItem key={account.id} value={account.id.toString()}>
-                                {account.name}
+                                {account.name} ({account.code})
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -607,178 +461,90 @@ export default function PaymentReceive() {
 
                   <FormField
                     control={form.control}
-                    name="paymentMethod"
+                    name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Payment Method</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select method" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="check">Check</SelectItem>
-                            <SelectItem value="credit_card">Credit Card</SelectItem>
-                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormLabel>Amount Received</FormLabel>
+                        <FormControl>
+                          <input
+                            type="text"
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="0.00"
+                            defaultValue={field.value || ''}
+                            onChange={(e) => {
+                              // Update for real-time feedback
+                              const tempValue = parseFloat(e.target.value);
+                              if (!isNaN(tempValue)) {
+                                // Update form value
+                                field.onChange(tempValue);
+                                
+                                // Update unapplied credit instantly
+                                const applied = paymentLineItems.reduce(
+                                  (sum, item) => sum + (item.selected ? item.amount : 0), 
+                                  0
+                                );
+                                setTotalApplied(applied);
+                                setUnappliedCredit(Math.max(0, tempValue - applied));
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const numValue = parseFloat(e.target.value);
+                              if (!isNaN(numValue)) {
+                                field.onChange(numValue);
+                              } else {
+                                // Reset to zero for invalid value
+                                e.target.value = '0';
+                                field.onChange(0);
+                                setUnappliedCredit(0);
+                              }
+                            }}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-
-                  <div className="md:col-span-2">
-                    <FormField
-                      control={form.control}
-                      name="note"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Memo / Notes</FormLabel>
-                          <FormControl>
-                            <Textarea 
-                              placeholder="Add any notes about this payment" 
-                              className="resize-none h-24"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="note"
+                  render={({ field }) => (
+                    <FormItem className="mt-6">
+                      <FormLabel>Memo / Notes</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Add any additional notes here" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
 
-            {/* Apply Payments Section */}
+            {/* Apply Payment Section */}
             {watchContactId && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Apply Payment to Invoices</CardTitle>
-                  {!isEditMode && watchAmount && watchAmount > 0 && (
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm"
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-center">
+                    <CardTitle>Apply Payment to Invoices</CardTitle>
+                    <Button
+                      type="button"
                       onClick={handleAutoApply}
+                      variant="outline"
+                      size="sm"
+                      disabled={!watchAmount || watchAmount <= 0}
                     >
                       Auto Apply
                     </Button>
-                  )}
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  {isEditMode && editModeInvoices && editModeInvoices.length > 0 ? (
-                    <div>
-                      <div className="rounded-md border">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Select
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Invoice #
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Date
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Original Amount
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Balance
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Payment
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {editModeInvoices.map((invoice: any, idx: number) => {
-                              // Find the corresponding line item from our state
-                              const lineItem = paymentLineItems.find(item => item.transactionId === invoice.id);
-                              return (
-                                <tr key={invoice.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <Checkbox
-                                      id={`invoice-${invoice.id}`}
-                                      checked={lineItem?.selected || false}
-                                      onCheckedChange={(checked) => {
-                                        const index = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
-                                        if (index !== -1) {
-                                          handleLineItemChange(index, 'selected', !!checked);
-                                        }
-                                      }}
-                                    />
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {invoice.reference || `INV-${invoice.id}`}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.amount)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance || invoice.amount)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <input
-                                      type="text"
-                                      className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                      disabled={!lineItem?.selected}
-                                      value={lineItem?.amount || 0}
-                                      onChange={(e) => {
-                                        // Update the UI immediately for calculations
-                                        const tempValue = parseFloat(e.target.value);
-                                        if (!isNaN(tempValue)) {
-                                          const index = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
-                                          if (index !== -1) {
-                                            handleLineItemChange(index, 'amount', tempValue);
-                                          }
-                                        }
-                                      }}
-                                    />
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      
-                      {/* Payment Summary */}
-                      <div className="mt-6 flex justify-end">
-                        <div className="min-w-[240px] space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total Applied:</span>
-                            <span className="font-medium">
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Amount Received:</span>
-                            <span className="font-medium">
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm border-t pt-1 mt-1">
-                            <span className="font-medium">Unapplied Credit:</span>
-                            <span className={`font-medium ${unappliedCredit > 0 ? 'text-blue-600' : ''}`}>
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                  {isInvoicesLoading ? (
+                    <div className="p-4 flex justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
-                  ) : !isEditMode && customerInvoices && customerInvoices.length > 0 ? (
+                  ) : customerInvoices && customerInvoices.length > 0 ? (
                     <div>
                       <div className="rounded-md border">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -795,9 +561,6 @@ export default function PaymentReceive() {
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Due Date
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Original Amount
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Balance
@@ -823,13 +586,10 @@ export default function PaymentReceive() {
                                   {invoice.reference || `INV-${invoice.id}`}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
+                                  {format(new Date(invoice.date), 'MMM dd, yyyy')}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.amount)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
                                   {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance || invoice.amount)}
@@ -871,35 +631,50 @@ export default function PaymentReceive() {
                           </tbody>
                         </table>
                       </div>
-                      
-                      {/* Payment Summary */}
-                      <div className="mt-6 flex justify-end">
-                        <div className="min-w-[240px] space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Total Applied:</span>
-                            <span className="font-medium">
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-600">Amount Received:</span>
-                            <span className="font-medium">
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm border-t pt-1 mt-1">
-                            <span className="font-medium">Unapplied Credit:</span>
-                            <span className={`font-medium ${unappliedCredit > 0 ? 'text-blue-600' : ''}`}>
-                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
-                            </span>
-                          </div>
+
+                      <div className="mt-6 rounded-md bg-gray-50 p-4">
+                        <div className="flex justify-between items-center text-sm">
+                          <span>Total Received:</span>
+                          <span className="font-medium">
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm mt-2">
+                          <span>Total Applied:</span>
+                          <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                            {totalApplied > (watchAmount || 0) && (
+                              <span className="ml-2 text-xs">
+                                (exceeds received amount)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <Separator className="my-3" />
+                        <div className="flex justify-between items-center font-medium">
+                          <span>Unapplied Credit:</span>
+                          <span className={
+                            totalApplied > (watchAmount || 0) 
+                              ? "text-red-600" 
+                              : unappliedCredit > 0 
+                                ? "text-green-600" 
+                                : ""
+                          }>
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                              totalApplied > (watchAmount || 0) 
+                                ? (watchAmount || 0) - totalApplied // Show negative value
+                                : unappliedCredit
+                            )}
+                          </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-gray-500">
-                      No open invoices found for this customer.
-                    </div>
+                    <Alert className="bg-blue-50 border-blue-200">
+                      <AlertDescription>
+                        No open invoices found for this customer.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </CardContent>
               </Card>

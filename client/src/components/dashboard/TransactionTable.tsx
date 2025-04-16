@@ -206,23 +206,16 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
                       <Link 
-                        href={transaction.type === 'payment' 
-                          ? `/payment-receive/${transaction.id}`
-                          : `/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`
-                        } 
+                        href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`} 
                         className="text-primary hover:text-primary/90"
                       >
                         View
                       </Link>
                       
-                      {/* Edit buttons for transactions that support editing */}
-                      {(transaction.type === 'invoice' || transaction.type === 'payment') && (
+                      {/* Edit button - only for invoices for now */}
+                      {transaction.type === 'invoice' && (
                         <Link 
-                          href={
-                            transaction.type === 'invoice' 
-                              ? `/invoice-edit/${transaction.id}`
-                              : `/payment-receive/${transaction.id}`
-                          }
+                          href={`/invoice-edit/${transaction.id}`}
                           className="text-blue-500 hover:text-blue-600"
                         >
                           <Button
