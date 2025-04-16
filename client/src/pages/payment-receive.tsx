@@ -756,7 +756,7 @@ export default function PaymentReceive() {
                                     {invoice.reference || `INV-${invoice.id}`}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {format(new Date(invoice.date), 'MMM dd, yyyy')}
+                                    {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
@@ -838,7 +838,7 @@ export default function PaymentReceive() {
                                   {invoice.reference || `INV-${invoice.id}`}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {format(new Date(invoice.date), 'MMM dd, yyyy')}
+                                  {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                   {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
