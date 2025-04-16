@@ -767,8 +767,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           // Add credit to Accounts Receivable (decrease)
+          // Using account ID 2 which is Accounts Receivable
           ledgerEntries.push({
-            accountId: 1100, // Accounts Receivable
+            accountId: 2, // Accounts Receivable (ID 2 from the database)
             debit: 0,
             credit: item.amount,
             description: `Payment applied to invoice #${invoice.reference}`,
@@ -780,9 +781,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Handle unapplied credit if any
       if (unappliedAmount > 0) {
-        // We need to credit customer prepayments/credits account
+        // We need to credit customer prepayments/credits account (Business Credit Card)
         ledgerEntries.push({
-          accountId: 2300, // Customer Credits/Prepayments
+          accountId: 19, // Business Credit Card (ID 19 from the database)
           debit: 0,
           credit: unappliedAmount,
           description: `Unapplied credit for customer #${data.contactId}`,
