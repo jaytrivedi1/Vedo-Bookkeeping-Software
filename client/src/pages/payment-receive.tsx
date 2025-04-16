@@ -147,25 +147,56 @@ export default function PaymentReceive() {
       form.setValue('paymentMethod', paymentData.paymentMethod || '');
       form.setValue('note', paymentData.note || '');
       
-      // If the payment has line items, set those too
-      if (paymentData.lineItems && paymentData.lineItems.length > 0) {
-        setPaymentLineItems(
-          paymentData.lineItems.map((item: any) => ({
-            transactionId: item.transactionId,
-            amount: item.amount || item.total, // Use total as fallback
-            selected: true,
-          }))
-        );
-      }
-      
-      if (paymentData.unappliedAmount) {
-        setUnappliedCredit(paymentData.unappliedAmount);
-      }
-      
-      // Set initial customer ID to ensure customer invoices are loaded
+      // Set initial customer ID
       setInitialCustomerId(paymentData.contactId);
+      
+      // If the payment has line items, fetch the original invoices
+      if (paymentData.lineItems && paymentData.lineItems.length > 0) {
+        // Create line items from the payment data
+        const items = paymentData.lineItems.map((item: any) => ({
+          transactionId: item.transactionId,
+          amount: item.amount || item.total, // Use total as fallback
+          selected: true,
+        }));
+        setPaymentLineItems(items);
+        
+        // Calculate totals
+        const applied = items.reduce((sum, item) => sum + item.amount, 0);
+        setTotalApplied(applied);
+        setUnappliedCredit(paymentData.unappliedAmount || 0);
+        
+        // Fetch the original invoices to display in the table
+        const fetchOriginalInvoices = async () => {
+          try {
+            const invoicePromises = paymentData.lineItems.map(async (item: any) => {
+              if (!item.transactionId) return null;
+              const response = await fetch(`/api/transactions/${item.transactionId}`);
+              if (!response.ok) return null;
+              return await response.json();
+            });
+            
+            const invoices = await Promise.all(invoicePromises);
+            // Filter out any null results
+            const validInvoices = invoices.filter(Boolean);
+            
+            // Override the customer invoices with just these specific ones
+            if (validInvoices.length > 0) {
+              setCustomerInvoices(validInvoices);
+            }
+          } catch (error) {
+            console.error("Failed to fetch original invoices:", error);
+            toast({
+              title: "Error",
+              description: "Could not load the original invoices for this payment",
+              variant: "destructive"
+            });
+          }
+        };
+        
+        fetchOriginalInvoices();
+      }
     }
-  }, [isEditMode, paymentData, form]);
+  }, [isEditMode, paymentData, form, toast]);
 
   // Fetch contacts (customers only)
   const { data: allContacts, isLoading: isContactsLoading } = useQuery({
@@ -210,9 +241,10 @@ export default function PaymentReceive() {
     enabled: !!watchContactId,
   });
 
-  // Reset payment line items when customer changes (but only in create mode)
+  // Handle customer's invoices - different behavior for create vs edit mode
   useEffect(() => {
     if (!isEditMode && customerInvoices && customerInvoices.length > 0) {
+      // In create mode, show all pending invoices
       const items = customerInvoices.map((invoice: any) => ({
         transactionId: invoice.id,
         amount: 0,
@@ -222,6 +254,7 @@ export default function PaymentReceive() {
     } else if (!isEditMode) {
       setPaymentLineItems([]);
     }
+    // In edit mode, we don't use customerInvoices - we use the line items from the payment data
   }, [customerInvoices, isEditMode]);
 
   // Update totals when any value changes
@@ -670,15 +703,17 @@ export default function PaymentReceive() {
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-center">
                     <CardTitle>Apply Payment to Invoices</CardTitle>
-                    <Button
-                      type="button"
-                      onClick={handleAutoApply}
-                      variant="outline"
-                      size="sm"
-                      disabled={!watchAmount || watchAmount <= 0}
-                    >
-                      Auto Apply
-                    </Button>
+                    {!isEditMode && (
+                      <Button
+                        type="button"
+                        onClick={handleAutoApply}
+                        variant="outline"
+                        size="sm"
+                        disabled={!watchAmount || watchAmount <= 0}
+                      >
+                        Auto Apply
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -686,7 +721,8 @@ export default function PaymentReceive() {
                     <div className="p-4 flex justify-center">
                       <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
-                  ) : customerInvoices && customerInvoices.length > 0 ? (
+                  ) : isEditMode ? (
+                    // In edit mode, show only the invoices that were part of the payment
                     <div>
                       <div className="rounded-md border">
                         <table className="min-w-full divide-y divide-gray-200">
