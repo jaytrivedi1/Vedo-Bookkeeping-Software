@@ -720,11 +720,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const paymentData = {
         reference: data.reference,
         date: new Date(data.date),
-        dueDate: new Date(data.date),
         contactId: data.contactId,
         amount: data.amount,
-        status: 'completed',
-        type: 'payment',
+        status: 'completed' as const,
+        type: 'payment' as const,
         description: data.description || 'Payment received',
       };
       
@@ -736,7 +735,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           debit: data.amount,
           credit: 0,
           description: `Payment from customer #${data.contactId}`,
-          date: new Date(data.date)
+          date: new Date(data.date),
+          transactionId: 0 // Will be set by createTransaction
         }
       ];
       

@@ -64,7 +64,13 @@ export class DatabaseStorage implements IStorage {
 
   // Transactions
   async getTransactions(): Promise<Transaction[]> {
-    return await db.select().from(transactions).orderBy(desc(transactions.date));
+    try {
+      const results = await db.select().from(transactions).orderBy(desc(transactions.date));
+      return results;
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      throw error;
+    }
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
