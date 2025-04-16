@@ -46,6 +46,7 @@ export default function PaymentView() {
   const [amountReceived, setAmountReceived] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [selectedInvoicePayments, setSelectedInvoicePayments] = useState<any[]>([]);
+  const [editableInvoicePayments, setEditableInvoicePayments] = useState<any[]>([]);
 
   // Toast notifications
   const { toast } = useToast();
