@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useNavigate } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Edit, Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -258,14 +258,26 @@ export default function PaymentView() {
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            <h1 className="text-2xl font-semibold text-gray-900">Receive Payment</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Payment Details</h1>
           </div>
-          <Button
-            className="bg-primary text-white"
-            disabled
-          >
-            Record Payment
-          </Button>
+          <div className="flex space-x-2">
+            <Button
+              variant="outline"
+              className="flex items-center"
+              onClick={() => navigate(`/payments/edit/${payment.id}`)}
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Payment
+            </Button>
+            <Button
+              variant="default"
+              className="bg-primary text-white"
+              onClick={() => window.print()}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+          </div>
         </div>
 
         {/* Payment Details Section */}
