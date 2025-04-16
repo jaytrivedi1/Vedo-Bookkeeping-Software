@@ -1038,11 +1038,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
             );
             
             if (ledgerEntry) {
+              // Calculate difference between original and new payment amount
+              const originalAmount = ledgerEntry.credit;
+              const newAmount = payment.amount;
+              const amountDifference = originalAmount - newAmount;
+              
               // Update the ledger entry with the new payment amount
               await storage.updateLedgerEntry(ledgerEntry.id, {
-                credit: payment.amount,
+                credit: newAmount,
                 date: body.date || ledgerEntry.date,
               });
+              
+              // Update the invoice balance if the payment amount changed
+              if (amountDifference !== 0 && payment.invoiceId) {
+                const invoice = await storage.getTransaction(payment.invoiceId);
+                if (invoice && invoice.type === 'invoice') {
+                  // Add the difference back to the invoice balance (if payment decreased, balance increases)
+                  const newBalance = (invoice.balance !== null ? invoice.balance : invoice.amount) + amountDifference;
+                  
+                  // Update the invoice balance
+                  await storage.updateTransaction(invoice.id, {
+                    balance: newBalance,
+                    // Update status based on the new balance
+                    status: newBalance <= 0 ? 'paid' : (newBalance < invoice.amount ? 'partial' : 'pending')
+                  });
+                }
+              }
             }
           }
         }
