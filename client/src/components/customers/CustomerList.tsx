@@ -131,8 +131,13 @@ export default function CustomerList({ className }: CustomerListProps) {
         path = `/invoices/${transaction.id}`; // View invoice route
         break;
       case 'payment':
-        // Since there's no specific payment edit route, we'll just go to the payments page
-        path = `/invoices`; 
+        // For payments, go to the payment receive form with the customer pre-selected
+        // Since we're in the customer detail view, we know the customer ID
+        if (selectedCustomer) {
+          path = `/payment-receive?customerId=${selectedCustomer.id}`; 
+        } else {
+          path = `/payment-receive`;
+        }
         break;
       default:
         path = "";

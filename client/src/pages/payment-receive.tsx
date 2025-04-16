@@ -63,6 +63,21 @@ export default function PaymentReceive() {
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
+  const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
+
+  // Check URL for customer ID parameter
+  useEffect(() => {
+    // Parse query string for customerId
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get('customerId');
+    
+    if (customerId) {
+      const id = parseInt(customerId);
+      if (!isNaN(id)) {
+        setInitialCustomerId(id);
+      }
+    }
+  }, []);
 
   // Fetch contacts (customers only)
   const { data: allContacts, isLoading: isContactsLoading } = useQuery({
@@ -88,6 +103,7 @@ export default function PaymentReceive() {
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
+      contactId: initialCustomerId || undefined,
       date: new Date(),
       paymentMethod: "",
       reference: "",
