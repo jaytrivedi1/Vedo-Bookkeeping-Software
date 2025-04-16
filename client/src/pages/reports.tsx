@@ -859,12 +859,11 @@ export default function Reports() {
                                 <TableRow key={index}>
                                   <TableCell>{account.code}</TableCell>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="capitalize">{account.type.replace(/_/g, ' ')}</TableCell>
                                   <TableCell className="text-right">
-                                    {debitAmount > 0 ? `$${debitAmount.toFixed(2)}` : ''}
+                                    {debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(debitAmount) : ''}
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    {creditAmount > 0 ? `$${creditAmount.toFixed(2)}` : ''}
+                                    {creditAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(creditAmount) : ''}
                                   </TableCell>
                                 </TableRow>
                               );
@@ -897,9 +896,13 @@ export default function Reports() {
                               
                               return (
                                 <TableRow className="font-bold">
-                                  <TableCell colSpan={3} className="text-right">Total</TableCell>
-                                  <TableCell className="text-right">${totalDebit.toFixed(2)}</TableCell>
-                                  <TableCell className="text-right">${totalCredit.toFixed(2)}</TableCell>
+                                  <TableCell colSpan={2} className="text-right">Total</TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebit)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredit)}
+                                  </TableCell>
                                 </TableRow>
                               );
                             })()}
