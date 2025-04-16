@@ -32,6 +32,16 @@ export default function PaymentView() {
   const [, navigate] = useLocation();
   const params = useParams();
   const paymentId = params.id;
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // State variables for editable fields
+  const [paymentDate, setPaymentDate] = useState<Date | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<string>('bank_transfer');
+  const [referenceNumber, setReferenceNumber] = useState<string>('');
+  const [selectedDepositAccountId, setSelectedDepositAccountId] = useState<number | null>(null);
+  const [amountReceived, setAmountReceived] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [selectedInvoicePayments, setSelectedInvoicePayments] = useState<any[]>([]);
 
   // Fetch payment data
   const { data, isLoading, error } = useQuery<PaymentResponse>({
@@ -108,8 +118,8 @@ export default function PaymentView() {
   
   // Find the deposit account from ledger entries
   const depositEntry = ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
-  const depositAccountId = depositEntry?.accountId;
-  const depositAccount = accounts?.find(a => a.id === depositAccountId);
+  const currentDepositAccountId = depositEntry?.accountId;
+  const depositAccount = accounts?.find(a => a.id === currentDepositAccountId);
   
   // Get line items data directly from the API response
   const lineItems = data.lineItems || [];
@@ -140,7 +150,7 @@ export default function PaymentView() {
   }
   
   // Try to match line items to transactions
-  const invoicePayments = lineItems.map((item: any, index) => {
+  const transactionInvoicePayments = lineItems.map((item: any, index) => {
     // Try to find the related invoice by transaction ID
     let relatedInvoice = transactions?.find(t => t.id === item.transactionId);
     
@@ -173,9 +183,9 @@ export default function PaymentView() {
   });
   
   // Look for relevant ledger entries if no specific lineItems were found
-  let finalInvoicePayments = invoicePayments;
+  let finalInvoicePayments = transactionInvoicePayments;
   
-  if (invoicePayments.length === 0 && arEntries.length > 0) {
+  if (transactionInvoicePayments.length === 0 && arEntries.length > 0) {
     // Create invoice payments from AR entries
     finalInvoicePayments = arEntries.map((entry, index) => {
       let relatedInvoice;
@@ -241,7 +251,7 @@ export default function PaymentView() {
 
   // Calculate totals
   const totalReceived = payment.amount;
-  const totalApplied = finalInvoicePayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalApplied = finalInvoicePayments.reduce((sum: number, p: any) => sum + p.amount, 0);
   const unappliedCredit = totalReceived - totalApplied;
 
   return (
@@ -264,10 +274,10 @@ export default function PaymentView() {
             <Button
               variant="outline"
               className="flex items-center"
-              onClick={() => navigate(`/payments/edit/${payment.id}`)}
+              onClick={() => setIsEditing(!isEditing)}
             >
               <Edit className="h-4 w-4 mr-2" />
-              Edit Payment
+              {isEditing ? 'Cancel Edit' : 'Edit Payment'}
             </Button>
             <Button
               variant="default"
