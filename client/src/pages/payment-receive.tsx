@@ -64,10 +64,15 @@ export default function PaymentReceive() {
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
 
-  // Fetch contacts (customers)
-  const { data: contacts, isLoading: isContactsLoading } = useQuery({
+  // Fetch contacts (customers only)
+  const { data: allContacts, isLoading: isContactsLoading } = useQuery({
     queryKey: ['/api/contacts'],
   });
+  
+  // Filter contacts to show only customers
+  const contacts = allContacts?.filter((contact: any) => 
+    contact.type === 'customer'
+  ) || [];
 
   // Fetch accounts (for deposit accounts)
   const { data: accounts, isLoading: isAccountsLoading } = useQuery({
@@ -257,12 +262,15 @@ export default function PaymentReceive() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="mr-4">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-            </Link>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="mr-4"
+              onClick={() => window.history.back()}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
             <h1 className="text-2xl font-semibold text-gray-900">Receive Payment</h1>
           </div>
           <Button
