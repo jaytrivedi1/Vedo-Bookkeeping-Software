@@ -9,8 +9,7 @@ import {
   CreditCard, 
   ArrowLeft,
   Save,
-  Plus, 
-  Minus
+  Loader2
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +34,6 @@ import { DatePicker } from "../components/ui/date-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { AccountType, Account, Contact, Transaction } from "@shared/schema";
@@ -62,7 +60,6 @@ type PaymentLineItem = z.infer<typeof paymentLineItemSchema>;
 export default function PaymentReceive() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  // Removed tabs in favor of a single scrollable page
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
@@ -79,7 +76,7 @@ export default function PaymentReceive() {
 
   // Filter for bank accounts and credit accounts
   const depositAccounts = accounts?.filter(
-    account => account.type === AccountType.BANK || account.type === AccountType.CREDIT
+    (account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
   ) || [];
 
   // Create form
@@ -113,7 +110,7 @@ export default function PaymentReceive() {
   // Reset payment line items when customer changes
   useEffect(() => {
     if (customerInvoices && customerInvoices.length > 0) {
-      const items = customerInvoices.map(invoice => ({
+      const items = customerInvoices.map((invoice: any) => ({
         transactionId: invoice.id,
         amount: 0,
         selected: false,
@@ -139,7 +136,7 @@ export default function PaymentReceive() {
     
     if (field === 'amount' && typeof value === 'number') {
       // Ensure amount doesn't exceed the invoice balance
-      const invoice = customerInvoices?.find(inv => inv.id === updatedItems[index].transactionId);
+      const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
       const maxAmount = invoice?.balance || 0;
       updatedItems[index].amount = Math.min(value, maxAmount);
       
@@ -160,7 +157,7 @@ export default function PaymentReceive() {
         updatedItems[index].amount = 0;
       } else if (updatedItems[index].amount === 0) {
         // If selected but amount is 0, auto-fill with remaining balance
-        const invoice = customerInvoices?.find(inv => inv.id === updatedItems[index].transactionId);
+        const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
         const invoiceBalance = invoice?.balance || 0;
         const remainingPaymentAmount = (watchAmount || 0) - totalApplied;
         updatedItems[index].amount = Math.min(invoiceBalance, remainingPaymentAmount);
@@ -179,7 +176,7 @@ export default function PaymentReceive() {
     
     // Sort invoices by date (oldest first)
     const sortedInvoices = [...customerInvoices].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime()
     );
     
     // Reset all amounts and selections
@@ -210,7 +207,7 @@ export default function PaymentReceive() {
       return apiRequest('/api/payments', {
         method: 'POST',
         data,
-      });
+      } as any);
     },
     onSuccess: () => {
       toast({
@@ -240,7 +237,7 @@ export default function PaymentReceive() {
         amount: item.amount,
       }));
 
-    const selectedContact = contacts?.find(c => c.id === values.contactId);
+    const selectedContact = contacts?.find((c: any) => c.id === values.contactId);
     
     const paymentData = {
       ...values,
@@ -310,7 +307,7 @@ export default function PaymentReceive() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {contacts?.map((contact) => (
+                            {contacts?.map((contact: any) => (
                               <SelectItem key={contact.id} value={contact.id.toString()}>
                                 {contact.name}
                               </SelectItem>
@@ -326,7 +323,7 @@ export default function PaymentReceive() {
                     <div>
                       <FormLabel>Email</FormLabel>
                       <Input
-                        value={contacts.find(c => c.id === watchContactId)?.email || ''}
+                        value={contacts.find((c: any) => c.id === watchContactId)?.email || ''}
                         disabled
                         className="bg-muted/50"
                       />
@@ -409,7 +406,7 @@ export default function PaymentReceive() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {depositAccounts.map((account) => (
+                            {depositAccounts.map((account: any) => (
                               <SelectItem key={account.id} value={account.id.toString()}>
                                 {account.name} ({account.code})
                               </SelectItem>
@@ -508,7 +505,7 @@ export default function PaymentReceive() {
                             </tr>
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
-                            {customerInvoices.map((invoice, idx) => (
+                            {customerInvoices.map((invoice: any, idx: number) => (
                               <tr key={invoice.id}>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <Checkbox
@@ -529,14 +526,14 @@ export default function PaymentReceive() {
                                   {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance)}
+                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance || invoice.amount)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <Input
                                     type="number"
                                     step="0.01"
                                     min="0"
-                                    max={invoice.balance}
+                                    max={invoice.balance || invoice.amount}
                                     disabled={!paymentLineItems[idx]?.selected}
                                     value={paymentLineItems[idx]?.amount || 0}
                                     onChange={(e) => 
