@@ -65,12 +65,11 @@ export default function PaymentView() {
   
   // Format currency
   const formatCurrency = (amount: number) => {
+    // Without $ sign for display in inputs and table cells
     return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount).replace('$', '');
+    }).format(amount);
   };
 
   // Loading state
@@ -112,32 +111,26 @@ export default function PaymentView() {
   const depositAccountId = depositEntry?.accountId;
   const depositAccount = accounts?.find(a => a.id === depositAccountId);
   
-  // Find invoice payment details from ledger entries
-  const invoicePayments = ledgerEntries
-    .filter((entry: LedgerEntry) => entry.accountId === 2 && entry.credit > 0) // Accounts Receivable credits
-    .map((entry: LedgerEntry) => {
-      // Try to extract invoice information from description
-      const match = entry.description?.match(/Invoice (\d+)/i);
-      const invoiceRef = match ? match[1] : 'Unknown';
-      
-      // Find the actual invoice transaction if possible
-      const relatedInvoice = transactions?.find(t => 
-        t.type === 'invoice' && 
-        t.reference === invoiceRef && 
-        t.contactId === payment.contactId
-      );
-      
-      return {
-        id: entry.id,
-        invoiceReference: invoiceRef,
-        invoiceId: relatedInvoice?.id,
-        date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
-        dueDate: null, // Not always available in our system
-        amount: entry.credit,
-        balance: relatedInvoice?.balance || 0,
-        description: entry.description || ''
-      };
-    });
+  // Get line items data directly from the API response
+  const lineItems = data.lineItems || [];
+  
+  // Properly map invoice payments from line items data
+  const invoicePayments = lineItems.map((item: any) => {
+    // Find the related invoice in transactions
+    const relatedInvoice = transactions?.find(t => t.id === item.transactionId);
+    
+    return {
+      id: item.id,
+      invoiceReference: relatedInvoice?.reference || 'Unknown',
+      invoiceId: relatedInvoice?.id,
+      date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
+      dueDate: null, // Not always available in our system
+      amount: item.amount,
+      balance: relatedInvoice?.balance || 0,
+      originalTotal: relatedInvoice?.amount || 0,
+      description: ''
+    };
+  });
 
   // Calculate totals
   const totalReceived = payment.amount;
@@ -317,7 +310,7 @@ export default function PaymentView() {
                         {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatCurrency(invoice.balance + invoice.amount)}
+                        {formatCurrency(invoice.originalTotal)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Input
