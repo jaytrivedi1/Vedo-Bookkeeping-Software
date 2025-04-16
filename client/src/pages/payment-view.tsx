@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ArrowLeft, Loader2, Edit, Printer } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 interface PaymentResponse {
   transaction: Transaction;
@@ -54,6 +58,33 @@ export default function PaymentView() {
       return response.json();
     },
   });
+  
+  // Initialize form state when data is loaded
+  useEffect(() => {
+    if (data?.transaction) {
+      const payment = data.transaction;
+      setPaymentDate(new Date(payment.date));
+      setPaymentMethod((payment as any).paymentMethod || 'bank_transfer');
+      setReferenceNumber(payment.reference || '');
+      
+      // Find deposit account ID from ledger entries
+      const depositEntry = data.ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
+      setSelectedDepositAccountId(depositEntry?.accountId || null);
+      
+      // Set amount received
+      setAmountReceived(payment.amount.toString());
+      
+      // Set description/notes
+      setNotes(payment.description || '');
+      
+      // Initialize invoice payments
+      const invoicePaymentsData = data.lineItems.map((item: any) => ({
+        ...item,
+        selected: true
+      }));
+      setSelectedInvoicePayments(invoicePaymentsData);
+    }
+  }, [data]);
 
   // Fetch contacts for customer info
   const { data: contacts } = useQuery<Contact[]>({
@@ -321,62 +352,143 @@ export default function PaymentView() {
 
               <div>
                 <Label htmlFor="date">Payment Date</Label>
-                <Input
-                  id="date"
-                  value={format(new Date(payment.date), "MMMM dd, yyyy")}
-                  readOnly
-                />
+                {isEditing ? (
+                  <DatePicker
+                    date={paymentDate}
+                    onSelect={setPaymentDate}
+                  />
+                ) : (
+                  <Input
+                    id="date"
+                    value={format(new Date(payment.date), "MMMM dd, yyyy")}
+                    readOnly
+                  />
+                )}
               </div>
 
               <div>
                 <Label htmlFor="method">Payment Method</Label>
-                <Input
-                  id="method"
-                  value={(payment as any).paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 
-                         (payment as any).paymentMethod === 'credit_card' ? 'Credit Card' : 
-                         (payment as any).paymentMethod === 'cash' ? 'Cash' : 
-                         (payment as any).paymentMethod === 'cheque' ? 'Cheque' : 
-                         'Bank Transfer'}
-                  readOnly
-                />
+                {isEditing ? (
+                  <Select
+                    value={paymentMethod}
+                    onValueChange={setPaymentMethod}
+                  >
+                    <SelectTrigger id="method">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="method"
+                    value={(payment as any).paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 
+                          (payment as any).paymentMethod === 'credit_card' ? 'Credit Card' : 
+                          (payment as any).paymentMethod === 'cash' ? 'Cash' : 
+                          (payment as any).paymentMethod === 'cheque' ? 'Cheque' : 
+                          'Bank Transfer'}
+                    readOnly
+                  />
+                )}
               </div>
 
               <div>
                 <Label htmlFor="reference">Reference Number</Label>
-                <Input
-                  id="reference"
-                  value={payment.reference || ''}
-                  readOnly
-                />
+                {isEditing ? (
+                  <Input
+                    id="reference"
+                    value={referenceNumber}
+                    onChange={(e) => setReferenceNumber(e.target.value)}
+                  />
+                ) : (
+                  <Input
+                    id="reference"
+                    value={payment.reference || ''}
+                    readOnly
+                  />
+                )}
               </div>
 
               <div>
                 <Label htmlFor="depositTo">Deposit To</Label>
-                <Input
-                  id="depositTo"
-                  value={depositAccount ? `${depositAccount.name} ${depositAccount.code ? `(${depositAccount.code})` : ''}` : ''}
-                  readOnly
-                />
+                {isEditing ? (
+                  <Select
+                    value={selectedDepositAccountId?.toString() || ''}
+                    onValueChange={(value) => setSelectedDepositAccountId(Number(value))}
+                  >
+                    <SelectTrigger id="depositTo">
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts?.filter(account => account.type === 'asset').map((account) => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.name} {account.code ? `(${account.code})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    id="depositTo"
+                    value={depositAccount ? `${depositAccount.name} ${depositAccount.code ? `(${depositAccount.code})` : ''}` : ''}
+                    readOnly
+                  />
+                )}
               </div>
 
               <div>
                 <Label htmlFor="amount">Amount Received</Label>
-                <Input
-                  id="amount"
-                  value={formatCurrency(payment.amount)}
-                  readOnly
-                />
+                {isEditing ? (
+                  <Input
+                    id="amount"
+                    value={amountReceived}
+                    onChange={(e) => setAmountReceived(e.target.value)}
+                  />
+                ) : (
+                  <Input
+                    id="amount"
+                    value={formatCurrency(payment.amount)}
+                    readOnly
+                  />
+                )}
               </div>
             </div>
 
             <div className="mt-6">
               <Label htmlFor="notes">Memo / Notes</Label>
-              <Input
-                id="notes"
-                value={payment.description || ''}
-                readOnly
-              />
+              {isEditing ? (
+                <Input
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              ) : (
+                <Input
+                  id="notes"
+                  value={payment.description || ''}
+                  readOnly
+                />
+              )}
             </div>
+            
+            {isEditing && (
+              <div className="mt-6 flex justify-end">
+                <Button
+                  variant="default"
+                  className="bg-primary text-white"
+                  onClick={() => {
+                    // Handle save logic here
+                    setIsEditing(false);
+                  }}
+                >
+                  Save Changes
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
