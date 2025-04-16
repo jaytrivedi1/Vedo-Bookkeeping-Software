@@ -72,8 +72,16 @@ export default function Dashboard() {
       )
     : [];
   
+  // Calculate the actual unpaid amounts using invoice balances
   const unpaidInvoicesAmount = unpaidInvoices.reduce(
-    (sum, invoice) => sum + invoice.amount, 
+    (sum, invoice) => {
+      // If balance is explicitly set, use it (handles partial payments correctly)
+      if (invoice.balance !== null && invoice.balance !== undefined) {
+        return sum + invoice.balance;
+      }
+      // Otherwise use the full amount (if balance isn't tracked yet)
+      return sum + invoice.amount;
+    }, 
     0
   );
 
