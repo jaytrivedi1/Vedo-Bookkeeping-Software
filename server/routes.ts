@@ -1004,26 +1004,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Failed to update payment" });
         }
         
-        // If deposit account changed, update ledger entries
-        if (body.depositAccountId) {
-          // Find the deposit entry
-          const depositEntry = existingLedgerEntries.find(entry => entry.debit > 0);
+        // Update the deposit entry
+        // Find the deposit entry
+        const depositEntry = existingLedgerEntries.find(entry => entry.debit > 0);
+        
+        if (depositEntry) {
+          // Update the deposit ledger entry
+          const depositUpdate: any = {
+            date: body.date || depositEntry.date,
+          };
+            
+          // Update account if changed
+          if (body.depositAccountId && depositEntry.accountId !== body.depositAccountId) {
+            depositUpdate.accountId = body.depositAccountId;
+          }
           
-          if (depositEntry && depositEntry.accountId !== body.depositAccountId) {
-            // Update the deposit account in ledger entry
-            await storage.updateLedgerEntry(depositEntry.id, {
-              accountId: body.depositAccountId,
-              // Update amount if it changed
-              debit: body.amount !== undefined ? body.amount : depositEntry.debit,
-              date: body.date || depositEntry.date,
-            });
+          // Update amount if changed
+          if (body.amount !== undefined) {
+            depositUpdate.debit = body.amount;
+          }
+          
+          await storage.updateLedgerEntry(depositEntry.id, depositUpdate);
+        }
+        
+        // Handle invoice payment updates if provided
+        if (body.invoicePayments && Array.isArray(body.invoicePayments)) {
+          // Update the credit entry for each invoice payment
+          for (const payment of body.invoicePayments) {
+            // Find the matching ledger entry
+            const ledgerEntry = existingLedgerEntries.find(entry => 
+              entry.id === payment.id || 
+              (entry.credit > 0 && entry.description?.includes(payment.invoiceReference))
+            );
+            
+            if (ledgerEntry) {
+              // Update the ledger entry with the new payment amount
+              await storage.updateLedgerEntry(ledgerEntry.id, {
+                credit: payment.amount,
+                date: body.date || ledgerEntry.date,
+              });
+            }
           }
         }
         
-        // Return updated payment data
+        // Return updated payment data with fresh data from database
         res.status(200).json({
           transaction: updatedTransaction,
-          lineItems: existingLineItems,
+          lineItems: await storage.getLineItemsByTransaction(transactionId), // Get fresh line items
           ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId), // Get fresh ledger entries
         });
       } else {

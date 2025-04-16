@@ -348,6 +348,16 @@ export default function PaymentView() {
                     0
                   );
                   
+                  // Validate that total applied doesn't exceed amount received
+                  if (totalAppliedFromInvoices > parsedAmount) {
+                    toast({
+                      title: "Invalid payment allocation",
+                      description: "The total applied amount cannot exceed the amount received.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
                   // Prepare the update data
                   const updateData = {
                     date: paymentDate,
