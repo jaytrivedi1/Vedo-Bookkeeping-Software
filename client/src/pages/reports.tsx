@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown } from "lucide-react";
+import ExportMenu from "@/components/ExportMenu";
+import { 
+  exportIncomeStatementToCSV, 
+  exportIncomeStatementToPDF,
+  exportBalanceSheetToCSV,
+  exportBalanceSheetToPDF,
+  exportAccountBalancesToCSV,
+  exportAccountBalancesToPDF,
+  generateFilename 
+} from "@/lib/exportUtils";
 import {
   Card,
   CardContent,
@@ -343,11 +353,28 @@ export default function Reports() {
             <TabsContent value="income-statement">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle>Income Statement</CardTitle>
-                    <CardDescription>
-                      For the period ending {format(new Date(), 'MMMM d, yyyy')}
-                    </CardDescription>
+                  <CardHeader className="flex flex-col sm:flex-row justify-between">
+                    <div>
+                      <CardTitle>Income Statement</CardTitle>
+                      <CardDescription>
+                        For the period ending {format(new Date(), 'MMMM d, yyyy')}
+                      </CardDescription>
+                    </div>
+                    {incomeStatement && !incomeLoading && (
+                      <div className="mt-2 sm:mt-0">
+                        <ExportMenu
+                          onExportCSV={() => {
+                            const filename = generateFilename('income_statement', startDate, endDate);
+                            exportIncomeStatementToCSV(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.csv`);
+                          }}
+                          onExportPDF={() => {
+                            const filename = generateFilename('income_statement', startDate, endDate);
+                            exportIncomeStatementToPDF(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.pdf`);
+                          }}
+                          label="Export"
+                        />
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent>
                     {incomeLoading ? (
@@ -491,11 +518,40 @@ export default function Reports() {
             <TabsContent value="balance-sheet">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <CardTitle>Balance Sheet</CardTitle>
-                    <CardDescription>
-                      As of {format(new Date(), 'MMMM d, yyyy')}
-                    </CardDescription>
+                  <CardHeader className="flex flex-col sm:flex-row justify-between">
+                    <div>
+                      <CardTitle>Balance Sheet</CardTitle>
+                      <CardDescription>
+                        As of {format(new Date(), 'MMMM d, yyyy')}
+                      </CardDescription>
+                    </div>
+                    {balanceSheet && !balanceLoading && (
+                      <div className="mt-2 sm:mt-0">
+                        <ExportMenu
+                          onExportCSV={() => {
+                            const filename = generateFilename('balance_sheet');
+                            exportBalanceSheetToCSV(
+                              balanceSheet, 
+                              accountsByType['asset'], 
+                              accountsByType['liability'], 
+                              accountsByType['equity'], 
+                              `${filename}.csv`
+                            );
+                          }}
+                          onExportPDF={() => {
+                            const filename = generateFilename('balance_sheet');
+                            exportBalanceSheetToPDF(
+                              balanceSheet, 
+                              accountsByType['asset'], 
+                              accountsByType['liability'], 
+                              accountsByType['equity'], 
+                              `${filename}.pdf`
+                            );
+                          }}
+                          label="Export"
+                        />
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent>
                     {balanceLoading ? (

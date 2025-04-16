@@ -1,6 +1,12 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Account } from "@shared/schema";
+import ExportMenu from "@/components/ExportMenu";
+import { 
+  exportAccountBalancesToCSV, 
+  exportAccountBalancesToPDF,
+  generateFilename 
+} from "@/lib/exportUtils";
 
 interface AccountBalanceItem {
   account: Account;
@@ -52,13 +58,38 @@ export default function AccountBalances() {
     );
   }
 
+  // Handle export to CSV
+  const handleExportCSV = () => {
+    if (!accountBalances || accountBalances.length === 0) return;
+    
+    const filename = generateFilename('account_balances', undefined);
+    exportAccountBalancesToCSV(accountBalances, `${filename}.csv`);
+  };
+  
+  // Handle export to PDF
+  const handleExportPDF = () => {
+    if (!accountBalances || accountBalances.length === 0) return;
+    
+    const filename = generateFilename('account_balances', undefined);
+    exportAccountBalancesToPDF(accountBalances, `${filename}.pdf`);
+  };
+
   return (
     <div className="bg-white shadow-sm rounded-lg p-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-medium text-gray-900">Account Balances</h3>
-        <Link href="/chart-of-accounts" className="text-sm text-primary hover:text-primary/90">
-          View All
-        </Link>
+        <div className="flex items-center gap-2">
+          {accountBalances && accountBalances.length > 0 && (
+            <ExportMenu
+              onExportCSV={handleExportCSV}
+              onExportPDF={handleExportPDF}
+              label="Export"
+            />
+          )}
+          <Link href="/chart-of-accounts" className="text-sm text-primary hover:text-primary/90">
+            View All
+          </Link>
+        </div>
       </div>
       
       {bankAccounts.length === 0 ? (

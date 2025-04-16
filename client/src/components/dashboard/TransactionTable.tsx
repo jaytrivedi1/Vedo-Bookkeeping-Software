@@ -34,6 +34,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Transaction, Contact } from "@shared/schema";
+import ExportMenu from "@/components/ExportMenu";
+import { 
+  exportTransactionsToCSV, 
+  exportTransactionsToPDF,
+  generateFilename 
+} from "@/lib/exportUtils";
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -123,6 +129,22 @@ export default function TransactionTable({ transactions, loading = false, onDele
     return type.charAt(0).toUpperCase() + type.slice(1);
   };
 
+  // Handle export to CSV
+  const handleExportCSV = () => {
+    if (!contacts || !transactions.length) return;
+    
+    const filename = generateFilename('transactions', undefined);
+    exportTransactionsToCSV(transactions, contacts, `${filename}.csv`);
+  };
+  
+  // Handle export to PDF
+  const handleExportPDF = () => {
+    if (!contacts || !transactions.length) return;
+    
+    const filename = generateFilename('transactions', undefined);
+    exportTransactionsToPDF(transactions, contacts, `${filename}.pdf`);
+  };
+
   return (
     <div className="overflow-x-auto">
       {loading ? (
@@ -131,6 +153,15 @@ export default function TransactionTable({ transactions, loading = false, onDele
         </div>
       ) : (
         <>
+          <div className="flex justify-end mb-4">
+            {transactions.length > 0 && (
+              <ExportMenu
+                onExportCSV={handleExportCSV}
+                onExportPDF={handleExportPDF}
+                label="Export Transactions"
+              />
+            )}
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
