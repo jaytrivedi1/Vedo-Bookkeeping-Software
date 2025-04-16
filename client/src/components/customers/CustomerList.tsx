@@ -210,123 +210,79 @@ export default function CustomerList({ className }: CustomerListProps) {
                 )}
               </div>
               
-              <Tabs defaultValue="invoices" className="px-6">
-                <TabsList>
-                  <TabsTrigger value="invoices">
-                    Transactions ({customerInvoicesAndPayments.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="expenses">
-                    Expenses ({customerExpenses.length})
-                  </TabsTrigger>
-                </TabsList>
+              <div className="px-6">
+                <h3 className="text-lg font-medium my-4">
+                  Transactions ({customerInvoicesAndPayments.length})
+                </h3>
                 
-                <TabsContent value="invoices">
-                  <div className="mt-4">
-                    <ScrollArea className="h-[400px]">
-                      {customerInvoicesAndPayments.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          No transactions found for this customer.
-                        </div>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Reference</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Balance</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {customerInvoicesAndPayments
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((transaction) => {
-                                // Format transaction type for display
-                                const typeDisplay = transaction.type === 'invoice' 
-                                  ? 'Invoice'
-                                  : transaction.type === 'payment'
-                                    ? 'Payment'
-                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                <div className="mt-2">
+                  <ScrollArea className="h-[400px]">
+                    {customerInvoicesAndPayments.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No transactions found for this customer.
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Reference</TableHead>
+                            <TableHead>Amount</TableHead>
+                            <TableHead>Balance</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {customerInvoicesAndPayments
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                            .map((transaction) => {
+                              // Format transaction type for display
+                              const typeDisplay = transaction.type === 'invoice' 
+                                ? 'Invoice'
+                                : transaction.type === 'payment'
+                                  ? 'Payment'
+                                  : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                              
+                              // Only show balance for invoices, not for payments
+                              const showBalance = transaction.type === 'invoice';
+                              
+                              // For invoices, show "Open" badge if there's a balance
+                              const statusBadge = transaction.type === 'invoice' && 
+                                                 transaction.balance !== null && 
+                                                 transaction.balance !== undefined &&
+                                                 transaction.balance > 0 && 
+                                                 transaction.status !== 'draft'
+                                ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
+                                : getStatusBadge(transaction.status);
                                 
-                                // Only show balance for invoices, not for payments
-                                const showBalance = transaction.type === 'invoice';
-                                
-                                // For invoices, show "Open" badge if there's a balance
-                                const statusBadge = transaction.type === 'invoice' && 
-                                                   transaction.balance !== null && 
-                                                   transaction.balance !== undefined &&
-                                                   transaction.balance > 0 && 
-                                                   transaction.status !== 'draft'
-                                  ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
-                                  : getStatusBadge(transaction.status);
-                                  
-                                return (
-                                  <TableRow key={transaction.id}>
-                                    <TableCell>
-                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
-                                    </TableCell>
-                                    <TableCell>{typeDisplay}</TableCell>
-                                    <TableCell>{transaction.reference}</TableCell>
-                                    <TableCell>{formatCurrency(transaction.amount)}</TableCell>
-                                    <TableCell>
-                                      {showBalance && transaction.balance !== null 
-                                        ? formatCurrency(transaction.balance) 
-                                        : '—'}
-                                    </TableCell>
-                                    <TableCell>{statusBadge}</TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </ScrollArea>
-                  </div>
-                </TabsContent>
-                
-                <TabsContent value="expenses">
-                  <div className="mt-4">
-                    <ScrollArea className="h-[400px]">
-                      {customerExpenses.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          No expenses found for this customer.
-                        </div>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Reference</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {customerExpenses
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((expense) => (
-                                <TableRow key={expense.id}>
+                              return (
+                                <TableRow key={transaction.id}>
                                   <TableCell>
-                                    {format(new Date(expense.date), "MMM dd, yyyy")}
+                                    {format(new Date(transaction.date), "MMM dd, yyyy")}
                                   </TableCell>
-                                  <TableCell>{expense.reference}</TableCell>
-                                  <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                                  <TableCell>{getStatusBadge(expense.status)}</TableCell>
+                                  <TableCell>{typeDisplay}</TableCell>
+                                  <TableCell>{transaction.reference}</TableCell>
+                                  <TableCell>{formatCurrency(transaction.amount)}</TableCell>
+                                  <TableCell>
+                                    {showBalance && transaction.balance !== null 
+                                      ? formatCurrency(transaction.balance) 
+                                      : '—'}
+                                  </TableCell>
+                                  <TableCell>{statusBadge}</TableCell>
                                 </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </ScrollArea>
-                  </div>
-                </TabsContent>
-              </Tabs>
+                              );
+                            })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </ScrollArea>
+                </div>
+              </div>
               
               {/* Summary */}
               <div className="border-t mt-6 p-6">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
                     <p className="text-xl font-semibold">
@@ -344,12 +300,6 @@ export default function CustomerList({ className }: CustomerListProps) {
                           : i.amount;
                         return sum + outstandingAmount;
                       }, 0))}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Expenses</h3>
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(customerExpenses.reduce((sum, e) => sum + e.amount, 0))}
                     </p>
                   </div>
                 </div>
