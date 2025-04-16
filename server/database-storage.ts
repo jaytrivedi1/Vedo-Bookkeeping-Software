@@ -262,6 +262,17 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updatedLedgerEntry;
   }
+  
+  async deleteLedgerEntry(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(ledgerEntries)
+        .where(eq(ledgerEntries.id, id));
+      return true;
+    } catch (error) {
+      console.error("Error deleting ledger entry:", error);
+      return false;
+    }
+  }
 
   // Reports
   async getAccountBalances(): Promise<{ account: Account; balance: number }[]> {
