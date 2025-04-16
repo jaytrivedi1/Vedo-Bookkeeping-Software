@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Contact, Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
 import { Search, User, ChevronRight, X, Eye, Trash2, AlertTriangle } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Card, 
@@ -66,6 +66,7 @@ export default function CustomerList({ className }: CustomerListProps) {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
   // Fetch customers
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -162,7 +163,6 @@ export default function CustomerList({ className }: CustomerListProps) {
   };
   
   // Delete customer and transaction mutations
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
   const deleteCustomerMutation = useMutation({
     mutationFn: async (customerId: number) => {
