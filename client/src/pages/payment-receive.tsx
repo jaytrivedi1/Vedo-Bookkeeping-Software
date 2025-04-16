@@ -437,7 +437,10 @@ export default function PaymentReceive() {
                             step="0.01"
                             min="0"
                             {...field} 
-                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                            onInput={(e) => {
+                              const target = e.target as HTMLInputElement;
+                              field.onChange(target.value ? parseFloat(target.value) : 0);
+                            }}
                             placeholder="0.00" 
                           />
                         </FormControl>
@@ -543,9 +546,11 @@ export default function PaymentReceive() {
                                     max={invoice.balance || invoice.amount}
                                     disabled={!paymentLineItems[idx]?.selected}
                                     value={paymentLineItems[idx]?.amount || 0}
-                                    onChange={(e) => 
-                                      handleLineItemChange(idx, 'amount', e.target.value ? parseFloat(e.target.value) : 0)
-                                    }
+                                    onInput={(e) => {
+                                      const target = e.target as HTMLInputElement;
+                                      const value = target.value ? parseFloat(target.value) : 0;
+                                      handleLineItemChange(idx, 'amount', value);
+                                    }}
                                     className="w-24"
                                   />
                                 </td>
