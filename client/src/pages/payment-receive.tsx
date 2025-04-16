@@ -251,6 +251,17 @@ export default function PaymentReceive() {
         transactionId: item.transactionId,
         amount: item.amount,
       }));
+    
+    // Check if applied amount exceeds received amount
+    const totalAppliedAmount = appliedItems.reduce((sum, item) => sum + item.amount, 0);
+    if (totalAppliedAmount > values.amount) {
+      toast({
+        title: "Error",
+        description: "The amount applied to invoices cannot exceed the amount received.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const selectedContact = contacts?.find((c: any) => c.id === values.contactId);
     
@@ -448,6 +459,22 @@ export default function PaymentReceive() {
                             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                             placeholder="0.00"
                             defaultValue={field.value || ''}
+                            onChange={(e) => {
+                              // Update for real-time feedback
+                              const tempValue = parseFloat(e.target.value);
+                              if (!isNaN(tempValue)) {
+                                // Update form value
+                                field.onChange(tempValue);
+                                
+                                // Update unapplied credit instantly
+                                const applied = paymentLineItems.reduce(
+                                  (sum, item) => sum + (item.selected ? item.amount : 0), 
+                                  0
+                                );
+                                setTotalApplied(applied);
+                                setUnappliedCredit(Math.max(0, tempValue - applied));
+                              }
+                            }}
                             onBlur={(e) => {
                               const numValue = parseFloat(e.target.value);
                               if (!isNaN(numValue)) {
@@ -456,6 +483,7 @@ export default function PaymentReceive() {
                                 // Reset to zero for invalid value
                                 e.target.value = '0';
                                 field.onChange(0);
+                                setUnappliedCredit(0);
                               }
                             }}
                           />
@@ -560,6 +588,20 @@ export default function PaymentReceive() {
                                     className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={!paymentLineItems[idx]?.selected}
                                     defaultValue={paymentLineItems[idx]?.amount || ''}
+                                    onChange={(e) => {
+                                      // Update the UI immediately to show applied/unapplied amounts
+                                      // Even though we'll properly set state on blur
+                                      const tempValue = parseFloat(e.target.value);
+                                      if (!isNaN(tempValue)) {
+                                        // Create a temporary set of items for calculation
+                                        const tempItems = [...paymentLineItems];
+                                        tempItems[idx].amount = tempValue;
+                                        tempItems[idx].selected = tempValue > 0;
+                                        const applied = tempItems.reduce((sum, item) => sum + (item.selected ? item.amount : 0), 0);
+                                        setTotalApplied(applied);
+                                        setUnappliedCredit(Math.max(0, (watchAmount || 0) - applied));
+                                      }
+                                    }}
                                     onBlur={(e) => {
                                       const numValue = parseFloat(e.target.value);
                                       if (!isNaN(numValue)) {
@@ -587,15 +629,30 @@ export default function PaymentReceive() {
                         </div>
                         <div className="flex justify-between items-center text-sm mt-2">
                           <span>Total Applied:</span>
-                          <span className="font-medium">
+                          <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
                             {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                            {totalApplied > (watchAmount || 0) && (
+                              <span className="ml-2 text-xs">
+                                (exceeds received amount)
+                              </span>
+                            )}
                           </span>
                         </div>
                         <Separator className="my-3" />
                         <div className="flex justify-between items-center font-medium">
                           <span>Unapplied Credit:</span>
-                          <span className={unappliedCredit > 0 ? "text-green-600" : ""}>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
+                          <span className={
+                            totalApplied > (watchAmount || 0) 
+                              ? "text-red-600" 
+                              : unappliedCredit > 0 
+                                ? "text-green-600" 
+                                : ""
+                          }>
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                              totalApplied > (watchAmount || 0) 
+                                ? (watchAmount || 0) - totalApplied // Show negative value
+                                : unappliedCredit
+                            )}
                           </span>
                         </div>
                       </div>
