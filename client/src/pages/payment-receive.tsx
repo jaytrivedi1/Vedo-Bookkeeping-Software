@@ -85,8 +85,7 @@ export default function PaymentReceive() {
     queryFn: async () => {
       if (!existingTransactionId) return null;
       const response = await fetch(`/api/payments/${existingTransactionId}`);
-      const data = await response.json();
-      return data.transaction;
+      return await response.json(); // The response is already the payment object
     },
     enabled: isEditMode,
   });
@@ -133,9 +132,8 @@ export default function PaymentReceive() {
               if (!response.ok) return null;
               const data = await response.json();
               
-              // The API returns a nested object with 'transaction' property
-              // So we need to extract the transaction from the response
-              return data.transaction || null;
+              // Return the transaction directly
+              return data || null;
             });
             
             const invoices = await Promise.all(invoicePromises);

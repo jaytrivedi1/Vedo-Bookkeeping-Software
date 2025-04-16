@@ -783,6 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fullPayment = {
         ...payment,
         depositAccountId,
+        paymentMethod: payment.paymentMethod || 'bank_transfer', // Ensure payment method is included
         lineItems,
         unappliedAmount
       };
@@ -809,6 +810,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'completed' as const,
         type: 'payment' as const,
         description: data.description || 'Payment received',
+        paymentMethod: data.paymentMethod || 'bank_transfer', // Include payment method
       };
       
       // Prepare ledger entries
@@ -925,6 +927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactId: data.contactId,
         amount: data.amount,
         description: data.description || 'Payment received',
+        paymentMethod: data.paymentMethod || 'bank_transfer', // Include payment method
       });
       
       // 2. Update the deposit account (banking) ledger entry
@@ -1033,6 +1036,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Return the updated payment with new ledger entries
       res.json({
         ...updatedPayment,
+        paymentMethod: data.paymentMethod || 'bank_transfer', // Make sure payment method is included
+        depositAccountId: data.depositAccountId,
         ledgerEntries: newLedgerEntries
       });
     } catch (error: any) {
