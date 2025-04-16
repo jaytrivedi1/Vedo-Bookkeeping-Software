@@ -432,6 +432,9 @@ export default function AccountBooks() {
                               return accountA.code.localeCompare(accountB.code);
                             });
                           
+                          // Skip if entriesForTransaction is undefined
+                          if (!entriesForTransaction) return;
+                          
                           // Get transaction details
                           const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
                           const transaction = transactions?.find(t => t.id === transactionId);
