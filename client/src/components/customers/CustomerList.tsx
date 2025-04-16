@@ -198,7 +198,15 @@ export default function CustomerList({ className }: CustomerListProps) {
         title: "Transaction deleted",
         description: "Transaction has been successfully deleted",
       });
+      // Invalidate multiple related queries to ensure all data is fresh
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
+      
+      // Force a reload of the page to ensure all components are updated with the latest data
+      window.location.reload();
+      
       setSelectedTransactionToDelete(null);
     },
     onError: (error: any) => {
