@@ -963,20 +963,160 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Transaction update endpoint
+  apiRouter.patch("/transactions/:id", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      
+      // Fetch the existing transaction to make sure it exists
+      const existingTransaction = await storage.getTransaction(transactionId);
+      if (!existingTransaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      
+      // Convert string dates to Date objects
+      const body = {
+        ...req.body,
+        date: req.body.date ? new Date(req.body.date) : undefined,
+      };
+      
+      // Get existing line items and ledger entries
+      const existingLineItems = await storage.getLineItemsByTransaction(transactionId);
+      const existingLedgerEntries = await storage.getLedgerEntriesByTransaction(transactionId);
+      
+      // Handle specific transaction types
+      if (existingTransaction.type === 'payment') {
+        // For payments, we need to update the payment details and ledger entries
+        
+        // Update the transaction
+        const transactionUpdate: Partial<Transaction> = {
+          reference: body.reference,
+          date: body.date,
+          description: body.description,
+          amount: body.amount !== undefined ? body.amount : existingTransaction.amount,
+          // Other fields as needed
+        };
+        
+        // Update the transaction record
+        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
+        
+        if (!updatedTransaction) {
+          return res.status(404).json({ message: "Failed to update payment" });
+        }
+        
+        // If deposit account changed, update ledger entries
+        if (body.depositAccountId) {
+          // Find the deposit entry
+          const depositEntry = existingLedgerEntries.find(entry => entry.debit > 0);
+          
+          if (depositEntry && depositEntry.accountId !== body.depositAccountId) {
+            // Update the deposit account in ledger entry
+            await storage.updateLedgerEntry(depositEntry.id, {
+              accountId: body.depositAccountId,
+              // Update amount if it changed
+              debit: body.amount !== undefined ? body.amount : depositEntry.debit,
+              date: body.date || depositEntry.date,
+            });
+          }
+        }
+        
+        // Return updated payment data
+        res.status(200).json({
+          transaction: updatedTransaction,
+          lineItems: existingLineItems,
+          ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId), // Get fresh ledger entries
+        });
+      } else {
+        // Generic update for other transaction types
+        const transactionUpdate: Partial<Transaction> = {
+          reference: body.reference,
+          date: body.date,
+          description: body.description,
+          status: body.status,
+          amount: body.amount,
+        };
+        
+        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
+        
+        if (!updatedTransaction) {
+          return res.status(404).json({ message: "Failed to update transaction" });
+        }
+        
+        res.status(200).json({
+          transaction: updatedTransaction,
+          lineItems: existingLineItems,
+          ledgerEntries: existingLedgerEntries,
+        });
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid transaction data", errors: error.errors });
+      }
+      console.error("Error updating transaction:", error);
+      res.status(500).json({ message: "Failed to update transaction", error: String(error) });
+    }
+  });
+
   // Transaction delete endpoint
   apiRouter.delete("/transactions/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const success = await storage.deleteTransaction(id);
+      const transaction = await storage.getTransaction(id);
       
-      if (!success) {
+      if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
       
-      res.status(204).send();
+      // Perform any necessary cleanup before deletion
+      if (transaction.type === 'invoice') {
+        // Handle invoice-specific cleanup
+      } else if (transaction.type === 'payment') {
+        // For payments, we need to update the balances of affected invoices
+        const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
+        
+        // Find AR credits which indicate payments to invoices
+        const arCreditEntries = ledgerEntries.filter(entry => 
+          entry.accountId === 2 && entry.credit > 0 // AR account with credit entries
+        );
+        
+        // Loop through each entry and update the corresponding invoice's balance
+        for (const entry of arCreditEntries) {
+          // Extract invoice reference from description if it exists
+          const invoiceRefMatch = entry.description?.match(/invoice #?(\d+)/i);
+          if (invoiceRefMatch) {
+            const invoiceRef = invoiceRefMatch[1];
+            
+            // Find the invoice by reference
+            const transactions = await storage.getTransactions();
+            const invoice = transactions.find(t => 
+              t.type === 'invoice' && 
+              t.reference === invoiceRef
+            );
+            
+            if (invoice) {
+              // Update invoice balance by adding back the payment amount
+              const updatedBalance = (invoice.balance || invoice.amount) + entry.credit;
+              await storage.updateTransaction(invoice.id, {
+                balance: updatedBalance,
+                // Also update status if needed
+                status: updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'pending')
+              });
+            }
+          }
+        }
+      }
+      
+      // Delete the transaction
+      const deleted = await storage.deleteTransaction(id);
+      
+      if (!deleted) {
+        return res.status(500).json({ message: "Failed to delete transaction" });
+      }
+      
+      res.status(200).json({ message: "Transaction deleted successfully" });
     } catch (error) {
       console.error("Error deleting transaction:", error);
-      res.status(500).json({ message: "Failed to delete transaction" });
+      res.status(500).json({ message: "Failed to delete transaction", error: String(error) });
     }
   });
 
