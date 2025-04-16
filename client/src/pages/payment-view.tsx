@@ -110,6 +110,19 @@ export default function PaymentView() {
       setSelectedInvoicePayments(invoicePaymentsData);
     }
   }, [data]);
+  
+  // Function to handle updating payment amounts
+  const handleUpdatePaymentAmount = (index: number, value: string) => {
+    const updatedPayments = [...editableInvoicePayments];
+    updatedPayments[index] = {
+      ...updatedPayments[index],
+      amountString: value,
+      amount: parseFloat(value.replace(/,/g, '')) || 0
+    };
+    setEditableInvoicePayments(updatedPayments);
+  };
+  
+
 
   // Fetch contacts for customer info
   const { data: contacts } = useQuery<Contact[]>({
@@ -305,6 +318,17 @@ export default function PaymentView() {
     }
   }
 
+  // Initialize editable invoice payments when finalInvoicePayments changes
+  useEffect(() => {
+    if (finalInvoicePayments?.length) {
+      const invoicePayments = finalInvoicePayments.map(item => ({
+        ...item,
+        amountString: item.amount.toString()
+      }));
+      setEditableInvoicePayments(invoicePayments);
+    }
+  }, [finalInvoicePayments]);
+  
   // Calculate totals
   const totalReceived = payment.amount;
   const totalApplied = finalInvoicePayments.reduce((sum: number, p: any) => sum + p.amount, 0);
@@ -532,6 +556,15 @@ export default function PaymentView() {
                       return;
                     }
                     
+                    // Calculate total from invoice payments if they've been edited
+                    let totalAppliedFromInvoices = 0;
+                    if (editableInvoicePayments.length > 0) {
+                      totalAppliedFromInvoices = editableInvoicePayments.reduce(
+                        (sum, p) => sum + (parseFloat(p.amountString?.replace(/,/g, '')) || p.amount || 0), 
+                        0
+                      );
+                    }
+                    
                     // Prepare the update data
                     const updateData = {
                       date: paymentDate,
@@ -539,8 +572,14 @@ export default function PaymentView() {
                       reference: referenceNumber,
                       amount: parsedAmount,
                       description: notes,
-                      // Include any other necessary payment fields
                       depositAccountId: selectedDepositAccountId,
+                      // Include invoice payment information for updating line items
+                      invoicePayments: editableInvoicePayments.map(p => ({
+                        id: p.id,
+                        invoiceId: p.invoiceId,
+                        amount: parseFloat(p.amountString?.replace(/,/g, '')) || p.amount,
+                        invoiceReference: p.invoiceReference
+                      }))
                     };
                     
                     // Submit the update
@@ -624,12 +663,21 @@ export default function PaymentView() {
                         {formatCurrency(invoice.originalTotal)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <Input
-                          type="text"
-                          className="text-right"
-                          value={formatCurrency(invoice.amount)}
-                          readOnly
-                        />
+                        {isEditing ? (
+                          <Input
+                            type="text"
+                            className="text-right"
+                            value={editableInvoicePayments?.[idx]?.amountString || formatCurrency(invoice.amount)}
+                            onChange={(e) => handleUpdatePaymentAmount(idx, e.target.value)}
+                          />
+                        ) : (
+                          <Input
+                            type="text"
+                            className="text-right"
+                            value={formatCurrency(invoice.amount)}
+                            readOnly
+                          />
+                        )}
                       </td>
                     </tr>
                   ))}
