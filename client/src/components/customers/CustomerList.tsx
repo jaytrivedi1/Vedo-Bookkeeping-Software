@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Contact, Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, User, ChevronRight, X, Eye } from "lucide-react";
+import { Search, User, ChevronRight, X, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Card, 
   CardContent,
@@ -40,6 +42,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface CustomerListProps {
   className?: string;
@@ -145,6 +157,56 @@ export default function CustomerList({ className }: CustomerListProps) {
     }
   };
   
+  // Delete customer mutation
+  const { toast } = useToast();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const deleteCustomerMutation = useMutation({
+    mutationFn: async (customerId: number) => {
+      return apiRequest(`/api/contacts/${customerId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({
+        title: "Customer deleted",
+        description: "Customer has been successfully deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+      setSidebarOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete customer",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
+  });
+  
+  const handleDeleteCustomer = () => {
+    if (!selectedCustomer) return;
+    
+    // Check if customer has outstanding transactions
+    const hasTransactions = customerTransactions && customerTransactions.length > 0;
+    
+    if (hasTransactions) {
+      toast({
+        title: "Cannot delete customer",
+        description: "This customer has associated transactions. Delete all transactions first.",
+        variant: "destructive",
+      });
+      setIsDeleteDialogOpen(false);
+      return;
+    }
+    
+    setIsDeleting(true);
+    deleteCustomerMutation.mutate(selectedCustomer.id);
+  };
+  
   return (
     <div className={className}>
       <Card>
@@ -219,17 +281,31 @@ export default function CustomerList({ className }: CustomerListProps) {
           {selectedCustomer && (
             <div>
               <div className="p-6">
-                <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
-                {selectedCustomer.contactName && (
-                  <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
-                )}
-                {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
-                {selectedCustomer.phone && (
-                  <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
-                )}
-                {selectedCustomer.address && (
-                  <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
-                )}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
+                    {selectedCustomer.contactName && (
+                      <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
+                    )}
+                    {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
+                    {selectedCustomer.phone && (
+                      <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
+                    )}
+                    {selectedCustomer.address && (
+                      <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
+                    )}
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    size="sm"
+                    disabled={isDeleting || (customerTransactions && customerTransactions.length > 0)}
+                    onClick={() => setIsDeleteDialogOpen(true)}
+                    className="mt-1"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                </div>
               </div>
               
               <div className="px-6">
@@ -502,6 +578,46 @@ export default function CustomerList({ className }: CustomerListProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Customer Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="h-5 w-5 mr-2" /> Delete Customer
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedCustomer?.name}? This action cannot be undone.
+              {customerTransactions && customerTransactions.length > 0 && (
+                <p className="mt-2 text-red-500 font-medium">
+                  This customer has {customerTransactions.length} associated transaction(s).
+                  Please delete all transactions first.
+                </p>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteCustomer();
+              }}
+              disabled={isDeleting || (customerTransactions && customerTransactions.length > 0)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? (
+                <>
+                  <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full"></div>
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
