@@ -124,21 +124,22 @@ export default function CustomerList({ className }: CustomerListProps) {
   
   // Handle transaction click
   const handleTransactionClick = (transaction: Transaction) => {
-    // Navigate to edit page based on transaction type
-    let editPath = "";
+    // Navigate to view/edit page based on transaction type
+    let path = "";
     switch(transaction.type) {
       case 'invoice':
-        editPath = `/invoice/edit/${transaction.id}`;
+        path = `/invoices/${transaction.id}`; // View invoice route
         break;
       case 'payment':
-        editPath = `/payment-receive/${transaction.id}`;
+        // Since there's no specific payment edit route, we'll just go to the payments page
+        path = `/invoices`; 
         break;
       default:
-        editPath = "";
+        path = "";
     }
     
-    if (editPath) {
-      window.location.href = editPath;
+    if (path) {
+      window.location.href = path;
     }
   };
   
