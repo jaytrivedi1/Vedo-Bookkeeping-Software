@@ -68,11 +68,12 @@ export default function PaymentReceive() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   
-  // Payment line items
+  // Payment line items and related state
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
+  const [editModeInvoices, setEditModeInvoices] = useState<any[]>([]);
   
   // State for transaction ID when user clicks on an existing payment
   const [existingTransactionId, setExistingTransactionId] = useState<number | null>(null);
@@ -161,7 +162,7 @@ export default function PaymentReceive() {
         setPaymentLineItems(items);
         
         // Calculate totals
-        const applied = items.reduce((sum, item) => sum + item.amount, 0);
+        const applied = items.reduce((sum: number, item: PaymentLineItem) => sum + item.amount, 0);
         setTotalApplied(applied);
         setUnappliedCredit(paymentData.unappliedAmount || 0);
         
@@ -179,9 +180,9 @@ export default function PaymentReceive() {
             // Filter out any null results
             const validInvoices = invoices.filter(Boolean);
             
-            // Override the customer invoices with just these specific ones
+            // Store the invoices for edit mode
             if (validInvoices.length > 0) {
-              setCustomerInvoices(validInvoices);
+              setEditModeInvoices(validInvoices);
             }
           } catch (error) {
             console.error("Failed to fetch original invoices:", error);
@@ -204,9 +205,9 @@ export default function PaymentReceive() {
   });
   
   // Filter contacts to show only customers
-  const contacts = allContacts?.filter((contact: any) => 
-    contact.type === 'customer'
-  ) || [];
+  const contacts = Array.isArray(allContacts) 
+    ? allContacts.filter((contact: any) => contact.type === 'customer') 
+    : [];
 
   // Fetch accounts (for deposit accounts)
   const { data: accounts, isLoading: isAccountsLoading } = useQuery({
@@ -214,9 +215,9 @@ export default function PaymentReceive() {
   });
 
   // Filter for bank accounts and credit accounts
-  const depositAccounts = accounts?.filter(
-    (account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
-  ) || [];
+  const depositAccounts = Array.isArray(accounts)
+    ? accounts.filter((account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT)
+    : [];
   
   // Set the customer ID in the form when initialCustomerId changes
   useEffect(() => {
@@ -717,12 +718,82 @@ export default function PaymentReceive() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {isInvoicesLoading ? (
+                  {isInvoicesLoading || (isEditMode && isPaymentDataLoading) ? (
                     <div className="p-4 flex justify-center">
                       <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
-                  ) : isEditMode ? (
-                    // In edit mode, show only the invoices that were part of the payment
+                  ) : isEditMode && editModeInvoices.length > 0 ? (
+                    // In edit mode, show invoices from the original payment
+                    <div>
+                      <div className="rounded-md border">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Invoice #
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Date
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Due Date
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Original Amount
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Amount Paid
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {editModeInvoices.map((invoice: any, idx: number) => {
+                              // Find the corresponding line item with payment amount
+                              const lineItem = paymentLineItems.find(item => item.transactionId === invoice.id);
+                              return (
+                                <tr key={invoice.id}>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {invoice.reference || `INV-${invoice.id}`}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {format(new Date(invoice.date), 'MMM dd, yyyy')}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.amount)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(lineItem?.amount || 0)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Payment Summary */}
+                      <div className="mt-6 text-right">
+                        <div className="text-sm text-gray-500">Total Applied: 
+                          <span className="ml-2 font-medium text-gray-900">
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-500">Amount Received: 
+                          <span className="ml-2 font-medium text-gray-900">
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
+                          </span>
+                        </div>
+                        <div className="text-sm font-medium">Unapplied Credit: 
+                          <span className={`ml-2 ${unappliedCredit > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
+                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : !isEditMode && customerInvoices && customerInvoices.length > 0 ? (
                     <div>
                       <div className="rounded-md border">
                         <table className="min-w-full divide-y divide-gray-200">
