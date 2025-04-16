@@ -752,7 +752,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Update invoice balance and status
           const newBalance = invoice.balance ? invoice.balance - item.amount : 0;
-          const newStatus = newBalance <= 0 ? 'paid' : 'partial';
+          // Use status enum values from schema.ts (partial is not a valid enum value)
+          const newStatus = newBalance <= 0 ? 'paid' : 'pending';
           await storage.updateTransaction(invoice.id, { 
             balance: newBalance, 
             status: newStatus 
