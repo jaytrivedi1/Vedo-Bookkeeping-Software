@@ -111,6 +111,13 @@ export default function PaymentReceive() {
       note: "",
     },
   });
+  
+  // Set the customer ID in the form when initialCustomerId changes
+  useEffect(() => {
+    if (initialCustomerId) {
+      form.setValue('contactId', initialCustomerId);
+    }
+  }, [initialCustomerId, form]);
 
   const watchContactId = form.watch("contactId");
   const watchAmount = form.watch("amount");
