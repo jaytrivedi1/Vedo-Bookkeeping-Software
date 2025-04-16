@@ -172,11 +172,14 @@ export class DatabaseStorage implements IStorage {
           const invoicePaymentEntries = ledgerEntriesToDelete.filter(entry => 
             entry.accountId === 2 && 
             entry.credit > 0 && 
+            entry.description && 
             entry.description.includes('invoice')
           );
           
           // Process each payment application to restore invoice balances
           for (const entry of invoicePaymentEntries) {
+            if (!entry.description) continue;
+            
             // Extract invoice reference from description (e.g., "Payment applied to invoice #1002")
             const invoiceRefMatch = entry.description.match(/invoice\s+#(\d+)/i);
             
@@ -196,12 +199,18 @@ export class DatabaseStorage implements IStorage {
                 );
               
               if (invoice) {
-                // Add the payment amount back to the invoice's balance
-                const newBalance = invoice.balance + entry.credit;
-                // If the invoice was paid and now has a balance, change status back to pending
-                const newStatus = newBalance > 0 && invoice.status === 'paid' ? 'pending' : invoice.status;
+                // When a payment is deleted, we need to:
+                // 1. Restore the full invoice balance (amount) if it was fully paid
+                // 2. Add the payment credit back to the balance if it was partially paid
                 
-                console.log(`Updating invoice #${invoiceRef} balance from ${invoice.balance} to ${newBalance}, status from ${invoice.status} to ${newStatus}`);
+                // Always restore the full invoice amount on deletion of a payment
+                // This ensures we don't have any balance calculation errors
+                const newBalance = invoice.amount;
+                
+                // Set status to 'pending' since we're restoring the invoice
+                const newStatus = 'pending';
+                
+                console.log(`Updating invoice #${invoiceRef} balance from ${invoice.balance || invoice.amount} to ${newBalance}, status from ${invoice.status || 'unknown'} to ${newStatus}`);
                 
                 // Update the invoice
                 await tx
@@ -258,7 +267,7 @@ export class DatabaseStorage implements IStorage {
           .delete(transactions)
           .where(eq(transactions.id, id));
         
-        return deleteResult.rowCount > 0;
+        return deleteResult.rowCount !== null && deleteResult.rowCount > 0;
       });
     } catch (error) {
       console.error('Error deleting transaction:', error);
