@@ -401,7 +401,7 @@ export default function Reports() {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" />
                           <YAxis />
-                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
                           <Bar dataKey="value" fill="#3b82f6" />
                         </BarChart>
                       </ResponsiveContainer>
@@ -564,7 +564,7 @@ export default function Reports() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -986,7 +986,7 @@ export default function Reports() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
@@ -1062,7 +1062,7 @@ export default function Reports() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value: any) => `$${Number(value).toFixed(2)}`} />
+                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
                           <Legend />
                         </PieChart>
                       </ResponsiveContainer>
