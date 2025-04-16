@@ -196,13 +196,24 @@ export default function PaymentReceive() {
       const itemIndex = updatedItems.findIndex(item => item.transactionId === invoice.id);
       if (itemIndex === -1) continue;
       
-      const paymentAmount = Math.min(invoice.balance, remainingAmount);
+      const paymentAmount = Math.min(invoice.balance || invoice.amount, remainingAmount);
       updatedItems[itemIndex].amount = paymentAmount;
       updatedItems[itemIndex].selected = paymentAmount > 0;
       remainingAmount -= paymentAmount;
     }
     
     setPaymentLineItems(updatedItems);
+    
+    // Force update the UI inputs
+    setTimeout(() => {
+      // Update all payment input fields with calculated values
+      const paymentInputs = document.querySelectorAll('td.px-6.py-4.whitespace-nowrap input[type="text"]');
+      updatedItems.forEach((item, index) => {
+        if (index < paymentInputs.length) {
+          (paymentInputs[index] as HTMLInputElement).value = item.amount.toString();
+        }
+      });
+    }, 100);
   };
 
   // Payment creation mutation
@@ -432,24 +443,21 @@ export default function PaymentReceive() {
                       <FormItem>
                         <FormLabel>Amount Received</FormLabel>
                         <FormControl>
-                          <Input 
+                          <input
                             type="text"
-                            {...field}
-                            value={field.value || ''}
-                            onChange={(e) => {
-                              // Allow empty field for editing
-                              if (e.target.value === '') {
-                                field.onChange(0);
-                                return;
-                              }
-                              
-                              // Only proceed if value is numeric
+                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="0.00"
+                            defaultValue={field.value || ''}
+                            onBlur={(e) => {
                               const numValue = parseFloat(e.target.value);
                               if (!isNaN(numValue)) {
                                 field.onChange(numValue);
+                              } else {
+                                // Reset to zero for invalid value
+                                e.target.value = '0';
+                                field.onChange(0);
                               }
                             }}
-                            placeholder="0.00" 
                           />
                         </FormControl>
                         <FormMessage />
@@ -547,27 +555,21 @@ export default function PaymentReceive() {
                                   {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance || invoice.amount)}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                  <Input
+                                  <input
                                     type="text"
+                                    className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={!paymentLineItems[idx]?.selected}
-                                    value={paymentLineItems[idx]?.amount || ''}
-                                    onChange={(e) => {
-                                      // Allow empty string for temporary editing
-                                      if (e.target.value === '') {
-                                        const updatedItems = [...paymentLineItems];
-                                        updatedItems[idx].amount = 0;
-                                        updatedItems[idx].selected = true;
-                                        setPaymentLineItems(updatedItems);
-                                        return;
-                                      }
-                                      
-                                      // Only proceed if value is numeric
+                                    defaultValue={paymentLineItems[idx]?.amount || ''}
+                                    onBlur={(e) => {
                                       const numValue = parseFloat(e.target.value);
                                       if (!isNaN(numValue)) {
                                         handleLineItemChange(idx, 'amount', numValue);
+                                      } else {
+                                        // Reset to zero for invalid value
+                                        e.target.value = '0';
+                                        handleLineItemChange(idx, 'amount', 0);
                                       }
                                     }}
-                                    className="w-24"
                                   />
                                 </td>
                               </tr>
