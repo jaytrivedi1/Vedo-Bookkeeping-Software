@@ -360,70 +360,126 @@ export default function CustomerList({ className }: CustomerListProps) {
           </DialogHeader>
 
           {selectedTransaction && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Date</h3>
-                  <p className="text-base">
-                    {format(new Date(selectedTransaction.date), "MMMM dd, yyyy")}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Amount</h3>
-                  <p className="text-base">{formatCurrency(selectedTransaction.amount)}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Status</h3>
-                  <p className="text-base">{selectedTransaction.status.toUpperCase()}</p>
-                </div>
-                {selectedTransaction.type === 'invoice' && selectedTransaction.balance !== undefined && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
-                    <p className="text-base">{formatCurrency(selectedTransaction.balance)}</p>
+            <div className="space-y-6">
+              {/* Main transaction information in a card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    {selectedTransaction.type === 'invoice' ? 'Invoice Details' : 
+                     selectedTransaction.type === 'payment' ? 'Payment Details' : 
+                     'Transaction Details'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Left column */}
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Date</h3>
+                        <p className="text-base font-medium">
+                          {format(new Date(selectedTransaction.date), "MMMM dd, yyyy")}
+                        </p>
+                      </div>
+                      
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Status</h3>
+                        <div className="mt-1">
+                          <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            selectedTransaction.status === 'paid' || selectedTransaction.status === 'completed' 
+                              ? 'bg-green-100 text-green-800' 
+                              : selectedTransaction.status === 'pending' 
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : selectedTransaction.status === 'overdue'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {selectedTransaction.status.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {selectedTransaction.description && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">Description</h3>
+                          <p className="text-base">{selectedTransaction.description}</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Right column */}
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Reference</h3>
+                        <p className="text-base font-medium">{selectedTransaction.reference || 'N/A'}</p>
+                      </div>
+                      
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500">Amount</h3>
+                        <p className="text-base font-semibold text-green-700">
+                          {formatCurrency(selectedTransaction.amount)}
+                        </p>
+                      </div>
+                      
+                      {selectedTransaction.type === 'invoice' && selectedTransaction.balance !== undefined && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
+                          <p className="text-base font-semibold text-blue-700">
+                            {formatCurrency(selectedTransaction.balance)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
+                </CardContent>
+              </Card>
 
-              {selectedTransaction.description && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Description</h3>
-                  <p className="text-base">{selectedTransaction.description}</p>
-                </div>
-              )}
-
-              {/* Show ledger entries for this transaction */}
-              <div>
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Journal Entries</h3>
-                {!ledgerEntries ? (
-                  <div className="flex justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  </div>
-                ) : ledgerEntries.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No ledger entries found for this transaction.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Account</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead className="text-right">Debit</TableHead>
-                        <TableHead className="text-right">Credit</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ledgerEntries.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell>
-                            {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
-                          </TableCell>
-                          <TableCell>{entry.description}</TableCell>
-                          <TableCell className="text-right">{entry.debit > 0 ? formatCurrency(entry.debit) : ''}</TableCell>
-                          <TableCell className="text-right">{entry.credit > 0 ? formatCurrency(entry.credit) : ''}</TableCell>
+              {/* Show ledger entries in a second card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Journal Entries</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!ledgerEntries ? (
+                    <div className="flex justify-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    </div>
+                  ) : ledgerEntries.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No ledger entries found for this transaction.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Account</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right">Debit</TableHead>
+                          <TableHead className="text-right">Credit</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
+                      </TableHeader>
+                      <TableBody>
+                        {ledgerEntries.map((entry) => (
+                          <TableRow key={entry.id}>
+                            <TableCell>
+                              {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
+                            </TableCell>
+                            <TableCell>{entry.description}</TableCell>
+                            <TableCell className="text-right">{entry.debit > 0 ? formatCurrency(entry.debit) : ''}</TableCell>
+                            <TableCell className="text-right">{entry.credit > 0 ? formatCurrency(entry.credit) : ''}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Actions at the bottom */}
+              <div className="flex justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setSelectedTransaction(null)}
+                >
+                  Close
+                </Button>
               </div>
             </div>
           )}
