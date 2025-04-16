@@ -324,30 +324,30 @@ export default function CustomerList({ className }: CustomerListProps) {
           </SheetHeader>
           
           {selectedCustomer && (
-            <div>
-              <div className="p-6">
-                <div>
-                  <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
-                  {selectedCustomer.contactName && (
-                    <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
-                  )}
-                  {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
-                  {selectedCustomer.phone && (
-                    <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
-                  )}
-                  {selectedCustomer.address && (
-                    <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
-                  )}
+            <ScrollArea className="h-[calc(100vh-80px)]">
+              <div>
+                <div className="p-6">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
+                    {selectedCustomer.contactName && (
+                      <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
+                    )}
+                    {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
+                    {selectedCustomer.phone && (
+                      <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
+                    )}
+                    {selectedCustomer.address && (
+                      <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              
-              <div className="px-6">
-                <h3 className="text-lg font-medium my-4">
-                  Transactions ({customerInvoicesAndPayments.length})
-                </h3>
                 
-                <div className="mt-2">
-                  <ScrollArea className="h-[400px]">
+                <div className="px-6">
+                  <h3 className="text-lg font-medium my-4">
+                    Transactions ({customerInvoicesAndPayments.length})
+                  </h3>
+                  
+                  <div className="mt-2">
                     {customerInvoicesAndPayments.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         No transactions found for this customer.
@@ -455,35 +455,35 @@ export default function CustomerList({ className }: CustomerListProps) {
                         </TableBody>
                       </Table>
                     )}
-                  </ScrollArea>
-                </div>
-              </div>
-              
-              {/* Summary */}
-              <div className="border-t mt-6 p-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(customerInvoices.reduce((sum, i) => sum + i.amount, 0))}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Outstanding Balance</h3>
-                    <p className="text-xl font-semibold text-blue-700">
-                      {formatCurrency(customerInvoices.reduce((sum, i) => {
-                        // Add balance to the sum if it exists, otherwise add the full amount
-                        // This assumes invoices with no balance set are fully outstanding
-                        const outstandingAmount = (i.balance !== null && i.balance !== undefined) 
-                          ? i.balance 
-                          : i.amount;
-                        return sum + outstandingAmount;
-                      }, 0))}
-                    </p>
                   </div>
                 </div>
+                
+                {/* Summary */}
+                <div className="border-t mt-6 p-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
+                      <p className="text-xl font-semibold">
+                        {formatCurrency(customerInvoices.reduce((sum, i) => sum + i.amount, 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Outstanding Balance</h3>
+                      <p className="text-xl font-semibold text-blue-700">
+                        {formatCurrency(customerInvoices.reduce((sum, i) => {
+                          // Add balance to the sum if it exists, otherwise add the full amount
+                          // This assumes invoices with no balance set are fully outstanding
+                          const outstandingAmount = (i.balance !== null && i.balance !== undefined) 
+                            ? i.balance 
+                            : i.amount;
+                          return sum + outstandingAmount;
+                        }, 0))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            </ScrollArea>
           )}
         </SheetContent>
       </Sheet>
