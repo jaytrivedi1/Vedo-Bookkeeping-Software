@@ -364,16 +364,20 @@ export default function Reports() {
                           <TableBody>
                             <TableRow>
                               <TableCell className="font-medium">Revenues</TableCell>
-                              <TableCell className="text-right">${incomeStatement?.revenues.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {incomeStatement?.revenues ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenues) : '0.00'}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-medium">Expenses</TableCell>
-                              <TableCell className="text-right">${incomeStatement?.expenses.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {incomeStatement?.expenses ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.expenses) : '0.00'}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-bold">Net Income</TableCell>
                               <TableCell className="text-right font-bold">
-                                ${incomeStatement?.netIncome.toFixed(2)}
+                                {incomeStatement?.netIncome ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome) : '0.00'}
                               </TableCell>
                             </TableRow>
                           </TableBody>
@@ -431,7 +435,9 @@ export default function Reports() {
                               accountsByType['income'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                  </TableCell>
                                 </TableRow>
                               ))
                             ) : (
@@ -462,7 +468,9 @@ export default function Reports() {
                               accountsByType['expense'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                  </TableCell>
                                 </TableRow>
                               ))
                             ) : (
@@ -504,20 +512,27 @@ export default function Reports() {
                           <TableBody>
                             <TableRow>
                               <TableCell className="font-medium">Assets</TableCell>
-                              <TableCell className="text-right">${balanceSheet?.assets.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {balanceSheet?.assets ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.assets) : '0.00'}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-medium">Liabilities</TableCell>
-                              <TableCell className="text-right">${balanceSheet?.liabilities.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {balanceSheet?.liabilities ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.liabilities) : '0.00'}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-medium">Equity</TableCell>
-                              <TableCell className="text-right">${balanceSheet?.equity.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {balanceSheet?.equity ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity) : '0.00'}
+                              </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-bold">Liabilities + Equity</TableCell>
                               <TableCell className="text-right font-bold">
-                                ${(balanceSheet?.liabilities + balanceSheet?.equity).toFixed(2)}
+                                {balanceSheet?.liabilities && balanceSheet?.equity ? 
+                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.liabilities + balanceSheet.equity) : '0.00'}
                               </TableCell>
                             </TableRow>
                           </TableBody>
@@ -583,7 +598,9 @@ export default function Reports() {
                               accountsByType['asset'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                  </TableCell>
                                 </TableRow>
                               ))
                             ) : (
@@ -614,7 +631,9 @@ export default function Reports() {
                               accountsByType['liability'].map((account: any) => (
                                 <TableRow key={account.id}>
                                   <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                  <TableCell className="text-right">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                  </TableCell>
                                 </TableRow>
                               ))
                             ) : (
@@ -659,7 +678,9 @@ export default function Reports() {
                                         .map((account: any) => (
                                           <TableRow key={account.id}>
                                             <TableCell>{account.name}</TableCell>
-                                            <TableCell className="text-right">${account.balance.toFixed(2)}</TableCell>
+                                            <TableCell className="text-right">
+                                              {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                            </TableCell>
                                           </TableRow>
                                         ))
                                       }
