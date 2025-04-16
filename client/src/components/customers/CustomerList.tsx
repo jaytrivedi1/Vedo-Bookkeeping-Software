@@ -58,10 +58,14 @@ interface CustomerListProps {
 }
 
 export default function CustomerList({ className }: CustomerListProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Fetch customers
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -158,10 +162,7 @@ export default function CustomerList({ className }: CustomerListProps) {
   };
   
   // Delete customer and transaction mutations
-  const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   
   const deleteCustomerMutation = useMutation({
     mutationFn: async (customerId: number) => {
