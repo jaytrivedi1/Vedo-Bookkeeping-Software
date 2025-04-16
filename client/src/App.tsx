@@ -29,6 +29,7 @@ function Router() {
       <Route path="/invoice-new" component={InvoiceNew} />
       <Route path="/invoice-edit/:id" component={InvoiceEdit} />
       <Route path="/invoices/:id" component={InvoiceView} />
+      <Route path="/payments/edit/:id" component={PaymentReceive} />
       <Route path="/payments/:id" component={PaymentView} />
       <Route path="/payment-receive" component={PaymentReceive} />
       <Route path="/expenses" component={Expenses} />
