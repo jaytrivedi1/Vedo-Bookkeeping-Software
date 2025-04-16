@@ -832,7 +832,6 @@ export default function Reports() {
                             <TableRow>
                               <TableHead>Account Code</TableHead>
                               <TableHead>Account Name</TableHead>
-                              <TableHead>Type</TableHead>
                               <TableHead className="text-right">Debit</TableHead>
                               <TableHead className="text-right">Credit</TableHead>
                             </TableRow>
