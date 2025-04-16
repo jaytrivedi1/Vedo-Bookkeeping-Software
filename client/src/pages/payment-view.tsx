@@ -8,11 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Transaction, Contact, Account, LedgerEntry } from "@shared/schema";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 interface PaymentResponse {
   transaction: Transaction;
   lineItems: any[];
   ledgerEntries: LedgerEntry[];
+}
+
+interface InvoiceDetails {
+  id: number;
+  reference: string;
+  date: Date;
+  dueDate?: Date | null;
+  balance: number;
+  amount: number;
 }
 
 export default function PaymentView() {
@@ -41,6 +54,11 @@ export default function PaymentView() {
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
+
+  // Fetch all transactions to get invoice details
+  const { data: transactions } = useQuery<Transaction[]>({
+    queryKey: ['/api/transactions'],
+  });
   
   // Get contact information
   const contact = contacts?.find(c => c.id === data?.transaction?.contactId);
@@ -50,7 +68,9 @@ export default function PaymentView() {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-    }).format(amount);
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount).replace('$', '');
   };
 
   // Loading state
@@ -98,159 +118,236 @@ export default function PaymentView() {
     .map((entry: LedgerEntry) => {
       // Try to extract invoice information from description
       const match = entry.description?.match(/Invoice (\d+)/i);
+      const invoiceRef = match ? match[1] : 'Unknown';
+      
+      // Find the actual invoice transaction if possible
+      const relatedInvoice = transactions?.find(t => 
+        t.type === 'invoice' && 
+        t.reference === invoiceRef && 
+        t.contactId === payment.contactId
+      );
+      
       return {
         id: entry.id,
-        invoiceReference: match ? match[1] : 'Unknown',
+        invoiceReference: invoiceRef,
+        invoiceId: relatedInvoice?.id,
+        date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
+        dueDate: null, // Not always available in our system
         amount: entry.credit,
+        balance: relatedInvoice?.balance || 0,
         description: entry.description || ''
       };
     });
 
+  // Calculate totals
+  const totalReceived = payment.amount;
+  const totalApplied = invoicePayments.reduce((sum, p) => sum + p.amount, 0);
+  const unappliedCredit = totalReceived - totalApplied;
+
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex items-center mb-6">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate("/dashboard")}
-          className="mr-2"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
-        <h1 className="text-2xl font-bold">
-          Payment {payment.reference ? `#${payment.reference}` : ''}
-        </h1>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main payment details */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Customer</h3>
-                    <p className="text-base font-medium">
-                      {contact ? contact.name : `Customer #${payment.contactId}`}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Date</h3>
-                    <p className="text-base">
-                      {format(new Date(payment.date), "MMMM dd, yyyy")}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Status</h3>
-                    <div className="mt-1">
-                      <Badge className="bg-green-100 text-green-800">
-                        {payment.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Reference</h3>
-                    <p className="text-base">
-                      {payment.reference || 'N/A'}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Amount</h3>
-                    <p className="text-xl font-semibold text-green-700">
-                      {formatCurrency(payment.amount)}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500">Deposit Account</h3>
-                    <p className="text-base">
-                      {depositAccount ? depositAccount.name : 'N/A'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              {payment.description && (
-                <div className="mt-6 border-t pt-6">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Description</h3>
-                  <p className="text-base">{payment.description}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Applied to Invoices */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Applied to Invoices</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {invoicePayments.length === 0 ? (
-                <p className="text-gray-500">No invoice payments found</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoicePayments.map((paymentItem: { id: number, invoiceReference: string, amount: number, description: string }) => (
-                      <TableRow key={paymentItem.id}>
-                        <TableCell>{paymentItem.invoiceReference}</TableCell>
-                        <TableCell>{paymentItem.description}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(paymentItem.amount)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+    <div className="py-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => window.history.back()}
+              className="mr-4"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            <h1 className="text-2xl font-semibold text-gray-900">Receive Payment</h1>
+          </div>
+          <Button
+            className="bg-primary text-white"
+            disabled
+          >
+            Record Payment
+          </Button>
         </div>
-        
-        {/* Journal entries */}
-        <Card>
+
+        {/* Payment Details Section */}
+        <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Journal Entries</CardTitle>
+            <CardTitle>Payment Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Account</TableHead>
-                  <TableHead className="text-right">Debit</TableHead>
-                  <TableHead className="text-right">Credit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ledgerEntries.map((entry: LedgerEntry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell>
-                      {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {entry.debit > 0 ? formatCurrency(entry.debit) : ''}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {entry.credit > 0 ? formatCurrency(entry.credit) : ''}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Label htmlFor="customer">Customer</Label>
+                <div className="relative mt-1">
+                  <Input
+                    id="customer"
+                    value={contact?.name || ''}
+                    className="pr-10"
+                    readOnly
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  value={contact?.email || ''}
+                  readOnly
+                  className="bg-muted/50"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="date">Payment Date</Label>
+                <Input
+                  id="date"
+                  value={format(new Date(payment.date), "MMMM dd, yyyy")}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="method">Payment Method</Label>
+                <Input
+                  id="method"
+                  value={(payment as any).paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 
+                         (payment as any).paymentMethod === 'credit_card' ? 'Credit Card' : 
+                         (payment as any).paymentMethod === 'cash' ? 'Cash' : 
+                         (payment as any).paymentMethod === 'cheque' ? 'Cheque' : 
+                         'Bank Transfer'}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="reference">Reference Number</Label>
+                <Input
+                  id="reference"
+                  value={payment.reference || ''}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="depositTo">Deposit To</Label>
+                <Input
+                  id="depositTo"
+                  value={depositAccount ? `${depositAccount.name} ${depositAccount.code ? `(${depositAccount.code})` : ''}` : ''}
+                  readOnly
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="amount">Amount Received</Label>
+                <Input
+                  id="amount"
+                  value={formatCurrency(payment.amount)}
+                  readOnly
+                />
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <Label htmlFor="notes">Memo / Notes</Label>
+              <Input
+                id="notes"
+                value={payment.description || ''}
+                readOnly
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Apply Payment Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex justify-between items-center">
+              <CardTitle>Apply Payment to Invoices</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+              >
+                Auto Apply
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Select
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Invoice #
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Due Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Balance
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Payment
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {invoicePayments.map((invoice, idx) => (
+                    <tr key={invoice.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Checkbox
+                          id={`invoice-${invoice.id}`}
+                          checked={true}
+                          disabled
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {invoice.invoiceReference}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(invoice.balance + invoice.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Input
+                          type="text"
+                          className="text-right"
+                          value={formatCurrency(invoice.amount)}
+                          readOnly
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex justify-between py-2">
+                <span className="font-medium">Total Received:</span>
+                <span className="font-medium">{formatCurrency(totalReceived)}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="font-medium">Total Applied:</span>
+                <span className="font-medium">{formatCurrency(totalApplied)}</span>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex justify-between py-2">
+                <span className="font-medium">Unapplied Credit:</span>
+                <span className="font-medium">{formatCurrency(unappliedCredit)}</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
