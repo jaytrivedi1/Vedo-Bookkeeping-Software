@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Contact, Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
 import { Search, User, ChevronRight, X, Eye } from "lucide-react";
@@ -293,20 +294,36 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
                                   <TableCell className="text-right">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTransaction(transaction);
-                                        if (transaction.id) {
-                                          refetchLedgerEntries();
-                                        }
-                                      }}
-                                    >
-                                      <Eye className="h-4 w-4 mr-1" />
-                                      View
-                                    </Button>
+                                    {transaction.type === 'invoice' ? (
+                                      <Link href={`/invoices/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
+                                        <Button variant="ghost" size="sm">
+                                          <Eye className="h-4 w-4 mr-1" />
+                                          View
+                                        </Button>
+                                      </Link>
+                                    ) : transaction.type === 'payment' ? (
+                                      <Link href={`/payments/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
+                                        <Button variant="ghost" size="sm">
+                                          <Eye className="h-4 w-4 mr-1" />
+                                          View
+                                        </Button>
+                                      </Link>
+                                    ) : (
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTransaction(transaction);
+                                          if (transaction.id) {
+                                            refetchLedgerEntries();
+                                          }
+                                        }}
+                                      >
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        View
+                                      </Button>
+                                    )}
                                   </TableCell>
                                 </TableRow>
                               );
