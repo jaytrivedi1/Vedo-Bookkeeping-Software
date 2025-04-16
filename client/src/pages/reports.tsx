@@ -691,7 +691,7 @@ export default function Reports() {
                                           {retainedEarningsAccount ? retainedEarningsAccount.name : 'Retained Earnings'}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                          ${incomeStatement?.netIncome.toFixed(2)}
+                                          {incomeStatement?.netIncome ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome) : '0.00'}
                                         </TableCell>
                                       </TableRow>
                                     </>
@@ -809,10 +809,10 @@ export default function Reports() {
                                     <TableCell>{entry.description}</TableCell>
                                     <TableCell>{accountName}</TableCell>
                                     <TableCell className="text-right">
-                                      {entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : ''}
+                                      {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      {entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : ''}
+                                      {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
                                     </TableCell>
                                   </TableRow>
                                 );
@@ -1016,7 +1016,9 @@ export default function Reports() {
                           expenseAccounts.map((item: any, index: number) => (
                             <TableRow key={index}>
                               <TableCell>{item.name}</TableCell>
-                              <TableCell className="text-right">${item.value.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.value)}
+                              </TableCell>
                               <TableCell className="text-right">
                                 {((item.value / (incomeStatement?.expenses || 1)) * 100).toFixed(1)}%
                               </TableCell>
@@ -1090,7 +1092,9 @@ export default function Reports() {
                           revenueAccounts.map((item: any, index: number) => (
                             <TableRow key={index}>
                               <TableCell>{item.name}</TableCell>
-                              <TableCell className="text-right">${item.value.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.value)}
+                              </TableCell>
                               <TableCell className="text-right">
                                 {((item.value / (incomeStatement?.revenues || 1)) * 100).toFixed(1)}%
                               </TableCell>
