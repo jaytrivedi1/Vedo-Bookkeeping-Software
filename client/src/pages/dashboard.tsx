@@ -1,18 +1,32 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  DollarSignIcon,
-  ShoppingCartIcon,
-  TrendingUpIcon,
-  FileTextIcon,
+  DollarSign,
+  ShoppingCart,
+  TrendingUp,
+  FileText,
+  Plus,
+  CreditCard,
+  PiggyBank,
+  Receipt,
+  BookOpen,
+  ArrowLeftRight,
 } from "lucide-react";
 import SummaryCard from "@/components/dashboard/SummaryCard";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import RevenueChart from "@/components/dashboard/RevenueChart";
 import AccountBalances from "@/components/dashboard/AccountBalances";
-import TransactionForm from "@/components/transactions/TransactionForm";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
 import { Transaction } from "@shared/schema";
 
 export default function Dashboard() {
@@ -70,7 +84,75 @@ export default function Dashboard() {
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
         <div className="flex items-center space-x-3">
           <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
-          <TransactionForm onSuccess={refetch} />
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="text-white bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4 mr-2" />
+                New Transaction
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <Link href="/invoice-new">
+                <DropdownMenuItem>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Invoice</span>
+                </DropdownMenuItem>
+              </Link>
+              <DropdownMenuItem>
+                <CreditCard className="mr-2 h-4 w-4" />
+                <span>Receive Payment</span>
+              </DropdownMenuItem>
+              <Link href="/deposits">
+                <DropdownMenuItem>
+                  <PiggyBank className="mr-2 h-4 w-4" />
+                  <span>Deposit</span>
+                </DropdownMenuItem>
+              </Link>
+              
+              <DropdownMenuSeparator />
+              
+              <DropdownMenuItem>
+                <Receipt className="mr-2 h-4 w-4" />
+                <span>Bill</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <DollarSign className="mr-2 h-4 w-4" />
+                <span>Pay Bill</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <CreditCard className="mr-2 h-4 w-4" />
+                <span>Cheque</span>
+              </DropdownMenuItem>
+              <Link href="/expenses">
+                <DropdownMenuItem>
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  <span>Expense</span>
+                </DropdownMenuItem>
+              </Link>
+              
+              <DropdownMenuSeparator />
+              
+              <Link href="/journals">
+                <DropdownMenuItem>
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  <span>Journal Entry</span>
+                </DropdownMenuItem>
+              </Link>
+              <DropdownMenuItem>
+                <Receipt className="mr-2 h-4 w-4" />
+                <span>Vendor Credit</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <FileText className="mr-2 h-4 w-4" />
+                <span>Customer Credit</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <ArrowLeftRight className="mr-2 h-4 w-4" />
+                <span>Transfer</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       
@@ -84,7 +166,7 @@ export default function Dashboard() {
               amount={incomeStatement?.revenues 
                 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenues)
                 : '0.00'}
-              icon={<DollarSignIcon />}
+              icon={<DollarSign />}
               trend="+12.5%"
               change="from last month"
               trendDirection="up"
@@ -97,7 +179,7 @@ export default function Dashboard() {
               amount={incomeStatement?.expenses 
                 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.expenses)
                 : '0.00'}
-              icon={<ShoppingCartIcon />}
+              icon={<ShoppingCart />}
               trend="+4.3%"
               change="from last month"
               trendDirection="down"
@@ -110,7 +192,7 @@ export default function Dashboard() {
               amount={incomeStatement?.netIncome 
                 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)
                 : '0.00'}
-              icon={<TrendingUpIcon />}
+              icon={<TrendingUp />}
               trend="+8.2%"
               change="from last month"
               trendDirection="up"
@@ -121,7 +203,7 @@ export default function Dashboard() {
             <SummaryCard
               title="Unpaid Invoices"
               amount={new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unpaidInvoicesAmount)}
-              icon={<FileTextIcon />}
+              icon={<FileText />}
               trend={`${unpaidInvoices.length} invoices`}
               change="pending payment"
               iconBgColor="bg-yellow-100"
