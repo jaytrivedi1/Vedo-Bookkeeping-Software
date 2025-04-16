@@ -54,10 +54,8 @@ export default function PaymentView() {
   const { data, isLoading, error } = useQuery<PaymentResponse>({
     queryKey: ['/api/transactions', paymentId],
     queryFn: async () => {
-      const response = await fetch(`/api/transactions/${paymentId}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch payment details");
-      }
+      // Use apiRequest from queryClient to ensure proper error handling
+      const response = await apiRequest('GET', `/api/transactions/${paymentId}`);
       return response.json();
     },
   });
