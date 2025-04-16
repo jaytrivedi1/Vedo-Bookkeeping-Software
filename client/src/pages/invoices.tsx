@@ -61,12 +61,31 @@ export default function Invoices() {
   
   // Get total amounts
   const totalInvoiced = invoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPaid = invoices
-    .filter((invoice) => invoice.status === "paid")
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
-  const totalPending = invoices
-    .filter((invoice) => invoice.status === "pending" || invoice.status === "overdue")
-    .reduce((sum, invoice) => sum + invoice.amount, 0);
+  
+  // Calculate paid amounts based on original amounts minus remaining balance
+  const totalPaid = invoices.reduce((sum, invoice) => {
+    // If invoice is paid, add full amount
+    if (invoice.status === "paid") {
+      return sum + invoice.amount;
+    }
+    // For partially paid invoices, add the paid portion (original amount - balance)
+    else if (invoice.status === "pending" && invoice.balance !== null && invoice.balance !== undefined) {
+      return sum + (invoice.amount - invoice.balance);
+    }
+    return sum;
+  }, 0);
+  
+  // Calculate pending amounts based on remaining balances
+  const totalPending = invoices.reduce((sum, invoice) => {
+    if ((invoice.status === "pending" || invoice.status === "overdue") && 
+        invoice.balance !== null && invoice.balance !== undefined) {
+      return sum + invoice.balance;
+    } else if ((invoice.status === "pending" || invoice.status === "overdue") && 
+               (invoice.balance === null || invoice.balance === undefined)) {
+      return sum + invoice.amount;
+    }
+    return sum;
+  }, 0);
   
   return (
     <div className="py-6">
