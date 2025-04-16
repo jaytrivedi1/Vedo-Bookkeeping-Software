@@ -57,7 +57,7 @@ export default function RevenueChart({ data, loading = false }: RevenueChartProp
   }, [data]);
 
   const formatCurrency = (value: number) => {
-    return `$${value.toFixed(2)}`;
+    return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
 
   if (loading) {

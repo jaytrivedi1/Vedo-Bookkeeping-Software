@@ -81,7 +81,9 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <SummaryCard
               title="Total Revenue"
-              amount={`$${incomeStatement?.revenues.toFixed(2) || '0.00'}`}
+              amount={incomeStatement?.revenues 
+                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenues)
+                : '0.00'}
               icon={<DollarSignIcon />}
               trend="+12.5%"
               change="from last month"
@@ -92,7 +94,9 @@ export default function Dashboard() {
             
             <SummaryCard
               title="Total Expenses"
-              amount={`$${incomeStatement?.expenses.toFixed(2) || '0.00'}`}
+              amount={incomeStatement?.expenses 
+                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.expenses)
+                : '0.00'}
               icon={<ShoppingCartIcon />}
               trend="+4.3%"
               change="from last month"
@@ -103,7 +107,9 @@ export default function Dashboard() {
             
             <SummaryCard
               title="Net Profit"
-              amount={`$${incomeStatement?.netIncome.toFixed(2) || '0.00'}`}
+              amount={incomeStatement?.netIncome 
+                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)
+                : '0.00'}
               icon={<TrendingUpIcon />}
               trend="+8.2%"
               change="from last month"
@@ -114,7 +120,7 @@ export default function Dashboard() {
             
             <SummaryCard
               title="Unpaid Invoices"
-              amount={`$${unpaidInvoicesAmount.toFixed(2)}`}
+              amount={new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unpaidInvoicesAmount)}
               icon={<FileTextIcon />}
               trend={`${unpaidInvoices.length} invoices`}
               change="pending payment"

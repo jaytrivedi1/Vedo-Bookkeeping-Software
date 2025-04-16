@@ -74,7 +74,7 @@ export default function AccountBalances() {
                 <p className="text-xs text-gray-500">{formatAccountNumber(item.account.code)}</p>
               </div>
               <span className="text-base font-medium text-gray-900">
-                ${item.balance.toFixed(2)}
+                {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.balance)}
               </span>
             </div>
           ))}
@@ -83,7 +83,7 @@ export default function AccountBalances() {
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-gray-500">Total</span>
               <span className="text-base font-semibold text-gray-900">
-                ${totalBalance.toFixed(2)}
+                {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalBalance)}
               </span>
             </div>
           </div>
