@@ -99,10 +99,12 @@ export default function Dashboard() {
                   <span>Invoice</span>
                 </DropdownMenuItem>
               </Link>
-              <DropdownMenuItem>
-                <CreditCard className="mr-2 h-4 w-4" />
-                <span>Receive Payment</span>
-              </DropdownMenuItem>
+              <Link href="/payment-receive">
+                <DropdownMenuItem>
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  <span>Receive Payment</span>
+                </DropdownMenuItem>
+              </Link>
               <Link href="/deposits">
                 <DropdownMenuItem>
                   <PiggyBank className="mr-2 h-4 w-4" />

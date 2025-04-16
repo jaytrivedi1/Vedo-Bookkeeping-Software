@@ -710,6 +710,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Deposit routes
+  apiRouter.post("/payments", async (req: Request, res: Response) => {
+    const data = req.body;
+    const lineItems = data.lineItems || [];
+    const unappliedAmount = data.unappliedAmount || 0;
+    
+    try {
+      // Create the payment transaction
+      const paymentData = {
+        reference: data.reference,
+        date: new Date(data.date),
+        dueDate: new Date(data.date),
+        contactId: data.contactId,
+        amount: data.amount,
+        status: 'completed',
+        type: 'payment',
+        description: data.description || 'Payment received',
+      };
+      
+      // Prepare ledger entries
+      const ledgerEntries = [
+        // Debit the bank account (increase)
+        {
+          accountId: data.depositAccountId,
+          debit: data.amount,
+          credit: 0,
+          description: `Payment from customer #${data.contactId}`,
+          date: new Date(data.date)
+        }
+      ];
+      
+      // Apply payments to invoices
+      if (lineItems.length > 0) {
+        for (const item of lineItems) {
+          // Get the invoice to apply payment to
+          const invoice = await storage.getTransaction(item.transactionId);
+          
+          if (!invoice) {
+            continue;
+          }
+          
+          // Update invoice balance and status
+          const newBalance = invoice.balance ? invoice.balance - item.amount : 0;
+          const newStatus = newBalance <= 0 ? 'paid' : 'partial';
+          await storage.updateTransaction(invoice.id, { 
+            balance: newBalance, 
+            status: newStatus 
+          });
+          
+          // Add credit to Accounts Receivable (decrease)
+          ledgerEntries.push({
+            accountId: 1100, // Accounts Receivable
+            debit: 0,
+            credit: item.amount,
+            description: `Payment applied to invoice #${invoice.reference}`,
+            date: new Date(data.date)
+          });
+        }
+      }
+      
+      // Handle unapplied credit if any
+      if (unappliedAmount > 0) {
+        // We need to credit customer prepayments/credits account
+        ledgerEntries.push({
+          accountId: 2300, // Customer Credits/Prepayments
+          debit: 0,
+          credit: unappliedAmount,
+          description: `Unapplied credit for customer #${data.contactId}`,
+          date: new Date(data.date)
+        });
+      }
+      
+      // Create the transaction with ledger entries
+      const payment = await storage.createTransaction(
+        paymentData,
+        [], // No line items for the payment itself
+        ledgerEntries
+      );
+      
+      res.status(201).json(payment);
+    } catch (error: any) {
+      console.error("Error processing payment:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   apiRouter.post("/deposits", async (req: Request, res: Response) => {
     try {
       // Convert string dates to Date objects before validation

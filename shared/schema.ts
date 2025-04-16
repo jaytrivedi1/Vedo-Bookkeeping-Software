@@ -9,12 +9,30 @@ export const accountTypeEnum = pgEnum('account_type', [
   'equity', 'income', 'other_income', 'cost_of_goods_sold', 'expenses', 'other_expense'
 ]);
 
+export enum AccountType {
+  ACCOUNTS_RECEIVABLE = 'accounts_receivable',
+  CURRENT_ASSETS = 'current_assets',
+  BANK = 'bank',
+  FIXED_ASSETS = 'property_plant_equipment',
+  LONG_TERM_ASSETS = 'long_term_assets',
+  ACCOUNTS_PAYABLE = 'accounts_payable',
+  CREDIT = 'credit_card',
+  CURRENT_LIABILITIES = 'other_current_liabilities',
+  LONG_TERM_LIABILITIES = 'long_term_liabilities',
+  EQUITY = 'equity',
+  INCOME = 'income',
+  OTHER_INCOME = 'other_income',
+  COGS = 'cost_of_goods_sold',
+  EXPENSES = 'expenses',
+  OTHER_EXPENSE = 'other_expense'
+}
+
 export const transactionTypeEnum = pgEnum('transaction_type', [
-  'invoice', 'expense', 'journal_entry', 'deposit'
+  'invoice', 'expense', 'journal_entry', 'deposit', 'payment'
 ]);
 
 export const statusEnum = pgEnum('status', [
-  'draft', 'pending', 'completed', 'cancelled', 'paid', 'overdue'
+  'draft', 'pending', 'completed', 'cancelled', 'paid', 'overdue', 'partial'
 ]);
 
 // Chart of Accounts
@@ -53,6 +71,7 @@ export const transactions = pgTable('transactions', {
   date: timestamp('date').notNull().defaultNow(),
   description: text('description'),
   amount: doublePrecision('amount').notNull(),
+  balance: doublePrecision('balance'),
   contactId: integer('contact_id').references(() => contacts.id),
   status: statusEnum('status').notNull().default('pending'),
 });

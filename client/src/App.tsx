@@ -17,6 +17,7 @@ import Products from "@/pages/products";
 import InvoiceNew from "@/pages/invoice-new";
 import InvoiceEdit from "@/pages/invoice-edit";
 import InvoiceView from "@/pages/invoice-view";
+import PaymentReceive from "@/pages/payment-receive";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/invoice-new" component={InvoiceNew} />
       <Route path="/invoice-edit/:id" component={InvoiceEdit} />
       <Route path="/invoices/:id" component={InvoiceView} />
+      <Route path="/payment-receive" component={PaymentReceive} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
