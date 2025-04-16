@@ -219,10 +219,7 @@ export default function PaymentReceive() {
   // Payment creation mutation
   const paymentMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/payments', {
-        method: 'POST',
-        data,
-      } as any);
+      return apiRequest('/api/payments', 'POST', data);
     },
     onSuccess: () => {
       toast({
