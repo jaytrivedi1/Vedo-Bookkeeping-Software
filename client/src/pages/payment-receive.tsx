@@ -68,7 +68,8 @@ export default function PaymentReceive() {
 
   // State for transaction ID when user clicks on an existing payment
   const [existingTransactionId, setExistingTransactionId] = useState<number | null>(null);
-  const [showEditWarning, setShowEditWarning] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [isLoadingExistingPayment, setIsLoadingExistingPayment] = useState(false);
   
   // Check URL for customer ID and transaction ID parameters
   useEffect(() => {
@@ -88,10 +89,60 @@ export default function PaymentReceive() {
       const id = parseInt(transactionId);
       if (!isNaN(id)) {
         setExistingTransactionId(id);
-        setShowEditWarning(true);
+        setIsEditMode(true);
+        // We'll load the payment data in a separate effect
       }
     }
   }, []);
+  
+  // Fetch existing payment data when in edit mode
+  const { data: paymentData, isLoading: isPaymentDataLoading } = useQuery({
+    queryKey: ['/api/payments', existingTransactionId],
+    queryFn: async () => {
+      if (!existingTransactionId) return null;
+      setIsLoadingExistingPayment(true);
+      try {
+        const result = await apiRequest(`/api/payments/${existingTransactionId}`);
+        setIsLoadingExistingPayment(false);
+        return result;
+      } catch (error) {
+        console.error("Error fetching payment:", error);
+        setIsLoadingExistingPayment(false);
+        return null;
+      }
+    },
+    enabled: isEditMode && existingTransactionId !== null,
+  });
+  
+  // Populate form with existing payment data when in edit mode
+  useEffect(() => {
+    if (isEditMode && paymentData) {
+      // Set form values from payment data
+      form.setValue('contactId', paymentData.contactId);
+      form.setValue('date', new Date(paymentData.date));
+      form.setValue('reference', paymentData.reference || '');
+      form.setValue('amount', paymentData.amount);
+      form.setValue('depositAccountId', paymentData.depositAccountId);
+      
+      // If the payment has line items, set those too
+      if (paymentData.lineItems && paymentData.lineItems.length > 0) {
+        setPaymentLineItems(
+          paymentData.lineItems.map((item: any) => ({
+            transactionId: item.transactionId,
+            amount: item.amount || item.total, // Use total as fallback
+            selected: true,
+          }))
+        );
+      }
+      
+      if (paymentData.unappliedAmount) {
+        setUnappliedCredit(paymentData.unappliedAmount);
+      }
+      
+      // Set initial customer ID to ensure customer invoices are loaded
+      setInitialCustomerId(paymentData.contactId);
+    }
+  }, [isEditMode, paymentData, form]);
 
   // Fetch contacts (customers only)
   const { data: allContacts, isLoading: isContactsLoading } = useQuery({
@@ -269,7 +320,8 @@ export default function PaymentReceive() {
   };
 
   // Payment creation mutation
-  const paymentMutation = useMutation({
+  // Payment create mutation
+  const createPaymentMutation = useMutation({
     mutationFn: async (data: any) => {
       return apiRequest('/api/payments', 'POST', data);
     },
@@ -287,6 +339,30 @@ export default function PaymentReceive() {
       toast({
         title: "Error",
         description: error.message || "Failed to record payment",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Payment update mutation
+  const updatePaymentMutation = useMutation({
+    mutationFn: async (data: any) => {
+      return apiRequest(`/api/payments/${existingTransactionId}`, 'PATCH', data);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment Updated",
+        description: "The payment has been successfully updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
+      navigate("/dashboard");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update payment",
         variant: "destructive",
       });
     },
@@ -323,23 +399,29 @@ export default function PaymentReceive() {
       unappliedAmount: unappliedCredit,
     };
     
-    paymentMutation.mutate(paymentData);
+    // Use the appropriate mutation based on whether we're in edit mode
+    if (isEditMode && existingTransactionId) {
+      updatePaymentMutation.mutate(paymentData);
+    } else {
+      createPaymentMutation.mutate(paymentData);
+    }
   };
 
-  const isLoading = isContactsLoading || isAccountsLoading || paymentMutation.isPending;
+  const isLoading = isContactsLoading || isAccountsLoading || createPaymentMutation.isPending || 
+                  updatePaymentMutation.isPending || isPaymentDataLoading;
 
   return (
     <div className="py-6">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Alert for editing existing payment */}
-        {showEditWarning && (
+        {isEditMode && (
           <div className="mb-6 border border-blue-100 bg-blue-50 rounded-md p-4 flex items-start">
             <AlertCircle className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
             <div>
               <h3 className="text-sm font-medium text-blue-800">Payment details</h3>
               <p className="text-sm text-blue-700 mt-1">
-                You're viewing a payment transaction (ID: {existingTransactionId}). 
-                Payment editing is not yet available, but you can create a new payment for this customer.
+                You're editing a payment transaction (ID: {existingTransactionId}).
+                Update the details and click "Update Payment" to save your changes.
               </p>
             </div>
           </div>
@@ -364,12 +446,12 @@ export default function PaymentReceive() {
             disabled={isLoading || !form.formState.isValid}
             className="bg-primary text-white"
           >
-            {paymentMutation.isPending ? (
+            {(createPaymentMutation.isPending || updatePaymentMutation.isPending) ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            Record Payment
+            {isEditMode ? 'Update Payment' : 'Record Payment'}
           </Button>
         </div>
 
