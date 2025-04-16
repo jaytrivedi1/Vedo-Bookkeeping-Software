@@ -114,23 +114,91 @@ export default function PaymentView() {
   // Get line items data directly from the API response
   const lineItems = data.lineItems || [];
   
-  // Properly map invoice payments from line items data
-  const invoicePayments = lineItems.map((item: any) => {
-    // Find the related invoice in transactions
-    const relatedInvoice = transactions?.find(t => t.id === item.transactionId);
+  // Extract the AR entries from ledger entries that correspond to invoice payments
+  const arEntries = ledgerEntries
+    .filter((entry: LedgerEntry) => entry.accountId === 2 && entry.credit > 0)
+    .map((entry: LedgerEntry) => {
+      // Extract invoice reference from description
+      const invoiceRefMatch = entry.description?.match(/invoice #?(\d+)/i);
+      return {
+        id: entry.id,
+        amount: entry.credit,
+        description: entry.description || '',
+        invoiceRef: invoiceRefMatch ? invoiceRefMatch[1] : null
+      };
+    });
+    
+  // Create a map of all transactions to look up invoices by ID or reference
+  const transactionMap = new Map();
+  if (transactions) {
+    transactions.forEach(t => {
+      transactionMap.set(t.id, t);
+      if (t.reference) {
+        transactionMap.set(t.reference, t);
+      }
+    });
+  }
+  
+  // Try to match line items to transactions
+  const invoicePayments = lineItems.map((item: any, index) => {
+    // Try to find the related invoice by transaction ID
+    let relatedInvoice = transactions?.find(t => t.id === item.transactionId);
+    
+    // If not found, try to match using AR entry description that has the same amount
+    if (!relatedInvoice) {
+      const matchingArEntry = arEntries.find(entry => 
+        Math.abs(entry.amount - item.amount) < 0.01 && entry.invoiceRef
+      );
+      
+      if (matchingArEntry?.invoiceRef) {
+        // Look up invoice by reference number
+        relatedInvoice = transactions?.find(t => 
+          t.type === 'invoice' && 
+          t.reference === matchingArEntry.invoiceRef
+        );
+      }
+    }
     
     return {
-      id: item.id,
+      id: item.id || index,
+      selected: true,
       invoiceReference: relatedInvoice?.reference || 'Unknown',
       invoiceId: relatedInvoice?.id,
       date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
       dueDate: null, // Not always available in our system
       amount: item.amount,
       balance: relatedInvoice?.balance || 0,
-      originalTotal: relatedInvoice?.amount || 0,
-      description: ''
+      originalTotal: relatedInvoice?.amount || 0
     };
   });
+  
+  // If no line items with invoice mappings, fall back to using ledger entries
+  if (invoicePayments.length === 0 && arEntries.length > 0) {
+    // Create invoice payments from AR entries
+    return arEntries.map((entry, index) => {
+      let relatedInvoice;
+      
+      if (entry.invoiceRef) {
+        // Try to find the invoice by reference
+        relatedInvoice = transactions?.find(t => 
+          t.type === 'invoice' && 
+          t.reference === entry.invoiceRef
+        );
+      }
+      
+      return {
+        id: entry.id || index,
+        selected: true,
+        invoiceReference: entry.invoiceRef || 'Unknown',
+        invoiceId: relatedInvoice?.id,
+        date: relatedInvoice?.date ? new Date(relatedInvoice.date) : null,
+        dueDate: null,
+        amount: entry.amount,
+        balance: relatedInvoice?.balance || 0,
+        originalTotal: relatedInvoice?.amount || 0
+      };
+    });
+  }
 
   // Calculate totals
   const totalReceived = payment.amount;
