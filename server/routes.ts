@@ -1053,8 +1053,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (amountDifference !== 0 && payment.invoiceId) {
                 const invoice = await storage.getTransaction(payment.invoiceId);
                 if (invoice && invoice.type === 'invoice') {
-                  // Add the difference back to the invoice balance (if payment decreased, balance increases)
-                  const newBalance = (invoice.balance !== null ? invoice.balance : invoice.amount) + amountDifference;
+                  // Calculate what the balance should be regardless of what's in the database
+                  // Original invoice amount minus the new payment amount
+                  const newBalance = invoice.amount - newAmount;
+                  
+                  console.log(`Updating invoice #${invoice.id} (${invoice.reference}): Original amount: ${invoice.amount}, Current balance: ${invoice.balance}, New payment: ${newAmount}, New balance: ${newBalance}`);
                   
                   // Update the invoice balance
                   await storage.updateTransaction(invoice.id, {
