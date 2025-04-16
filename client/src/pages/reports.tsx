@@ -1039,9 +1039,68 @@ export default function Reports() {
             <TabsContent value="expense-analysis">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Expense Distribution</CardTitle>
-                    <CardDescription>Breakdown of expenses by category</CardDescription>
+                  <CardHeader className="flex flex-col sm:flex-row justify-between">
+                    <div>
+                      <CardTitle>Expense Distribution</CardTitle>
+                      <CardDescription>Breakdown of expenses by category</CardDescription>
+                    </div>
+                    {expenseAccounts && expenseAccounts.length > 0 && (
+                      <div className="mt-2 sm:mt-0">
+                        <ExportMenu
+                          onExportCSV={() => {
+                            const filename = generateFilename('expense_analysis');
+                            const data = expenseAccounts.map(account => ({
+                              Account: account.name,
+                              Amount: account.value,
+                              Percentage: ((account.value / (incomeStatement?.expenses || 1)) * 100).toFixed(1) + '%'
+                            }));
+                            
+                            const csv = Papa.unparse({
+                              fields: ['Account', 'Amount', 'Percentage'],
+                              data
+                            });
+                            
+                            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.setAttribute('href', url);
+                            link.setAttribute('download', `${filename}.csv`);
+                            link.style.visibility = 'hidden';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          onExportPDF={() => {
+                            const filename = generateFilename('expense_analysis');
+                            const doc = new jsPDF();
+                            
+                            // Add title
+                            doc.setFontSize(18);
+                            doc.text('Expense Analysis', 14, 22);
+                            
+                            // Add date
+                            doc.setFontSize(11);
+                            doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 30);
+                            
+                            const tableRows = expenseAccounts.map(account => [
+                              account.name,
+                              new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.value),
+                              ((account.value / (incomeStatement?.expenses || 1)) * 100).toFixed(1) + '%'
+                            ]);
+                            
+                            (doc as any).autoTable({
+                              head: [['Expense Account', 'Amount', 'Percentage']],
+                              body: tableRows,
+                              startY: 40,
+                              theme: 'grid'
+                            });
+                            
+                            doc.save(`${filename}.pdf`);
+                          }}
+                          label="Export"
+                        />
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <div className="h-80">
