@@ -134,13 +134,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTransaction(id: number, transactionUpdate: Partial<Transaction>): Promise<Transaction | undefined> {
-    // Ensure status values conform to the enum defined in schema.ts
-    // Valid values are: 'draft', 'pending', 'completed', 'cancelled', 'paid', 'overdue'
-    if (transactionUpdate.status && transactionUpdate.status === 'partial') {
-      // Replace 'partial' with 'pending' since 'partial' is not a valid enum value
-      transactionUpdate.status = 'pending';
-    }
-    
     const [updatedTransaction] = await db.update(transactions)
       .set(transactionUpdate)
       .where(eq(transactions.id, id))
