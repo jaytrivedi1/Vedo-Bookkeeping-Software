@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
-import { BookOpen, ChevronDown, ChevronRight, Search, Book } from "lucide-react";
+import { format, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, parseISO } from "date-fns";
+import { BookOpen, ChevronDown, ChevronRight, Search, Book, Filter, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,11 +29,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
+} from "@/components/ui/tabs";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Account, LedgerEntry, Transaction, Contact } from "@shared/schema";
 
 // Types for account books
@@ -50,6 +61,19 @@ export default function AccountBooks() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>("all");
   const [expandedAccounts, setExpandedAccounts] = useState<number[]>([]);
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>("all");
+  
+  // Date range state
+  const [dateRange, setDateRange] = useState<{
+    from: Date | undefined;
+    to: Date | undefined;
+  }>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date())
+  });
+  
+  // Period presets
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("current-month");
   
   // Fetch accounts with balances
   const { data: accountBalances, isLoading: accountsLoading } = useQuery<{account: Account, balance: number}[]>({
@@ -146,6 +170,56 @@ export default function AccountBooks() {
     }).format(amount);
   };
   
+  // Handle period selection
+  const handlePeriodChange = (period: string) => {
+    setSelectedPeriod(period);
+    
+    const now = new Date();
+    let from: Date | undefined;
+    let to: Date | undefined;
+    
+    switch (period) {
+      case "current-month":
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+        break;
+      case "previous-month":
+        from = startOfMonth(subMonths(now, 1));
+        to = endOfMonth(subMonths(now, 1));
+        break;
+      case "current-year":
+        from = startOfYear(now);
+        to = endOfYear(now);
+        break;
+      case "custom":
+        // Keep the current custom range
+        break;
+      default:
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+    }
+    
+    if (period !== "custom") {
+      setDateRange({ from, to });
+    }
+  };
+  
+  // Format transaction type for display
+  const formatTransactionType = (type: string): string => {
+    switch (type) {
+      case "invoice":
+        return "Invoice";
+      case "expense":
+        return "Expense";
+      case "journal_entry":
+        return "Journal Entry";
+      case "deposit":
+        return "Deposit";
+      default:
+        return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+    }
+  };
+  
   return (
     <div className="py-6">
       {/* Page header */}
@@ -171,6 +245,114 @@ export default function AccountBooks() {
                 The general ledger contains all financial transactions recorded in your accounts using double-entry accounting principles.
                 Each transaction affects at least two accounts - typically with equal debits and credits.
               </p>
+              
+              {/* Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Period Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+                  <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="current-month">Current Month</SelectItem>
+                      <SelectItem value="previous-month">Previous Month</SelectItem>
+                      <SelectItem value="current-year">Current Year</SelectItem>
+                      <SelectItem value="custom">Custom Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Custom Date Range */}
+                {selectedPeriod === "custom" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                    <div className="flex items-center space-x-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            className="justify-start text-left font-normal w-full"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {dateRange.from ? (
+                              format(dateRange.from, 'MMM dd, yyyy')
+                            ) : (
+                              <span>Start date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={dateRange.from}
+                            onSelect={(date) => setDateRange({ ...dateRange, from: date })}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <span>to</span>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            className="justify-start text-left font-normal w-full"
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {dateRange.to ? (
+                              format(dateRange.to, 'MMM dd, yyyy')
+                            ) : (
+                              <span>End date</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <CalendarComponent
+                            mode="single"
+                            selected={dateRange.to}
+                            onSelect={(date) => setDateRange({ ...dateRange, to: date })}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Transaction Type Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                  <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="invoice">Invoices</SelectItem>
+                      <SelectItem value="expense">Expenses</SelectItem>
+                      <SelectItem value="journal_entry">Journal Entries</SelectItem>
+                      <SelectItem value="deposit">Deposits</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Search Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                  <div className="relative">
+                    <Input
+                      className="pl-10"
+                      placeholder="Search accounts, descriptions..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
           
@@ -188,6 +370,7 @@ export default function AccountBooks() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Reference</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Account</TableHead>
                       <TableHead>Description</TableHead>
@@ -196,31 +379,64 @@ export default function AccountBooks() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ledgerEntries && ledgerEntries.length === 0 ? (
+                    {!ledgerEntries || ledgerEntries.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-gray-500">
+                        <TableCell colSpan={8} className="text-center py-6 text-gray-500">
                           No entries found in the general ledger
                         </TableCell>
                       </TableRow>
                     ) : (
-                      // Group entries by transaction ID and sort by date
-                      ledgerEntries && 
-                      Array.from(new Set(ledgerEntries.map(entry => entry.transactionId)))
-                        .map(transactionId => {
+                      (() => {
+                        // Get filtered transactions
+                        const allTransactionIds = Array.from(new Set(ledgerEntries?.map(entry => entry.transactionId) || []));
+                        
+                        const filteredTransactionIds = allTransactionIds.filter(transactionId => {
+                          const transaction = transactions?.find(t => t.id === transactionId);
+                          if (!transaction) return false;
+                          
+                          // Apply transaction type filter
+                          if (transactionTypeFilter !== 'all' && transaction.type !== transactionTypeFilter) {
+                            return false;
+                          }
+                          
+                          // Apply date range filter
+                          if (dateRange.from && dateRange.to) {
+                            const txDate = new Date(transaction.date);
+                            return txDate >= dateRange.from && txDate <= dateRange.to;
+                          }
+                          
+                          return true;
+                        });
+                        
+                        if (filteredTransactionIds.length === 0) {
+                          return (
+                            <TableRow>
+                              <TableCell colSpan={8} className="text-center py-6 text-gray-500">
+                                No entries found matching the selected filters
+                              </TableCell>
+                            </TableRow>
+                          );
+                        }
+                        
+                        // Render entries for each filtered transaction
+                        const rows: React.ReactNode[] = [];
+                        
+                        filteredTransactionIds.forEach(transactionId => {
                           const entriesForTransaction = ledgerEntries
-                            .filter(entry => entry.transactionId === transactionId)
+                            ?.filter(entry => entry.transactionId === transactionId)
                             .sort((a, b) => {
-                              // Sort by account type and code
+                              // Sort by account code
                               const accountA = accountBooks.find(acc => acc.id === a.accountId);
                               const accountB = accountBooks.find(acc => acc.id === b.accountId);
                               if (!accountA || !accountB) return 0;
                               return accountA.code.localeCompare(accountB.code);
                             });
-
-                          // Get the date and transaction details from the first entry
+                          
+                          // Get transaction details
                           const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
                           const transaction = transactions?.find(t => t.id === transactionId);
-                          // Find contact name if available
+                          
+                          // Get contact name
                           const contactId = transaction?.contactId;
                           let contactName = "System Entry";
                           
@@ -230,21 +446,24 @@ export default function AccountBooks() {
                               contactName = contact.name;
                             }
                           }
-
-                          // Return the entries for display
-                          return entriesForTransaction.map((entry, index) => {
+                          
+                          // Create rows for each entry
+                          entriesForTransaction.forEach((entry, index) => {
                             const account = accountBooks.find(acc => acc.id === entry.accountId);
-                            return (
+                            
+                            rows.push(
                               <TableRow 
                                 key={entry.id}
                                 className={index > 0 && index < entriesForTransaction.length ? "border-t-0" : ""}
                               >
-                                {/* Only show date for the first row of the transaction */}
                                 <TableCell>
                                   {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
                                 </TableCell>
                                 <TableCell>
                                   {index === 0 ? transaction?.reference || '' : ''}
+                                </TableCell>
+                                <TableCell>
+                                  {index === 0 && transaction ? formatTransactionType(transaction.type) : ''}
                                 </TableCell>
                                 <TableCell>
                                   {index === 0 ? contactName : ''}
@@ -260,7 +479,10 @@ export default function AccountBooks() {
                               </TableRow>
                             );
                           });
-                        }).flat()
+                        });
+                        
+                        return rows;
+                      })()
                     )}
                   </TableBody>
                 </Table>
