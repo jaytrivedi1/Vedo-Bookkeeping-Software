@@ -5,6 +5,7 @@ import { seed } from "./seed";
 import migrateLineItems from "./migrate-line-items";
 import { migrateCompanyTable } from "./migrate-company";
 import migrateSalesTaxComponents from "./migrate-sales-tax-components";
+import migrateTransactions from "./migrate-transactions";
 
 const app = express();
 app.use(express.json());
@@ -55,6 +56,9 @@ app.use((req, res, next) => {
     
     // Run sales tax components migration for multi-component taxes (GST+QST)
     await migrateSalesTaxComponents();
+    
+    // Run transactions migration to add balance field
+    await migrateTransactions();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }

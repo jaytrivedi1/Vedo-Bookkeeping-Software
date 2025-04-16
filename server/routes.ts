@@ -764,7 +764,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             debit: 0,
             credit: item.amount,
             description: `Payment applied to invoice #${invoice.reference}`,
-            date: new Date(data.date)
+            date: new Date(data.date),
+            transactionId: 0 // Will be set by createTransaction
           });
         }
       }
@@ -777,7 +778,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           debit: 0,
           credit: unappliedAmount,
           description: `Unapplied credit for customer #${data.contactId}`,
-          date: new Date(data.date)
+          date: new Date(data.date),
+          transactionId: 0 // Will be set by createTransaction
         });
       }
       
