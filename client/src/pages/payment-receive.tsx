@@ -579,6 +579,7 @@ export default function PaymentReceive() {
                         <Select 
                           onValueChange={field.onChange}
                           value={field.value}
+                          defaultValue={isEditMode && paymentData?.paymentMethod ? paymentData.paymentMethod : undefined}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -736,6 +737,9 @@ export default function PaymentReceive() {
                           <thead className="bg-gray-50">
                             <tr>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Select
+                              </th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Invoice #
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -748,7 +752,7 @@ export default function PaymentReceive() {
                                 Original Amount
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Amount Paid
+                                Payment
                               </th>
                             </tr>
                           </thead>
@@ -756,8 +760,20 @@ export default function PaymentReceive() {
                             {editModeInvoices.map((invoice: any, idx: number) => {
                               // Find the corresponding line item with payment amount
                               const lineItem = paymentLineItems.find(item => item.transactionId === invoice.id);
+                              const lineItemIndex = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
                               return (
                                 <tr key={`edit-invoice-${invoice.id}-${idx}`}>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <Checkbox
+                                      id={`edit-invoice-${invoice.id}`}
+                                      checked={lineItem?.selected || false}
+                                      onCheckedChange={(checked) => {
+                                        if (lineItemIndex !== -1) {
+                                          handleLineItemChange(lineItemIndex, 'selected', !!checked);
+                                        }
+                                      }}
+                                    />
+                                  </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                     {invoice.reference || `INV-${invoice.id}`}
                                   </td>
@@ -770,8 +786,35 @@ export default function PaymentReceive() {
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                     {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.amount)}
                                   </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(lineItem?.amount || 0)}
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <input
+                                      type="text"
+                                      className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                      disabled={!lineItem?.selected}
+                                      defaultValue={lineItem?.amount || ''}
+                                      onChange={(e) => {
+                                        const tempValue = parseFloat(e.target.value);
+                                        if (!isNaN(tempValue) && lineItemIndex !== -1) {
+                                          // Create a temporary set of items for calculation
+                                          const tempItems = [...paymentLineItems];
+                                          tempItems[lineItemIndex].amount = tempValue;
+                                          tempItems[lineItemIndex].selected = tempValue > 0;
+                                          const applied = tempItems.reduce((sum, item) => sum + (item.selected ? item.amount : 0), 0);
+                                          setTotalApplied(applied);
+                                          setUnappliedCredit(Math.max(0, (watchAmount || 0) - applied));
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        const numValue = parseFloat(e.target.value);
+                                        if (!isNaN(numValue) && lineItemIndex !== -1) {
+                                          handleLineItemChange(lineItemIndex, 'amount', numValue);
+                                        } else if (lineItemIndex !== -1) {
+                                          // Reset to zero for invalid value
+                                          e.target.value = '0';
+                                          handleLineItemChange(lineItemIndex, 'amount', 0);
+                                        }
+                                      }}
+                                    />
                                   </td>
                                 </tr>
                               );
