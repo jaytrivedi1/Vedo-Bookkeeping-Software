@@ -88,14 +88,14 @@ export default function PaymentView() {
   const ledgerEntries = data.ledgerEntries || [];
   
   // Find the deposit account from ledger entries
-  const depositEntry = ledgerEntries.find(entry => entry.debit > 0);
+  const depositEntry = ledgerEntries.find((entry: LedgerEntry) => entry.debit > 0);
   const depositAccountId = depositEntry?.accountId;
   const depositAccount = accounts?.find(a => a.id === depositAccountId);
   
   // Find invoice payment details from ledger entries
   const invoicePayments = ledgerEntries
-    .filter(entry => entry.accountId === 2 && entry.credit > 0) // Accounts Receivable credits
-    .map(entry => {
+    .filter((entry: LedgerEntry) => entry.accountId === 2 && entry.credit > 0) // Accounts Receivable credits
+    .map((entry: LedgerEntry) => {
       // Try to extract invoice information from description
       const match = entry.description?.match(/Invoice (\d+)/i);
       return {
@@ -207,11 +207,11 @@ export default function PaymentView() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoicePayments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{payment.invoiceReference}</TableCell>
-                        <TableCell>{payment.description}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(payment.amount)}</TableCell>
+                    {invoicePayments.map((paymentItem: { id: number, invoiceReference: string, amount: number, description: string }) => (
+                      <TableRow key={paymentItem.id}>
+                        <TableCell>{paymentItem.invoiceReference}</TableCell>
+                        <TableCell>{paymentItem.description}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(paymentItem.amount)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -236,7 +236,7 @@ export default function PaymentView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ledgerEntries.map((entry) => (
+                {ledgerEntries.map((entry: LedgerEntry) => (
                   <TableRow key={entry.id}>
                     <TableCell>
                       {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}

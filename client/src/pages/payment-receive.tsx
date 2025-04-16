@@ -65,23 +65,23 @@ export default function PaymentReceive() {
   const [unappliedCredit, setUnappliedCredit] = useState(0);
 
   // Fetch contacts (customers only)
-  const { data: allContacts, isLoading: isContactsLoading } = useQuery({
+  const { data: allContacts, isLoading: isContactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
   
   // Filter contacts to show only customers
-  const contacts = allContacts?.filter((contact: any) => 
+  const contacts = allContacts?.filter((contact: Contact) => 
     contact.type === 'customer'
   ) || [];
 
   // Fetch accounts (for deposit accounts)
-  const { data: accounts, isLoading: isAccountsLoading } = useQuery({
+  const { data: accounts, isLoading: isAccountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
 
   // Filter for bank accounts and credit accounts
   const depositAccounts = accounts?.filter(
-    (account: any) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
+    (account: Account) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
   ) || [];
 
   // Create form
@@ -236,7 +236,7 @@ export default function PaymentReceive() {
     mutationFn: async (data: any) => {
       return apiRequest('/api/payments', 'POST', data);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Payment Received",
         description: "Payment has been successfully recorded",
@@ -244,7 +244,13 @@ export default function PaymentReceive() {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
       queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
-      navigate("/dashboard");
+      
+      // Navigate to the payment details page
+      if (data && data.id) {
+        navigate(`/payments/${data.id}`);
+      } else {
+        navigate("/dashboard");
+      }
     },
     onError: (error: any) => {
       toast({
