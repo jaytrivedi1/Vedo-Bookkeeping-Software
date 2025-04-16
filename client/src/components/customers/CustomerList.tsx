@@ -157,10 +157,11 @@ export default function CustomerList({ className }: CustomerListProps) {
     }
   };
   
-  // Delete customer mutation
+  // Delete customer and transaction mutations
   const { toast } = useToast();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   
   const deleteCustomerMutation = useMutation({
     mutationFn: async (customerId: number) => {
@@ -187,6 +188,41 @@ export default function CustomerList({ className }: CustomerListProps) {
     }
   });
   
+  const deleteTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return apiRequest(`/api/transactions/${transactionId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({
+        title: "Transaction deleted",
+        description: "Transaction has been successfully deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      setSelectedTransactionToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsDeleting(false);
+    }
+  });
+
+  const handleDeleteTransaction = (transaction: Transaction) => {
+    setSelectedTransactionToDelete(transaction);
+  };
+
+  const confirmDeleteTransaction = () => {
+    if (!selectedTransactionToDelete) return;
+    
+    setIsDeleting(true);
+    deleteTransactionMutation.mutate(selectedTransactionToDelete.id);
+  };
+
   const handleDeleteCustomer = () => {
     if (!selectedCustomer) return;
     
@@ -281,30 +317,18 @@ export default function CustomerList({ className }: CustomerListProps) {
           {selectedCustomer && (
             <div>
               <div className="p-6">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
-                    {selectedCustomer.contactName && (
-                      <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
-                    )}
-                    {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
-                    {selectedCustomer.phone && (
-                      <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
-                    )}
-                    {selectedCustomer.address && (
-                      <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
-                    )}
-                  </div>
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    disabled={isDeleting || (customerTransactions && customerTransactions.length > 0)}
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                    className="mt-1"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
+                <div>
+                  <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
+                  {selectedCustomer.contactName && (
+                    <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
+                  )}
+                  {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
+                  {selectedCustomer.phone && (
+                    <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
+                  )}
+                  {selectedCustomer.address && (
+                    <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
+                  )}
                 </div>
               </div>
               
@@ -370,36 +394,51 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
                                   <TableCell className="text-right">
-                                    {transaction.type === 'invoice' ? (
-                                      <Link href={`/invoices/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="sm">
+                                    <div className="flex justify-end gap-2">
+                                      {transaction.type === 'invoice' ? (
+                                        <Link href={`/invoices/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
+                                          <Button variant="ghost" size="sm">
+                                            <Eye className="h-4 w-4 mr-1" />
+                                            View
+                                          </Button>
+                                        </Link>
+                                      ) : transaction.type === 'payment' ? (
+                                        <Link href={`/payments/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
+                                          <Button variant="ghost" size="sm">
+                                            <Eye className="h-4 w-4 mr-1" />
+                                            View
+                                          </Button>
+                                        </Link>
+                                      ) : (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedTransaction(transaction);
+                                            if (transaction.id) {
+                                              refetchLedgerEntries();
+                                            }
+                                          }}
+                                        >
                                           <Eye className="h-4 w-4 mr-1" />
                                           View
                                         </Button>
-                                      </Link>
-                                    ) : transaction.type === 'payment' ? (
-                                      <Link href={`/payments/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="sm">
-                                          <Eye className="h-4 w-4 mr-1" />
-                                          View
-                                        </Button>
-                                      </Link>
-                                    ) : (
+                                      )}
+                                      
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
+                                        className="text-red-600 hover:text-red-800 hover:bg-red-50"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setSelectedTransaction(transaction);
-                                          if (transaction.id) {
-                                            refetchLedgerEntries();
-                                          }
+                                          handleDeleteTransaction(transaction);
                                         }}
                                       >
-                                        <Eye className="h-4 w-4 mr-1" />
-                                        View
+                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        Delete
                                       </Button>
-                                    )}
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               );
@@ -604,6 +643,52 @@ export default function CustomerList({ className }: CustomerListProps) {
                 handleDeleteCustomer();
               }}
               disabled={isDeleting || (customerTransactions && customerTransactions.length > 0)}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {isDeleting ? (
+                <>
+                  <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full"></div>
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Delete Transaction Confirmation Dialog */}
+      <AlertDialog 
+        open={!!selectedTransactionToDelete} 
+        onOpenChange={(open) => !open && setSelectedTransactionToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="h-5 w-5 mr-2" /> Delete Transaction
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this 
+              {selectedTransactionToDelete?.type === 'invoice' 
+                ? ' invoice' 
+                : selectedTransactionToDelete?.type === 'payment'
+                  ? ' payment' 
+                  : ' transaction'}
+              {selectedTransactionToDelete?.reference 
+                ? ` #${selectedTransactionToDelete.reference}` 
+                : ''}? 
+              This action cannot be undone and will remove all associated ledger entries.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDeleteTransaction();
+              }}
+              disabled={isDeleting}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             >
               {isDeleting ? (
