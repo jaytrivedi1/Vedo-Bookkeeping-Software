@@ -433,13 +433,21 @@ export default function PaymentReceive() {
                         <FormLabel>Amount Received</FormLabel>
                         <FormControl>
                           <Input 
-                            type="number" 
-                            step="0.01"
-                            min="0"
-                            {...field} 
-                            onInput={(e) => {
-                              const target = e.target as HTMLInputElement;
-                              field.onChange(target.value ? parseFloat(target.value) : 0);
+                            type="text"
+                            {...field}
+                            value={field.value || ''}
+                            onChange={(e) => {
+                              // Allow empty field for editing
+                              if (e.target.value === '') {
+                                field.onChange(0);
+                                return;
+                              }
+                              
+                              // Only proceed if value is numeric
+                              const numValue = parseFloat(e.target.value);
+                              if (!isNaN(numValue)) {
+                                field.onChange(numValue);
+                              }
                             }}
                             placeholder="0.00" 
                           />
@@ -540,16 +548,24 @@ export default function PaymentReceive() {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    max={invoice.balance || invoice.amount}
+                                    type="text"
                                     disabled={!paymentLineItems[idx]?.selected}
-                                    value={paymentLineItems[idx]?.amount || 0}
-                                    onInput={(e) => {
-                                      const target = e.target as HTMLInputElement;
-                                      const value = target.value ? parseFloat(target.value) : 0;
-                                      handleLineItemChange(idx, 'amount', value);
+                                    value={paymentLineItems[idx]?.amount || ''}
+                                    onChange={(e) => {
+                                      // Allow empty string for temporary editing
+                                      if (e.target.value === '') {
+                                        const updatedItems = [...paymentLineItems];
+                                        updatedItems[idx].amount = 0;
+                                        updatedItems[idx].selected = true;
+                                        setPaymentLineItems(updatedItems);
+                                        return;
+                                      }
+                                      
+                                      // Only proceed if value is numeric
+                                      const numValue = parseFloat(e.target.value);
+                                      if (!isNaN(numValue)) {
+                                        handleLineItemChange(idx, 'amount', numValue);
+                                      }
                                     }}
                                     className="w-24"
                                   />
