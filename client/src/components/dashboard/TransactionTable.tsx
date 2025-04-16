@@ -165,8 +165,8 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
                       {transaction.type === 'expense' 
-                        ? '-$' + transaction.amount.toFixed(2) 
-                        : '$' + transaction.amount.toFixed(2)}
+                        ? '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount) 
+                        : '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount)}
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
