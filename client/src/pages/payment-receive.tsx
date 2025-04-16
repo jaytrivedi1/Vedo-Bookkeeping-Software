@@ -9,7 +9,8 @@ import {
   CreditCard, 
   ArrowLeft,
   Save,
-  Loader2
+  Loader2,
+  AlertCircle
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -65,16 +66,29 @@ export default function PaymentReceive() {
   const [unappliedCredit, setUnappliedCredit] = useState(0);
   const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
 
-  // Check URL for customer ID parameter
+  // State for transaction ID when user clicks on an existing payment
+  const [existingTransactionId, setExistingTransactionId] = useState<number | null>(null);
+  const [showEditWarning, setShowEditWarning] = useState(false);
+  
+  // Check URL for customer ID and transaction ID parameters
   useEffect(() => {
-    // Parse query string for customerId
+    // Parse query string for customerId and transactionId
     const params = new URLSearchParams(window.location.search);
     const customerId = params.get('customerId');
+    const transactionId = params.get('transactionId');
     
     if (customerId) {
       const id = parseInt(customerId);
       if (!isNaN(id)) {
         setInitialCustomerId(id);
+      }
+    }
+    
+    if (transactionId) {
+      const id = parseInt(transactionId);
+      if (!isNaN(id)) {
+        setExistingTransactionId(id);
+        setShowEditWarning(true);
       }
     }
   }, []);
@@ -317,6 +331,20 @@ export default function PaymentReceive() {
   return (
     <div className="py-6">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Alert for editing existing payment */}
+        {showEditWarning && (
+          <div className="mb-6 border border-blue-100 bg-blue-50 rounded-md p-4 flex items-start">
+            <AlertCircle className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-medium text-blue-800">Payment details</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                You're viewing a payment transaction (ID: {existingTransactionId}). 
+                Payment editing is not yet available, but you can create a new payment for this customer.
+              </p>
+            </div>
+          </div>
+        )}
+        
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center">
             <Button 
