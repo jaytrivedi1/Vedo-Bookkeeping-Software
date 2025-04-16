@@ -1,62 +1,49 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { format } from "date-fns";
-import { 
-  ArrowLeft,
-  Save,
-  Loader2,
-  AlertCircle
-} from "lucide-react";
+import { useState, useEffect } from 'react';
+import { useLocation, useRoute } from 'wouter';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { format } from 'date-fns';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
 
-import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { DatePicker } from "@/components/ui/date-picker";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AccountType } from "@shared/schema";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertCircle, ArrowLeft, CircleDollarSign, Loader2, Save } from 'lucide-react';
 
-// Define the form schema for payment
+import { DatePicker } from '@/components/ui/date-picker';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+
+// Define account types directly in this file since we don't have many dependencies
+enum AccountType {
+  BANK = 'bank',
+  CREDIT = 'credit_card'
+}
+
+// Define the payment form validation schema
 const paymentSchema = z.object({
   contactId: z.number({
-    required_error: "Please select a customer",
+    required_error: "Customer is required",
   }),
   date: z.date({
-    required_error: "Please select a date",
+    required_error: "Payment date is required",
   }),
-  paymentMethod: z.string().optional(),
   reference: z.string().optional(),
-  depositAccountId: z.number({
-    required_error: "Please select a deposit account",
-  }),
   amount: z.number({
-    required_error: "Please enter an amount",
-  }).min(0.01, "Amount must be greater than 0"),
+    required_error: "Payment amount is required",
+  }).positive("Amount must be greater than 0"),
+  depositAccountId: z.number({
+    required_error: "Deposit account is required",
+  }),
+  paymentMethod: z.string().default('bank_transfer'),
   note: z.string().optional(),
 });
 
-// Define types
 type PaymentFormValues = z.infer<typeof paymentSchema>;
 type PaymentLineItem = {
   transactionId: number;
@@ -65,75 +52,43 @@ type PaymentLineItem = {
 };
 
 export default function PaymentReceive() {
-  const [, navigate] = useLocation();
+  const [match, params] = useRoute('/payment-receive/:id?');
+  const existingTransactionId = params?.id ? parseInt(params.id) : undefined;
+  const isEditMode = !!existingTransactionId;
+  const [, setLocation] = useLocation();
+  const navigate = (path: string) => setLocation(path);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
-  // Payment line items and related state
+  // Form state
+  const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
-  const [initialCustomerId, setInitialCustomerId] = useState<number | null>(null);
   const [editModeInvoices, setEditModeInvoices] = useState<any[]>([]);
   
-  // State for transaction ID when user clicks on an existing payment
-  const [existingTransactionId, setExistingTransactionId] = useState<number | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [isLoadingExistingPayment, setIsLoadingExistingPayment] = useState(false);
-  
-  // Create form
+  // Form definition
   const form = useForm<PaymentFormValues>({
     resolver: zodResolver(paymentSchema),
     defaultValues: {
-      contactId: undefined,
       date: new Date(),
-      paymentMethod: "",
-      reference: "",
+      reference: '',
       amount: 0,
-      note: "",
+      paymentMethod: 'bank_transfer',
+      note: '',
     },
   });
-  
-  // Check URL for customer ID and transaction ID parameters
-  useEffect(() => {
-    // Parse query string for customerId and transactionId
-    const params = new URLSearchParams(window.location.search);
-    const customerId = params.get('customerId');
-    const transactionId = params.get('transactionId');
-    
-    if (customerId) {
-      const id = parseInt(customerId);
-      if (!isNaN(id)) {
-        setInitialCustomerId(id);
-      }
-    }
-    
-    if (transactionId) {
-      const id = parseInt(transactionId);
-      if (!isNaN(id)) {
-        setExistingTransactionId(id);
-        setIsEditMode(true);
-        // We'll load the payment data in a separate effect
-      }
-    }
-  }, []);
-  
-  // Fetch existing payment data when in edit mode
+
+  // Fetch existing payment data if in edit mode
   const { data: paymentData, isLoading: isPaymentDataLoading } = useQuery({
     queryKey: ['/api/payments', existingTransactionId],
     queryFn: async () => {
       if (!existingTransactionId) return null;
-      setIsLoadingExistingPayment(true);
-      try {
-        const result = await apiRequest(`/api/payments/${existingTransactionId}`);
-        setIsLoadingExistingPayment(false);
-        return result;
-      } catch (error) {
-        console.error("Error fetching payment:", error);
-        setIsLoadingExistingPayment(false);
-        return null;
-      }
+      const response = await fetch(`/api/payments/${existingTransactionId}`);
+      const data = await response.json();
+      return data.transaction;
     },
-    enabled: isEditMode && existingTransactionId !== null,
+    enabled: isEditMode,
   });
   
   // Populate form with existing payment data when in edit mode
@@ -145,8 +100,11 @@ export default function PaymentReceive() {
       form.setValue('reference', paymentData.reference || '');
       form.setValue('amount', paymentData.amount);
       form.setValue('depositAccountId', paymentData.depositAccountId);
-      form.setValue('paymentMethod', paymentData.paymentMethod || '');
+      form.setValue('paymentMethod', paymentData.paymentMethod || 'bank_transfer'); // Default to bank_transfer if none is set
       form.setValue('note', paymentData.note || '');
+      
+      // Log the payment method for debugging
+      console.log("Payment method from data:", paymentData.paymentMethod);
       
       // Set initial customer ID
       setInitialCustomerId(paymentData.contactId);
@@ -545,11 +503,9 @@ export default function PaymentReceive() {
                   {watchContactId && contacts && (
                     <div>
                       <FormLabel>Email</FormLabel>
-                      <Input
-                        value={contacts.find((c: any) => c.id === watchContactId)?.email || ''}
-                        disabled
-                        className="bg-muted/50"
-                      />
+                      <div className="h-10 px-3 py-2 rounded-md border border-input bg-background text-sm text-gray-500">
+                        {contacts.find((c: any) => c.id === watchContactId)?.email || 'No email available'}
+                      </div>
                     </div>
                   )}
 
@@ -557,43 +513,12 @@ export default function PaymentReceive() {
                     control={form.control}
                     name="date"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="flex flex-col">
                         <FormLabel>Payment Date</FormLabel>
-                        <FormControl>
-                          <DatePicker
-                            date={field.value}
-                            setDate={field.onChange}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="paymentMethod"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Payment Method</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          defaultValue={isEditMode && paymentData?.paymentMethod ? paymentData.paymentMethod : undefined}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select method" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="credit_card">Credit Card</SelectItem>
-                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="cheque">Cheque</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <DatePicker 
+                          date={field.value} 
+                          setDate={field.onChange}
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -606,7 +531,29 @@ export default function PaymentReceive() {
                       <FormItem>
                         <FormLabel>Reference Number</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="e.g., Transaction ID or cheque number" />
+                          <Input placeholder="Check/Reference #" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="amount"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Amount Received</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number" 
+                            placeholder="0.00" 
+                            {...field}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value);
+                              field.onChange(isNaN(value) ? 0 : value);
+                            }}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -630,9 +577,9 @@ export default function PaymentReceive() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {depositAccounts.map((account: any) => (
+                            {depositAccounts?.map((account: any) => (
                               <SelectItem key={account.id} value={account.id.toString()}>
-                                {account.name} ({account.code})
+                                {account.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -644,93 +591,73 @@ export default function PaymentReceive() {
 
                   <FormField
                     control={form.control}
-                    name="amount"
+                    name="paymentMethod"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Amount Received</FormLabel>
-                        <FormControl>
-                          <input
-                            type="text"
-                            className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                            placeholder="0.00"
-                            defaultValue={field.value || ''}
-                            onChange={(e) => {
-                              // Update for real-time feedback
-                              const tempValue = parseFloat(e.target.value);
-                              if (!isNaN(tempValue)) {
-                                // Update form value
-                                field.onChange(tempValue);
-                                
-                                // Update unapplied credit instantly
-                                const applied = paymentLineItems.reduce(
-                                  (sum, item) => sum + (item.selected ? item.amount : 0), 
-                                  0
-                                );
-                                setTotalApplied(applied);
-                                setUnappliedCredit(Math.max(0, tempValue - applied));
-                              }
-                            }}
-                            onBlur={(e) => {
-                              const numValue = parseFloat(e.target.value);
-                              if (!isNaN(numValue)) {
-                                field.onChange(numValue);
-                              } else {
-                                // Reset to zero for invalid value
-                                e.target.value = '0';
-                                field.onChange(0);
-                                setUnappliedCredit(0);
-                              }
-                            }}
-                          />
-                        </FormControl>
+                        <FormLabel>Payment Method</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select method" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="check">Check</SelectItem>
+                            <SelectItem value="credit_card">Credit Card</SelectItem>
+                            <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <FormField
-                  control={form.control}
-                  name="note"
-                  render={({ field }) => (
-                    <FormItem className="mt-6">
-                      <FormLabel>Memo / Notes</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="Add any additional notes here" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <div className="md:col-span-2">
+                    <FormField
+                      control={form.control}
+                      name="note"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Memo / Notes</FormLabel>
+                          <FormControl>
+                            <Textarea 
+                              placeholder="Add any notes about this payment" 
+                              className="resize-none h-24"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            {/* Apply Payment Section */}
+            {/* Apply Payments Section */}
             {watchContactId && (
               <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Apply Payment to Invoices</CardTitle>
-                    {!isEditMode && (
-                      <Button
-                        type="button"
-                        onClick={handleAutoApply}
-                        variant="outline"
-                        size="sm"
-                        disabled={!watchAmount || watchAmount <= 0}
-                      >
-                        Auto Apply
-                      </Button>
-                    )}
-                  </div>
+                <CardHeader>
+                  <CardTitle>Apply Payment to Invoices</CardTitle>
+                  {!isEditMode && watchAmount && watchAmount > 0 && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleAutoApply}
+                    >
+                      Auto Apply
+                    </Button>
+                  )}
                 </CardHeader>
                 <CardContent>
-                  {isInvoicesLoading || (isEditMode && isPaymentDataLoading) ? (
-                    <div className="p-4 flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin" />
-                    </div>
-                  ) : isEditMode && editModeInvoices.length > 0 ? (
-                    // In edit mode, show invoices from the original payment
+                  {isEditMode && editModeInvoices && editModeInvoices.length > 0 ? (
                     <div>
                       <div className="rounded-md border">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -746,10 +673,10 @@ export default function PaymentReceive() {
                                 Date
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Due Date
+                                Original Amount
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Original Amount
+                                Balance
                               </th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Payment
@@ -758,18 +685,18 @@ export default function PaymentReceive() {
                           </thead>
                           <tbody className="bg-white divide-y divide-gray-200">
                             {editModeInvoices.map((invoice: any, idx: number) => {
-                              // Find the corresponding line item with payment amount
+                              // Find the corresponding line item from our state
                               const lineItem = paymentLineItems.find(item => item.transactionId === invoice.id);
-                              const lineItemIndex = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
                               return (
-                                <tr key={`edit-invoice-${invoice.id}-${idx}`}>
+                                <tr key={invoice.id}>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <Checkbox
-                                      id={`edit-invoice-${invoice.id}`}
+                                      id={`invoice-${invoice.id}`}
                                       checked={lineItem?.selected || false}
                                       onCheckedChange={(checked) => {
-                                        if (lineItemIndex !== -1) {
-                                          handleLineItemChange(lineItemIndex, 'selected', !!checked);
+                                        const index = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
+                                        if (index !== -1) {
+                                          handleLineItemChange(index, 'selected', !!checked);
                                         }
                                       }}
                                     />
@@ -780,38 +707,26 @@ export default function PaymentReceive() {
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                     {invoice.date ? format(new Date(invoice.date), 'MMM dd, yyyy') : 'N/A'}
                                   </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {invoice.dueDate ? format(new Date(invoice.dueDate), 'MMM dd, yyyy') : 'N/A'}
-                                  </td>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                     {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.amount)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(invoice.balance || invoice.amount)}
                                   </td>
                                   <td className="px-6 py-4 whitespace-nowrap">
                                     <input
                                       type="text"
                                       className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                                       disabled={!lineItem?.selected}
-                                      defaultValue={lineItem?.amount || ''}
+                                      value={lineItem?.amount || 0}
                                       onChange={(e) => {
+                                        // Update the UI immediately for calculations
                                         const tempValue = parseFloat(e.target.value);
-                                        if (!isNaN(tempValue) && lineItemIndex !== -1) {
-                                          // Create a temporary set of items for calculation
-                                          const tempItems = [...paymentLineItems];
-                                          tempItems[lineItemIndex].amount = tempValue;
-                                          tempItems[lineItemIndex].selected = tempValue > 0;
-                                          const applied = tempItems.reduce((sum, item) => sum + (item.selected ? item.amount : 0), 0);
-                                          setTotalApplied(applied);
-                                          setUnappliedCredit(Math.max(0, (watchAmount || 0) - applied));
-                                        }
-                                      }}
-                                      onBlur={(e) => {
-                                        const numValue = parseFloat(e.target.value);
-                                        if (!isNaN(numValue) && lineItemIndex !== -1) {
-                                          handleLineItemChange(lineItemIndex, 'amount', numValue);
-                                        } else if (lineItemIndex !== -1) {
-                                          // Reset to zero for invalid value
-                                          e.target.value = '0';
-                                          handleLineItemChange(lineItemIndex, 'amount', 0);
+                                        if (!isNaN(tempValue)) {
+                                          const index = paymentLineItems.findIndex(item => item.transactionId === invoice.id);
+                                          if (index !== -1) {
+                                            handleLineItemChange(index, 'amount', tempValue);
+                                          }
                                         }
                                       }}
                                     />
@@ -824,21 +739,26 @@ export default function PaymentReceive() {
                       </div>
                       
                       {/* Payment Summary */}
-                      <div className="mt-6 text-right">
-                        <div className="text-sm text-gray-500">Total Applied: 
-                          <span className="ml-2 font-medium text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-500">Amount Received: 
-                          <span className="ml-2 font-medium text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
-                          </span>
-                        </div>
-                        <div className="text-sm font-medium">Unapplied Credit: 
-                          <span className={`ml-2 ${unappliedCredit > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
-                          </span>
+                      <div className="mt-6 flex justify-end">
+                        <div className="min-w-[240px] space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Applied:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Amount Received:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm border-t pt-1 mt-1">
+                            <span className="font-medium">Unapplied Credit:</span>
+                            <span className={`font-medium ${unappliedCredit > 0 ? 'text-blue-600' : ''}`}>
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -937,21 +857,26 @@ export default function PaymentReceive() {
                       </div>
                       
                       {/* Payment Summary */}
-                      <div className="mt-6 text-right">
-                        <div className="text-sm text-gray-500">Total Applied: 
-                          <span className="ml-2 font-medium text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-500">Amount Received: 
-                          <span className="ml-2 font-medium text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
-                          </span>
-                        </div>
-                        <div className="text-sm font-medium">Unapplied Credit: 
-                          <span className={`ml-2 ${unappliedCredit > 0 ? 'text-blue-600' : 'text-gray-900'}`}>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
-                          </span>
+                      <div className="mt-6 flex justify-end">
+                        <div className="min-w-[240px] space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Total Applied:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Amount Received:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm border-t pt-1 mt-1">
+                            <span className="font-medium">Unapplied Credit:</span>
+                            <span className={`font-medium ${unappliedCredit > 0 ? 'text-blue-600' : ''}`}>
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
