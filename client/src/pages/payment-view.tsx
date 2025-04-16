@@ -47,6 +47,9 @@ export default function PaymentView() {
   const [notes, setNotes] = useState<string>('');
   const [selectedInvoicePayments, setSelectedInvoicePayments] = useState<any[]>([]);
 
+  // Toast notifications
+  const { toast } = useToast();
+  
   // Fetch payment data
   const { data, isLoading, error } = useQuery<PaymentResponse>({
     queryKey: ['/api/transactions', paymentId],
@@ -57,6 +60,29 @@ export default function PaymentView() {
       }
       return response.json();
     },
+  });
+  
+  // Update payment mutation
+  const updatePaymentMutation = useMutation({
+    mutationFn: async (updatedPayment: any) => {
+      return await apiRequest('PATCH', `/api/transactions/${paymentId}`, updatedPayment);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Payment updated",
+        description: "The payment has been successfully updated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions', paymentId] });
+      setIsEditing(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Error updating payment",
+        description: String(error),
+        variant: "destructive",
+      });
+    }
   });
   
   // Initialize form state when data is loaded
@@ -354,8 +380,9 @@ export default function PaymentView() {
                 <Label htmlFor="date">Payment Date</Label>
                 {isEditing ? (
                   <DatePicker
-                    date={paymentDate}
-                    onSelect={setPaymentDate}
+                    date={paymentDate || new Date()}
+                    setDate={setPaymentDate}
+                    disabled={updatePaymentMutation.isPending}
                   />
                 ) : (
                   <Input
@@ -424,7 +451,11 @@ export default function PaymentView() {
                       <SelectValue placeholder="Select account" />
                     </SelectTrigger>
                     <SelectContent>
-                      {accounts?.filter(account => account.type === 'asset').map((account) => (
+                      {accounts?.filter(account => 
+                        account.type === 'bank' || 
+                        account.type === 'current_assets' || 
+                        account.type === 'accounts_receivable'
+                      ).map((account) => (
                         <SelectItem key={account.id} value={account.id.toString()}>
                           {account.name} {account.code ? `(${account.code})` : ''}
                         </SelectItem>
@@ -481,11 +512,51 @@ export default function PaymentView() {
                   variant="default"
                   className="bg-primary text-white"
                   onClick={() => {
-                    // Handle save logic here
-                    setIsEditing(false);
+                    // Make sure we have a valid amount
+                    const parsedAmount = parseFloat(amountReceived.replace(/,/g, ''));
+                    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+                      toast({
+                        title: "Invalid amount",
+                        description: "Please enter a valid amount greater than zero.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    // Make sure we have a valid deposit account
+                    if (!selectedDepositAccountId) {
+                      toast({
+                        title: "Missing deposit account",
+                        description: "Please select a deposit account.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    // Prepare the update data
+                    const updateData = {
+                      date: paymentDate,
+                      paymentMethod,
+                      reference: referenceNumber,
+                      amount: parsedAmount,
+                      description: notes,
+                      // Include any other necessary payment fields
+                      depositAccountId: selectedDepositAccountId,
+                    };
+                    
+                    // Submit the update
+                    updatePaymentMutation.mutate(updateData);
                   }}
+                  disabled={updatePaymentMutation.isPending}
                 >
-                  Save Changes
+                  {updatePaymentMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
                 </Button>
               </div>
             )}
