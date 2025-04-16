@@ -173,12 +173,18 @@ export default function PaymentReceive() {
               if (!item.transactionId) return null;
               const response = await fetch(`/api/transactions/${item.transactionId}`);
               if (!response.ok) return null;
-              return await response.json();
+              const data = await response.json();
+              
+              // The API returns a nested object with 'transaction' property
+              // So we need to extract the transaction from the response
+              return data.transaction || null;
             });
             
             const invoices = await Promise.all(invoicePromises);
             // Filter out any null results
             const validInvoices = invoices.filter(Boolean);
+            
+            console.log("Fetched original invoices:", validInvoices);
             
             // Store the invoices for edit mode
             if (validInvoices.length > 0) {
@@ -751,7 +757,7 @@ export default function PaymentReceive() {
                               // Find the corresponding line item with payment amount
                               const lineItem = paymentLineItems.find(item => item.transactionId === invoice.id);
                               return (
-                                <tr key={invoice.id}>
+                                <tr key={`edit-invoice-${invoice.id}-${idx}`}>
                                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                     {invoice.reference || `INV-${invoice.id}`}
                                   </td>
