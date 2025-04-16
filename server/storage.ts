@@ -58,6 +58,7 @@ export interface IStorage {
   getContact(id: number): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: number, contact: Partial<Contact>): Promise<Contact | undefined>;
+  deleteContact(id: number): Promise<boolean>;
 
   // Transactions
   getTransactions(): Promise<Transaction[]>;
@@ -276,6 +277,11 @@ export class MemStorage implements IStorage {
     const updatedContact = { ...contact, ...contactUpdate };
     this.contacts.set(id, updatedContact);
     return updatedContact;
+  }
+  
+  async deleteContact(id: number): Promise<boolean> {
+    if (!this.contacts.has(id)) return false;
+    return this.contacts.delete(id);
   }
 
   // Transaction Methods
