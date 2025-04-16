@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Contact, Transaction } from "@shared/schema";
+import { Contact, Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, User, ChevronRight, X } from "lucide-react";
+import { Search, User, ChevronRight, X, Eye } from "lucide-react";
 import { 
   Card, 
   CardContent,
@@ -31,6 +31,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface CustomerListProps {
   className?: string;
@@ -40,6 +48,7 @@ export default function CustomerList({ className }: CustomerListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   
   // Fetch customers
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -49,6 +58,18 @@ export default function CustomerList({ className }: CustomerListProps) {
   // Fetch transactions
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
+  });
+  
+  // Fetch ledger entries for selected transaction
+  const { data: ledgerEntries, refetch: refetchLedgerEntries } = useQuery<LedgerEntry[]>({
+    queryKey: ['/api/ledger-entries', selectedTransaction?.id],
+    enabled: !!selectedTransaction,
+    select: (data) => data.filter(entry => entry.transactionId === selectedTransaction?.id),
+  });
+  
+  // Fetch accounts for ledger entry display
+  const { data: accounts } = useQuery<any[]>({
+    queryKey: ['/api/accounts'],
   });
   
   const handleCustomerClick = (customer: Contact) => {
@@ -231,6 +252,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                             <TableHead>Amount</TableHead>
                             <TableHead>Balance</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -270,6 +292,22 @@ export default function CustomerList({ className }: CustomerListProps) {
                                       : '—'}
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedTransaction(transaction);
+                                        if (transaction.id) {
+                                          refetchLedgerEntries();
+                                        }
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4 mr-1" />
+                                      View
+                                    </Button>
+                                  </TableCell>
                                 </TableRow>
                               );
                             })}
@@ -308,6 +346,89 @@ export default function CustomerList({ className }: CustomerListProps) {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Transaction Detail Dialog */}
+      <Dialog open={!!selectedTransaction} onOpenChange={(open) => !open && setSelectedTransaction(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center">
+              {selectedTransaction?.type === 'invoice' ? 'Invoice' : 
+               selectedTransaction?.type === 'payment' ? 'Payment' : 
+               selectedTransaction?.type?.charAt(0).toUpperCase() + selectedTransaction?.type?.slice(1) || 'Transaction'} 
+              {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedTransaction && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Date</h3>
+                  <p className="text-base">
+                    {format(new Date(selectedTransaction.date), "MMMM dd, yyyy")}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Amount</h3>
+                  <p className="text-base">{formatCurrency(selectedTransaction.amount)}</p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Status</h3>
+                  <p className="text-base">{selectedTransaction.status.toUpperCase()}</p>
+                </div>
+                {selectedTransaction.type === 'invoice' && selectedTransaction.balance !== undefined && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
+                    <p className="text-base">{formatCurrency(selectedTransaction.balance)}</p>
+                  </div>
+                )}
+              </div>
+
+              {selectedTransaction.description && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Description</h3>
+                  <p className="text-base">{selectedTransaction.description}</p>
+                </div>
+              )}
+
+              {/* Show ledger entries for this transaction */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Journal Entries</h3>
+                {!ledgerEntries ? (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                ) : ledgerEntries.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No ledger entries found for this transaction.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Account</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Debit</TableHead>
+                        <TableHead className="text-right">Credit</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ledgerEntries.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
+                          </TableCell>
+                          <TableCell>{entry.description}</TableCell>
+                          <TableCell className="text-right">{entry.debit > 0 ? formatCurrency(entry.debit) : ''}</TableCell>
+                          <TableCell className="text-right">{entry.credit > 0 ? formatCurrency(entry.credit) : ''}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
