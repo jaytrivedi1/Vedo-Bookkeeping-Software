@@ -142,7 +142,7 @@ export default function PaymentReceive() {
     if (field === 'amount' && typeof value === 'number') {
       // Ensure amount doesn't exceed the invoice balance
       const invoice = customerInvoices?.find((inv: any) => inv.id === updatedItems[index].transactionId);
-      const maxAmount = invoice?.balance || 0;
+      const maxAmount = invoice?.balance || invoice?.amount || 0;
       updatedItems[index].amount = Math.min(value, maxAmount);
       
       // If an amount is entered, auto-select the invoice
@@ -168,7 +168,16 @@ export default function PaymentReceive() {
       }
     }
     
+    // Calculate new totals immediately
+    const newTotalApplied = updatedItems.reduce(
+      (sum, item) => sum + (item.selected ? item.amount : 0), 
+      0
+    );
+    
+    // Set the updated items and totals
     setPaymentLineItems(updatedItems);
+    setTotalApplied(newTotalApplied);
+    setUnappliedCredit(Math.max(0, (watchAmount || 0) - newTotalApplied));
   };
 
   // Auto-apply button handler
@@ -202,6 +211,12 @@ export default function PaymentReceive() {
       remainingAmount -= paymentAmount;
     }
     
+    // Calculate totals after applying
+    const appliedTotal = updatedItems.reduce((sum, item) => sum + (item.selected ? item.amount : 0), 0);
+    setTotalApplied(appliedTotal);
+    setUnappliedCredit(Math.max(0, watchAmount - appliedTotal));
+    
+    // Set the updated items to state
     setPaymentLineItems(updatedItems);
     
     // Force update the UI inputs
