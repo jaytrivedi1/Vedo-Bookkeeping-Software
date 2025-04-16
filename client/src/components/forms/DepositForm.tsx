@@ -78,9 +78,9 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     queryKey: ['/api/accounts'],
   });
 
-  // Filter bank and line of credit accounts
+  // Filter bank and credit accounts
   const bankAccounts = accounts?.filter(account => 
-    account.type === 'bank' || account.type === 'line_of_credit'
+    account.type === 'bank' || account.type === 'credit_card'
   ) || [];
 
   // Filter accounts for the line items (income accounts typically)
