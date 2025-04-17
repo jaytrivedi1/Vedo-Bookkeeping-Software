@@ -956,12 +956,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
               transactionId: 0 // Will be set by createTransaction
             });
             
-            // Update the deposit status from "Unapplied Credit" to "Completed" if fully applied
-            // We'll check if this payment fully uses up the deposit
-            if (item.amount >= deposit.amount) {
+            // Update the deposit status and balance based on how much credit was applied
+            const remainingBalance = deposit.amount - item.amount;
+            
+            // If fully applied, change status to completed and zero out the balance
+            if (remainingBalance <= 0) {
               await storage.updateTransaction(deposit.id, {
-                status: 'completed'
+                status: 'completed',
+                balance: 0
               });
+              console.log(`Deposit #${deposit.id} fully applied and changed to 'completed'`);
+            } 
+            // If partially applied, keep as unapplied_credit and update balance
+            else {
+              await storage.updateTransaction(deposit.id, {
+                balance: -remainingBalance // Maintain negative balance for credits
+              });
+              console.log(`Deposit #${deposit.id} partially applied, new balance: ${-remainingBalance}`);
             }
           }
         }
@@ -1078,7 +1089,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: depositData.description,
         amount: depositData.amount,
         contactId: depositData.contactId || null,
-        status: depositData.contactId ? 'unapplied_credit' as const : 'completed' as const
+        status: depositData.contactId ? 'unapplied_credit' as const : 'completed' as const,
+        // For customer deposits (unapplied credits), set a negative balance
+        balance: depositData.contactId ? -depositData.amount : undefined
       };
       
       // Empty line items for deposits
@@ -1313,14 +1326,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             if (!deposit || deposit.type !== 'deposit') continue;
             
-            // Check if this deposit is now fully applied
-            if (credit.amount >= deposit.amount) {
-              // Update deposit status to "completed" if it was previously "unapplied_credit"
-              if (deposit.status === 'unapplied_credit') {
+            // Update deposit status and balance based on how much credit is applied
+            if (deposit.status === 'unapplied_credit') {
+              // Calculate remaining balance
+              const remainingBalance = deposit.amount - credit.amount;
+              
+              if (remainingBalance <= 0) {
+                // Fully applied - mark as completed
                 await storage.updateTransaction(deposit.id, {
-                  status: 'completed'
+                  status: 'completed',
+                  balance: 0
                 });
                 console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) status to 'completed'`);
+              } else {
+                // Partially applied - update balance but keep status as unapplied_credit
+                await storage.updateTransaction(deposit.id, {
+                  balance: -remainingBalance // Keep negative balance for credits
+                });
+                console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) remaining balance: ${-remainingBalance}`);
               }
             }
           }
