@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { format } from "date-fns";
 import { 
+  CreditCard, 
   ArrowLeft,
   Save,
   Loader2
@@ -35,7 +36,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { AccountType, Account, Contact } from "@shared/schema";
+import { AccountType, Account, Contact, Transaction } from "@shared/schema";
 
 const paymentSchema = z.object({
   contactId: z.coerce.number(),
@@ -387,9 +388,6 @@ export default function PaymentReceive() {
 
   const isLoading = isContactsLoading || isAccountsLoading || paymentMutation.isPending;
 
-  // Calculate net balance after applying credits
-  const netBalanceAfterCredits = Math.max(0, totalApplied - totalCreditsApplied);
-
   return (
     <div className="py-6">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -621,9 +619,9 @@ export default function PaymentReceive() {
               </CardContent>
             </Card>
 
-            {/* Apply Payment to Invoices Section */}
-            {watchContactId && customerInvoices && customerInvoices.length > 0 && (
-              <Card className="mt-6">
+            {/* Apply Payment Section */}
+            {watchContactId && (
+              <Card>
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-center">
                     <CardTitle>Apply Payment to Invoices</CardTitle>
@@ -643,7 +641,7 @@ export default function PaymentReceive() {
                     <div className="p-4 flex justify-center">
                       <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
-                  ) : (
+                  ) : customerInvoices && customerInvoices.length > 0 ? (
                     <div>
                       <div className="rounded-md border">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -739,7 +737,7 @@ export default function PaymentReceive() {
                           </span>
                         </div>
                         <div className="flex justify-between items-center text-sm mt-2">
-                          <span>Total Applied:</span>
+                          <span>Total Applied to Invoices:</span>
                           <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
                             {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
                             {totalApplied > (watchAmount || 0) && (
@@ -749,6 +747,14 @@ export default function PaymentReceive() {
                             )}
                           </span>
                         </div>
+                        {totalCreditsApplied > 0 && (
+                          <div className="flex justify-between items-center text-sm mt-2">
+                            <span>Credits Applied:</span>
+                            <span className="font-medium text-blue-600">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalCreditsApplied)}
+                            </span>
+                          </div>
+                        )}
                         <Separator className="my-3" />
                         <div className="flex justify-between items-center font-medium">
                           <span>Unapplied Credit:</span>
@@ -766,138 +772,149 @@ export default function PaymentReceive() {
                             )}
                           </span>
                         </div>
+                        {totalCreditsApplied > 0 && (
+                          <div className="flex justify-between items-center font-medium mt-2">
+                            <span>Net Balance Due:</span>
+                            <span className="font-semibold text-gray-900">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                                Math.max(0, totalApplied - (watchAmount || 0) - totalCreditsApplied)
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Unapplied Credits Section */}
-            {watchContactId && customerDeposits && customerDeposits.length > 0 && (
-              <Card className="mt-6">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-center">
-                    <CardTitle>Available Credits</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {isDepositsLoading ? (
-                    <div className="p-4 flex justify-center">
-                      <Loader2 className="h-6 w-6 animate-spin" />
                     </div>
                   ) : (
-                    <div>
-                      <div className="rounded-md border">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Select
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Credit #
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Date
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Description
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Amount
-                              </th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Apply
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {customerDeposits.map((deposit: any, idx: number) => (
-                              <tr key={deposit.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <Checkbox
-                                    id={`deposit-${deposit.id}`}
-                                    checked={depositLineItems[idx]?.selected || false}
-                                    onCheckedChange={(checked) => 
-                                      handleCreditLineItemChange(idx, 'selected', !!checked)
-                                    }
-                                  />
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                  {deposit.reference || `DEP-${deposit.id}`}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {format(new Date(deposit.date), 'MMM dd, yyyy')}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {deposit.description || 'Deposit'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(deposit.amount)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <input
-                                    type="text"
-                                    className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                    disabled={!depositLineItems[idx]?.selected}
-                                    defaultValue={depositLineItems[idx]?.amount || ''}
-                                    onChange={(e) => {
-                                      const tempValue = parseFloat(e.target.value);
-                                      if (!isNaN(tempValue)) {
-                                        // Create a temporary set of items for calculation
-                                        const tempItems = [...depositLineItems];
-                                        tempItems[idx].amount = tempValue;
-                                        tempItems[idx].selected = tempValue > 0;
-                                        const applied = tempItems.reduce((sum, item) => sum + (item.selected ? item.amount : 0), 0);
-                                        setTotalCreditsApplied(applied);
-                                      }
-                                    }}
-                                    onBlur={(e) => {
-                                      const numValue = parseFloat(e.target.value);
-                                      if (!isNaN(numValue)) {
-                                        handleCreditLineItemChange(idx, 'amount', numValue);
-                                      } else {
-                                        // Reset to zero for invalid value
-                                        e.target.value = '0';
-                                        handleCreditLineItemChange(idx, 'amount', 0);
-                                      }
-                                    }}
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-6 rounded-md bg-gray-50 p-4">
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Total Outstanding Invoices:</span>
-                          <span className="font-medium">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm mt-2">
-                          <span>Total Credits Applied:</span>
-                          <span className="font-medium text-green-600">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalCreditsApplied)}
-                          </span>
-                        </div>
-                        <Separator className="my-3" />
-                        <div className="flex justify-between items-center font-medium">
-                          <span>Net Balance Due:</span>
-                          <span className="font-semibold text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                              Math.max(0, totalApplied - totalCreditsApplied)
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    <Alert className="bg-blue-50 border-blue-200">
+                      <AlertDescription>
+                        No open invoices found for this customer.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </CardContent>
               </Card>
+
+              {/* Unapplied Credits Section */}
+              {watchContactId && customerDeposits && customerDeposits.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-center">
+                      <CardTitle>Available Credits</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {isDepositsLoading ? (
+                      <div className="p-4 flex justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="rounded-md border">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Select
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Credit #
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Date
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Description
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Amount
+                                </th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Apply
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {customerDeposits.map((deposit: any, idx: number) => (
+                                <tr key={deposit.id}>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <Checkbox
+                                      id={`deposit-${deposit.id}`}
+                                      checked={depositLineItems[idx]?.selected || false}
+                                      onCheckedChange={(checked) => 
+                                        handleCreditLineItemChange(idx, 'selected', !!checked)
+                                      }
+                                    />
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {deposit.reference || `DEP-${deposit.id}`}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {format(new Date(deposit.date), 'MMM dd, yyyy')}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {deposit.description || 'Deposit'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(deposit.amount)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <input
+                                      type="text"
+                                      className="flex h-9 w-24 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                      disabled={!depositLineItems[idx]?.selected}
+                                      defaultValue={depositLineItems[idx]?.amount || ''}
+                                      onChange={(e) => {
+                                        const tempValue = parseFloat(e.target.value);
+                                        if (!isNaN(tempValue)) {
+                                          // Create a temporary set of items for calculation
+                                          const tempItems = [...depositLineItems];
+                                          tempItems[idx].amount = tempValue;
+                                          tempItems[idx].selected = tempValue > 0;
+                                          const applied = tempItems.reduce(
+                                            (sum, item) => sum + (item.selected ? item.amount : 0), 0
+                                          );
+                                          setTotalCreditsApplied(applied);
+                                        }
+                                      }}
+                                      onBlur={(e) => {
+                                        const numValue = parseFloat(e.target.value);
+                                        if (!isNaN(numValue)) {
+                                          handleCreditLineItemChange(idx, 'amount', numValue);
+                                        } else {
+                                          // Reset to zero for invalid value
+                                          e.target.value = '0';
+                                          handleCreditLineItemChange(idx, 'amount', 0);
+                                        }
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="mt-6 rounded-md bg-gray-50 p-4">
+                          <div className="flex justify-between items-center text-sm">
+                            <span>Total Credits Available:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                                customerDeposits.reduce((sum, deposit) => sum + deposit.amount, 0)
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-sm mt-2">
+                            <span>Total Credits Applied:</span>
+                            <span className="font-medium">
+                              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalCreditsApplied)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             )}
           </form>
         </Form>

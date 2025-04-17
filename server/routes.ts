@@ -714,6 +714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const data = req.body;
     const lineItems = data.lineItems || [];
     const unappliedAmount = data.unappliedAmount || 0;
+    const totalCreditsApplied = data.totalCreditsApplied || 0;
     
     try {
       // Create the payment transaction
@@ -740,47 +741,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       ];
       
-      // Apply payments to invoices
+      // Process all line items (both invoices and deposits)
       if (lineItems.length > 0) {
         for (const item of lineItems) {
-          // Get the invoice to apply payment to
-          const invoice = await storage.getTransaction(item.transactionId);
-          
-          if (!invoice) {
-            continue;
+          // Handle invoices
+          if (!item.type || item.type === 'invoice') {
+            // Get the invoice to apply payment to
+            const invoice = await storage.getTransaction(item.transactionId);
+            
+            if (!invoice) {
+              continue;
+            }
+            
+            // Update invoice balance and status
+            // Calculate the new balance by subtracting payment from current balance
+            // Make sure we're working with the correct current balance
+            const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
+              ? invoice.balance 
+              : invoice.amount;
+            
+            // Don't allow negative balances (overpayment protection)
+            const newBalance = Math.max(0, currentBalance - item.amount);
+            
+            // For status, use 'paid' when balance is 0, 'pending' when partially paid
+            // This ensures correct status labeling for partially paid invoices
+            const newStatus = newBalance === 0 ? 'paid' : 'pending';
+            
+            console.log(`Updating invoice #${invoice.id} balance from ${currentBalance} to ${newBalance}, status: ${newStatus}`);
+            
+            await storage.updateTransaction(invoice.id, { 
+              balance: newBalance, 
+              status: newStatus 
+            });
+            
+            // Add credit to Accounts Receivable (decrease)
+            ledgerEntries.push({
+              accountId: 2, // Accounts Receivable (ID 2 from the database)
+              debit: 0,
+              credit: item.amount,
+              description: `Payment applied to invoice #${invoice.reference}`,
+              date: new Date(data.date),
+              transactionId: 0 // Will be set by createTransaction
+            });
+          } 
+          // Handle deposits (unapplied credits being applied)
+          else if (item.type === 'deposit') {
+            // Get the deposit to apply as credit
+            const deposit = await storage.getTransaction(item.transactionId);
+            
+            if (!deposit) {
+              continue;
+            }
+            
+            // No need to update deposit status - just record the ledger entry
+            // Add debit to customer prepayments/credits account (Business Credit Card)
+            ledgerEntries.push({
+              accountId: 19, // Business Credit Card (ID 19 from the database)
+              debit: item.amount,
+              credit: 0,
+              description: `Applied credit from deposit #${deposit.reference || deposit.id}`,
+              date: new Date(data.date),
+              transactionId: 0 // Will be set by createTransaction
+            });
+            
+            // Also need to add a corresponding credit to Accounts Receivable
+            ledgerEntries.push({
+              accountId: 2, // Accounts Receivable (ID 2 from the database)
+              debit: 0, 
+              credit: item.amount,
+              description: `Credit applied from deposit #${deposit.reference || deposit.id} to payment`,
+              date: new Date(data.date),
+              transactionId: 0 // Will be set by createTransaction
+            });
           }
-          
-          // Update invoice balance and status
-          // Calculate the new balance by subtracting payment from current balance
-          // Make sure we're working with the correct current balance
-          const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
-            ? invoice.balance 
-            : invoice.amount;
-          
-          // Don't allow negative balances (overpayment protection)
-          const newBalance = Math.max(0, currentBalance - item.amount);
-          
-          // For status, use 'paid' when balance is 0, 'pending' when partially paid
-          // This ensures correct status labeling for partially paid invoices
-          const newStatus = newBalance === 0 ? 'paid' : 'pending';
-          
-          console.log(`Updating invoice #${invoice.id} balance from ${currentBalance} to ${newBalance}, status: ${newStatus}`);
-          
-          await storage.updateTransaction(invoice.id, { 
-            balance: newBalance, 
-            status: newStatus 
-          });
-          
-          // Add credit to Accounts Receivable (decrease)
-          // Using account ID 2 which is Accounts Receivable
-          ledgerEntries.push({
-            accountId: 2, // Accounts Receivable (ID 2 from the database)
-            debit: 0,
-            credit: item.amount,
-            description: `Payment applied to invoice #${invoice.reference}`,
-            date: new Date(data.date),
-            transactionId: 0 // Will be set by createTransaction
-          });
         }
       }
       
