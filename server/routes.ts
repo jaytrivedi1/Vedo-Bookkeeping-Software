@@ -30,6 +30,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API routes
   const apiRouter = express.Router();
   
+  // TEST Endpoint for creating a payment with unapplied credit
+  apiRouter.post("/test-unapplied-credit", async (req: Request, res: Response) => {
+    try {
+      // First, create an invoice to pay
+      const invoice = await storage.createTransaction(
+        {
+          type: 'invoice',
+          reference: `INV-TEST-${Date.now()}`,
+          date: new Date(),
+          description: "Test invoice for payment",
+          amount: 500, // $500 invoice
+          contactId: 1, // Acme Corporation
+          status: 'pending',
+          balance: 500
+        },
+        [
+          {
+            description: "Test product",
+            quantity: 1,
+            unitPrice: 500,
+            amount: 500,
+            transactionId: 0 // Will be set by createTransaction
+          }
+        ],
+        [
+          {
+            accountId: 2, // Accounts Receivable
+            description: "Test invoice",
+            debit: 500,
+            credit: 0,
+            date: new Date(),
+            transactionId: 0 // Will be set by createTransaction
+          },
+          {
+            accountId: 20, // Revenue
+            description: "Test invoice revenue",
+            debit: 0,
+            credit: 500,
+            date: new Date(),
+            transactionId: 0 // Will be set by createTransaction
+          }
+        ]
+      );
+      
+      // Now create a payment for $1000 (invoice is only $500, so $500 should be unapplied credit)
+      const payment = await storage.createTransaction(
+        {
+          type: 'payment',
+          reference: `PAY-TEST-${Date.now()}`,
+          date: new Date(),
+          description: "Test payment with unapplied credit",
+          amount: 1000, // $1000 payment for $500 invoice
+          contactId: 1, // Acme Corporation
+          status: 'completed'
+        },
+        [], // No line items for payments
+        [
+          {
+            accountId: 1, // Cash
+            description: "Test payment deposit",
+            debit: 1000,
+            credit: 0,
+            date: new Date(),
+            transactionId: 0 // Will be set by createTransaction
+          },
+          {
+            accountId: 2, // Accounts Receivable
+            description: `Payment for invoice #${invoice.reference}`,
+            debit: 0,
+            credit: 500, // Only applying $500 to the invoice
+            date: new Date(),
+            transactionId: 0 // Will be set by createTransaction
+          },
+          {
+            accountId: 2, // Accounts Receivable
+            description: "Unapplied credit for customer #1",
+            debit: 0,
+            credit: 500, // $500 unapplied credit
+            date: new Date(),
+            transactionId: 0 // Will be set by createTransaction
+          }
+        ]
+      );
+      
+      // Create a separate deposit transaction for the unapplied credit amount
+      const depositData = {
+        type: 'deposit' as const,
+        status: 'unapplied_credit' as const,
+        date: new Date(),
+        reference: `CREDIT-TEST-${Date.now()}`, // Generate a unique reference
+        description: "Unapplied credit from test payment",
+        amount: 500, // $500 unapplied credit
+        balance: -500, // Negative balance for credit
+        contactId: 1, // Acme Corporation
+      };
+      
+      // Create deposit ledger entries
+      const depositLedgerEntries = [
+        {
+          accountId: 2, // Accounts Receivable
+          debit: 0,
+          credit: 500,
+          description: "Unapplied credit from test payment",
+          date: new Date(),
+          transactionId: 0 // Will be set by createTransaction
+        },
+        {
+          accountId: 1, // Cash
+          debit: 500,
+          credit: 0,
+          description: "Deposit from unapplied credit",
+          date: new Date(),
+          transactionId: 0 // Will be set by createTransaction
+        }
+      ];
+      
+      // Create the deposit transaction
+      const deposit = await storage.createTransaction(
+        depositData,
+        [], // No line items for deposits
+        depositLedgerEntries
+      );
+      
+      // Update the invoice balance to show it's paid
+      await storage.updateTransaction(invoice.id, {
+        balance: 0,
+        status: 'paid'
+      });
+      
+      res.status(201).json({
+        message: "Test unapplied credit flow created successfully",
+        invoice,
+        payment,
+        deposit
+      });
+    } catch (error: any) {
+      console.error("Error in test endpoint:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // Accounts routes
   apiRouter.get("/accounts", async (req: Request, res: Response) => {
     try {
@@ -839,9 +980,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         
         // Create a separate deposit transaction for the unapplied credit amount
-        const depositData: InsertTransaction = {
-          type: 'deposit',
-          status: 'unapplied_credit',
+        const depositData = {
+          type: 'deposit' as const,
+          status: 'unapplied_credit' as const,
           date: new Date(data.date),
           reference: `CREDIT-${Date.now().toString().substring(8)}`, // Generate a unique reference
           description: `Unapplied credit from payment on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
