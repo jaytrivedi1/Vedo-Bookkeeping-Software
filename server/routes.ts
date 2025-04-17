@@ -905,25 +905,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
               continue;
             }
             
-            // Update invoice balance and status
-            // Calculate the new balance by subtracting payment from current balance
-            // Make sure we're working with the correct current balance
+            console.log(`Processing payment of ${item.amount} for invoice #${invoice.id}`);
+            
+            // First, update the invoice with the new ledger entries that will be created
+            // This is needed because our recalculation method will use these ledger entries
+            
+            // Note: We're setting the basic transaction data manually here for immediate update
+            // This will be followed by a comprehensive recalculation
             const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
               ? invoice.balance 
               : invoice.amount;
             
-            // Don't allow negative balances (overpayment protection)
-            const newBalance = Math.max(0, currentBalance - item.amount);
+            // Temporary calculation for immediate update - will be overwritten by recalculation
+            const tempNewBalance = Math.max(0, currentBalance - item.amount);
+            const tempNewStatus = tempNewBalance === 0 ? 'paid' : 'partial';
             
-            // For status, use 'paid' when balance is 0, 'pending' when partially paid
-            // This ensures correct status labeling for partially paid invoices
-            const newStatus = newBalance === 0 ? 'paid' : 'pending';
-            
-            console.log(`Updating invoice #${invoice.id} balance from ${currentBalance} to ${newBalance}, status: ${newStatus}`);
-            
+            // Temporary update to allow ledger entries to be created correctly
             await storage.updateTransaction(invoice.id, { 
-              balance: newBalance, 
-              status: newStatus 
+              balance: tempNewBalance, 
+              status: tempNewStatus 
             });
             
             // Add credit to Accounts Receivable (decrease)
@@ -1038,6 +1038,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         [], // No line items for the payment itself
         ledgerEntries
       );
+      
+      // After payment creation, recalculate all affected invoice balances
+      const invoiceItems = lineItems.filter(item => !item.type || item.type === 'invoice');
+      if (invoiceItems && invoiceItems.length > 0) {
+        console.log(`Recalculating balances for ${invoiceItems.length} invoices...`);
+        
+        for (const item of invoiceItems) {
+          if (item.transactionId) {
+            const updatedInvoice = await storage.recalculateInvoiceBalance(item.transactionId);
+            console.log(`Recalculated invoice #${item.transactionId}: balance ${updatedInvoice?.balance}, status ${updatedInvoice?.status}`);
+          }
+        }
+      }
       
       res.status(201).json(payment);
     } catch (error: any) {
@@ -1302,14 +1315,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Original invoice amount minus the new payment amount
                   const newBalance = invoice.amount - newAmount;
                   
-                  console.log(`Updating invoice #${invoice.id} (${invoice.reference}): Original amount: ${invoice.amount}, Current balance: ${invoice.balance}, New payment: ${newAmount}, New balance: ${newBalance}`);
+                  console.log(`Updating invoice #${invoice.id} (${invoice.reference}): Original amount: ${invoice.amount}, Current balance: ${invoice.balance}, New payment: ${newAmount}`);
                   
-                  // Update the invoice balance
-                  await storage.updateTransaction(invoice.id, {
-                    balance: newBalance,
-                    // Update status based on the new balance
-                    status: newBalance <= 0 ? 'paid' : (newBalance < invoice.amount ? 'partial' : 'pending')
-                  });
+                  // Recalculate the invoice balance properly using our new method
+                  const updatedInvoice = await storage.recalculateInvoiceBalance(invoice.id);
+                  console.log(`Recalculated invoice #${invoice.id}: new balance ${updatedInvoice?.balance}, status ${updatedInvoice?.status}`);
                 }
               }
             }

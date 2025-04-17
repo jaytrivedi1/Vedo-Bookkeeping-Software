@@ -7,7 +7,7 @@ import {
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne } from "drizzle-orm";
 import { IStorage } from "./storage";
 
 export class DatabaseStorage implements IStorage {
@@ -60,6 +60,32 @@ export class DatabaseStorage implements IStorage {
       .where(eq(contacts.id, id))
       .returning();
     return updatedContact;
+  }
+  
+  async deleteContact(id: number): Promise<boolean> {
+    try {
+      // Check if contact has any related transactions
+      const relatedTransactions = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.contactId, id));
+      
+      if (relatedTransactions.length > 0) {
+        // If contact has related transactions, don't delete
+        console.error(`Cannot delete contact with ID ${id}: has ${relatedTransactions.length} related transactions`);
+        return false;
+      }
+      
+      // Delete the contact
+      const result = await db
+        .delete(contacts)
+        .where(eq(contacts.id, id));
+      
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting contact with ID ${id}:`, error);
+      return false;
+    }
   }
 
   // Transactions
@@ -162,11 +188,11 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`,
         eq(ledgerEntries.accountId, 2), // Accounts Receivable
-        neq(ledgerEntries.transactionId, invoiceId) // Exclude the invoice's own ledger entries
+        ne(ledgerEntries.transactionId, invoiceId) // Exclude the invoice's own ledger entries
       ));
       
       const totalApplied = appliedPayments[0]?.amount || 0;
-      const remainingBalance = invoice.amount - totalApplied;
+      const remainingBalance = Number(invoice.amount) - Number(totalApplied);
       
       // Update invoice balance and status
       let status = invoice.status;
@@ -175,7 +201,7 @@ export class DatabaseStorage implements IStorage {
       } else if (remainingBalance < invoice.amount) {
         status = 'partial';
       } else {
-        status = 'outstanding';
+        status = 'pending'; // Use pending instead of outstanding to match our enum
       }
       
       // Update the invoice
@@ -353,16 +379,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
-    let query = db.select().from(ledgerEntries);
+    let conditions = [];
     
     if (startDate) {
-      query = query.where(gte(ledgerEntries.date, startDate));
+      conditions.push(gte(ledgerEntries.date, startDate));
     }
     
     if (endDate) {
-      query = query.where(lte(ledgerEntries.date, endDate));
+      conditions.push(lte(ledgerEntries.date, endDate));
     }
     
+    const query = conditions.length > 0
+      ? db.select().from(ledgerEntries).where(and(...conditions))
+      : db.select().from(ledgerEntries);
+      
     const result = await query.orderBy(ledgerEntries.date);
     return result as LedgerEntry[];
   }
