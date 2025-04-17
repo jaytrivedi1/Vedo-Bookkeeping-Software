@@ -60,10 +60,12 @@ const depositLineItemSchema = z.object({
   salesTaxId: z.number().optional(),
 });
 
-// Define the deposit schema
+// Define the deposit schema - this will be transformed to match the server schema before submission
 const depositSchema = z.object({
   depositAccountId: z.number({ required_error: "Please select a deposit account" }),
   date: z.date({ required_error: "Please select a date" }),
+  reference: z.string().min(1, "Reference is required"),
+  description: z.string().min(1, "Description is required"),
   lineItems: z.array(depositLineItemSchema).min(1, "At least one item is required"),
   memo: z.string().optional(),
   attachment: z.string().optional(),
@@ -193,7 +195,24 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
 
   // Handle form submission
   const onSubmit = (data: DepositFormValues) => {
-    createDepositMutation.mutate(data);
+    // Calculate the total amount from line items
+    const amount = data.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0) + taxAmount;
+    
+    // Find the first line item account to use as source
+    const sourceAccountId = data.lineItems[0]?.accountId;
+    
+    // Format data to match server schema
+    const serverData = {
+      date: data.date,
+      reference: data.reference,
+      description: data.description,
+      amount: amount,
+      sourceAccountId: sourceAccountId,
+      destinationAccountId: data.depositAccountId,
+      memo: data.memo,
+    };
+    
+    createDepositMutation.mutate(serverData);
   };
 
   return (
@@ -225,6 +244,40 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="reference"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Reference #</FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      placeholder="Enter a unique reference number"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      placeholder="Enter deposit description"
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
