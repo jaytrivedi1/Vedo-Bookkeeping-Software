@@ -1406,6 +1406,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Transaction not found" });
       }
       
+      console.log(`Deleting ${transaction.type} transaction: ${transaction.reference}`);
+      
+      // Get all transactions to search for related ones
+      const allTransactions = await storage.getTransactions();
+      
       // Perform any necessary cleanup before deletion
       if (transaction.type === 'invoice') {
         // Handle invoice-specific cleanup
@@ -1426,15 +1431,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const invoiceRef = invoiceRefMatch[1];
             
             // Find the invoice by reference
-            const transactions = await storage.getTransactions();
-            const invoice = transactions.find(t => 
+            const invoice = allTransactions.find(t => 
               t.type === 'invoice' && 
               t.reference === invoiceRef
             );
             
             if (invoice) {
+              console.log(`Found payment applied to invoice: ${invoice.reference}`);
               // Update invoice balance by adding back the payment amount
               const updatedBalance = (invoice.balance || invoice.amount) + entry.credit;
+              console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'pending')}`);
               await storage.updateTransaction(invoice.id, {
                 balance: updatedBalance,
                 // Also update status if needed
@@ -1478,6 +1484,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
           }
+        }
+        
+        // Find any unapplied credit transactions created from this payment
+        // These are deposit transactions with description containing text like "Unapplied credit from payment"
+        const relatedCredits = allTransactions.filter(t => 
+          t.type === 'deposit' && 
+          t.status === 'unapplied_credit' &&
+          t.description?.includes("Unapplied credit from payment") &&
+          (
+            // Either direct reference to payment ID
+            t.description?.includes(`payment on ${format(new Date(transaction.date), 'MMM dd, yyyy')}`) ||
+            // Or created in the same transaction (timestamps within a few seconds)
+            (Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000)
+          )
+        );
+        
+        // Delete all related unapplied credit transactions
+        for (const credit of relatedCredits) {
+          console.log(`Deleting related unapplied credit: ${credit.reference}`);
+          await storage.deleteTransaction(credit.id);
         }
       }
       
