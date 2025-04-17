@@ -666,6 +666,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
       
+      // Process applied credits if any were included
+      if (req.body.appliedCredits && Array.isArray(req.body.appliedCredits) && req.body.appliedCredits.length > 0) {
+        // Create a payment to apply the credits against the invoice
+        const paymentData = {
+          contactId: invoiceData.contactId,
+          date: invoiceData.date,
+          depositAccountId: receivableAccount.id, // A/R account serves as deposit account
+          amount: 0, // We use 0 amount since we're applying credits only
+          reference: `AUTO-PMT-${newTransaction.reference}`,
+          paymentMethod: 'credit_application',
+          description: `Auto-payment applying credits to invoice ${newTransaction.reference}`,
+          status: 'completed' as const,
+          type: 'payment' as const,
+          lineItems: [
+            // Add the invoice as a line item
+            {
+              transactionId: newTransaction.id,
+              amount: req.body.appliedCredits.reduce((sum: number, credit: any) => sum + credit.amount, 0),
+              type: 'invoice'
+            },
+            // Add each credit deposit as a line item
+            ...req.body.appliedCredits.map((credit: any) => ({
+              transactionId: credit.transactionId,
+              amount: credit.amount,
+              type: 'deposit'
+            }))
+          ],
+          totalCreditsApplied: req.body.appliedCredits.reduce((sum: number, credit: any) => sum + credit.amount, 0),
+          unappliedAmount: 0
+        };
+        
+        // Process the payment to apply credits
+        // Use similar logic to the payment processing endpoint but simplified
+        const invoiceItems = paymentData.lineItems.filter((item: any) => item.type === 'invoice');
+        const depositItems = paymentData.lineItems.filter((item: any) => item.type === 'deposit');
+        
+        // Process credit application logic
+        for (const item of invoiceItems) {
+          console.log(`Processing credit application of ${item.amount} for invoice #${item.transactionId}`);
+          
+          // Update invoice balance and status
+          const invoice = await storage.getTransaction(item.transactionId);
+          if (invoice) {
+            const newBalance = invoice.balance !== null ? invoice.balance - item.amount : invoice.amount - item.amount;
+            const newStatus = newBalance <= 0 ? 'paid' : 'pending';
+            
+            await storage.updateTransaction(invoice.id, {
+              balance: newBalance,
+              status: newStatus
+            });
+          }
+        }
+        
+        // Mark the deposits as applied
+        for (const item of depositItems) {
+          console.log(`Deposit #${item.transactionId} fully applied and changed to 'completed'`);
+          await storage.updateTransaction(item.transactionId, {
+            status: 'completed',
+            balance: 0
+          });
+        }
+      }
+      
       // Include additional invoice details in the response
       res.status(201).json({
         transaction: newTransaction,
