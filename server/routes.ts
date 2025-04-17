@@ -1587,6 +1587,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Perform any necessary cleanup before deletion
       if (transaction.type === 'invoice') {
         // Handle invoice-specific cleanup
+        // Find any auto-payment that was created to apply credits to this invoice
+        console.log(`Looking for auto-payments related to invoice #${transaction.reference}`);
+        const autoPaymentRef = `AUTO-PMT-${transaction.reference}`;
+        const autoPayment = allTransactions.find(t => 
+          t.type === 'payment' && 
+          t.reference === autoPaymentRef
+        );
+        
+        if (autoPayment) {
+          console.log(`Found auto-payment #${autoPayment.id} for credit application on invoice #${transaction.reference}`);
+          
+          // Get line items for this payment to find deposits that were used
+          const paymentLedgerEntries = await storage.getLedgerEntriesByTransaction(autoPayment.id);
+          
+          // Find deposit references in ledger entries
+          for (const entry of paymentLedgerEntries) {
+            if (entry.description && entry.description.toLowerCase().includes('applied credit from deposit')) {
+              console.log(`Found deposit reference in auto-payment entry: "${entry.description}"`);
+              
+              // Try different regex patterns to extract deposit reference
+              const matches = [
+                entry.description.match(/applied credit from deposit #?([^,\s]+)/i),
+                entry.description.match(/deposit #?([^,\s]+)/i)
+              ].filter(Boolean);
+              
+              if (matches.length > 0) {
+                const depositRef = matches[0][1];
+                console.log(`Extracted deposit reference: ${depositRef}`);
+                
+                // Find the deposit by reference (try different variations)
+                let deposit = allTransactions.find(t => 
+                  t.type === 'deposit' && 
+                  (t.reference === depositRef || 
+                   t.id.toString() === depositRef || 
+                   t.reference === `DEP-${depositRef}`)
+                );
+                
+                if (!deposit) {
+                  // Try numeric deposit ID
+                  const depositId = parseInt(depositRef);
+                  if (!isNaN(depositId)) {
+                    deposit = allTransactions.find(t => t.id === depositId && t.type === 'deposit');
+                  }
+                }
+                
+                if (deposit) {
+                  console.log(`Found deposit #${deposit.id} (${deposit.reference}) to revert to unapplied_credit`);
+                  
+                  // Update the deposit to revert it to unapplied_credit status
+                  await storage.updateTransaction(deposit.id, {
+                    status: 'unapplied_credit',
+                    balance: -deposit.amount  // Reset to original negative balance
+                  });
+                  
+                  console.log(`Reverted deposit #${deposit.id} to unapplied_credit status with balance -${deposit.amount}`);
+                }
+              }
+            }
+          }
+          
+          // Delete the auto-payment too
+          console.log(`Deleting auto-payment #${autoPayment.id} as part of invoice deletion`);
+          await storage.deleteTransaction(autoPayment.id);
+        }
       } else if (transaction.type === 'payment') {
         // For payments, we need to update the balances of affected invoices
         const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
