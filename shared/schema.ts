@@ -32,7 +32,7 @@ export const transactionTypeEnum = pgEnum('transaction_type', [
 ]);
 
 export const statusEnum = pgEnum('status', [
-  'draft', 'pending', 'completed', 'cancelled', 'paid', 'overdue', 'partial'
+  'draft', 'pending', 'completed', 'cancelled', 'paid', 'overdue', 'partial', 'unapplied_credit'
 ]);
 
 // Chart of Accounts

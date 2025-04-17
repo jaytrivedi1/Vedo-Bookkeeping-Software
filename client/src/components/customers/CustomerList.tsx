@@ -159,6 +159,8 @@ export default function CustomerList({ className }: CustomerListProps) {
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Cancelled</Badge>;
       case 'completed':
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>;
+      case 'unapplied_credit':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -508,8 +510,11 @@ export default function CustomerList({ className }: CustomerListProps) {
             <DialogTitle className="text-xl flex items-center">
               {selectedTransaction?.type === 'invoice' ? 'Invoice' : 
                selectedTransaction?.type === 'payment' ? 'Payment' :
-               selectedTransaction?.type === 'deposit' ? 'Deposit (Unapplied Credit)' :
-               selectedTransaction?.type?.charAt(0).toUpperCase() + selectedTransaction?.type?.slice(1) || 'Transaction'} 
+               selectedTransaction?.type === 'deposit' 
+                 ? selectedTransaction.status === 'unapplied_credit' 
+                    ? 'Deposit (Unapplied Credit)' 
+                    : 'Deposit'
+                 : selectedTransaction?.type?.charAt(0).toUpperCase() + selectedTransaction?.type?.slice(1) || 'Transaction'} 
               {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
             </DialogTitle>
           </DialogHeader>
@@ -522,8 +527,11 @@ export default function CustomerList({ className }: CustomerListProps) {
                   <CardTitle>
                     {selectedTransaction.type === 'invoice' ? 'Invoice Details' : 
                      selectedTransaction.type === 'payment' ? 'Payment Details' : 
-                     selectedTransaction.type === 'deposit' ? 'Deposit Details (Unapplied Credit)' : 
-                     'Transaction Details'}
+                     selectedTransaction.type === 'deposit' 
+                        ? selectedTransaction.status === 'unapplied_credit'
+                            ? 'Deposit Details (Unapplied Credit)' 
+                            : 'Deposit Details'
+                        : 'Transaction Details'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
