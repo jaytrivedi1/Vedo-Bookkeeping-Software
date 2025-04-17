@@ -853,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: depositData.date,
         description: depositData.description,
         amount: depositData.amount,
-        contactId: null,
+        contactId: depositData.contactId || null,
         status: 'completed' as const
       };
       

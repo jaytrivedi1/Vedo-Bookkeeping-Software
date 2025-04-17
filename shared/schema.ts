@@ -171,6 +171,7 @@ export const depositSchema = z.object({
   amount: z.number().min(0.01, "Amount must be greater than 0"),
   sourceAccountId: z.number(),
   destinationAccountId: z.number(),
+  contactId: z.number().optional(),
 });
 
 // Types
