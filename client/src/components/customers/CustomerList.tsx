@@ -131,6 +131,13 @@ export default function CustomerList({ className }: CustomerListProps) {
     ? customerTransactions.filter(transaction => transaction.type === 'invoice')
     : [];
     
+  // Filter unapplied credits (deposits with status 'unapplied_credit')
+  const customerUnappliedCredits = customerTransactions
+    ? customerTransactions.filter(transaction => 
+        transaction.type === 'deposit' && 
+        transaction.status === 'unapplied_credit')
+    : [];
+    
   // Filter expenses
   const customerExpenses = customerTransactions
     ? customerTransactions.filter(transaction => transaction.type === 'expense')
@@ -475,7 +482,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                 
                 {/* Summary */}
                 <div className="border-t mt-6 p-6">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
                       <p className="text-xl font-semibold">
@@ -492,6 +499,19 @@ export default function CustomerList({ className }: CustomerListProps) {
                             ? i.balance 
                             : i.amount;
                           return sum + outstandingAmount;
+                        }, 0))}
+                      </p>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500">Unapplied Credits</h3>
+                      <p className="text-xl font-semibold text-green-700">
+                        {formatCurrency(customerUnappliedCredits.reduce((sum, credit) => {
+                          // For unapplied credits, use the negative of the amount/balance
+                          // This makes them display as a positive number (credit)
+                          const creditAmount = (credit.balance !== null && credit.balance !== undefined && credit.balance < 0) 
+                            ? Math.abs(credit.balance)
+                            : Math.abs(credit.amount);
+                          return sum + creditAmount;
                         }, 0))}
                       </p>
                     </div>
