@@ -262,7 +262,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                         onValueChange={(value) => field.onChange(parseInt(value))}
                       >
                         <FormControl>
-                          <SelectTrigger>
+                          <SelectTrigger className="h-10">
                             <SelectValue placeholder="Select account" />
                           </SelectTrigger>
                         </FormControl>
@@ -288,6 +288,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                       <FormControl>
                         <Input 
                           {...field} 
+                          className="h-10"
                           placeholder="Enter a unique reference number"
                         />
                       </FormControl>
@@ -307,7 +308,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                           <FormControl>
                             <Button
                               variant="outline"
-                              className="pl-3 text-left font-normal w-full"
+                              className="pl-3 text-left font-normal w-full h-10"
                             >
                               {field.value ? (
                                 format(field.value, "MMMM dd, yyyy")
@@ -335,28 +336,29 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                   )}
                 />
 
-            <div className="w-full flex justify-end mt-6">
-              <div className="flex items-center">
-                <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
-                <Select
-                  value={isExclusiveOfTax ? "exclusive" : "inclusive"}
-                  onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
-                >
-                  <SelectTrigger className="w-[180px] h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                    <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
           </div>
             </CardContent>
           </Card>
 
           {/* Line Items */}
+          <div className="w-full flex justify-end mb-2">
+            <div className="flex items-center">
+              <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
+              <Select
+                value={isExclusiveOfTax ? "exclusive" : "inclusive"}
+                onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
+              >
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                  <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
           <Card className="shadow-sm">
             <CardHeader className="bg-muted/50 pb-3">
               <CardTitle className="text-lg flex items-center">
