@@ -52,6 +52,7 @@ import { Account, Contact, SalesTax } from "@shared/schema";
 // Define the deposit line item schema
 const depositLineItemSchema = z.object({
   receivedFrom: z.string().optional(),
+  contactId: z.number().optional(),
   accountId: z.number().optional(),
   description: z.string().optional(),
   paymentMethod: z.string().optional(),
@@ -119,6 +120,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       lineItems: [
         {
           receivedFrom: '',
+          contactId: undefined,
           accountId: undefined,
           description: '',
           paymentMethod: '',
@@ -230,6 +232,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       amount: amount,
       sourceAccountId: sourceAccountId,
       destinationAccountId: data.depositAccountId,
+      contactId: data.lineItems[0]?.contactId,
     };
     
     // Call the API
@@ -396,7 +399,18 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                               <FormItem>
                                 <Select
                                   value={field.value}
-                                  onValueChange={field.onChange}
+                                  onValueChange={(value) => {
+                                    field.onChange(value);
+                                    // When a contact is selected, update the contactId
+                                    if (value !== 'none') {
+                                      const contact = contacts?.find(c => c.name === value);
+                                      if (contact) {
+                                        form.setValue(`lineItems.${index}.contactId`, contact.id);
+                                      }
+                                    } else {
+                                      form.setValue(`lineItems.${index}.contactId`, undefined);
+                                    }
+                                  }}
                                 >
                                   <FormControl>
                                     <SelectTrigger>
@@ -565,6 +579,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                               size="sm"
                               onClick={() => append({
                                 receivedFrom: '',
+                                contactId: undefined,
                                 accountId: undefined,
                                 description: '',
                                 paymentMethod: '',
@@ -583,6 +598,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                 form.setValue("lineItems", [
                                   {
                                     receivedFrom: '',
+                                    contactId: undefined,
                                     accountId: undefined,
                                     description: '',
                                     paymentMethod: '',
