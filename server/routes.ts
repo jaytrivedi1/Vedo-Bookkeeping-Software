@@ -802,23 +802,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               continue;
             }
             
-            // No need to update deposit status - just record the ledger entry
-            // Add debit to customer prepayments/credits account (Business Credit Card)
+            // For deposit applications, we need to debit Accounts Receivable 
+            // This correctly records the application of an existing credit
             ledgerEntries.push({
-              accountId: 19, // Business Credit Card (ID 19 from the database)
+              accountId: 2, // Accounts Receivable (ID 2 from the database)
               debit: item.amount,
               credit: 0,
               description: `Applied credit from deposit #${deposit.reference || deposit.id}`,
-              date: new Date(data.date),
-              transactionId: 0 // Will be set by createTransaction
-            });
-            
-            // Also need to add a corresponding credit to Accounts Receivable
-            ledgerEntries.push({
-              accountId: 2, // Accounts Receivable (ID 2 from the database)
-              debit: 0, 
-              credit: item.amount,
-              description: `Credit applied from deposit #${deposit.reference || deposit.id} to payment`,
               date: new Date(data.date),
               transactionId: 0 // Will be set by createTransaction
             });
@@ -828,9 +818,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Handle unapplied credit if any
       if (unappliedAmount > 0) {
-        // We need to credit customer prepayments/credits account (Business Credit Card)
+        // For unapplied credits, we should credit back to Accounts Receivable
         ledgerEntries.push({
-          accountId: 19, // Business Credit Card (ID 19 from the database)
+          accountId: 2, // Accounts Receivable (ID 2 from the database)
           debit: 0,
           credit: unappliedAmount,
           description: `Unapplied credit for customer #${data.contactId}`,
