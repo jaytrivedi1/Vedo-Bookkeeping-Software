@@ -342,6 +342,8 @@ export default function PaymentReceive() {
   });
 
   const onSubmit = (values: PaymentFormValues) => {
+    console.log("Form submitted with values:", values);
+    
     // Only include selected invoice line items
     const appliedItems = paymentLineItems
       .filter(item => item.selected && item.amount > 0)
@@ -363,10 +365,27 @@ export default function PaymentReceive() {
     // Combine both types of line items
     const allLineItems = [...appliedItems, ...appliedCreditItems];
     
+    // Make sure we have at least one line item
+    if (allLineItems.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please select at least one invoice or credit to apply the payment to.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Check the net balance after applying credits against invoices
     const totalAppliedAmount = appliedItems.reduce((sum, item) => sum + item.amount, 0);
     const totalCreditsAmount = appliedCreditItems.reduce((sum, item) => sum + item.amount, 0);
     const netBalance = totalAppliedAmount - totalCreditsAmount - values.amount;
+    
+    console.log("Balance calculation:", {
+      totalAppliedToInvoices: totalAppliedAmount,
+      totalCreditsApplied: totalCreditsAmount,
+      amountReceived: values.amount,
+      netBalance: netBalance
+    });
     
     // Only show error if net balance is greater than 0 (amounts don't balance)
     if (netBalance > 0) {
@@ -417,7 +436,7 @@ export default function PaymentReceive() {
           <Button
             type="button"
             onClick={form.handleSubmit(onSubmit)}
-            disabled={isLoading || !form.formState.isValid}
+            disabled={isLoading}
             className="bg-primary text-white"
           >
             {paymentMutation.isPending ? (

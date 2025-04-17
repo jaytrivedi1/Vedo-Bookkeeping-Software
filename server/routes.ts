@@ -716,6 +716,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const unappliedAmount = data.unappliedAmount || 0;
     const totalCreditsApplied = data.totalCreditsApplied || 0;
     
+    console.log("Payment request received:", {
+      data,
+      lineItems,
+      unappliedAmount,
+      totalCreditsApplied,
+      invoiceItems: lineItems.filter(item => !item.type || item.type === 'invoice'),
+      depositItems: lineItems.filter(item => item.type === 'deposit')
+    });
+    
     try {
       // Create the payment transaction
       const paymentData = {
