@@ -604,11 +604,11 @@ export default function CustomerList({ className }: CustomerListProps) {
                         </p>
                       </div>
                       
-                      {selectedTransaction.type === 'invoice' && selectedTransaction.balance !== undefined && (
+                      {selectedTransaction.type === 'invoice' && (
                         <div>
                           <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
                           <p className="text-base font-semibold text-blue-700">
-                            {formatCurrency(selectedTransaction.balance || 0)}
+                            {formatCurrency(typeof selectedTransaction.balance === 'number' ? selectedTransaction.balance : 0)}
                           </p>
                         </div>
                       )}

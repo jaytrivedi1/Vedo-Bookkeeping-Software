@@ -542,8 +542,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax> {
-    const [newSalesTax] = await db.insert(salesTaxSchema).values(salesTax).returning();
-    return newSalesTax;
+    const result = await db.insert(salesTaxSchema).values(salesTax).returning();
+    return result[0];
   }
 
   async updateSalesTax(id: number, salesTaxUpdate: Partial<SalesTax>): Promise<SalesTax | undefined> {
