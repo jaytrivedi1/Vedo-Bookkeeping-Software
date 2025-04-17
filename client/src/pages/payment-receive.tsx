@@ -105,13 +105,17 @@ export default function PaymentReceive() {
     queryKey: ['/api/transactions', { type: 'invoice', contactId: watchContactId }],
     queryFn: async () => {
       if (!watchContactId) return [];
-      // Get all pending/overdue invoices
-      const allInvoices = await apiRequest(`/api/transactions?type=invoice&status=pending,overdue`);
-      // Filter by selected customer - ensure we only get invoices for this customer
-      // Make sure we only include actual invoices, not deposits
-      return allInvoices.filter((invoice: any) => 
+      
+      // Get all transactions
+      const allTransactions = await apiRequest(`/api/transactions`);
+      
+      // Filter by selected customer and only select invoices with balance > 0
+      // This ensures we only get unpaid or partially paid invoices
+      return allTransactions.filter((invoice: any) => 
         invoice.contactId === watchContactId && 
-        invoice.type === 'invoice'
+        invoice.type === 'invoice' &&
+        invoice.status !== 'paid' &&
+        (invoice.balance === undefined || invoice.balance > 0)
       );
     },
     enabled: !!watchContactId,
