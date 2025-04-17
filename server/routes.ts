@@ -1005,18 +1005,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create deposit ledger entries
         const depositLedgerEntries = [
           {
-            accountId: 2, // Accounts Receivable
-            debit: 0,
-            credit: unappliedAmount,
+            accountId: 2, // Accounts Receivable - DEBIT (represents money owed from customer)
+            debit: unappliedAmount,
+            credit: 0,
             description: `Unapplied credit from payment #${paymentData.reference || ''}`,
             date: new Date(data.date),
             transactionId: 0 // Will be set by createTransaction
           },
           {
-            accountId: data.depositAccountId, // Bank account
-            debit: unappliedAmount,
-            credit: 0,
-            description: `Deposit from unapplied credit`,
+            accountId: 2, // Accounts Receivable - CREDIT (offset to form the complete entry)
+            debit: 0,
+            credit: unappliedAmount,
+            description: `Unapplied credit from payment #${paymentData.reference || ''}`,
             date: new Date(data.date),
             transactionId: 0 // Will be set by createTransaction
           }
