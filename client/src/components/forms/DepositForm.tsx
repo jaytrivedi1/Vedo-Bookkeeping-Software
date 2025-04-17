@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CalendarIcon, X, Trash2, PlusCircle, FileText } from "lucide-react";
+import { CalendarIcon, X, Trash2, PlusCircle, FileText, Receipt, DollarSign } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
@@ -18,6 +18,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { 
   Form, 
   FormControl, 
@@ -32,6 +38,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Popover,
@@ -40,7 +47,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { apiRequest } from "@/lib/queryClient";
-import { Account } from "@shared/schema";
+import { Account, Contact, SalesTax } from "@shared/schema";
 
 // Define the deposit line item schema
 const depositLineItemSchema = z.object({
@@ -78,10 +85,23 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     queryKey: ['/api/accounts'],
   });
 
+  // Fetch contacts for the dropdown
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
+  });
+
+  // Fetch sales taxes for the dropdown
+  const { data: salesTaxes } = useQuery<SalesTax[]>({
+    queryKey: ['/api/sales-taxes'],
+  });
+
   // Filter bank and credit accounts
   const bankAccounts = accounts?.filter(account => 
     account.type === 'bank' || account.type === 'credit_card'
   ) || [];
+
+  // All accounts for dropdown
+  const allAccounts = accounts || [];
 
   // Filter accounts for the line items (income accounts typically)
   const depositableAccounts = accounts?.filter(account => 
@@ -279,13 +299,24 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                             name={`lineItems.${index}.receivedFrom`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="Received from"
-                                    className="border-0 focus-visible:ring-0 px-0"
-                                  />
-                                </FormControl>
+                                <Select
+                                  value={field.value}
+                                  onValueChange={field.onChange}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select source" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="">-- Select a source --</SelectItem>
+                                    {contacts?.map((contact) => (
+                                      <SelectItem key={contact.id} value={contact.name}>
+                                        {contact.name} ({contact.type})
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -307,7 +338,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {depositableAccounts.map((account) => (
+                                    {allAccounts.map((account) => (
                                       <SelectItem key={account.id} value={account.id.toString()}>
                                         {account.name} {account.code ? `(${account.code})` : ''}
                                       </SelectItem>
