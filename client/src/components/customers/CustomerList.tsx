@@ -118,10 +118,12 @@ export default function CustomerList({ className }: CustomerListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedCustomer.id)
     : [];
     
-  // Filter transactions for the Invoices tab (invoices + payments)
+  // Filter transactions for the Invoices tab (invoices + payments + deposits)
   const customerInvoicesAndPayments = customerTransactions
     ? customerTransactions.filter(transaction => 
-        transaction.type === 'invoice' || transaction.type === 'payment')
+        transaction.type === 'invoice' || 
+        transaction.type === 'payment' ||
+        transaction.type === 'deposit')
     : [];
     
   // Filter just invoices (for calculations and counts)
@@ -374,19 +376,27 @@ export default function CustomerList({ className }: CustomerListProps) {
                                 ? 'Invoice'
                                 : transaction.type === 'payment'
                                   ? 'Payment'
-                                  : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                  : transaction.type === 'deposit'
+                                    ? 'Deposit'
+                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                               
-                              // Only show balance for invoices, not for payments
+                              // Only show balance for invoices, not for payments or deposits
                               const showBalance = transaction.type === 'invoice';
                               
+                              // For deposits, show "Unapplied Credit" label
+                              const isUnappliedCredit = transaction.type === 'deposit';
+                              
                               // For invoices, show "Open" badge if there's a balance
-                              const statusBadge = transaction.type === 'invoice' && 
-                                                 transaction.balance !== null && 
-                                                 transaction.balance !== undefined &&
-                                                 transaction.balance > 0 && 
-                                                 transaction.status !== 'draft'
-                                ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
-                                : getStatusBadge(transaction.status);
+                              // For deposits, show "Unapplied Credit" badge
+                              const statusBadge = isUnappliedCredit
+                                ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
+                                : transaction.type === 'invoice' && 
+                                  transaction.balance !== null && 
+                                  transaction.balance !== undefined &&
+                                  transaction.balance > 0 && 
+                                  transaction.status !== 'draft'
+                                    ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
+                                    : getStatusBadge(transaction.status);
                                 
                               return (
                                 <TableRow key={transaction.id}>
@@ -494,7 +504,8 @@ export default function CustomerList({ className }: CustomerListProps) {
           <DialogHeader>
             <DialogTitle className="text-xl flex items-center">
               {selectedTransaction?.type === 'invoice' ? 'Invoice' : 
-               selectedTransaction?.type === 'payment' ? 'Payment' : 
+               selectedTransaction?.type === 'payment' ? 'Payment' :
+               selectedTransaction?.type === 'deposit' ? 'Deposit (Unapplied Credit)' :
                selectedTransaction?.type?.charAt(0).toUpperCase() + selectedTransaction?.type?.slice(1) || 'Transaction'} 
               {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
             </DialogTitle>
@@ -508,6 +519,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                   <CardTitle>
                     {selectedTransaction.type === 'invoice' ? 'Invoice Details' : 
                      selectedTransaction.type === 'payment' ? 'Payment Details' : 
+                     selectedTransaction.type === 'deposit' ? 'Deposit Details (Unapplied Credit)' : 
                      'Transaction Details'}
                   </CardTitle>
                 </CardHeader>
@@ -683,7 +695,9 @@ export default function CustomerList({ className }: CustomerListProps) {
                 ? ' invoice' 
                 : selectedTransactionToDelete?.type === 'payment'
                   ? ' payment' 
-                  : ' transaction'}
+                  : selectedTransactionToDelete?.type === 'deposit'
+                    ? ' deposit'
+                    : ' transaction'}
               {selectedTransactionToDelete?.reference 
                 ? ` #${selectedTransactionToDelete.reference}` 
                 : ''}? 
