@@ -819,28 +819,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: new Date(req.body.date)
       };
       
-      // Check if deposit reference already exists
-      const transactions = await storage.getTransactions();
-      const existingDeposit = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'deposit'
-      );
-      
-      if (existingDeposit) {
-        return res.status(400).json({ 
-          message: "Deposit reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "A deposit with this reference number already exists" 
-          }] 
-        });
+      // Only check references if the reference is not empty
+      if (body.reference && body.reference.trim() !== '') {
+        // Check if deposit reference already exists
+        const transactions = await storage.getTransactions();
+        const existingDeposit = transactions.find(t => 
+          t.reference === body.reference && 
+          t.type === 'deposit'
+        );
+        
+        if (existingDeposit) {
+          return res.status(400).json({ 
+            message: "Deposit reference must be unique", 
+            errors: [{ 
+              path: ["reference"], 
+              message: "A deposit with this reference number already exists" 
+            }] 
+          });
+        }
       }
       
       const depositData = depositSchema.parse(body);
       
+      // Generate default reference if empty
+      const reference = depositData.reference?.trim() 
+        ? depositData.reference 
+        : `DEP-${Date.now()}`;
+      
       // Create transaction
       const transaction = {
-        reference: depositData.reference,
+        reference: reference,
         type: 'deposit' as const,
         date: depositData.date,
         description: depositData.description,
@@ -857,7 +865,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ledgerEntries = [
         {
           accountId: depositData.destinationAccountId,
-          description: `Deposit ${transaction.reference}`,
+          description: reference ? `Deposit ${reference}` : "Deposit",
           debit: depositData.amount,
           credit: 0,
           date: depositData.date,
@@ -865,7 +873,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         {
           accountId: depositData.sourceAccountId,
-          description: `Deposit ${transaction.reference}`,
+          description: reference ? `Deposit ${reference}` : "Deposit",
           debit: 0,
           credit: depositData.amount,
           date: depositData.date,
