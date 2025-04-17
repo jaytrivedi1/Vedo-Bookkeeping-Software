@@ -134,11 +134,35 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     name: "lineItems",
   });
 
-  // Calculate total
-  const depositTotal = form.watch("lineItems").reduce(
+  // Watch for changes to line items to recalculate totals
+  const lineItems = form.watch("lineItems");
+  
+  // Function to calculate sales tax amount
+  const calculateSalesTax = (amount: number, taxId?: number) => {
+    if (!taxId || !salesTaxes) return 0;
+    const tax = salesTaxes.find(t => t.id === taxId);
+    if (!tax) return 0;
+    
+    if (isExclusiveOfTax) {
+      return (amount * tax.rate) / 100;
+    } else {
+      // Calculate tax amount from inclusive price
+      return amount - (amount * 100) / (100 + tax.rate);
+    }
+  };
+  
+  // Calculate subtotal, tax, and total
+  const subtotal = lineItems.reduce(
     (sum, item) => sum + (item.amount || 0), 
     0
   );
+  
+  const taxAmount = lineItems.reduce(
+    (sum, item) => sum + calculateSalesTax(item.amount || 0, item.salesTaxId), 
+    0
+  );
+  
+  const total = isExclusiveOfTax ? subtotal + taxAmount : subtotal;
 
   // Mutation for creating a new deposit
   const createDepositMutation = useMutation({
@@ -309,7 +333,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="">-- Select a source --</SelectItem>
+                                    <SelectItem value="none">-- Select a source --</SelectItem>
                                     {contacts?.map((contact) => (
                                       <SelectItem key={contact.id} value={contact.name}>
                                         {contact.name} ({contact.type})
@@ -450,7 +474,11 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value="5">Exempt (0%)</SelectItem>
+                                    {salesTaxes?.map((tax) => (
+                                      <SelectItem key={tax.id} value={tax.id.toString()}>
+                                        {tax.name} ({tax.rate}%)
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
                                 <FormMessage />
@@ -514,11 +542,25 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                               Clear all lines
                             </Button>
                           </div>
-                          <div className="text-right">
-                            <span className="font-medium">Other funds total</span>
-                            <span className="ml-4 font-medium">
-                              {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(depositTotal)}
-                            </span>
+                          <div className="text-right space-y-2">
+                            <div className="flex justify-end items-center">
+                              <span className="w-32 text-right">Subtotal</span>
+                              <span className="ml-4 w-32 text-right font-medium">
+                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(subtotal)}
+                              </span>
+                            </div>
+                            <div className="flex justify-end items-center">
+                              <span className="w-32 text-right">Tax</span>
+                              <span className="ml-4 w-32 text-right font-medium">
+                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(taxAmount)}
+                              </span>
+                            </div>
+                            <div className="flex justify-end items-center">
+                              <span className="w-32 text-right font-bold">Total</span>
+                              <span className="ml-4 w-32 text-right font-bold">
+                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(total)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </td>
