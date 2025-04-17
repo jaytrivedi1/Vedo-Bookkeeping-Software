@@ -1478,6 +1478,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get all transactions to search for related ones
       const allTransactions = await storage.getTransactions();
       
+      // IMPORTANT: Fetch ledger entries for this transaction BEFORE deleting it
+      // This ensures we can detect deposit references and revert them properly
+      const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
+      console.log(`Fetched ${ledgerEntries.length} ledger entries for transaction #${id} before deletion`);
+      
+      // Process deposit references in ledger entries if this is a payment
+      if (transaction.type === 'payment') {
+        // Look for Applied credit from deposit entries
+        for (const entry of ledgerEntries) {
+          if (entry.description && entry.description.toLowerCase().includes('applied credit from deposit')) {
+            console.log(`Found deposit reference in payment entry: "${entry.description}"`);
+            
+            // Extract deposit reference
+            const match = entry.description.match(/applied credit from deposit #?([^,\s]+)/i);
+            if (match) {
+              const depositRef = match[1];
+              console.log(`Extracted deposit reference: ${depositRef}`);
+              
+              // Find the deposit by reference
+              const deposits = allTransactions.filter(
+                t => t.type === 'deposit' && (t.reference === depositRef || t.reference === `DEP-${depositRef}`)
+              );
+              
+              if (deposits.length > 0) {
+                const deposit = deposits[0];
+                console.log(`Found deposit #${deposit.id} (${deposit.reference}) to revert to unapplied_credit`);
+                
+                // Get the amount of credit that was applied
+                const creditAmount = entry.debit || entry.credit;
+                
+                // Update the deposit to revert it to unapplied_credit status
+                await storage.updateTransaction(deposit.id, {
+                  status: 'unapplied_credit',
+                  balance: -deposit.amount  // Reset to original negative balance
+                });
+                
+                console.log(`Reverted deposit #${deposit.id} to unapplied_credit status with balance -${deposit.amount}`);
+              }
+            }
+          }
+        }
+      }
+      
       // Perform any necessary cleanup before deletion
       if (transaction.type === 'invoice') {
         // Handle invoice-specific cleanup
@@ -1520,12 +1563,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // - "deposit #123" 
           // - "Applied credit from deposit #TEST-DEP2"
           // - "from deposit #123"
-          const depositRefMatch = entry.description?.match(/(?:deposit|from deposit|applied credit from deposit) #?([^,\s]+)/i);
+          console.log(`DEBUG: Examining ledger entry description for deposit references: "${entry.description}"`);
+          
+          // First check specifically for "Applied credit from deposit" pattern
+          // This is the most common and reliable pattern
+          const appliedCreditMatch = entry.description?.match(/applied credit from deposit #?([^,\s]+)/i);
+          if (appliedCreditMatch) {
+            console.log(`DEBUG: Found applied credit from deposit match: "${appliedCreditMatch[1]}"`);
+          }
+          
+          // Also try the more generic pattern as a fallback
+          const depositRefMatch = entry.description?.match(/(?:deposit|from deposit) #?([^,\s]+)/i);
+          
+          // Log the match result for debugging
+          console.log(`DEBUG: depositRefMatch result: ${JSON.stringify(depositRefMatch || 'No match found')}`);
+          
+          // Use the applied credit match if we have it, otherwise try the more generic match
+          const finalMatch = appliedCreditMatch || depositRefMatch;
           
           // Extract any deposit references from the description
-          if (depositRefMatch) {
+          if (finalMatch) {
             // Extract the deposit reference from the match
-            const depositRef = depositRefMatch[1];
+            const depositRef = finalMatch[1];
             
             // First try to find by ID if it's a number
             let deposit;
@@ -1574,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Also check for reference to "Applied credit from deposit #..." format specifically
           // This check is redundant after our regex update above, but kept for safety
           const depositNameRefMatch = entry.description?.match(/(?:applied credit from|from) deposit #?([^,\s]+)/i);
-          if (depositNameRefMatch && !depositRefMatch) {
+          if (depositNameRefMatch && !finalMatch) {
             const depositRef = depositNameRefMatch[1];
             // Find deposit by reference
             const deposits = (await storage.getTransactions()).filter(
