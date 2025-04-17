@@ -6,6 +6,7 @@ import migrateLineItems from "./migrate-line-items";
 import { migrateCompanyTable } from "./migrate-company";
 import migrateSalesTaxComponents from "./migrate-sales-tax-components";
 import migrateTransactions from "./migrate-transactions";
+import migrateStatusEnum from "./migrate-status-enum";
 
 const app = express();
 app.use(express.json());
@@ -59,6 +60,9 @@ app.use((req, res, next) => {
     
     // Run transactions migration to add balance field
     await migrateTransactions();
+    
+    // Run status enum migration to add unapplied_credit status
+    await migrateStatusEnum();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
