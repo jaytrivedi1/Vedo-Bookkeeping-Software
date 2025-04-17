@@ -141,6 +141,59 @@ export class DatabaseStorage implements IStorage {
     return updatedTransaction;
   }
   
+  /**
+   * Recalculates the balance for an invoice by summing all payments applied to it
+   * @param invoiceId The ID of the invoice to recalculate
+   */
+  async recalculateInvoiceBalance(invoiceId: number): Promise<Transaction | undefined> {
+    try {
+      // Get the invoice
+      const invoice = await this.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        console.error(`Transaction ${invoiceId} is not an invoice or doesn't exist`);
+        return undefined;
+      }
+      
+      // Get all payments applied to this invoice through ledger entries
+      const appliedPayments = await db.select({
+        amount: sql`SUM(${ledgerEntries.credit})`,
+      })
+      .from(ledgerEntries)
+      .where(and(
+        sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`,
+        eq(ledgerEntries.accountId, 2), // Accounts Receivable
+        neq(ledgerEntries.transactionId, invoiceId) // Exclude the invoice's own ledger entries
+      ));
+      
+      const totalApplied = appliedPayments[0]?.amount || 0;
+      const remainingBalance = invoice.amount - totalApplied;
+      
+      // Update invoice balance and status
+      let status = invoice.status;
+      if (remainingBalance <= 0) {
+        status = 'paid';
+      } else if (remainingBalance < invoice.amount) {
+        status = 'partial';
+      } else {
+        status = 'outstanding';
+      }
+      
+      // Update the invoice
+      const [updatedInvoice] = await db.update(transactions)
+        .set({
+          balance: remainingBalance > 0 ? remainingBalance : 0,
+          status
+        })
+        .where(eq(transactions.id, invoiceId))
+        .returning();
+        
+      return updatedInvoice;
+    } catch (error) {
+      console.error('Error recalculating invoice balance:', error);
+      return undefined;
+    }
+  }
+  
   async deleteTransaction(id: number): Promise<boolean> {
     try {
       // Use a transaction to ensure all related data is properly deleted
