@@ -43,7 +43,7 @@ const paymentSchema = z.object({
   paymentMethod: z.string().min(1, "Please select a payment method"),
   reference: z.string().optional(),
   depositAccountId: z.coerce.number(),
-  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  amount: z.coerce.number().min(0, "Amount must be greater than or equal to 0"),
   note: z.string().optional(),
 });
 
