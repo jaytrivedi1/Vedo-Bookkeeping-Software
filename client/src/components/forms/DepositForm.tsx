@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CalendarIcon, X, Trash2, PlusCircle, FileText, Receipt, DollarSign } from "lucide-react";
+import { CalendarIcon, X, Trash2, PlusCircle, FileText, Receipt, DollarSign, InfoIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
@@ -243,7 +243,10 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
           {/* Header with basic deposit info */}
           <Card className="shadow-sm">
             <CardHeader className="bg-muted/50 pb-3">
-              <CardTitle className="text-xl font-bold">Create Deposit</CardTitle>
+              <CardTitle className="text-xl font-bold flex items-center">
+                <DollarSign className="h-6 w-6 mr-2 text-primary" />
+                <span>Create Deposit</span>
+              </CardTitle>
               <CardDescription>Record funds deposited into your account</CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -359,7 +362,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
           <Card className="shadow-sm">
             <CardHeader className="bg-muted/50 pb-3">
               <CardTitle className="text-lg flex items-center">
-                <PlusCircleIcon className="h-5 w-5 mr-2" />
+                <PlusCircle className="h-5 w-5 mr-2" />
                 <span>Add funds to this deposit</span>
               </CardTitle>
               <CardDescription>Record all funds to be added in this deposit</CardDescription>
@@ -625,7 +628,11 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
           {/* Additional Information */}
           <Card className="shadow-sm">
             <CardHeader className="bg-muted/50 pb-3">
-              <CardTitle className="text-lg">Additional Information</CardTitle>
+              <CardTitle className="text-lg flex items-center">
+                <InfoIcon className="h-5 w-5 mr-2" />
+                <span>Additional Information</span>
+              </CardTitle>
+              <CardDescription>Add notes, memos, and file attachments</CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -698,7 +705,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
           </Card>
 
           {/* Footer buttons */}
-          <div className="flex justify-between items-center pt-4 mt-4 border-t">
+          <div className="flex justify-between items-center pt-6 mt-4 border-t">
             <div>
               <Button
                 type="button"
@@ -706,15 +713,27 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                 className="mr-2"
                 onClick={() => setLocation("/dashboard")}
               >
+                <X className="h-4 w-4 mr-2" />
                 Cancel
               </Button>
             </div>
             <div className="space-x-2">
               <Button
                 type="submit"
+                className="px-6"
                 disabled={createDepositMutation.isPending}
               >
-                {createDepositMutation.isPending ? "Saving..." : "Save Deposit"}
+                {createDepositMutation.isPending ? (
+                  <>
+                    <span className="animate-spin mr-2">⟳</span> 
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Receipt className="h-4 w-4 mr-2" />
+                    Save Deposit
+                  </>
+                )}
               </Button>
             </div>
           </div>
