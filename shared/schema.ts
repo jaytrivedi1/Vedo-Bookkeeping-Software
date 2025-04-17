@@ -166,7 +166,7 @@ export const journalEntrySchema = z.object({
 
 export const depositSchema = z.object({
   date: z.date(),
-  reference: z.string().min(1, "Reference is required"),
+  reference: z.string().optional(),
   description: z.string(),
   amount: z.number().min(0.01, "Amount must be greater than 0"),
   sourceAccountId: z.number(),
