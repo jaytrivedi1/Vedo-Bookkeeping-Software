@@ -384,7 +384,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                   <Input
                                     {...field}
                                     placeholder="Description"
-                                    className="border-0 focus-visible:ring-0 px-0"
+                                    className="border border-input rounded-md px-3 py-1 w-full"
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -429,7 +429,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                   <Input
                                     {...field}
                                     placeholder="Reference #"
-                                    className="border-0 focus-visible:ring-0 px-0"
+                                    className="border border-input rounded-md px-3 py-1 w-full"
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -449,7 +449,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                                     type="number"
                                     step="0.01"
                                     placeholder="0.00"
-                                    className="border-0 focus-visible:ring-0 px-0 text-right"
+                                    className="border border-input rounded-md px-3 py-1 w-full text-right"
                                     onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                                   />
                                 </FormControl>
