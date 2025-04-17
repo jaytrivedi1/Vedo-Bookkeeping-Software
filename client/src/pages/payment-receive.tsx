@@ -108,7 +108,11 @@ export default function PaymentReceive() {
       // Get all pending/overdue invoices
       const allInvoices = await apiRequest(`/api/transactions?type=invoice&status=pending,overdue`);
       // Filter by selected customer - ensure we only get invoices for this customer
-      return allInvoices.filter((invoice: any) => invoice.contactId === watchContactId);
+      // Make sure we only include actual invoices, not deposits
+      return allInvoices.filter((invoice: any) => 
+        invoice.contactId === watchContactId && 
+        invoice.type === 'invoice'
+      );
     },
     enabled: !!watchContactId,
   });
@@ -731,42 +735,7 @@ export default function PaymentReceive() {
                         </table>
                       </div>
 
-                      <div className="mt-6 rounded-md bg-gray-50 p-4">
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Total Received:</span>
-                          <span className="font-medium">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm mt-2">
-                          <span>Total Applied:</span>
-                          <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                            {totalApplied > (watchAmount || 0) && (
-                              <span className="ml-2 text-xs">
-                                (exceeds received amount)
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <Separator className="my-3" />
-                        <div className="flex justify-between items-center font-medium">
-                          <span>Unapplied Credit:</span>
-                          <span className={
-                            totalApplied > (watchAmount || 0) 
-                              ? "text-red-600" 
-                              : unappliedCredit > 0 
-                                ? "text-green-600" 
-                                : ""
-                          }>
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                              totalApplied > (watchAmount || 0) 
-                                ? (watchAmount || 0) - totalApplied // Show negative value
-                                : unappliedCredit
-                            )}
-                          </span>
-                        </div>
-                      </div>
+                      {/* Summary will be shown at the bottom of the page */}
                     </div>
                   )}
                 </CardContent>
@@ -871,31 +840,69 @@ export default function PaymentReceive() {
                         </table>
                       </div>
 
-                      <div className="mt-6 rounded-md bg-gray-50 p-4">
-                        <div className="flex justify-between items-center text-sm">
-                          <span>Total Outstanding Invoices:</span>
-                          <span className="font-medium">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm mt-2">
-                          <span>Total Credits Applied:</span>
-                          <span className="font-medium text-green-600">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalCreditsApplied)}
-                          </span>
-                        </div>
-                        <Separator className="my-3" />
-                        <div className="flex justify-between items-center font-medium">
-                          <span>Net Balance Due:</span>
-                          <span className="font-semibold text-gray-900">
-                            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                              Math.max(0, totalApplied - totalCreditsApplied)
-                            )}
-                          </span>
-                        </div>
-                      </div>
+                      {/* Summary will be shown at the bottom of the page */}
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Single Summary Section at the end */}
+            {watchContactId && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Payment Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-md bg-gray-50 p-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span>Total Received:</span>
+                      <span className="font-medium">
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(watchAmount || 0)}
+                      </span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-sm mt-2">
+                      <span>Total Applied to Invoices:</span>
+                      <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
+                        {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
+                        {totalApplied > (watchAmount || 0) && (
+                          <span className="ml-2 text-xs">
+                            (exceeds received amount)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    
+                    {totalCreditsApplied > 0 && (
+                      <div className="flex justify-between items-center text-sm mt-2">
+                        <span>Total Credits Applied:</span>
+                        <span className="font-medium text-green-600">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalCreditsApplied)}
+                        </span>
+                      </div>
+                    )}
+                    
+                    <Separator className="my-3" />
+                    
+                    {totalCreditsApplied > 0 ? (
+                      <div className="flex justify-between items-center font-medium">
+                        <span>Net Balance Due:</span>
+                        <span className="font-semibold text-gray-900">
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
+                            Math.max(0, totalApplied - totalCreditsApplied)
+                          )}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center font-medium">
+                        <span>Unapplied Credit:</span>
+                        <span className={unappliedCredit > 0 ? "text-green-600" : ""}>
+                          {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(unappliedCredit)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}
