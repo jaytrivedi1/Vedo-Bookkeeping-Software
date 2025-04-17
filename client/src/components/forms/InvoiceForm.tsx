@@ -53,8 +53,17 @@ interface TaxComponentInfo {
   parentId?: number;
 }
 
+// Define extended invoice type with applied credits
+interface InvoiceWithCredits extends Invoice {
+  appliedCredits?: Array<{
+    transactionId: number;
+    amount: number;
+    type: string;
+  }>;
+}
+
 // Extend UseFormReturn to include our custom property
-interface InvoiceFormType extends UseFormReturn<Invoice> {
+interface InvoiceFormType extends UseFormReturn<InvoiceWithCredits> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
@@ -89,14 +98,14 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   });
   
   // Fetch customer's unapplied credits
-  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery({
+  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId, status: 'unapplied_credit' }],
     queryFn: async () => {
       if (!watchContactId) return [];
       // Get all transactions
       const allTransactions = await apiRequest(`/api/transactions`);
       // Filter for unapplied credit deposits for this customer
-      return allTransactions.filter((transaction: any) => 
+      return allTransactions.filter((transaction: Transaction) => 
         transaction.type === 'deposit' && 
         transaction.contactId === watchContactId &&
         transaction.status === 'unapplied_credit'
@@ -111,8 +120,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
 
-  // Use our custom form type that includes taxComponentsInfo
-  const form = useForm<Invoice>({
+  // Use our custom form type that includes taxComponentsInfo and applied credits
+  const form = useForm<InvoiceWithCredits>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       date: today,
@@ -243,6 +252,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     // Calculate tax amount based on the per-line item tax rates
     let totalTaxAmount = 0;
     const usedTaxes = new Map<number, SalesTax>();
+    
+    // Note: We'll calculate applied credit amount later in this function
+    // to avoid duplication
     
     // Track tax components separately for display
     const taxComponents = new Map<number, {
