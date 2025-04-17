@@ -1119,6 +1119,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // Handle deposit credit updates if provided
+        if (body.depositCredits && Array.isArray(body.depositCredits)) {
+          for (const credit of body.depositCredits) {
+            if (!credit.selected || !credit.depositId) continue;
+            
+            // Get the deposit transaction
+            const deposit = await storage.getTransaction(credit.depositId);
+            
+            if (!deposit || deposit.type !== 'deposit') continue;
+            
+            // Check if this deposit is now fully applied
+            if (credit.amount >= deposit.amount) {
+              // Update deposit status to "completed" if it was previously "unapplied_credit"
+              if (deposit.status === 'unapplied_credit') {
+                await storage.updateTransaction(deposit.id, {
+                  status: 'completed'
+                });
+                console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) status to 'completed'`);
+              }
+            }
+          }
+        }
+        
         // Return updated payment data with fresh data from database
         res.status(200).json({
           transaction: updatedTransaction,
@@ -1200,6 +1223,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Also update status if needed
                 status: updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'pending')
               });
+            }
+          }
+
+          // Check if entry is related to a deposit
+          const depositRefMatch = entry.description?.match(/deposit #?(\d+)/i);
+          if (depositRefMatch) {
+            // If this was a deposit being used as credit, reset its status to unapplied_credit
+            const depositIdMatch = entry.description?.match(/from deposit #?(\d+)/i);
+            if (depositIdMatch) {
+              const depositId = parseInt(depositIdMatch[1]);
+              const deposit = await storage.getTransaction(depositId);
+              
+              if (deposit && deposit.type === 'deposit' && deposit.status === 'completed') {
+                // Reset deposit status to unapplied_credit
+                await storage.updateTransaction(depositId, {
+                  status: 'unapplied_credit'
+                });
+                console.log(`Reset deposit #${depositId} status to 'unapplied_credit' after payment deletion`);
+              }
             }
           }
         }
