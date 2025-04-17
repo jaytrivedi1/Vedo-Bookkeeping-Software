@@ -342,9 +342,22 @@ export class DatabaseStorage implements IStorage {
     
     // Calculate balances from ledger entries
     allLedgerEntries.forEach(entry => {
+      const account = allAccounts.find(a => a.id === entry.accountId);
+      if (!account) return;
+      
       const currentBalance = balanceMap.get(entry.accountId) || 0;
-      // Calculate balance based on normal balance of account type
-      balanceMap.set(entry.accountId, currentBalance + (entry.debit - entry.credit));
+      let newBalance = currentBalance;
+      
+      // Apply debits and credits according to account type's normal balance
+      if (['asset', 'expense', 'cost_of_goods_sold'].includes(account.type)) {
+        // Debit increases (positive), credit decreases (negative)
+        newBalance += entry.debit - entry.credit;
+      } else {
+        // For liability, equity, income accounts - credit increases (positive), debit decreases (negative)
+        newBalance += entry.credit - entry.debit;
+      }
+      
+      balanceMap.set(entry.accountId, newBalance);
     });
     
     // Create result array with account and balance
@@ -361,13 +374,14 @@ export class DatabaseStorage implements IStorage {
     const revenueAccounts = accountBalances.filter(item => 
       item.account.type === 'income' || item.account.type === 'other_income'
     );
-    // Revenue accounts have credit balances, so we negate the balance
-    const revenues = revenueAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
+    // With our fixed account balances, revenue accounts already have positive balances
+    const revenues = revenueAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     // For expense accounts, debit increases the balance (expense)
     const expenseAccounts = accountBalances.filter(item => 
       item.account.type === 'expenses' || item.account.type === 'cost_of_goods_sold'
     );
+    // With our fixed account balances, expense accounts already have positive balances
     const expenses = expenseAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     return {
@@ -388,37 +402,40 @@ export class DatabaseStorage implements IStorage {
       item.account.type === 'property_plant_equipment' || 
       item.account.type === 'long_term_assets'
     );
+    // With our fixed account balances, asset accounts already have positive balances
     const assets = assetAccounts.reduce((sum, item) => sum + item.balance, 0);
     
-    // Liability accounts have credit balances (negative in our ledger system)
+    // Liability accounts have credit balances
     const liabilityAccounts = accountBalances.filter(item => 
       item.account.type === 'accounts_payable' || 
       item.account.type === 'credit_card' || 
       item.account.type === 'other_current_liabilities' ||
       item.account.type === 'long_term_liabilities'
     );
-    // Liability accounts have credit balances, so we negate the balance
-    const liabilities = liabilityAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
+    // With our fixed account balances, liability accounts already have positive balances
+    const liabilities = liabilityAccounts.reduce((sum, item) => sum + item.balance, 0);
     
-    // Equity accounts have credit balances (negative in our ledger system)
+    // Equity accounts have credit balances
     const equityAccounts = accountBalances.filter(item => 
       item.account.type === 'equity'
     );
-    // Equity accounts have credit balances, so we negate the balance
-    const equity = equityAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
+    // With our fixed account balances, equity accounts already have positive balances
+    const equity = equityAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     // Include income and expense accounts in equity (net income)
     const incomeAccounts = accountBalances.filter(item => 
       item.account.type === 'income' || 
       item.account.type === 'other_income'
     );
-    const revenueTotal = incomeAccounts.reduce((sum, item) => sum + (-1 * item.balance), 0);
+    // With our fixed account balances, income accounts already have positive balances
+    const revenueTotal = incomeAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     const expenseAccounts = accountBalances.filter(item => 
       item.account.type === 'expenses' || 
       item.account.type === 'cost_of_goods_sold' ||
       item.account.type === 'other_expense'
     );
+    // With our fixed account balances, expense accounts already have positive balances
     const expenseTotal = expenseAccounts.reduce((sum, item) => sum + item.balance, 0);
     
     // Net income is part of equity
