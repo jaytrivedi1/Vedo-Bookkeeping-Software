@@ -64,7 +64,7 @@ const depositLineItemSchema = z.object({
 const depositSchema = z.object({
   depositAccountId: z.number({ required_error: "Please select a deposit account" }),
   date: z.date({ required_error: "Please select a date" }),
-  reference: z.string().min(1, "Reference is required"),
+  reference: z.string().optional(),
   lineItems: z.array(depositLineItemSchema).min(1, "At least one item is required"),
   memo: z.string().optional(),
   attachment: z.string().optional(),
