@@ -1516,11 +1516,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
-          // Check if entry is related to a deposit
-          // This handles "deposit #123", "Applied credit from deposit #TEST-DEP2", etc.
-          const depositRefMatch = entry.description?.match(/(?:deposit|from deposit) #?([^,\s]+)/i);
+          // Check if entry is related to a deposit - this needs to handle:
+          // - "deposit #123" 
+          // - "Applied credit from deposit #TEST-DEP2"
+          // - "from deposit #123"
+          const depositRefMatch = entry.description?.match(/(?:deposit|from deposit|applied credit from deposit) #?([^,\s]+)/i);
           
-          // More robust approach: extract any deposit references from the description
+          // Extract any deposit references from the description
           if (depositRefMatch) {
             // Extract the deposit reference from the match
             const depositRef = depositRefMatch[1];
