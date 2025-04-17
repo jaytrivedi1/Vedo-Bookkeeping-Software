@@ -61,7 +61,9 @@ export default function PaymentReceive() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [paymentLineItems, setPaymentLineItems] = useState<PaymentLineItem[]>([]);
+  const [depositLineItems, setDepositLineItems] = useState<PaymentLineItem[]>([]);
   const [totalApplied, setTotalApplied] = useState(0);
+  const [totalCreditsApplied, setTotalCreditsApplied] = useState(0);
   const [unappliedCredit, setUnappliedCredit] = useState(0);
 
   // Fetch contacts (customers only)
@@ -111,6 +113,23 @@ export default function PaymentReceive() {
     },
     enabled: !!watchContactId,
   });
+  
+  // Fetch customer's deposits (unapplied credits)
+  const { data: customerDeposits, isLoading: isDepositsLoading } = useQuery({
+    queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId }],
+    queryFn: async () => {
+      if (!watchContactId) return [];
+      // Get all deposits for this customer
+      const allTransactions = await apiRequest(`/api/transactions`);
+      // Filter for completed deposits for this customer
+      return allTransactions.filter((transaction: any) => 
+        transaction.type === 'deposit' && 
+        transaction.contactId === watchContactId &&
+        transaction.status === 'completed'
+      );
+    },
+    enabled: !!watchContactId,
+  });
 
   // Reset payment line items when customer changes
   useEffect(() => {
@@ -125,6 +144,20 @@ export default function PaymentReceive() {
       setPaymentLineItems([]);
     }
   }, [customerInvoices]);
+  
+  // Initialize deposit line items when deposits change
+  useEffect(() => {
+    if (customerDeposits && customerDeposits.length > 0) {
+      const items = customerDeposits.map((deposit: any) => ({
+        transactionId: deposit.id,
+        amount: 0,
+        selected: false,
+      }));
+      setDepositLineItems(items);
+    } else {
+      setDepositLineItems([]);
+    }
+  }, [customerDeposits]);
 
   // Update totals when any value changes
   useEffect(() => {
@@ -135,7 +168,7 @@ export default function PaymentReceive() {
     setUnappliedCredit(unapplied);
   }, [paymentLineItems, watchAmount]);
 
-  // Handle line item changes
+  // Handle invoice line item changes
   const handleLineItemChange = (index: number, field: 'amount' | 'selected', value: number | boolean) => {
     const updatedItems = [...paymentLineItems];
     
@@ -178,6 +211,50 @@ export default function PaymentReceive() {
     setPaymentLineItems(updatedItems);
     setTotalApplied(newTotalApplied);
     setUnappliedCredit(Math.max(0, (watchAmount || 0) - newTotalApplied));
+  };
+  
+  // Handle deposit credit line item changes
+  const handleCreditLineItemChange = (index: number, field: 'amount' | 'selected', value: number | boolean) => {
+    const updatedItems = [...depositLineItems];
+    
+    if (field === 'amount' && typeof value === 'number') {
+      // Ensure amount doesn't exceed the deposit amount
+      const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
+      const maxAmount = deposit?.amount || 0;
+      updatedItems[index].amount = Math.min(value, maxAmount);
+      
+      // If an amount is entered, auto-select the deposit
+      if (value > 0 && !updatedItems[index].selected) {
+        updatedItems[index].selected = true;
+      }
+      
+      // If amount is set to 0, deselect the deposit
+      if (value === 0) {
+        updatedItems[index].selected = false;
+      }
+    } else if (field === 'selected' && typeof value === 'boolean') {
+      updatedItems[index].selected = value;
+      
+      // If deselected, reset amount to 0
+      if (!value) {
+        updatedItems[index].amount = 0;
+      } else {
+        // When selected, auto-fill with the deposit amount
+        const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
+        const depositAmount = deposit?.amount || 0;
+        updatedItems[index].amount = depositAmount;
+      }
+    }
+    
+    // Calculate new credits applied immediately
+    const newTotalCreditsApplied = updatedItems.reduce(
+      (sum, item) => sum + (item.selected ? item.amount : 0), 
+      0
+    );
+    
+    // Set the updated items and totals
+    setDepositLineItems(updatedItems);
+    setTotalCreditsApplied(newTotalCreditsApplied);
   };
 
   // Auto-apply button handler
@@ -262,15 +339,28 @@ export default function PaymentReceive() {
   });
 
   const onSubmit = (values: PaymentFormValues) => {
-    // Only include selected line items
+    // Only include selected invoice line items
     const appliedItems = paymentLineItems
       .filter(item => item.selected && item.amount > 0)
       .map(item => ({
         transactionId: item.transactionId,
         amount: item.amount,
+        type: 'invoice'
       }));
     
-    // Check if applied amount exceeds received amount
+    // Include selected deposit credit line items
+    const appliedCreditItems = depositLineItems
+      .filter(item => item.selected && item.amount > 0)
+      .map(item => ({
+        transactionId: item.transactionId,
+        amount: item.amount,
+        type: 'deposit'
+      }));
+    
+    // Combine both types of line items
+    const allLineItems = [...appliedItems, ...appliedCreditItems];
+    
+    // Check if applied invoice amount exceeds received amount
     const totalAppliedAmount = appliedItems.reduce((sum, item) => sum + item.amount, 0);
     if (totalAppliedAmount > values.amount) {
       toast({
@@ -288,8 +378,9 @@ export default function PaymentReceive() {
       type: 'payment',
       status: 'completed',
       description: `Payment received from ${selectedContact?.name || 'customer'}`,
-      lineItems: appliedItems,
+      lineItems: allLineItems,
       unappliedAmount: unappliedCredit,
+      totalCreditsApplied: totalCreditsApplied
     };
     
     paymentMutation.mutate(paymentData);
