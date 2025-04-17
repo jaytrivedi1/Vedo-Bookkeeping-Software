@@ -381,7 +381,6 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                       <th className="px-4 py-3 text-left">ACCOUNT</th>
                       <th className="px-4 py-3 text-left">DESCRIPTION</th>
                       <th className="px-4 py-3 text-left">PAYMENT METHOD</th>
-                      <th className="px-4 py-3 text-left">REF NO.</th>
                       <th className="px-4 py-3 text-right">AMOUNT (CAD)</th>
                       <th className="px-4 py-3 text-left">SALES TAX</th>
                       <th className="w-10 px-4 py-3 text-left"></th>
@@ -495,24 +494,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                             )}
                           />
                         </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.refNo`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="Reference #"
-                                    className="border border-input rounded-md px-3 py-1 w-full"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
+
                         <td className="px-4 py-3">
                           <FormField
                             control={form.control}
@@ -578,7 +560,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
                   </tbody>
                   <tfoot>
                     <tr className="border-t">
-                      <td colSpan={9} className="px-4 py-3">
+                      <td colSpan={8} className="px-4 py-3">
                         <div className="flex justify-between items-center">
                           <div className="flex space-x-2">
                             <Button 
