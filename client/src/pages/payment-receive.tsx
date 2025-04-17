@@ -363,12 +363,16 @@ export default function PaymentReceive() {
     // Combine both types of line items
     const allLineItems = [...appliedItems, ...appliedCreditItems];
     
-    // Check if applied invoice amount exceeds received amount
+    // Check the net balance after applying credits against invoices
     const totalAppliedAmount = appliedItems.reduce((sum, item) => sum + item.amount, 0);
-    if (totalAppliedAmount > values.amount) {
+    const totalCreditsAmount = appliedCreditItems.reduce((sum, item) => sum + item.amount, 0);
+    const netBalance = totalAppliedAmount - totalCreditsAmount - values.amount;
+    
+    // Only show error if net balance is greater than 0 (amounts don't balance)
+    if (netBalance > 0) {
       toast({
         title: "Error",
-        description: "The amount applied to invoices cannot exceed the amount received.",
+        description: "The net balance must be zero or negative. Please adjust the amounts.",
         variant: "destructive",
       });
       return;
@@ -864,11 +868,15 @@ export default function PaymentReceive() {
                     
                     <div className="flex justify-between items-center text-sm mt-2">
                       <span>Total Applied to Invoices:</span>
-                      <span className={totalApplied > (watchAmount || 0) ? "font-medium text-red-600" : "font-medium"}>
+                      <span className={
+                        totalApplied > (watchAmount || 0) && totalApplied > totalCreditsApplied
+                          ? "font-medium text-red-600" 
+                          : "font-medium"
+                      }>
                         {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalApplied)}
-                        {totalApplied > (watchAmount || 0) && (
+                        {totalApplied > (watchAmount || 0) && totalApplied > totalCreditsApplied && (
                           <span className="ml-2 text-xs">
-                            (exceeds received amount)
+                            (exceeds available funds)
                           </span>
                         )}
                       </span>
@@ -888,9 +896,18 @@ export default function PaymentReceive() {
                     {totalCreditsApplied > 0 ? (
                       <div className="flex justify-between items-center font-medium">
                         <span>Net Balance Due:</span>
-                        <span className="font-semibold text-gray-900">
+                        <span className={
+                          Math.max(0, totalApplied - totalCreditsApplied - (watchAmount || 0)) > 0 
+                            ? "font-semibold text-red-600" 
+                            : "font-semibold text-gray-900"
+                        }>
                           {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(
-                            Math.max(0, totalApplied - totalCreditsApplied)
+                            Math.max(0, totalApplied - totalCreditsApplied - (watchAmount || 0))
+                          )}
+                          {Math.max(0, totalApplied - totalCreditsApplied - (watchAmount || 0)) === 0 && (
+                            <span className="ml-2 text-xs text-green-600">
+                              (Balanced)
+                            </span>
                           )}
                         </span>
                       </div>
