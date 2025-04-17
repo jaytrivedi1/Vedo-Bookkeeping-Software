@@ -664,7 +664,7 @@ export default function PaymentReceive() {
                       onClick={handleAutoApply}
                       variant="outline"
                       size="sm"
-                      disabled={!watchAmount || watchAmount <= 0}
+                      disabled={(!watchAmount || watchAmount <= 0) && totalCreditsApplied <= 0}
                     >
                       Auto Apply
                     </Button>
