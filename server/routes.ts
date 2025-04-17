@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import { format } from "date-fns";
 import { 
   insertAccountSchema, 
   insertContactSchema, 
@@ -18,6 +19,7 @@ import {
   journalEntrySchema,
   depositSchema,
   Transaction,
+  InsertTransaction,
   salesTaxSchema
 } from "@shared/schema";
 import { z } from "zod";
@@ -835,9 +837,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
           date: new Date(data.date),
           transactionId: 0 // Will be set by createTransaction
         });
+        
+        // Create a separate deposit transaction for the unapplied credit amount
+        const depositData: InsertTransaction = {
+          type: 'deposit',
+          status: 'unapplied_credit',
+          date: new Date(data.date),
+          reference: `CREDIT-${Date.now().toString().substring(8)}`, // Generate a unique reference
+          description: `Unapplied credit from payment on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
+          amount: unappliedAmount,
+          balance: -unappliedAmount, // Negative balance for credit
+          contactId: data.contactId,
+        };
+        
+        // Create deposit ledger entries
+        const depositLedgerEntries = [
+          {
+            accountId: 2, // Accounts Receivable
+            debit: 0,
+            credit: unappliedAmount,
+            description: `Unapplied credit from payment #${paymentData.reference || ''}`,
+            date: new Date(data.date),
+            transactionId: 0 // Will be set by createTransaction
+          },
+          {
+            accountId: data.depositAccountId, // Bank account
+            debit: unappliedAmount,
+            credit: 0,
+            description: `Deposit from unapplied credit`,
+            date: new Date(data.date),
+            transactionId: 0 // Will be set by createTransaction
+          }
+        ];
+        
+        // Create the deposit transaction
+        await storage.createTransaction(
+          depositData,
+          [], // No line items for deposits
+          depositLedgerEntries
+        );
+        
+        console.log(`Created deposit transaction for unapplied credit: $${unappliedAmount}`);
       }
       
-      // Create the transaction with ledger entries
+      // Create the payment transaction with ledger entries
       const payment = await storage.createTransaction(
         paymentData,
         [], // No line items for the payment itself
