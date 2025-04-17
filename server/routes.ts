@@ -1517,30 +1517,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Check if entry is related to a deposit
-          const depositRefMatch = entry.description?.match(/deposit #?(\d+)/i);
+          const depositRefMatch = entry.description?.match(/deposit #?([^,\s]+)/i);
           
-          // More robust approach: extract any deposit IDs from the description
-          // This will handle various formats like "deposit #123", "from deposit #123", etc.
+          // More robust approach: extract any deposit references from the description
+          // This will handle various formats like "deposit #123", "from deposit #DEP-123", etc.
           if (depositRefMatch) {
-            // Extract the deposit ID from the match
-            const depositId = parseInt(depositRefMatch[1]);
-            const deposit = await storage.getTransaction(depositId);
+            // Extract the deposit reference from the match
+            const depositRef = depositRefMatch[1];
+            
+            // First try to find by ID if it's a number
+            let deposit;
+            if (/^\d+$/.test(depositRef)) {
+              deposit = await storage.getTransaction(parseInt(depositRef));
+            } 
+            
+            // If not found by ID or not a number, look by reference
+            if (!deposit) {
+              const deposits = (await storage.getTransactions()).filter(
+                t => t.type === 'deposit' && (t.reference === depositRef || t.reference === `DEP-${depositRef}`)
+              );
+              deposit = deposits.length > 0 ? deposits[0] : null;
+            }
             
             if (deposit && deposit.type === 'deposit') {
-              console.log(`Found deposit #${depositId} referenced in deleted payment, current status: ${deposit.status}`);
-              
-              // Find how much credit was applied in the deleted payment
-              const creditAmount = entry.debit || 0;
+              console.log(`Found deposit #${deposit.id} (${deposit.reference}) referenced in deleted payment, current status: ${deposit.status}`);
               
               // Always reset deposit to unapplied_credit status when its payment is deleted
               // Regardless of its current status
-              await storage.updateTransaction(depositId, {
+              await storage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
                 balance: -deposit.amount // Restore full negative balance
               });
-              console.log(`Reset deposit #${depositId} status to 'unapplied_credit' with balance ${-deposit.amount} after payment deletion`);
+              console.log(`Reset deposit #${deposit.id} (${deposit.reference}) status to 'unapplied_credit' with balance ${-deposit.amount} after payment deletion`);
             } else {
-              console.log(`Deposit #${depositId} referenced in ledger entry not found or not a deposit type`);
+              console.log(`Deposit referenced as "${depositRef}" in ledger entry not found or not a deposit type`);
+            }
+          }
+          
+          // Also check for reference to a deposit reference number directly in the description
+          const depositNameRefMatch = entry.description?.match(/from deposit #?([^,\s]+)/i);
+          if (depositNameRefMatch && !depositRefMatch) {
+            const depositRef = depositNameRefMatch[1];
+            // Find deposit by reference
+            const deposits = (await storage.getTransactions()).filter(
+              t => t.type === 'deposit' && (t.reference === depositRef || t.reference === `DEP-${depositRef}`)
+            );
+            
+            if (deposits.length > 0) {
+              const deposit = deposits[0];
+              console.log(`Found deposit by reference ${deposit.reference} in deleted payment, current status: ${deposit.status}`);
+              
+              // Reset deposit to unapplied_credit status
+              await storage.updateTransaction(deposit.id, {
+                status: 'unapplied_credit',
+                balance: -deposit.amount // Restore full negative balance
+              });
+              console.log(`Reset deposit ${deposit.reference} status to 'unapplied_credit' with balance ${-deposit.amount} after payment deletion`);
             }
           }
         }
