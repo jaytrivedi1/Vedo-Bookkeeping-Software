@@ -812,6 +812,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               date: new Date(data.date),
               transactionId: 0 // Will be set by createTransaction
             });
+            
+            // Update the deposit status from "Unapplied Credit" to "Completed" if fully applied
+            // We'll check if this payment fully uses up the deposit
+            if (item.amount >= deposit.amount) {
+              await storage.updateTransaction(deposit.id, {
+                status: 'completed'
+              });
+            }
           }
         }
       }
@@ -886,7 +894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: depositData.description,
         amount: depositData.amount,
         contactId: depositData.contactId || null,
-        status: 'completed' as const
+        status: depositData.contactId ? 'unapplied_credit' as const : 'completed' as const
       };
       
       // Empty line items for deposits

@@ -383,13 +383,16 @@ export default function CustomerList({ className }: CustomerListProps) {
                               // Only show balance for invoices, not for payments or deposits
                               const showBalance = transaction.type === 'invoice';
                               
-                              // For deposits, show "Unapplied Credit" label
-                              const isUnappliedCredit = transaction.type === 'deposit';
+                              // For deposits, check actual status
+                              const isUnappliedCredit = transaction.type === 'deposit' && 
+                                transaction.status === 'unapplied_credit';
                               
                               // For invoices, show "Open" badge if there's a balance
-                              // For deposits, show "Unapplied Credit" badge
-                              const statusBadge = isUnappliedCredit
-                                ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
+                              // For deposits, respect their status (unapplied_credit or completed)
+                              const statusBadge = transaction.type === 'deposit'
+                                ? transaction.status === 'unapplied_credit'
+                                  ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
+                                  : <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
                                 : transaction.type === 'invoice' && 
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
