@@ -627,6 +627,11 @@ export default function PaymentReceive() {
                           />
                         </FormControl>
                         <FormMessage />
+                        {totalCreditsApplied > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Amount can be zero when credits balance invoices
+                          </p>
+                        )}
                       </FormItem>
                     )}
                   />
