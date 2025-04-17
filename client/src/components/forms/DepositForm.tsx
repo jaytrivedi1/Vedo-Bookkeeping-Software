@@ -214,6 +214,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     
     // Find the first line item account to use as source
     const sourceAccountId = data.lineItems[0]?.accountId;
+    const contactId = data.lineItems[0]?.contactId;
     
     if (!sourceAccountId) {
       toast({
@@ -224,6 +225,51 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       return;
     }
     
+    // Check if using Accounts Receivable (id: 2) without a customer
+    if (sourceAccountId === 2 && !contactId) {
+      toast({
+        title: "Customer Required",
+        description: "When using Accounts Receivable, you must select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check if using Accounts Payable (id: 3) without a vendor
+    if (sourceAccountId === 3 && !contactId) {
+      toast({
+        title: "Vendor Required",
+        description: "When using Accounts Payable, you must select a vendor",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check contact type matches account type
+    if (contactId && sourceAccountId === 2) {
+      const contact = contacts?.find(c => c.id === contactId);
+      if (contact && !(contact.type === 'customer' || contact.type === 'both')) {
+        toast({
+          title: "Invalid Contact Type",
+          description: "Accounts Receivable must be associated with a customer",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
+    if (contactId && sourceAccountId === 3) {
+      const contact = contacts?.find(c => c.id === contactId);
+      if (contact && !(contact.type === 'vendor' || contact.type === 'both')) {
+        toast({
+          title: "Invalid Contact Type",
+          description: "Accounts Payable must be associated with a vendor",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     // Format data to match server schema
     const serverData = {
       date: data.date,
@@ -232,7 +278,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       amount: amount,
       sourceAccountId: sourceAccountId,
       destinationAccountId: data.depositAccountId,
-      contactId: data.lineItems[0]?.contactId,
+      contactId: contactId,
     };
     
     // Call the API

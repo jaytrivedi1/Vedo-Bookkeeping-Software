@@ -1087,6 +1087,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Check if using Accounts Receivable without a customer
+      if (body.sourceAccountId === 2 && !body.contactId) {
+        return res.status(400).json({
+          message: "Customer association required",
+          errors: [{
+            path: ["contactId"],
+            message: "When using Accounts Receivable, you must select a customer"
+          }]
+        });
+      }
+      
+      // Check if using Accounts Payable without a vendor
+      if (body.sourceAccountId === 3 && !body.contactId) {
+        return res.status(400).json({
+          message: "Vendor association required",
+          errors: [{
+            path: ["contactId"],
+            message: "When using Accounts Payable, you must select a vendor"
+          }]
+        });
+      }
+      
+      // Verify contact type matches account type if provided
+      if (body.contactId && (body.sourceAccountId === 2 || body.sourceAccountId === 3)) {
+        const contact = await storage.getContact(body.contactId);
+        
+        if (!contact) {
+          return res.status(400).json({
+            message: "Contact not found",
+            errors: [{
+              path: ["contactId"],
+              message: "The selected contact does not exist"
+            }]
+          });
+        }
+        
+        if (body.sourceAccountId === 2 && !(contact.type === 'customer' || contact.type === 'both')) {
+          return res.status(400).json({
+            message: "Invalid contact type",
+            errors: [{
+              path: ["contactId"],
+              message: "Accounts Receivable must be associated with a customer"
+            }]
+          });
+        }
+        
+        if (body.sourceAccountId === 3 && !(contact.type === 'vendor' || contact.type === 'both')) {
+          return res.status(400).json({
+            message: "Invalid contact type",
+            errors: [{
+              path: ["contactId"],
+              message: "Accounts Payable must be associated with a vendor"
+            }]
+          });
+        }
+      }
+      
       const depositData = depositSchema.parse(body);
       
       // Generate default reference if empty
