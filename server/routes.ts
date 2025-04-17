@@ -1517,10 +1517,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           // Check if entry is related to a deposit
-          const depositRefMatch = entry.description?.match(/deposit #?([^,\s]+)/i);
+          // This handles "deposit #123", "Applied credit from deposit #TEST-DEP2", etc.
+          const depositRefMatch = entry.description?.match(/(?:deposit|from deposit) #?([^,\s]+)/i);
           
           // More robust approach: extract any deposit references from the description
-          // This will handle various formats like "deposit #123", "from deposit #DEP-123", etc.
           if (depositRefMatch) {
             // Extract the deposit reference from the match
             const depositRef = depositRefMatch[1];
@@ -1569,8 +1569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
           
-          // Also check for reference to a deposit reference number directly in the description
-          const depositNameRefMatch = entry.description?.match(/from deposit #?([^,\s]+)/i);
+          // Also check for reference to "Applied credit from deposit #..." format specifically
+          // This check is redundant after our regex update above, but kept for safety
+          const depositNameRefMatch = entry.description?.match(/(?:applied credit from|from) deposit #?([^,\s]+)/i);
           if (depositNameRefMatch && !depositRefMatch) {
             const depositRef = depositNameRefMatch[1];
             // Find deposit by reference
