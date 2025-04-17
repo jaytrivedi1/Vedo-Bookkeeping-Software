@@ -864,8 +864,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       lineItems,
       unappliedAmount,
       totalCreditsApplied,
-      invoiceItems: lineItems.filter(item => !item.type || item.type === 'invoice'),
-      depositItems: lineItems.filter(item => item.type === 'deposit')
+      invoiceItems: lineItems.filter((item: any) => !item.type || item.type === 'invoice'),
+      depositItems: lineItems.filter((item: any) => item.type === 'deposit')
     });
     
     try {
@@ -1040,11 +1040,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // After payment creation, recalculate all affected invoice balances
-      const invoiceItems = lineItems.filter(item => !item.type || item.type === 'invoice');
+      const invoiceItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
       if (invoiceItems && invoiceItems.length > 0) {
         console.log(`Recalculating balances for ${invoiceItems.length} invoices...`);
         
-        for (const item of invoiceItems) {
+        for (const item of invoiceItems as any[]) {
           if (item.transactionId) {
             const updatedInvoice = await storage.recalculateInvoiceBalance(item.transactionId);
             console.log(`Recalculated invoice #${item.transactionId}: balance ${updatedInvoice?.balance}, status ${updatedInvoice?.status}`);
