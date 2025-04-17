@@ -1587,13 +1587,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Perform any necessary cleanup before deletion
       if (transaction.type === 'invoice') {
         // Handle invoice-specific cleanup
-        // Find any auto-payment that was created to apply credits to this invoice
+        
+        // First approach: Find any auto-payment that was created to apply credits to this invoice
         console.log(`Looking for auto-payments related to invoice #${transaction.reference}`);
         const autoPaymentRef = `AUTO-PMT-${transaction.reference}`;
         const autoPayment = allTransactions.find(t => 
           t.type === 'payment' && 
           t.reference === autoPaymentRef
         );
+        
+        // Second approach: Get the ledger entries and look for references to applied credits
+        console.log(`Checking ledger entries for credit applications in invoice #${transaction.reference}`);
+        const creditRefIds: number[] = [];
+        
+        // Check for applied credits in transaction ledger entries
+        for (const entry of ledgerEntries) {
+          if (entry.description?.toLowerCase().includes('applied credit') || 
+              entry.description?.toLowerCase().includes('credit application')) {
+            
+            console.log(`Found credit reference in entry: "${entry.description}"`);
+            
+            // Try to extract credit transaction ID
+            const creditIdMatch = entry.description?.match(/credit (?:from |#)?(\d+)/i);
+            if (creditIdMatch && creditIdMatch[1]) {
+              const creditId = parseInt(creditIdMatch[1]);
+              if (!isNaN(creditId) && !creditRefIds.includes(creditId)) {
+                creditRefIds.push(creditId);
+              }
+            }
+          }
+        }
+        
+        // Process any credits we found directly from ledger references
+        // This handles cases where we don't find the AUTO-PMT payment explicitly
+        if (creditRefIds.length > 0) {
+          console.log(`Found ${creditRefIds.length} direct credit references to revert in invoice #${transaction.reference}`);
+          
+          for (const creditId of creditRefIds) {
+            const creditTransaction = await storage.getTransaction(creditId);
+            if (creditTransaction && creditTransaction.type === 'deposit') {
+              console.log(`Found credit transaction #${creditId} referenced in invoice, status: ${creditTransaction.status}`);
+              
+              // Update credit to be unapplied again
+              await storage.updateTransaction(creditId, {
+                status: 'unapplied_credit',
+                balance: -creditTransaction.amount // Restore negative balance
+              });
+              
+              console.log(`Reverted credit #${creditId} to unapplied_credit status with balance -${creditTransaction.amount}`);
+            }
+          }
+        }
+        
+        // Also check for any credit transactions that were completed and match the invoice date
+        const possibleCredits = allTransactions.filter(t => 
+          t.type === 'deposit' && 
+          t.status === 'completed' &&
+          t.contactId === transaction.contactId &&
+          // Created within 1 minute of the invoice
+          Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 60000
+        );
+        
+        if (possibleCredits.length > 0) {
+          console.log(`Found ${possibleCredits.length} possible credit transactions to check for invoice #${transaction.reference}`);
+          
+          for (const credit of possibleCredits) {
+            // Only revert credits that were actually applied, so their balance is 0
+            if (credit.balance === 0) {
+              console.log(`Reverting credit #${credit.id} (${credit.reference}) that was likely applied to this invoice`);
+              
+              await storage.updateTransaction(credit.id, {
+                status: 'unapplied_credit',
+                balance: -credit.amount
+              });
+            }
+          }
+        }
         
         if (autoPayment) {
           console.log(`Found auto-payment #${autoPayment.id} for credit application on invoice #${transaction.reference}`);
@@ -1795,11 +1864,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Find any unapplied credit transactions created from this payment
         // These are deposit transactions with description containing text like "Unapplied credit from payment"
-        // Check for ANY associated unapplied credits/deposits, regardless of status, that were created around the same time
-        const relatedCredits = allTransactions.filter(t => 
+        // or any deposit transactions created at the same time as the payment
+        
+        // First approach: Check by description and timing correlation
+        const relatedCreditsByDescription = allTransactions.filter(t => 
           t.type === 'deposit' && 
           (
-            // Any description that references this payment
+            // Any description that references this payment or "Unapplied credit"
             (t.description?.includes("Unapplied credit from payment") && 
              (
                // Either direct reference to payment date
@@ -1812,6 +1883,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
             (new Date(t.date).getTime() === new Date(transaction.date).getTime() && t.contactId === transaction.contactId)
           )
         );
+        
+        // Second approach: Check ALL deposit transactions for this contact created within 10 seconds of the payment
+        const relatedCreditsByTiming = allTransactions.filter(t => 
+          t.type === 'deposit' && 
+          t.contactId === transaction.contactId &&
+          Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000
+        );
+        
+        // Third approach: Check for any deposit referencing this payment ID
+        const relatedCreditsByPaymentId = allTransactions.filter(t => 
+          t.type === 'deposit' && 
+          (
+            t.description?.includes(`payment #${transaction.id}`) ||
+            t.description?.includes(`payment ${transaction.id}`) ||
+            t.description?.includes(`payment ID ${transaction.id}`)
+          )
+        );
+        
+        // Combine all approaches and filter out duplicates
+        const allRelatedCreditIds = [
+          ...relatedCreditsByDescription.map(t => t.id),
+          ...relatedCreditsByTiming.map(t => t.id),
+          ...relatedCreditsByPaymentId.map(t => t.id)
+        ];
+        
+        // Use a regular array with filter to remove duplicates
+        const relatedCreditIds = allRelatedCreditIds.filter((id, index) => 
+          allRelatedCreditIds.indexOf(id) === index
+        );
+        
+        // Convert to array of transactions
+        const relatedCredits = relatedCreditIds.map(id => 
+          allTransactions.find(t => t.id === id)
+        ).filter(Boolean) as typeof allTransactions;
         
         console.log(`Found ${relatedCredits.length} related credit/deposit transactions when deleting payment #${transaction.id}:`, 
           relatedCredits.map(c => `#${c.id} (${c.reference}): ${c.status}, ${c.amount}, ${c.description}`));
