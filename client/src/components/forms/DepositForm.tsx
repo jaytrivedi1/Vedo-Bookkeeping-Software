@@ -241,7 +241,13 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Header with basic deposit info */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="shadow-sm">
+            <CardHeader className="bg-muted/50 pb-3">
+              <CardTitle className="text-xl font-bold">Create Deposit</CardTitle>
+              <CardDescription>Record funds deposited into your account</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <FormField
               control={form.control}
               name="depositAccountId"
@@ -346,13 +352,17 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
               </div>
             </div>
           </div>
+            </CardContent>
+          </Card>
 
           {/* Line Items */}
-          <Card>
-            <CardHeader className="bg-muted/50">
+          <Card className="shadow-sm">
+            <CardHeader className="bg-muted/50 pb-3">
               <CardTitle className="text-lg flex items-center">
+                <PlusCircleIcon className="h-5 w-5 mr-2" />
                 <span>Add funds to this deposit</span>
               </CardTitle>
+              <CardDescription>Record all funds to be added in this deposit</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -613,74 +623,82 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
           </Card>
 
           {/* Additional Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <FormField
-                control={form.control}
-                name="memo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Memo</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        {...field}
-                        placeholder="Add any notes or details about this deposit" 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div>
-              <FormField
-                control={form.control}
-                name="attachment"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Attachment</FormLabel>
-                    <div className="mt-2 flex items-center space-x-2">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        className="w-full justify-start"
-                        onClick={() => {
-                          // In a real implementation, this would open a file dialog
-                          // For now, we'll just set a placeholder value
-                          field.onChange("example-attachment.pdf");
-                          toast({
-                            title: "Attachment added",
-                            description: "example-attachment.pdf has been added",
-                          });
-                        }}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>{field.value ? field.value : "Add Attachment"}</span>
-                      </Button>
-                      {field.value && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => field.onChange("")}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Attach receipts or other documents (PDF, JPG, PNG)
-                    </p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </div>
+          <Card className="shadow-sm">
+            <CardHeader className="bg-muted/50 pb-3">
+              <CardTitle className="text-lg">Additional Information</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <FormField
+                    control={form.control}
+                    name="memo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Memo</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            {...field}
+                            placeholder="Add any notes or details about this deposit" 
+                            className="min-h-[100px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div>
+                  <FormField
+                    control={form.control}
+                    name="attachment"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Attachment</FormLabel>
+                        <div className="mt-2 flex items-center space-x-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="w-full justify-start"
+                            onClick={() => {
+                              // In a real implementation, this would open a file dialog
+                              // For now, we'll just set a placeholder value
+                              field.onChange("example-attachment.pdf");
+                              toast({
+                                title: "Attachment added",
+                                description: "example-attachment.pdf has been added",
+                              });
+                            }}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            <span>{field.value ? field.value : "Add Attachment"}</span>
+                          </Button>
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => field.onChange("")}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Attach receipts or other documents (PDF, JPG, PNG)
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Footer buttons */}
-          <div className="flex justify-between items-center pt-4 border-t">
+          <div className="flex justify-between items-center pt-4 mt-4 border-t">
             <div>
               <Button
                 type="button"
