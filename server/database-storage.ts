@@ -543,7 +543,10 @@ export class DatabaseStorage implements IStorage {
 
   async createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax> {
     const result = await db.insert(salesTaxSchema).values(salesTax).returning();
-    return result[0];
+    if (Array.isArray(result) && result.length > 0) {
+      return result[0] as SalesTax;
+    }
+    throw new Error("Failed to create sales tax");
   }
 
   async updateSalesTax(id: number, salesTaxUpdate: Partial<SalesTax>): Promise<SalesTax | undefined> {

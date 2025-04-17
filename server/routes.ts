@@ -1408,6 +1408,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Deleting ${transaction.type} transaction: ${transaction.reference}`);
       
+      // Check if this is a system-generated unapplied credit transaction
+      if (transaction.type === 'deposit' && 
+          transaction.status === 'unapplied_credit' && 
+          transaction.description?.includes("Unapplied credit from payment")) {
+        // This is a system-generated unapplied credit that shouldn't be directly deleted
+        return res.status(403).json({ 
+          message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
+        });
+      }
+      
       // Get all transactions to search for related ones
       const allTransactions = await storage.getTransactions();
       
