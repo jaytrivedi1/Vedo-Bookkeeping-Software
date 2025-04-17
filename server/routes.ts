@@ -1612,7 +1612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 entry.description.match(/deposit #?([^,\s]+)/i)
               ].filter(Boolean);
               
-              if (matches.length > 0) {
+              if (matches.length > 0 && matches[0] !== null) {
                 const depositRef = matches[0][1];
                 console.log(`Extracted deposit reference: ${depositRef}`);
                 
@@ -1795,17 +1795,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Find any unapplied credit transactions created from this payment
         // These are deposit transactions with description containing text like "Unapplied credit from payment"
+        // Check for ANY associated unapplied credits/deposits, regardless of status, that were created around the same time
         const relatedCredits = allTransactions.filter(t => 
           t.type === 'deposit' && 
-          t.status === 'unapplied_credit' &&
-          t.description?.includes("Unapplied credit from payment") &&
           (
-            // Either direct reference to payment ID
-            t.description?.includes(`payment on ${format(new Date(transaction.date), 'MMM dd, yyyy')}`) ||
-            // Or created in the same transaction (timestamps within a few seconds)
-            (Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000)
+            // Any description that references this payment
+            (t.description?.includes("Unapplied credit from payment") && 
+             (
+               // Either direct reference to payment date
+               t.description?.includes(`payment on ${format(new Date(transaction.date), 'MMM dd, yyyy')}`) ||
+               // Or created in the same transaction (timestamps within a few seconds)
+               (Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000)
+             )
+            ) ||
+            // Or created exactly at the same time as the payment (very likely to be related)
+            (new Date(t.date).getTime() === new Date(transaction.date).getTime() && t.contactId === transaction.contactId)
           )
         );
+        
+        console.log(`Found ${relatedCredits.length} related credit/deposit transactions when deleting payment #${transaction.id}:`, 
+          relatedCredits.map(c => `#${c.id} (${c.reference}): ${c.status}, ${c.amount}, ${c.description}`));
         
         // Delete all related unapplied credit transactions
         for (const credit of relatedCredits) {
