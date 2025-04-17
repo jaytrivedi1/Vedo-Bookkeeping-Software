@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, parseISO } from "date-fns";
-import { BookOpen, ChevronDown, ChevronRight, Search, Book, Filter, Calendar } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Search, Book, Filter, Calendar, Trash2, AlertTriangle } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Card,
