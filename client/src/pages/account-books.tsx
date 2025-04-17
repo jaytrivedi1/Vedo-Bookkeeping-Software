@@ -13,6 +13,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -64,6 +74,10 @@ export default function AccountBooks() {
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>("all");
   const [expandedAccounts, setExpandedAccounts] = useState<number[]>([]);
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>("all");
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   
   // Date range state
   const [dateRange, setDateRange] = useState<{
@@ -222,280 +236,385 @@ export default function AccountBooks() {
     }
   };
   
-  return (
-    <div className="py-6">
-      {/* Page header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center">
-        <div className="flex items-center">
-          <BookOpen className="h-6 w-6 mr-2 text-primary" />
-          <h1 className="text-2xl font-semibold text-gray-900">Account Books</h1>
-        </div>
-        <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
-      </div>
+  // Delete transaction mutation
+  const deleteTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return apiRequest(`/api/transactions/${transactionId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({
+        title: "Transaction deleted",
+        description: "Transaction has been successfully deleted",
+      });
+      // Invalidate multiple related queries to ensure all data is fresh
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <div className="py-4">
-          <Card className="mb-6">
-            <CardHeader className="pb-2">
-              <CardTitle>General Ledger</CardTitle>
-              <CardDescription>
-                View the double-entry accounting records for all accounts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-500 mb-4">
-                The general ledger contains all financial transactions recorded in your accounts using double-entry accounting principles.
-                Each transaction affects at least two accounts - typically with equal debits and credits.
-              </p>
-              
-              {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                {/* Period Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
-                  <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="current-month">Current Month</SelectItem>
-                      <SelectItem value="previous-month">Previous Month</SelectItem>
-                      <SelectItem value="current-year">Current Year</SelectItem>
-                      <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+      setTransactionToDelete(null);
+      setIsDeleting(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+      setIsDeleting(false);
+    }
+  });
+  
+  // Handle delete button click
+  const handleDeleteClick = (transaction: Transaction) => {
+    setTransactionToDelete(transaction);
+  };
+  
+  // Handle confirm delete
+  const handleConfirmDelete = () => {
+    if (transactionToDelete) {
+      setIsDeleting(true);
+      deleteTransactionMutation.mutate(transactionToDelete.id);
+    }
+  };
+  
+  return (
+    <>
+      <div className="py-6">
+        {/* Page header */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center">
+          <div className="flex items-center">
+            <BookOpen className="h-6 w-6 mr-2 text-primary" />
+            <h1 className="text-2xl font-semibold text-gray-900">Account Books</h1>
+          </div>
+          <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
+        </div>
+        
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+          <div className="py-4">
+            <Card className="mb-6">
+              <CardHeader className="pb-2">
+                <CardTitle>General Ledger</CardTitle>
+                <CardDescription>
+                  View the double-entry accounting records for all accounts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500 mb-4">
+                  The general ledger contains all financial transactions recorded in your accounts using double-entry accounting principles.
+                  Each transaction affects at least two accounts - typically with equal debits and credits.
+                </p>
                 
-                {/* Custom Date Range */}
-                {selectedPeriod === "custom" && (
+                {/* Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  {/* Period Selection */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
-                    <div className="flex items-center space-x-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            className="justify-start text-left font-normal w-full"
-                          >
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {dateRange.from ? (
-                              format(dateRange.from, 'MMM dd, yyyy')
-                            ) : (
-                              <span>Start date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarComponent
-                            mode="single"
-                            selected={dateRange.from}
-                            onSelect={(date) => setDateRange({ ...dateRange, from: date })}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      <span>to</span>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            className="justify-start text-left font-normal w-full"
-                          >
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {dateRange.to ? (
-                              format(dateRange.to, 'MMM dd, yyyy')
-                            ) : (
-                              <span>End date</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarComponent
-                            mode="single"
-                            selected={dateRange.to}
-                            onSelect={(date) => setDateRange({ ...dateRange, to: date })}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Period</label>
+                    <Select value={selectedPeriod} onValueChange={handlePeriodChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="current-month">Current Month</SelectItem>
+                        <SelectItem value="previous-month">Previous Month</SelectItem>
+                        <SelectItem value="current-year">Current Year</SelectItem>
+                        <SelectItem value="custom">Custom Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Custom Date Range */}
+                  {selectedPeriod === "custom" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                      <div className="flex items-center space-x-2">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              className="justify-start text-left font-normal w-full"
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {dateRange.from ? (
+                                format(dateRange.from, 'MMM dd, yyyy')
+                              ) : (
+                                <span>Start date</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={dateRange.from}
+                              onSelect={(date) => setDateRange({ ...dateRange, from: date })}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <span>to</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              className="justify-start text-left font-normal w-full"
+                            >
+                              <Calendar className="mr-2 h-4 w-4" />
+                              {dateRange.to ? (
+                                format(dateRange.to, 'MMM dd, yyyy')
+                              ) : (
+                                <span>End date</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={dateRange.to}
+                              onSelect={(date) => setDateRange({ ...dateRange, to: date })}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Transaction Type Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
+                    <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="All Types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="invoice">Invoices</SelectItem>
+                        <SelectItem value="expense">Expenses</SelectItem>
+                        <SelectItem value="journal_entry">Journal Entries</SelectItem>
+                        <SelectItem value="deposit">Deposits</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Search Filter */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                    <div className="relative">
+                      <Input
+                        className="pl-10"
+                        placeholder="Search accounts, descriptions..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Search className="h-4 w-4 text-gray-400" />
+                      </div>
                     </div>
                   </div>
-                )}
-                
-                {/* Transaction Type Filter */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Transaction Type</label>
-                  <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="All Types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="invoice">Invoices</SelectItem>
-                      <SelectItem value="expense">Expenses</SelectItem>
-                      <SelectItem value="journal_entry">Journal Entries</SelectItem>
-                      <SelectItem value="deposit">Deposits</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
-                
-                {/* Search Filter */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                  <div className="relative">
-                    <Input
-                      className="pl-10"
-                      placeholder="Search accounts, descriptions..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="h-4 w-4 text-gray-400" />
-                    </div>
-                  </div>
+              </CardContent>
+            </Card>
+            
+            {/* General Ledger View */}
+            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+              {isLoading ? (
+                <div className="p-6 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                  <p className="mt-2 text-sm text-gray-500">Loading general ledger...</p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          {/* General Ledger View */}
-          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-            {isLoading ? (
-              <div className="p-6 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading general ledger...</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Account</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="text-right">Debit</TableHead>
-                      <TableHead className="text-right">Credit</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {!ledgerEntries || ledgerEntries.length === 0 ? (
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-6 text-gray-500">
-                          No entries found in the general ledger
-                        </TableCell>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Reference</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Account</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-right">Debit</TableHead>
+                        <TableHead className="text-right">Credit</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ) : (
-                      (() => {
-                        // Get filtered transactions
-                        const allTransactionIds = Array.from(new Set(ledgerEntries?.map(entry => entry.transactionId) || []));
-                        
-                        const filteredTransactionIds = allTransactionIds.filter(transactionId => {
-                          const transaction = transactions?.find(t => t.id === transactionId);
-                          if (!transaction) return false;
+                    </TableHeader>
+                    <TableBody>
+                      {!ledgerEntries || ledgerEntries.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={9} className="text-center py-6 text-gray-500">
+                            No entries found in the general ledger
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        (() => {
+                          // Get filtered transactions
+                          const allTransactionIds = Array.from(new Set(ledgerEntries?.map(entry => entry.transactionId) || []));
                           
-                          // Apply transaction type filter
-                          if (transactionTypeFilter !== 'all' && transaction.type !== transactionTypeFilter) {
-                            return false;
-                          }
-                          
-                          // Apply date range filter
-                          if (dateRange.from && dateRange.to) {
-                            const txDate = new Date(transaction.date);
-                            return txDate >= dateRange.from && txDate <= dateRange.to;
-                          }
-                          
-                          return true;
-                        });
-                        
-                        if (filteredTransactionIds.length === 0) {
-                          return (
-                            <TableRow>
-                              <TableCell colSpan={8} className="text-center py-6 text-gray-500">
-                                No entries found matching the selected filters
-                              </TableCell>
-                            </TableRow>
-                          );
-                        }
-                        
-                        // Render entries for each filtered transaction
-                        const rows: React.ReactNode[] = [];
-                        
-                        filteredTransactionIds.forEach(transactionId => {
-                          const entriesForTransaction = ledgerEntries
-                            ?.filter(entry => entry.transactionId === transactionId)
-                            .sort((a, b) => {
-                              // Sort by account code
-                              const accountA = accountBooks.find(acc => acc.id === a.accountId);
-                              const accountB = accountBooks.find(acc => acc.id === b.accountId);
-                              if (!accountA || !accountB) return 0;
-                              return accountA.code.localeCompare(accountB.code);
-                            });
-                          
-                          // Skip if entriesForTransaction is undefined
-                          if (!entriesForTransaction) return;
-                          
-                          // Get transaction details
-                          const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
-                          const transaction = transactions?.find(t => t.id === transactionId);
-                          
-                          // Get contact name
-                          const contactId = transaction?.contactId;
-                          let contactName = "System Entry";
-                          
-                          if (contactId && contacts) {
-                            const contact = contacts.find(c => c.id === contactId);
-                            if (contact) {
-                              contactName = contact.name;
-                            }
-                          }
-                          
-                          // Create rows for each entry
-                          entriesForTransaction.forEach((entry, index) => {
-                            const account = accountBooks.find(acc => acc.id === entry.accountId);
+                          const filteredTransactionIds = allTransactionIds.filter(transactionId => {
+                            const transaction = transactions?.find(t => t.id === transactionId);
+                            if (!transaction) return false;
                             
-                            rows.push(
-                              <TableRow 
-                                key={entry.id}
-                                className={index > 0 && index < entriesForTransaction.length ? "border-t-0" : ""}
-                              >
-                                <TableCell>
-                                  {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
-                                </TableCell>
-                                <TableCell>
-                                  {index === 0 ? transaction?.reference || '' : ''}
-                                </TableCell>
-                                <TableCell>
-                                  {index === 0 && transaction ? formatTransactionType(transaction.type) : ''}
-                                </TableCell>
-                                <TableCell>
-                                  {index === 0 ? contactName : ''}
-                                </TableCell>
-                                <TableCell>{account?.name || 'Unknown Account'}</TableCell>
-                                <TableCell>{entry.description || ''}</TableCell>
-                                <TableCell className="text-right">
-                                  {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
+                            // Apply transaction type filter
+                            if (transactionTypeFilter !== 'all' && transaction.type !== transactionTypeFilter) {
+                              return false;
+                            }
+                            
+                            // Apply date range filter
+                            if (dateRange.from && dateRange.to) {
+                              const txDate = new Date(transaction.date);
+                              return txDate >= dateRange.from && txDate <= dateRange.to;
+                            }
+                            
+                            return true;
+                          });
+                          
+                          if (filteredTransactionIds.length === 0) {
+                            return (
+                              <TableRow>
+                                <TableCell colSpan={9} className="text-center py-6 text-gray-500">
+                                  No entries found matching the selected filters
                                 </TableCell>
                               </TableRow>
                             );
+                          }
+                          
+                          // Render entries for each filtered transaction
+                          const rows: React.ReactNode[] = [];
+                          
+                          filteredTransactionIds.forEach(transactionId => {
+                            const entriesForTransaction = ledgerEntries
+                              ?.filter(entry => entry.transactionId === transactionId)
+                              .sort((a, b) => {
+                                // Sort by account code
+                                const accountA = accountBooks.find(acc => acc.id === a.accountId);
+                                const accountB = accountBooks.find(acc => acc.id === b.accountId);
+                                if (!accountA || !accountB) return 0;
+                                return accountA.code.localeCompare(accountB.code);
+                              });
+                            
+                            // Skip if entriesForTransaction is undefined
+                            if (!entriesForTransaction) return;
+                            
+                            // Get transaction details
+                            const date = entriesForTransaction.length > 0 ? entriesForTransaction[0].date : new Date();
+                            const transaction = transactions?.find(t => t.id === transactionId);
+                            
+                            // Get contact name
+                            const contactId = transaction?.contactId;
+                            let contactName = "System Entry";
+                            
+                            if (contactId && contacts) {
+                              const contact = contacts.find(c => c.id === contactId);
+                              if (contact) {
+                                contactName = contact.name;
+                              }
+                            }
+                            
+                            // Create rows for each entry
+                            entriesForTransaction.forEach((entry, index) => {
+                              const account = accountBooks.find(acc => acc.id === entry.accountId);
+                              
+                              rows.push(
+                                <TableRow 
+                                  key={entry.id}
+                                  className={index > 0 && index < entriesForTransaction.length ? "border-t-0" : ""}
+                                >
+                                  <TableCell>
+                                    {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
+                                  </TableCell>
+                                  <TableCell>
+                                    {index === 0 ? transaction?.reference || '' : ''}
+                                  </TableCell>
+                                  <TableCell>
+                                    {index === 0 && transaction ? formatTransactionType(transaction.type) : ''}
+                                  </TableCell>
+                                  <TableCell>
+                                    {index === 0 ? contactName : ''}
+                                  </TableCell>
+                                  <TableCell>{account?.name || 'Unknown Account'}</TableCell>
+                                  <TableCell>{entry.description || ''}</TableCell>
+                                  <TableCell className="text-right">
+                                    {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    {index === 0 && transaction ? (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteClick(transaction)}
+                                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        title="Delete transaction"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    ) : null}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            });
                           });
-                        });
-                        
-                        return rows;
-                      })()
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+                          
+                          return rows;
+                        })()
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center text-red-600">
+              <AlertTriangle className="h-5 w-5 mr-2" /> Delete Transaction
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this 
+              {transactionToDelete?.type === 'invoice' 
+                ? ' invoice' 
+                : transactionToDelete?.type === 'payment'
+                  ? ' payment' 
+                  : transactionToDelete?.type === 'journal_entry'
+                    ? ' journal entry'
+                    : transactionToDelete?.type === 'deposit'
+                      ? ' deposit'
+                      : ' transaction'}
+              {transactionToDelete?.reference 
+                ? ` #${transactionToDelete.reference}` 
+                : ''}? 
+              This action cannot be undone and will remove all associated ledger entries.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmDelete();
+              }}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
