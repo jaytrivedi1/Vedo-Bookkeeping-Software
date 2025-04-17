@@ -1041,7 +1041,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Handle unapplied credit if any
+      // Handle unapplied credit ledger entry for the main payment
       if (unappliedAmount > 0) {
         // For unapplied credits, we should credit back to Accounts Receivable
         ledgerEntries.push({
@@ -1052,14 +1052,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           date: new Date(data.date),
           transactionId: 0 // Will be set by createTransaction
         });
-        
+      }
+      
+      // Create the payment transaction with ledger entries
+      const payment = await storage.createTransaction(
+        paymentData,
+        [], // No line items for the payment itself
+        ledgerEntries
+      );
+      
+      // Now create unapplied credit entry if there's any amount not applied to invoices
+      if (unappliedAmount > 0) {
         // Create a separate deposit transaction for the unapplied credit amount
         const depositData = {
           type: 'deposit' as const,
           status: 'unapplied_credit' as const,
           date: new Date(data.date),
           reference: `CREDIT-${Date.now().toString().substring(8)}`, // Generate a unique reference
-          description: `Unapplied credit from payment on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
+          description: `Unapplied credit from payment #${payment.id} (${paymentData.reference || ''}) on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
           amount: unappliedAmount,
           balance: -unappliedAmount, // Negative balance for credit
           contactId: data.contactId,
@@ -1071,7 +1081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountId: 2, // Accounts Receivable - DEBIT (represents money owed from customer)
             debit: unappliedAmount,
             credit: 0,
-            description: `Unapplied credit from payment #${paymentData.reference || ''}`,
+            description: `Unapplied credit from payment #${payment.id} (${paymentData.reference || ''})`,
             date: new Date(data.date),
             transactionId: 0 // Will be set by createTransaction
           },
@@ -1079,7 +1089,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountId: 2, // Accounts Receivable - CREDIT (offset to form the complete entry)
             debit: 0,
             credit: unappliedAmount,
-            description: `Unapplied credit from payment #${paymentData.reference || ''}`,
+            description: `Unapplied credit from payment #${payment.id} (${paymentData.reference || ''})`,
             date: new Date(data.date),
             transactionId: 0 // Will be set by createTransaction
           }
@@ -1094,13 +1104,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log(`Created deposit transaction for unapplied credit: $${unappliedAmount}`);
       }
-      
-      // Create the payment transaction with ledger entries
-      const payment = await storage.createTransaction(
-        paymentData,
-        [], // No line items for the payment itself
-        ledgerEntries
-      );
       
       // After payment creation, recalculate all affected invoice balances
       const invoiceItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
