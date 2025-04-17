@@ -65,7 +65,6 @@ const depositSchema = z.object({
   depositAccountId: z.number({ required_error: "Please select a deposit account" }),
   date: z.date({ required_error: "Please select a date" }),
   reference: z.string().min(1, "Reference is required"),
-  description: z.string().min(1, "Description is required"),
   lineItems: z.array(depositLineItemSchema).min(1, "At least one item is required"),
   memo: z.string().optional(),
   attachment: z.string().optional(),
@@ -116,7 +115,6 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     defaultValues: {
       date: new Date(),
       reference: `DEP-${new Date().toISOString().split('T')[0]}`,
-      description: 'Deposit',
       depositAccountId: undefined,
       lineItems: [
         {
@@ -228,7 +226,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     const serverData = {
       date: data.date,
       reference: data.reference,
-      description: data.description,
+      description: data.lineItems[0]?.description || 'Deposit',
       amount: amount,
       sourceAccountId: sourceAccountId,
       destinationAccountId: data.depositAccountId,
@@ -289,22 +287,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
               )}
             />
             
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Input 
-                      {...field} 
-                      placeholder="Enter deposit description"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
 
             <FormField
               control={form.control}
