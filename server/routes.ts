@@ -1442,12 +1442,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const depositId = parseInt(depositIdMatch[1]);
               const deposit = await storage.getTransaction(depositId);
               
-              if (deposit && deposit.type === 'deposit' && deposit.status === 'completed') {
-                // Reset deposit status to unapplied_credit
-                await storage.updateTransaction(depositId, {
-                  status: 'unapplied_credit'
-                });
-                console.log(`Reset deposit #${depositId} status to 'unapplied_credit' after payment deletion`);
+              if (deposit && deposit.type === 'deposit') {
+                // Find how much credit was applied in the deleted payment
+                const creditAmount = entry.debit || 0;
+                
+                // For completed deposits, revert back to unapplied_credit status
+                if (deposit.status === 'completed') {
+                  await storage.updateTransaction(depositId, {
+                    status: 'unapplied_credit',
+                    balance: -deposit.amount // Restore full negative balance
+                  });
+                  console.log(`Reset deposit #${depositId} status to 'unapplied_credit' with full balance after payment deletion`);
+                } 
+                // For partially applied deposits, update the balance
+                else if (deposit.status === 'unapplied_credit') {
+                  // Calculate the restored balance (more negative after deletion)
+                  const currentBalance = deposit.balance || 0;
+                  const newBalance = currentBalance - creditAmount;
+                  
+                  await storage.updateTransaction(depositId, {
+                    balance: newBalance
+                  });
+                  console.log(`Updated deposit #${depositId} balance to ${newBalance} after payment deletion`);
+                }
               }
             }
           }
