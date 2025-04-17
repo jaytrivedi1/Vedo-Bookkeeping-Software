@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { Invoice, invoiceSchema, Contact, SalesTax, Product } from "@shared/schema";
+import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction } from "@shared/schema";
 import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
+  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
+  const [selectedCredits, setSelectedCredits] = useState<Record<number, boolean>>({});
+  const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
   // Extract next invoice number
@@ -83,6 +86,23 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
+  });
+  
+  // Fetch customer's unapplied credits
+  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery({
+    queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId, status: 'unapplied_credit' }],
+    queryFn: async () => {
+      if (!watchContactId) return [];
+      // Get all transactions
+      const allTransactions = await apiRequest(`/api/transactions`);
+      // Filter for unapplied credit deposits for this customer
+      return allTransactions.filter((transaction: any) => 
+        transaction.type === 'deposit' && 
+        transaction.contactId === watchContactId &&
+        transaction.status === 'unapplied_credit'
+      );
+    },
+    enabled: !!watchContactId,
   });
   
   // Ensure products are properly typed
@@ -311,6 +331,24 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     const total = subtotal + totalTaxAmount;
     
+    // Calculate the total amount of selected credits
+    const appliedCreditsAmount = Object.entries(selectedCredits)
+      .filter(([_, isSelected]) => isSelected)
+      .reduce((sum, [creditId]) => {
+        const credit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId));
+        if (credit) {
+          // Get the credit amount - either the balance or the original amount
+          const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
+            ? Math.abs(credit.balance)
+            : Math.abs(credit.amount);
+          return sum + creditAmount;
+        }
+        return sum;
+      }, 0) || 0;
+      
+    // Update the applied credit amount for display
+    setAppliedCreditAmount(appliedCreditsAmount);
+    
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     
@@ -324,6 +362,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       subtotal, 
       totalTaxAmount, 
       total,
+      appliedCredits: appliedCreditsAmount,
+      balanceDue: total - appliedCreditsAmount,
       lineItems,
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
@@ -368,7 +408,20 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     const contact = contacts.find(c => c.id === contactId);
     if (contact) {
       setSelectedContact(contact);
+      // Reset selected credits when contact changes
+      setSelectedCredits({});
+      setAppliedCreditAmount(0);
     }
+  };
+  
+  // Handle toggling a credit for application against this invoice
+  const handleCreditToggle = (creditId: number, checked: boolean) => {
+    setSelectedCredits(prev => ({
+      ...prev,
+      [creditId]: checked
+    }));
+    // Recalculate totals to update the applied credit amount
+    calculateTotals();
   };
 
   // Update totals whenever line items change
@@ -376,7 +429,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     calculateTotals();
   }, [fields]);
 
-  // Update due date when invoice date changes
+  // Update due date when invoice date changes and watch for contactId changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === 'date' && value.date) {
@@ -385,7 +438,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       }
       
       if (name === 'contactId' && value.contactId) {
-        handleContactChange(Number(value.contactId));
+        const contactId = Number(value.contactId);
+        handleContactChange(contactId);
+        setWatchContactId(contactId);
       }
     });
     
