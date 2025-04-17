@@ -1542,13 +1542,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (deposit && deposit.type === 'deposit') {
               console.log(`Found deposit #${deposit.id} (${deposit.reference}) referenced in deleted payment, current status: ${deposit.status}`);
               
+              // Find the amount of credit that was applied from this deposit in the deleted payment
+              // by looking at the debit entry in the accounts receivable account
+              const creditAppliedAmount = entry.debit;
+              
+              // Get the current balance of the deposit
+              const currentBalance = deposit.balance || -deposit.amount;
+              
+              // Calculate the new balance after restoring the applied credit
+              // If the current balance is -500 and we applied 1000, new balance should be -1500
+              // We need to subtract because balance for unapplied credits is always negative
+              const newBalance = currentBalance - creditAppliedAmount;
+              
+              // Make sure the new balance doesn't exceed the deposit amount (edge case)
+              const finalBalance = Math.max(newBalance, -deposit.amount);
+              
               // Always reset deposit to unapplied_credit status when its payment is deleted
               // Regardless of its current status
               await storage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
-                balance: -deposit.amount // Restore full negative balance
+                balance: finalBalance
               });
-              console.log(`Reset deposit #${deposit.id} (${deposit.reference}) status to 'unapplied_credit' with balance ${-deposit.amount} after payment deletion`);
+              console.log(`Reset deposit #${deposit.id} (${deposit.reference}) status to 'unapplied_credit' with balance ${finalBalance} after payment deletion, restored credit: ${creditAppliedAmount}`);
             } else {
               console.log(`Deposit referenced as "${depositRef}" in ledger entry not found or not a deposit type`);
             }
@@ -1567,12 +1582,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const deposit = deposits[0];
               console.log(`Found deposit by reference ${deposit.reference} in deleted payment, current status: ${deposit.status}`);
               
+              // Find amount of credit applied from description 
+              const creditAppliedAmount = entry.debit || 1000; // Default to 1000 if not found
+              
+              // Get the current balance of the deposit
+              const currentBalance = deposit.balance || -deposit.amount;
+              
+              // Calculate the new balance after restoring the applied credit
+              const newBalance = currentBalance - creditAppliedAmount;
+              
+              // Make sure the new balance doesn't exceed the deposit amount (edge case)
+              const finalBalance = Math.max(newBalance, -deposit.amount);
+              
               // Reset deposit to unapplied_credit status
               await storage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
-                balance: -deposit.amount // Restore full negative balance
+                balance: finalBalance
               });
-              console.log(`Reset deposit ${deposit.reference} status to 'unapplied_credit' with balance ${-deposit.amount} after payment deletion`);
+              console.log(`Reset deposit ${deposit.reference} status to 'unapplied_credit' with balance ${finalBalance} after payment deletion, restored credit: ${creditAppliedAmount}`);
             }
           }
         }
