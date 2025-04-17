@@ -534,7 +534,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                  ? selectedTransaction.status === 'unapplied_credit' 
                     ? 'Deposit (Unapplied Credit)' 
                     : 'Deposit'
-                 : selectedTransaction?.type?.charAt(0).toUpperCase() + selectedTransaction?.type?.slice(1) || 'Transaction'} 
+                 : (selectedTransaction?.type ? selectedTransaction.type.charAt(0).toUpperCase() + selectedTransaction.type.slice(1) : 'Transaction')} 
               {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
             </DialogTitle>
           </DialogHeader>
@@ -608,7 +608,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                         <div>
                           <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
                           <p className="text-base font-semibold text-blue-700">
-                            {formatCurrency(selectedTransaction.balance)}
+                            {formatCurrency(selectedTransaction.balance || 0)}
                           </p>
                         </div>
                       )}
