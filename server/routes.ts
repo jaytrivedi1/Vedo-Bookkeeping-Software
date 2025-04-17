@@ -1866,29 +1866,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // These are deposit transactions with description containing text like "Unapplied credit from payment"
         // or any deposit transactions created at the same time as the payment
         
-        // First approach: Check by description and timing correlation
+        // First approach: Check by description and timing correlation, making sure to be more precise
+        // about the relationship between this specific payment and the credit
+        const paymentDateStr = format(new Date(transaction.date), 'MMM dd, yyyy');
+        const paymentTimeMs = new Date(transaction.date).getTime();
+        
         const relatedCreditsByDescription = allTransactions.filter(t => 
           t.type === 'deposit' && 
+          t.contactId === transaction.contactId && // Must be for the same contact
           (
-            // Any description that references this payment or "Unapplied credit"
-            (t.description?.includes("Unapplied credit from payment") && 
-             (
-               // Either direct reference to payment date
-               t.description?.includes(`payment on ${format(new Date(transaction.date), 'MMM dd, yyyy')}`) ||
-               // Or created in the same transaction (timestamps within a few seconds)
-               (Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000)
-             )
-            ) ||
-            // Or created exactly at the same time as the payment (very likely to be related)
-            (new Date(t.date).getTime() === new Date(transaction.date).getTime() && t.contactId === transaction.contactId)
+            // Description explicitly references THIS payment
+            (t.description?.includes(`Unapplied credit from payment #${transaction.id}`)) ||
+            
+            // Created at exactly the same time (indicating it was created as part of the same operation)
+            // AND has a description about being an unapplied credit
+            (Math.abs(new Date(t.date).getTime() - paymentTimeMs) < 5000 && 
+             t.description?.includes("Unapplied credit from payment") &&
+             t.description?.includes(paymentDateStr))
           )
         );
         
-        // Second approach: Check ALL deposit transactions for this contact created within 10 seconds of the payment
+        // Second approach: More precise timing check for deposits linked to this payment
+        // Look for deposit entries created within 5 seconds of payment AND with special markers
         const relatedCreditsByTiming = allTransactions.filter(t => 
           t.type === 'deposit' && 
           t.contactId === transaction.contactId &&
-          Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 10000
+          Math.abs(new Date(t.date).getTime() - paymentTimeMs) < 5000 &&
+          // Must have at least one of these indicators of being related to this payment:
+          (
+            // 1. Has "unapplied" in status (indicates it's an unapplied credit)
+            t.status?.includes("unapplied") ||
+            // 2. Has special description patterns indicating a credit relationship
+            t.description?.includes("Unapplied credit") ||
+            t.description?.includes("credit from payment") ||
+            // 3. Has a reference starting with "CREDIT-" (our system's convention)
+            t.reference?.startsWith("CREDIT-")
+          )
         );
         
         // Third approach: Check for any deposit referencing this payment ID
