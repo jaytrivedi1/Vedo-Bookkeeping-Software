@@ -1059,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'unapplied_credit' as const,
           date: new Date(data.date),
           reference: `CREDIT-${Date.now().toString().substring(8)}`, // Generate a unique reference
-          description: `Unapplied credit from payment on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
+          description: `Unapplied credit from payment #${newTransaction.id} on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
           amount: unappliedAmount,
           balance: -unappliedAmount, // Negative balance for credit
           contactId: data.contactId,
@@ -1904,13 +1904,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         );
         
-        // Third approach: Check for any deposit referencing this payment ID
+        // Third approach: Check for any deposit EXPLICITLY referencing this payment ID
         const relatedCreditsByPaymentId = allTransactions.filter(t => 
           t.type === 'deposit' && 
+          t.contactId === transaction.contactId && // Must be for the same contact
           (
+            // Explicit references to THIS payment's ID
             t.description?.includes(`payment #${transaction.id}`) ||
             t.description?.includes(`payment ${transaction.id}`) ||
-            t.description?.includes(`payment ID ${transaction.id}`)
+            t.description?.includes(`payment ID ${transaction.id}`) ||
+            // Look in ledger entries for references to this payment
+            t.reference?.includes(`PMT-${transaction.id}`)
           )
         );
         
