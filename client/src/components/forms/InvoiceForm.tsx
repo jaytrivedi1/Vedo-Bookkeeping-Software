@@ -147,7 +147,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   });
 
   const createInvoice = useMutation({
-    mutationFn: async (data: Invoice) => {
+    mutationFn: async (data: InvoiceWithCredits) => {
       console.log("Submitting invoice with data:", JSON.stringify(data, null, 2));
       return await apiRequest('/api/invoices', 'POST', data);
     },
@@ -467,7 +467,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     return () => subscription.unsubscribe();
   }, [form.watch, paymentTerms]);
 
-  const onSubmit = (data: Invoice) => {
+  const onSubmit = (data: InvoiceWithCredits) => {
     console.log("Form data before submit:", data);
     
     // Filter out empty line items
