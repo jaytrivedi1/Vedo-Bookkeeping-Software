@@ -1059,7 +1059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'unapplied_credit' as const,
           date: new Date(data.date),
           reference: `CREDIT-${Date.now().toString().substring(8)}`, // Generate a unique reference
-          description: `Unapplied credit from payment #${newTransaction.id} on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
+          description: `Unapplied credit from payment on ${format(new Date(data.date), 'MMM dd, yyyy')}`,
           amount: unappliedAmount,
           balance: -unappliedAmount, // Negative balance for credit
           contactId: data.contactId,
