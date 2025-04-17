@@ -124,11 +124,11 @@ export default function PaymentReceive() {
       if (!watchContactId) return [];
       // Get all deposits for this customer
       const allTransactions = await apiRequest(`/api/transactions`);
-      // Filter for completed deposits for this customer
+      // Filter for unapplied credit deposits for this customer
       return allTransactions.filter((transaction: any) => 
         transaction.type === 'deposit' && 
         transaction.contactId === watchContactId &&
-        transaction.status === 'completed'
+        transaction.status === 'unapplied_credit'
       );
     },
     enabled: !!watchContactId,
@@ -775,7 +775,7 @@ export default function PaymentReceive() {
               <Card className="mt-6">
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-center">
-                    <CardTitle>Available Credits</CardTitle>
+                    <CardTitle>Available Unapplied Credits</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>
