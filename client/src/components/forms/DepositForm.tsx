@@ -115,6 +115,9 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     resolver: zodResolver(depositSchema),
     defaultValues: {
       date: new Date(),
+      reference: `DEP-${new Date().toISOString().split('T')[0]}`,
+      description: 'Deposit',
+      depositAccountId: undefined,
       lineItems: [
         {
           receivedFrom: '',
@@ -127,6 +130,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
         }
       ],
       memo: '',
+      attachment: '',
     },
   });
 
@@ -168,7 +172,7 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
 
   // Mutation for creating a new deposit
   const createDepositMutation = useMutation({
-    mutationFn: async (data: DepositFormValues) => {
+    mutationFn: async (data: any) => {
       return await apiRequest('/api/deposits', 'POST', data);
     },
     onSuccess: () => {
@@ -195,11 +199,30 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
 
   // Handle form submission
   const onSubmit = (data: DepositFormValues) => {
+    // Validation checks
+    if (!data.lineItems[0]?.accountId) {
+      toast({
+        title: "Error",
+        description: "Please select at least one account for the deposit",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     // Calculate the total amount from line items
     const amount = data.lineItems.reduce((sum, item) => sum + (item.amount || 0), 0) + taxAmount;
     
     // Find the first line item account to use as source
     const sourceAccountId = data.lineItems[0]?.accountId;
+    
+    if (!sourceAccountId) {
+      toast({
+        title: "Error",
+        description: "Please select a source account",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Format data to match server schema
     const serverData = {
@@ -209,9 +232,9 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
       amount: amount,
       sourceAccountId: sourceAccountId,
       destinationAccountId: data.depositAccountId,
-      memo: data.memo,
     };
     
+    // Call the API
     createDepositMutation.mutate(serverData);
   };
 
@@ -645,16 +668,49 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
               />
             </div>
             <div>
-              <Label htmlFor="attachment">Attachment</Label>
-              <div className="mt-2 flex items-center space-x-2">
-                <Button type="button" variant="outline" className="w-full justify-start">
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>Add Attachment</span>
-                </Button>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">
-                Attach receipts or other documents (PDF, JPG, PNG)
-              </p>
+              <FormField
+                control={form.control}
+                name="attachment"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Attachment</FormLabel>
+                    <div className="mt-2 flex items-center space-x-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => {
+                          // In a real implementation, this would open a file dialog
+                          // For now, we'll just set a placeholder value
+                          field.onChange("example-attachment.pdf");
+                          toast({
+                            title: "Attachment added",
+                            description: "example-attachment.pdf has been added",
+                          });
+                        }}
+                      >
+                        <FileText className="mr-2 h-4 w-4" />
+                        <span>{field.value ? field.value : "Add Attachment"}</span>
+                      </Button>
+                      {field.value && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => field.onChange("")}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Attach receipts or other documents (PDF, JPG, PNG)
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </div>
 
