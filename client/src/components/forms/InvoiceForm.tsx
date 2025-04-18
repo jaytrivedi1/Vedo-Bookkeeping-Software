@@ -102,7 +102,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       contactId: undefined,
       reference: defaultInvoiceNumber,
       description: '',
-      status: 'draft' as const,
+      status: 'pending' as const,
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
   }) as InvoiceFormType;
@@ -505,7 +505,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || defaultInvoiceNumber,
-      status: 'draft' as const, // Default status since we removed the field
+      status: 'pending' as const, // Default status for new invoices
       description: data.description || '',
       subTotal,
       taxAmount,

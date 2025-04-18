@@ -136,7 +136,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       contactId: invoice.contactId ?? 0,
       reference: invoiceNumber,
       description: invoice.description || '',
-      status: invoice.status as "draft" | "pending" | "paid" | "overdue",
+      status: invoice.status as "pending" | "paid" | "overdue" | "completed" | "cancelled" | "partial" | "unapplied_credit",
       lineItems: lineItems.length > 0 
         ? lineItems.map(item => ({
             description: item.description,
@@ -554,7 +554,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || invoiceNumber,
-      status: 'draft' as const, // Default status since we removed the field
+      status: 'pending' as const, // Default status for open invoices
       description: data.description || '',
       subTotal,
       taxAmount,
