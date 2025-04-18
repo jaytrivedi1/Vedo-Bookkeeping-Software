@@ -138,6 +138,13 @@ export default function CustomerList({ className }: CustomerListProps) {
         transaction.status === 'unapplied_credit')
     : [];
     
+  // Ensure we use the most up-to-date data when customer details are opened
+  useEffect(() => {
+    if (selectedCustomer) {
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+    }
+  }, [selectedCustomer, queryClient]);
+    
   // Filter expenses
   const customerExpenses = customerTransactions
     ? customerTransactions.filter(transaction => transaction.type === 'expense')
@@ -507,11 +514,13 @@ export default function CustomerList({ className }: CustomerListProps) {
                       <h3 className="text-sm font-medium text-gray-500">Unapplied Credits</h3>
                       <p className="text-xl font-semibold text-green-700">
                         {formatCurrency(customerUnappliedCredits.reduce((sum, credit) => {
-                          // For unapplied credits, use the negative of the amount/balance
-                          // This makes them display as a positive number (credit)
-                          const creditAmount = (credit.balance !== null && credit.balance !== undefined && credit.balance < 0) 
-                            ? Math.abs(credit.balance)
-                            : Math.abs(credit.amount);
+                          // For unapplied credits, use the negative of the balance (which is already negative)
+                          // Balance is the actual remaining available credit
+                          const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
+                            ? Math.abs(credit.balance) // Balance should be negative for credits, so make it positive
+                            : Math.abs(credit.amount); // Fallback to amount if balance not set
+                          
+                          console.log(`Credit #${credit.id}: balance=${credit.balance}, amount=${credit.amount}, using ${creditAmount}`);
                           return sum + creditAmount;
                         }, 0))}
                       </p>

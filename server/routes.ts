@@ -1369,8 +1369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // when the amount changes (important for unapplied credits)
       if (existingTransaction.type === 'deposit' && 
           existingTransaction.status === 'unapplied_credit' &&
-          body.amount !== undefined && 
-          body.amount !== existingTransaction.amount) {
+          body.amount !== undefined) {
         // For unapplied credits, the balance should be negative (representing credits)
         body.balance = -body.amount;
         console.log(`Updating deposit balance to ${body.balance} for amount ${body.amount}`);
@@ -1507,6 +1506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: body.description,
           status: body.status,
           amount: body.amount,
+          balance: body.balance, // Include balance update if provided
         };
         
         const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);

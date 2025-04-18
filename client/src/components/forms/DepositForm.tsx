@@ -250,17 +250,31 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
         
         // Update the ledger entries if the amount has changed
         if (debitEntry && creditEntry && data.amount !== initialData.amount) {
-          // Update debit entry
-          await apiRequest(`/api/ledger-entries/${debitEntry.id}`, 'PATCH', {
-            debit: data.amount,
-            date: data.date
-          });
+          console.log(`Updating ledger entries for deposit ${initialData.id}: amount ${initialData.amount} -> ${data.amount}`);
           
-          // Update credit entry
-          await apiRequest(`/api/ledger-entries/${creditEntry.id}`, 'PATCH', {
-            credit: data.amount,
-            date: data.date
-          });
+          // For unapplied credits, we need to set the balance to negative amount
+          if (initialData.status === 'unapplied_credit') {
+            data.balance = -data.amount;
+            console.log(`Setting balance to ${data.balance} for unapplied credit`);
+          }
+          
+          try {
+            // Update debit entry
+            await apiRequest(`/api/ledger-entries/${debitEntry.id}`, 'PATCH', {
+              debit: data.amount,
+              date: data.date
+            });
+            
+            // Update credit entry
+            await apiRequest(`/api/ledger-entries/${creditEntry.id}`, 'PATCH', {
+              credit: data.amount,
+              date: data.date
+            });
+            
+            console.log('Successfully updated ledger entries');
+          } catch (error) {
+            console.error('Error updating ledger entries:', error);
+          }
         }
       }
       
