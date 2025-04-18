@@ -163,12 +163,13 @@ export default function CustomerList({ className }: CustomerListProps) {
     switch (status) {
       case 'paid':
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
+      case 'open':
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>;
       case 'overdue':
         return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Overdue</Badge>;
+      // No longer used, keeping for backward compatibility
       case 'draft':
-        return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Draft</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>;
       case 'cancelled':
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Cancelled</Badge>;
       case 'completed':
@@ -413,7 +414,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
                                   transaction.balance > 0 && 
-                                  transaction.status !== 'draft'
+                                  transaction.status === 'open'
                                     ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
                                     : getStatusBadge(transaction.status);
                                 
@@ -581,7 +582,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             selectedTransaction.status === 'paid' || selectedTransaction.status === 'completed' 
                               ? 'bg-green-100 text-green-800' 
-                              : selectedTransaction.status === 'pending' 
+                              : selectedTransaction.status === 'open' 
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : selectedTransaction.status === 'overdue'
                                   ? 'bg-red-100 text-red-800'
