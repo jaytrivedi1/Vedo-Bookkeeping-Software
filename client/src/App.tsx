@@ -8,6 +8,7 @@ import Invoices from "@/pages/invoices";
 import Expenses from "@/pages/expenses";
 import Journals from "@/pages/journals";
 import Deposits from "@/pages/deposits";
+import DepositView from "@/pages/deposit-view";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
+      <Route path="/deposits/:id" component={DepositView} />
       <Route path="/banking" component={Banking} />
       <Route path="/chart-of-accounts" component={ChartOfAccounts} />
       <Route path="/account-books" component={AccountBooks} />

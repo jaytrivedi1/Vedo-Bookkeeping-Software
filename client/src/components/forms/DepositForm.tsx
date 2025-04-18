@@ -236,6 +236,34 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       });
     },
   });
+  
+  // Mutation for updating an existing deposit
+  const updateDepositMutation = useMutation({
+    mutationFn: async (data: any) => {
+      if (!initialData?.id) throw new Error("Missing deposit ID for update");
+      return await apiRequest(`/api/transactions/${initialData.id}`, 'PATCH', data);
+    },
+    onSuccess: () => {
+      toast({
+        title: 'Success',
+        description: 'Deposit has been updated successfully.',
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        setLocation('/dashboard');
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: 'Error',
+        description: `Failed to update deposit: ${error}`,
+        variant: 'destructive',
+      });
+    },
+  });
 
   // Handle form submission
   const onSubmit = (data: DepositFormValues) => {
@@ -321,8 +349,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       contactId: contactId,
     };
     
-    // Call the API
-    createDepositMutation.mutate(serverData);
+    // Determine if we're creating or updating
+    if (isEditing && initialData?.id) {
+      // Update existing deposit
+      updateDepositMutation.mutate(serverData);
+    } else {
+      // Create new deposit
+      createDepositMutation.mutate(serverData);
+    }
   };
 
   return (
@@ -334,9 +368,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
             <CardHeader className="bg-muted/50 pb-3">
               <CardTitle className="text-xl font-bold flex items-center">
                 <DollarSign className="h-6 w-6 mr-2 text-primary" />
-                <span>Create Deposit</span>
+                <span>{isEditing ? 'Edit Deposit' : 'Create Deposit'}</span>
               </CardTitle>
-              <CardDescription>Record funds deposited into your account</CardDescription>
+              <CardDescription>
+                {isEditing 
+                  ? 'Update the details of this deposit' 
+                  : 'Record funds deposited into your account'
+                }
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="flex flex-row gap-4">
@@ -833,7 +872,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                 ) : (
                   <>
                     <Receipt className="h-4 w-4 mr-2" />
-                    Save Deposit
+                    {isEditing ? 'Update Deposit' : 'Save Deposit'}
                   </>
                 )}
               </Button>
