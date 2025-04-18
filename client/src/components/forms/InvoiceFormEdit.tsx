@@ -136,7 +136,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       contactId: invoice.contactId ?? 0,
       reference: invoiceNumber,
       description: invoice.description || '',
-      status: invoice.status as "pending" | "paid" | "overdue" | "completed" | "cancelled" | "partial" | "unapplied_credit",
+      status: invoice.status as "pending" | "paid" | "overdue" | "partial",
       lineItems: lineItems.length > 0 
         ? lineItems.map(item => ({
             description: item.description,

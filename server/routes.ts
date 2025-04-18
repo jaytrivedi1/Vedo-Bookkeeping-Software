@@ -457,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
         // Ensure these fields exist even if they weren't sent
         reference: req.body.reference || `INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
-        status: req.body.status || 'draft',
+        status: req.body.status || 'pending',
         description: req.body.description || ''
       };
       
