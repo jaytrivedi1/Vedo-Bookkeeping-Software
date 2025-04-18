@@ -962,7 +962,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="0">None</SelectItem>
-                                    {salesTaxes?.map((tax) => (
+                                    {salesTaxes?.filter(tax => !tax.parentId).map((tax) => (
                                       <SelectItem key={tax.id} value={tax.id.toString()}>
                                         {tax.name} ({tax.rate}%)
                                       </SelectItem>

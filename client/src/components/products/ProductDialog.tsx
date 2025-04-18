@@ -304,7 +304,7 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="0">None</SelectItem>
-                      {salesTaxes.map((tax: any) => (
+                      {salesTaxes.filter((tax: any) => !tax.parentId).map((tax: any) => (
                         <SelectItem key={tax.id} value={tax.id.toString()}>
                           {tax.name} ({tax.rate}%)
                         </SelectItem>
