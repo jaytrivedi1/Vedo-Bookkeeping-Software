@@ -53,17 +53,8 @@ interface TaxComponentInfo {
   parentId?: number;
 }
 
-// Define extended invoice type with applied credits
-interface InvoiceWithCredits extends Invoice {
-  appliedCredits?: Array<{
-    transactionId: number;
-    amount: number;
-    type: string;
-  }>;
-}
-
 // Extend UseFormReturn to include our custom property
-interface InvoiceFormType extends UseFormReturn<InvoiceWithCredits> {
+interface InvoiceFormType extends UseFormReturn<Invoice> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
@@ -131,8 +122,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
 
-  // Use our custom form type that includes taxComponentsInfo and applied credits
-  const form = useForm<InvoiceWithCredits>({
+  // Use our custom form type that includes taxComponentsInfo
+  const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
       date: today,
@@ -158,7 +149,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   });
 
   const createInvoice = useMutation({
-    mutationFn: async (data: InvoiceWithCredits) => {
+    mutationFn: async (data: Invoice) => {
       console.log("Submitting invoice with data:", JSON.stringify(data, null, 2));
       return await apiRequest('/api/invoices', 'POST', data);
     },
@@ -505,74 +496,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     const contact = contacts.find(c => c.id === contactId);
     if (contact) {
       setSelectedContact(contact);
-      // Reset selected credits when contact changes
-      setSelectedCredits({});
-      setAppliedCreditAmount(0);
     }
   };
   
-  // Handle toggling a credit for application against this invoice
-  const handleCreditToggle = (creditId: number, checked: boolean) => {
-    // Update the selected credits state
-    setSelectedCredits(prev => ({
-      ...prev,
-      [creditId]: checked
-    }));
-    
-    // INVERSE LOGIC: 
-    // If unchecked (checkbox OFF) = APPLY the credit
-    // If checked (checkbox ON) = DO NOT APPLY the credit
-    
-    // When checkbox is unchecked (checked=false), we APPLY the credit
-    if (!checked && customerCredits) {
-      const creditToApply = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
-      if (creditToApply) {
-        // Add the credit to form.appliedCredits
-        const creditAmount = (creditToApply.balance !== null && creditToApply.balance !== undefined) 
-          ? Math.abs(creditToApply.balance) 
-          : Math.abs(creditToApply.amount);
-          
-        // Prepare applied credits array if it doesn't exist yet
-        const existingAppliedCredits = form.getValues('appliedCredits') || [];
-        
-        // Add this credit if not already added
-        if (!existingAppliedCredits.some(c => c.transactionId === creditId)) {
-          form.setValue('appliedCredits', [
-            ...existingAppliedCredits,
-            {
-              transactionId: creditId,
-              amount: creditAmount,
-              type: 'credit'
-            }
-          ]);
-        }
-        
-        // Add this amount to applied credits
-        setAppliedCreditAmount(prev => prev + creditAmount);
-      }
-    } else {
-      // When checkbox is checked (checked=true), we REMOVE the credit
-      const creditToRemove = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
-      if (creditToRemove) {
-        // Remove this credit from applied credits
-        const existingAppliedCredits = form.getValues('appliedCredits') || [];
-        form.setValue('appliedCredits', 
-          existingAppliedCredits.filter(c => c.transactionId !== creditId)
-        );
-        
-        // Calculate the credit amount
-        const creditAmount = (creditToRemove.balance !== null && creditToRemove.balance !== undefined) 
-          ? Math.abs(creditToRemove.balance) 
-          : Math.abs(creditToRemove.amount);
-        
-        // Subtract this amount from applied credits
-        setAppliedCreditAmount(prev => Math.max(0, prev - creditAmount));
-      }
-    }
-    
-    // Recalculate totals to update the applied credit amount
-    calculateTotals();
-  };
+  // Credit application functionality has been removed
 
   // Update totals whenever line items change
   useEffect(() => {
@@ -597,7 +524,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     return () => subscription.unsubscribe();
   }, [form.watch, paymentTerms]);
 
-  const onSubmit = (data: InvoiceWithCredits) => {
+  const onSubmit = (data: Invoice) => {
     console.log("Form data before submit:", data);
     
     // Filter out empty line items
@@ -653,30 +580,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Include the applied credits if any are selected
-    if (Object.keys(selectedCredits).length > 0) {
-      const appliedCredits = Object.entries(selectedCredits)
-        // With our INVERSE logic, isSelected=false means the credit is applied
-        .filter(([_, isSelected]) => !isSelected)
-        .map(([creditId]) => {
-          const credit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId));
-          if (credit) {
-            // Get the credit amount - either the balance or the original amount
-            const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
-              ? Math.abs(credit.balance)
-              : Math.abs(credit.amount);
-            return {
-              transactionId: parseInt(creditId),
-              amount: creditAmount,
-              type: 'deposit'
-            };
-          }
-          return null;
-        })
-        .filter(credit => credit !== null);
-      
-      enrichedData.appliedCredits = appliedCredits;
-    }
+    // Credit application functionality has been removed
     
     console.log("Sending to server:", enrichedData);
     if (createInvoice.isPending) return; // Prevent double submission
