@@ -1101,17 +1101,67 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
                     
-                    {/* Credit application functionality has been removed */}
+                    {/* Applied credits */}
+                    {appliedCreditAmount > 0 && (
+                      <div className="flex justify-between text-green-600 border-t pt-2">
+                        <span className="text-sm">Applied Credits</span>
+                        <span>-${appliedCreditAmount.toFixed(2)}</span>
+                      </div>
+                    )}
                     
                     <div className="flex justify-between font-medium border-t pt-2 mt-1">
                       <span>Balance due</span>
-                      <span>${totalAmount.toFixed(2)}</span>
+                      <span>${(totalAmount - appliedCreditAmount).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               </div>
               
-              {/* Credit application functionality has been removed */}
+              {/* Available Credits */}
+              {watchContactId && customerCredits && customerCredits.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center mb-2">
+                    <h3 className="text-sm font-medium">Available Credits</h3>
+                    <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
+                  </div>
+                  
+                  <div className="border rounded-sm overflow-hidden">
+                    <div className="bg-gray-50 grid grid-cols-5 text-xs font-medium p-2 border-b">
+                      <div className="col-span-1">APPLY</div>
+                      <div className="col-span-1">DATE</div>
+                      <div className="col-span-2">REFERENCE</div>
+                      <div className="col-span-1 text-right">AMOUNT</div>
+                    </div>
+                    
+                    {customerCredits.map((credit) => (
+                      <div key={credit.id} className="grid grid-cols-5 p-2 border-b hover:bg-gray-50">
+                        <div className="col-span-1 flex items-center">
+                          <Checkbox 
+                            id={`credit-${credit.id}`}
+                            checked={selectedCredits[credit.id] || false}
+                            onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
+                          />
+                        </div>
+                        <div className="col-span-1 text-sm">
+                          {format(new Date(credit.date), 'dd/MM/yyyy')}
+                        </div>
+                        <div className="col-span-2 text-sm">
+                          {credit.reference || `Credit #${credit.id}`}
+                        </div>
+                        <div className="col-span-1 text-sm text-right">
+                          ${Math.abs(credit.balance || 0).toFixed(2)}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {customerCredits.length === 0 && (
+                      <div className="p-3 text-center text-gray-500 text-sm">
+                        No credits available for this customer
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               
               {/* Invoice message */}
               <div>
@@ -1127,8 +1177,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             <div>
               <div className="mb-6 text-right">
                 <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${totalAmount.toFixed(2)}</div>
-                {/* Credit application functionality has been removed */}
+                <div className="text-2xl font-medium">${(totalAmount - appliedCreditAmount).toFixed(2)}</div>
+                {appliedCreditAmount > 0 && (
+                  <div className="text-sm text-green-600">Including ${appliedCreditAmount.toFixed(2)} in applied credits</div>
+                )}
               </div>
               
               <div className="space-y-4">
