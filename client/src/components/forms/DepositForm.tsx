@@ -75,9 +75,12 @@ type DepositFormValues = z.infer<typeof depositSchema>;
 
 interface DepositFormProps {
   onSuccess?: () => void;
+  initialData?: any;
+  ledgerEntries?: any[];
+  isEditing?: boolean;
 }
 
-export default function DepositForm({ onSuccess }: DepositFormProps) {
+export default function DepositForm({ onSuccess, initialData, ledgerEntries, isEditing = false }: DepositFormProps) {
   const [_, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
@@ -110,10 +113,47 @@ export default function DepositForm({ onSuccess }: DepositFormProps) {
     account.type === 'income' || account.type === 'other_income'
   ) || [];
   
-  // Initialize form with default values
+  // Set up default values or populate from initialData if editing
+  const getDestinationAccountId = () => {
+    if (initialData && ledgerEntries) {
+      // Find the debit entry which represents the destination account
+      const debitEntry = ledgerEntries.find(entry => entry.debit > 0);
+      return debitEntry?.accountId;
+    }
+    return undefined;
+  };
+  
+  const getSourceAccountId = () => {
+    if (initialData && ledgerEntries) {
+      // Find the credit entry which represents the source account
+      const creditEntry = ledgerEntries.find(entry => entry.credit > 0);
+      return creditEntry?.accountId;
+    }
+    return undefined;
+  };
+  
+  // Initialize form with default values or from initialData if editing
   const form = useForm<DepositFormValues>({
     resolver: zodResolver(depositSchema),
-    defaultValues: {
+    defaultValues: initialData ? {
+      date: initialData.date ? new Date(initialData.date) : new Date(),
+      reference: initialData.reference || `DEP-${initialData.id}`,
+      depositAccountId: getDestinationAccountId(),
+      lineItems: [
+        {
+          receivedFrom: '',
+          contactId: initialData.contactId || undefined,
+          accountId: getSourceAccountId(),
+          description: initialData.description || '',
+          paymentMethod: '',
+          refNo: '',
+          amount: initialData.amount || 0,
+          salesTaxId: undefined,
+        }
+      ],
+      memo: initialData.description || '',
+      attachment: '',
+    } : {
       date: new Date(),
       reference: `DEP-${new Date().toISOString().split('T')[0]}`,
       depositAccountId: undefined,
