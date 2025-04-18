@@ -112,6 +112,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       );
     },
     enabled: !!watchContactId,
+    onSuccess: (data) => {
+      // Initialize all credits as checked (which means NOT applied)
+      if (data && data.length > 0) {
+        const initialCreditState = data.reduce((acc, credit) => {
+          acc[credit.id] = true; // true = checked = not applied
+          return acc;
+        }, {} as Record<number, boolean>);
+        setSelectedCredits(initialCreditState);
+        setAppliedCreditAmount(0); // Reset applied amount
+      }
+    }
   });
   
   // Ensure products are properly typed
@@ -508,10 +519,40 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       [creditId]: checked
     }));
     
-    // If checked, REMOVE the credit (opposite of before)
+    // If checked (checkbox ON) = NOT applied
+    // If unchecked (checkbox OFF) = applied
+    
+    // When checkbox is unchecked (checked=false), we APPLY the credit
     if (!checked && customerCredits) {
-      const unselectedCredit = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
-      if (unselectedCredit) {
+      const creditToApply = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
+      if (creditToApply) {
+        // Add the credit to form.appliedCredits
+        const creditAmount = (creditToApply.balance !== null && creditToApply.balance !== undefined) 
+          ? Math.abs(creditToApply.balance) 
+          : Math.abs(creditToApply.amount);
+          
+        // Prepare applied credits array if it doesn't exist yet
+        const existingAppliedCredits = form.getValues('appliedCredits') || [];
+        
+        // Add this credit if not already added
+        if (!existingAppliedCredits.some(c => c.transactionId === creditId)) {
+          form.setValue('appliedCredits', [
+            ...existingAppliedCredits,
+            {
+              transactionId: creditId,
+              amount: creditAmount,
+              type: 'credit'
+            }
+          ]);
+        }
+        
+        // Add this amount to applied credits
+        setAppliedCreditAmount(prev => prev + creditAmount);
+      }
+    } else {
+      // When checkbox is checked (checked=true), we REMOVE the credit
+      const creditToRemove = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
+      if (creditToRemove) {
         // Remove this credit from applied credits
         const existingAppliedCredits = form.getValues('appliedCredits') || [];
         form.setValue('appliedCredits', 
@@ -519,37 +560,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
         );
         
         // Calculate the credit amount
-        const creditAmount = (unselectedCredit.balance !== null && unselectedCredit.balance !== undefined) 
-          ? Math.abs(unselectedCredit.balance) 
-          : Math.abs(unselectedCredit.amount);
+        const creditAmount = (creditToRemove.balance !== null && creditToRemove.balance !== undefined) 
+          ? Math.abs(creditToRemove.balance) 
+          : Math.abs(creditToRemove.amount);
         
         // Subtract this amount from applied credits
         setAppliedCreditAmount(prev => Math.max(0, prev - creditAmount));
-      }
-    } else {
-      // If unchecked, ADD the credit (opposite of before)
-      const selectedCredit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
-      if (selectedCredit) {
-        // Add the credit to form.appliedCredits
-        const creditAmount = (selectedCredit.balance !== null && selectedCredit.balance !== undefined) 
-          ? Math.abs(selectedCredit.balance) 
-          : Math.abs(selectedCredit.amount);
-          
-        // Prepare applied credits array if it doesn't exist yet
-        const existingAppliedCredits = form.getValues('appliedCredits') || [];
-        
-        // Add this credit to the applied credits list
-        form.setValue('appliedCredits', [
-          ...existingAppliedCredits.filter(c => c.transactionId !== creditId),
-          {
-            transactionId: creditId,
-            amount: creditAmount,
-            type: 'deposit'
-          }
-        ]);
-        
-        // Update applied credit amount immediately for display
-        setAppliedCreditAmount(prev => prev + creditAmount);
       }
     }
     
@@ -636,10 +652,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Include the applied credits if any are selected
-    if (Object.values(selectedCredits).some(selected => selected)) {
+    // Include the applied credits if any are selected (unchecked in UI)
+    if (Object.keys(selectedCredits).length > 0) {
       const appliedCredits = Object.entries(selectedCredits)
-        .filter(([_, isSelected]) => isSelected)
+        // In our updated logic, isSelected=false means the credit is applied
+        .filter(([_, isSelected]) => !isSelected)
         .map(([creditId]) => {
           const credit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId));
           if (credit) {
@@ -1164,18 +1181,19 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span className="text-sm">Total</span>
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between font-medium">
-                      <span>Balance due</span>
-                      <span>${(totalAmount - appliedCreditAmount).toFixed(2)}</span>
-                    </div>
                     
                     {/* Display applied credits if any */}
                     {appliedCreditAmount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600 mt-2">
+                      <div className="flex justify-between text-sm text-green-600">
                         <span>Applied credits</span>
                         <span>-${appliedCreditAmount.toFixed(2)}</span>
                       </div>
                     )}
+                    
+                    <div className="flex justify-between font-medium border-t pt-2 mt-1">
+                      <span>Balance due</span>
+                      <span>${(totalAmount - appliedCreditAmount).toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
