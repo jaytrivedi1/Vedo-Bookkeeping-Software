@@ -440,6 +440,37 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       ...prev,
       [creditId]: checked
     }));
+    
+    // Automatically add/apply full credit amount to the invoice
+    if (checked && customerCredits) {
+      const selectedCredit = customerCredits.find((c: Transaction) => c.id === creditId);
+      if (selectedCredit) {
+        // Add the credit to form.appliedCredits
+        const creditAmount = (selectedCredit.balance !== null && selectedCredit.balance !== undefined) 
+          ? Math.abs(selectedCredit.balance) 
+          : Math.abs(selectedCredit.amount);
+          
+        // Prepare applied credits array if it doesn't exist yet
+        const existingAppliedCredits = form.getValues('appliedCredits') || [];
+        
+        // Add this credit to the applied credits list
+        form.setValue('appliedCredits', [
+          ...existingAppliedCredits.filter(c => c.transactionId !== creditId),
+          {
+            transactionId: creditId,
+            amount: creditAmount,
+            type: 'deposit'
+          }
+        ]);
+      }
+    } else {
+      // Remove this credit from applied credits if unchecked
+      const existingAppliedCredits = form.getValues('appliedCredits') || [];
+      form.setValue('appliedCredits', 
+        existingAppliedCredits.filter(c => c.transactionId !== creditId)
+      );
+    }
+    
     // Recalculate totals to update the applied credit amount
     calculateTotals();
   };
