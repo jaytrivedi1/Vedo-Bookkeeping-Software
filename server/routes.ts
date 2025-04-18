@@ -42,7 +42,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: "Test invoice for payment",
           amount: 500, // $500 invoice
           contactId: 1, // Acme Corporation
-          status: 'pending',
+          status: 'open',
           balance: 500
         },
         [
@@ -1760,11 +1760,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`Found payment applied to invoice: ${invoice.reference}`);
               // Update invoice balance by adding back the payment amount
               const updatedBalance = (invoice.balance || invoice.amount) + entry.credit;
-              console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'pending')}`);
+              console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'open')}`);
               await storage.updateTransaction(invoice.id, {
                 balance: updatedBalance,
                 // Also update status if needed
-                status: updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'pending')
+                status: updatedBalance <= 0 ? 'paid' : (updatedBalance < invoice.amount ? 'partial' : 'open')
               });
             }
           }

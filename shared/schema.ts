@@ -73,7 +73,7 @@ export const transactions = pgTable('transactions', {
   amount: doublePrecision('amount').notNull(),
   balance: doublePrecision('balance'),
   contactId: integer('contact_id').references(() => contacts.id),
-  status: statusEnum('status').notNull().default('pending'),
+  status: statusEnum('status').notNull().default('open'),
 });
 
 // Line Items
