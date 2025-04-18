@@ -284,34 +284,48 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                 const qstComponent = components.find(c => c.name === 'QST');
                 
                 if (gstComponent && qstComponent) {
-                  // Calculate GST (5%)
+                  // Calculate GST (5%) on original amount
                   const gstAmount = (item.amount || 0) * (gstComponent.rate / 100);
                   
-                  // Calculate QST (9.975% on price + GST)
-                  const qstAmount = ((item.amount || 0) + gstAmount) * (qstComponent.rate / 100);
+                  // Calculate QST (9.975%) on the original amount (not compounded for invoice display)
+                  const qstAmount = (item.amount || 0) * (qstComponent.rate / 100);
                   
                   // Add both tax amounts to the total
                   totalTaxAmount += (gstAmount + qstAmount);
                   
-                  // Add GST component to the map
-                  taxComponents.set(gstComponent.id, {
-                    id: gstComponent.id,
-                    name: gstComponent.name,
-                    rate: gstComponent.rate,
-                    amount: gstAmount,
-                    isComponent: true,
-                    parentId: salesTax.id
-                  });
+                  // Update/create GST component entry
+                  const existingGstComponent = taxComponents.get(gstComponent.id);
+                  if (existingGstComponent) {
+                    existingGstComponent.amount += gstAmount;
+                    taxComponents.set(gstComponent.id, existingGstComponent);
+                  } else {
+                    // Add GST component to the map
+                    taxComponents.set(gstComponent.id, {
+                      id: gstComponent.id,
+                      name: gstComponent.name,
+                      rate: gstComponent.rate,
+                      amount: gstAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
                   
-                  // Add QST component to the map
-                  taxComponents.set(qstComponent.id, {
-                    id: qstComponent.id,
-                    name: qstComponent.name,
-                    rate: qstComponent.rate,
-                    amount: qstAmount,
-                    isComponent: true,
-                    parentId: salesTax.id
-                  });
+                  // Update/create QST component entry
+                  const existingQstComponent = taxComponents.get(qstComponent.id);
+                  if (existingQstComponent) {
+                    existingQstComponent.amount += qstAmount;
+                    taxComponents.set(qstComponent.id, existingQstComponent);
+                  } else {
+                    // Add QST component to the map
+                    taxComponents.set(qstComponent.id, {
+                      id: qstComponent.id,
+                      name: qstComponent.name,
+                      rate: qstComponent.rate,
+                      amount: qstAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
                 } else {
                   // Fallback if the components aren't found
                   components.forEach(component => {

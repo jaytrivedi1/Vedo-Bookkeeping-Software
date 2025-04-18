@@ -298,27 +298,101 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
             const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
             
             if (components.length > 0) {
-              // Calculate each component separately
-              components.forEach(component => {
-                const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
-                totalTaxAmount += componentTaxAmount;
+              // For QST+GST specifically, we need special handling to show both taxes
+              if (salesTax.name === 'QST+GST') {
+                // QST is 9.975% and GST is 5%
+                const gstComponent = components.find(c => c.name === 'GST');
+                const qstComponent = components.find(c => c.name === 'QST');
                 
-                // Add/update component in the tax components map
-                const existingComponent = taxComponents.get(component.id);
-                if (existingComponent) {
-                  existingComponent.amount += componentTaxAmount;
-                  taxComponents.set(component.id, existingComponent);
+                if (gstComponent && qstComponent) {
+                  // Calculate GST (5%) on original amount
+                  const gstAmount = (item.amount || 0) * (gstComponent.rate / 100);
+                  
+                  // Calculate QST (9.975%) on the original amount (not compounded for invoice display)
+                  const qstAmount = (item.amount || 0) * (qstComponent.rate / 100);
+                  
+                  // Add both tax amounts to the total
+                  totalTaxAmount += (gstAmount + qstAmount);
+                  
+                  // Update/create GST component entry
+                  const existingGstComponent = taxComponents.get(gstComponent.id);
+                  if (existingGstComponent) {
+                    existingGstComponent.amount += gstAmount;
+                    taxComponents.set(gstComponent.id, existingGstComponent);
+                  } else {
+                    // Add GST component to the map
+                    taxComponents.set(gstComponent.id, {
+                      id: gstComponent.id,
+                      name: gstComponent.name,
+                      rate: gstComponent.rate,
+                      amount: gstAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                  
+                  // Update/create QST component entry
+                  const existingQstComponent = taxComponents.get(qstComponent.id);
+                  if (existingQstComponent) {
+                    existingQstComponent.amount += qstAmount;
+                    taxComponents.set(qstComponent.id, existingQstComponent);
+                  } else {
+                    // Add QST component to the map
+                    taxComponents.set(qstComponent.id, {
+                      id: qstComponent.id,
+                      name: qstComponent.name,
+                      rate: qstComponent.rate,
+                      amount: qstAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
                 } else {
-                  taxComponents.set(component.id, {
-                    id: component.id,
-                    name: component.name,
-                    rate: component.rate,
-                    amount: componentTaxAmount,
-                    isComponent: true,
-                    parentId: salesTax.id
+                  // Fallback to regular component calculation if components aren't found
+                  components.forEach(component => {
+                    const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
+                    totalTaxAmount += componentTaxAmount;
+                    
+                    // Add/update component in the tax components map
+                    const existingComponent = taxComponents.get(component.id);
+                    if (existingComponent) {
+                      existingComponent.amount += componentTaxAmount;
+                      taxComponents.set(component.id, existingComponent);
+                    } else {
+                      taxComponents.set(component.id, {
+                        id: component.id,
+                        name: component.name,
+                        rate: component.rate,
+                        amount: componentTaxAmount,
+                        isComponent: true,
+                        parentId: salesTax.id
+                      });
+                    }
                   });
                 }
-              });
+              } else {
+                // For other composite taxes, calculate each component separately
+                components.forEach(component => {
+                  const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
+                  totalTaxAmount += componentTaxAmount;
+                  
+                  // Add/update component in the tax components map
+                  const existingComponent = taxComponents.get(component.id);
+                  if (existingComponent) {
+                    existingComponent.amount += componentTaxAmount;
+                    taxComponents.set(component.id, existingComponent);
+                  } else {
+                    taxComponents.set(component.id, {
+                      id: component.id,
+                      name: component.name,
+                      rate: component.rate,
+                      amount: componentTaxAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                });
+              }
               
               // Also track the parent/composite tax
               usedTaxes.set(salesTax.id, salesTax);

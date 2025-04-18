@@ -773,7 +773,7 @@ export default function ChartOfAccounts() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
+                          {salesTaxes && salesTaxes.filter(tax => tax.isActive && !tax.parentId).map(tax => (
                             <SelectItem key={tax.id} value={tax.name}>
                               {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
                             </SelectItem>
