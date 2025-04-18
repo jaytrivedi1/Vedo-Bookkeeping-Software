@@ -64,8 +64,8 @@ export default function Expenses() {
   const completedExpenses = expenses
     .filter((expense) => expense.status === "completed")
     .reduce((sum, expense) => sum + expense.amount, 0);
-  const pendingExpenses = expenses
-    .filter((expense) => expense.status === "pending")
+  const openExpenses = expenses
+    .filter((expense) => expense.status === "open")
     .reduce((sum, expense) => sum + expense.amount, 0);
   
   return (
@@ -119,10 +119,10 @@ export default function Expenses() {
             
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-500">Pending</CardTitle>
+                <CardTitle className="text-sm text-gray-500">Open</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-yellow-600">${pendingExpenses.toFixed(2)}</p>
+                <p className="text-2xl font-semibold text-yellow-600">${openExpenses.toFixed(2)}</p>
               </CardContent>
             </Card>
           </div>

@@ -306,8 +306,8 @@ export class DatabaseStorage implements IStorage {
                 // This ensures we don't have any balance calculation errors
                 const newBalance = invoice.amount;
                 
-                // Set status to 'pending' since we're restoring the invoice
-                const newStatus = 'pending';
+                // Set status to 'open' since we're restoring the invoice
+                const newStatus = 'open';
                 
                 console.log(`Updating invoice #${invoiceRef} balance from ${invoice.balance || invoice.amount} to ${newBalance}, status from ${invoice.status || 'unknown'} to ${newStatus}`);
                 
