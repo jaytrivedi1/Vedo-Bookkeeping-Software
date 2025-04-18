@@ -67,8 +67,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
-  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
-  const [selectedCredits, setSelectedCredits] = useState<Record<number, boolean>>({});
   const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
@@ -88,33 +86,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     queryKey: ['/api/products'],
   });
   
-  // Fetch customer's unapplied credits
-  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId, status: 'unapplied_credit' }],
-    queryFn: async () => {
-      if (!watchContactId) return [];
-      // Get all transactions
-      const allTransactions = await apiRequest(`/api/transactions`);
-      // Filter for unapplied credit deposits for this customer
-      return allTransactions.filter((transaction: Transaction) => 
-        transaction.type === 'deposit' && 
-        transaction.contactId === watchContactId &&
-        transaction.status === 'unapplied_credit'
-      );
-    },
-    enabled: !!watchContactId,
-    onSuccess: (data) => {
-      // Initialize all credits as unchecked (which means NOT applied)
-      if (data && data.length > 0) {
-        const initialCreditState = data.reduce((acc, credit) => {
-          acc[credit.id] = false; // false = unchecked = not applied
-          return acc;
-        }, {} as Record<number, boolean>);
-        setSelectedCredits(initialCreditState);
-        setAppliedCreditAmount(0); // Reset applied amount
-      }
-    }
-  });
+  // Credit functionality has been removed
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -420,8 +392,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     const total = subtotal + totalTaxAmount;
     
     // Credit application functionality has been removed
-    const appliedCreditsAmount = 0;
-    setAppliedCreditAmount(0);
     
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
@@ -436,8 +406,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       subtotal, 
       totalTaxAmount, 
       total,
-      appliedCredits: appliedCreditsAmount,
-      balanceDue: total - appliedCreditsAmount,
       lineItems,
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
