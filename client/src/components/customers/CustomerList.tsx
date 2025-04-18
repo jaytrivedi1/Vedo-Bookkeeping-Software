@@ -440,6 +440,13 @@ export default function CustomerList({ className }: CustomerListProps) {
                                             View
                                           </Button>
                                         </Link>
+                                      ) : transaction.type === 'deposit' ? (
+                                        <Link href={`/deposits/${transaction.id}`} onClick={(e) => e.stopPropagation()}>
+                                          <Button variant="ghost" size="sm">
+                                            <Eye className="h-4 w-4 mr-1" />
+                                            View
+                                          </Button>
+                                        </Link>
                                       ) : (
                                         <Button 
                                           variant="ghost" 
