@@ -221,7 +221,7 @@ export class DatabaseStorage implements IStorage {
       } else if (remainingBalance < invoice.amount) {
         status = 'partial';
       } else {
-        status = 'pending'; // Use pending instead of outstanding to match our enum
+        status = 'open'; // Use open instead of outstanding/pending to match our enum
       }
       
       // Update the invoice

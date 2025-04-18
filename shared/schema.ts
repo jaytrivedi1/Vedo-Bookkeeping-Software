@@ -134,7 +134,7 @@ export const expenseSchema = z.object({
   contactId: z.number(),
   reference: z.string().min(1, "Reference is required"),
   description: z.string(),
-  status: z.enum(["pending", "completed", "cancelled"]),
+  status: z.enum(["open", "completed", "cancelled"]),
   lineItems: z.array(
     z.object({
       description: z.string().min(1, "Description is required"),
