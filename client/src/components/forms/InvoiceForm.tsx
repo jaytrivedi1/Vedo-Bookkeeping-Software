@@ -519,11 +519,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       [creditId]: checked
     }));
     
-    // If checked (checkbox ON) = APPLY the credit
-    // If unchecked (checkbox OFF) = DO NOT APPLY the credit
+    // INVERSE LOGIC: 
+    // If unchecked (checkbox OFF) = APPLY the credit
+    // If checked (checkbox ON) = DO NOT APPLY the credit
     
-    // When checkbox is checked (checked=true), we APPLY the credit
-    if (checked && customerCredits) {
+    // When checkbox is unchecked (checked=false), we APPLY the credit
+    if (!checked && customerCredits) {
       const creditToApply = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
       if (creditToApply) {
         // Add the credit to form.appliedCredits
@@ -550,7 +551,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
         setAppliedCreditAmount(prev => prev + creditAmount);
       }
     } else {
-      // When checkbox is unchecked (checked=false), we REMOVE the credit
+      // When checkbox is checked (checked=true), we REMOVE the credit
       const creditToRemove = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
       if (creditToRemove) {
         // Remove this credit from applied credits
@@ -652,11 +653,11 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Include the applied credits if any are selected (checked in UI)
+    // Include the applied credits if any are selected
     if (Object.keys(selectedCredits).length > 0) {
       const appliedCredits = Object.entries(selectedCredits)
-        // With our updated logic, isSelected=true means the credit is applied
-        .filter(([_, isSelected]) => isSelected)
+        // With our INVERSE logic, isSelected=false means the credit is applied
+        .filter(([_, isSelected]) => !isSelected)
         .map(([creditId]) => {
           const credit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId));
           if (credit) {
@@ -1201,7 +1202,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
               {/* Available customer credits section */}
               {customerCredits && customerCredits.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-sm font-medium mb-2">Available Credits (check to apply credit)</div>
+                  <div className="text-sm font-medium mb-2">Available Credits (uncheck to apply credit)</div>
                   <div className="border rounded-sm overflow-hidden">
                     {customerCredits.map((credit: any) => {
                       const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
@@ -1209,7 +1210,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                         : Math.abs(credit.amount);
                       
                       return (
-                        <div key={credit.id} className={`flex items-center justify-between border-b p-2 ${selectedCredits[credit.id] ? 'bg-green-50' : ''}`}>
+                        <div key={credit.id} className={`flex items-center justify-between border-b p-2 ${!selectedCredits[credit.id] ? 'bg-green-50' : ''}`}>
                           <div className="flex items-center space-x-2">
                             <div className="flex items-center">
                               <Checkbox
@@ -1218,7 +1219,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                 onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
                               />
                               <label htmlFor={`credit-${credit.id}`} className="ml-2 text-xs text-gray-600">
-                                {!selectedCredits[credit.id] ? 'Not applied' : 'Applied'}
+                                {!selectedCredits[credit.id] ? 'Applied' : 'Not applied'}
                               </label>
                             </div>
                             <div>
