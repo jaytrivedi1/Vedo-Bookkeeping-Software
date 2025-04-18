@@ -419,23 +419,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     const total = subtotal + totalTaxAmount;
     
-    // Calculate the total amount of selected credits
-    const appliedCreditsAmount = Object.entries(selectedCredits)
-      .filter(([_, isSelected]) => isSelected)
-      .reduce((sum, [creditId]) => {
-        const credit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId));
-        if (credit) {
-          // Get the credit amount - either the balance or the original amount
-          const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
-            ? Math.abs(credit.balance)
-            : Math.abs(credit.amount);
-          return sum + creditAmount;
-        }
-        return sum;
-      }, 0) || 0;
-      
-    // Update the applied credit amount for display
-    setAppliedCreditAmount(appliedCreditsAmount);
+    // Credit application functionality has been removed
+    const appliedCreditsAmount = 0;
+    setAppliedCreditAmount(0);
     
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
@@ -1087,57 +1073,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
                     
-                    {/* Display applied credits if any */}
-                    {appliedCreditAmount > 0 && (
-                      <div className="flex justify-between text-sm text-green-600">
-                        <span>Applied credits</span>
-                        <span>-${appliedCreditAmount.toFixed(2)}</span>
-                      </div>
-                    )}
+                    {/* Credit application functionality has been removed */}
                     
                     <div className="flex justify-between font-medium border-t pt-2 mt-1">
                       <span>Balance due</span>
-                      <span>${(totalAmount - appliedCreditAmount).toFixed(2)}</span>
+                      <span>${totalAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               </div>
               
-              {/* Available customer credits section */}
-              {customerCredits && customerCredits.length > 0 && (
-                <div className="mt-4">
-                  <div className="text-sm font-medium mb-2">Available Credits (uncheck to apply credit)</div>
-                  <div className="border rounded-sm overflow-hidden">
-                    {customerCredits.map((credit: any) => {
-                      const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
-                        ? Math.abs(credit.balance) 
-                        : Math.abs(credit.amount);
-                      
-                      return (
-                        <div key={credit.id} className={`flex items-center justify-between border-b p-2 ${!selectedCredits[credit.id] ? 'bg-green-50' : ''}`}>
-                          <div className="flex items-center space-x-2">
-                            <div className="flex items-center">
-                              <Checkbox
-                                id={`credit-${credit.id}`}
-                                checked={selectedCredits[credit.id] || false}
-                                onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
-                              />
-                              <label htmlFor={`credit-${credit.id}`} className="ml-2 text-xs text-gray-600">
-                                {!selectedCredits[credit.id] ? 'Applied' : 'Not applied'}
-                              </label>
-                            </div>
-                            <div>
-                              <div className="text-sm">{credit.reference || `Credit from ${format(new Date(credit.date), 'MMM d, yyyy')}`}</div>
-                              <div className="text-xs text-gray-500">{format(new Date(credit.date), 'MMM d, yyyy')}</div>
-                            </div>
-                          </div>
-                          <div className="text-sm font-medium">${creditAmount.toFixed(2)}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              {/* Credit application functionality has been removed */}
               
               {/* Invoice message */}
               <div>
@@ -1153,10 +1099,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             <div>
               <div className="mb-6 text-right">
                 <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${(totalAmount - appliedCreditAmount).toFixed(2)}</div>
-                {appliedCreditAmount > 0 && (
-                  <div className="text-sm text-green-600 mt-1">Credit: ${appliedCreditAmount.toFixed(2)}</div>
-                )}
+                <div className="text-2xl font-medium">${totalAmount.toFixed(2)}</div>
+                {/* Credit application functionality has been removed */}
               </div>
               
               <div className="space-y-4">
