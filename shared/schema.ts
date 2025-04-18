@@ -111,7 +111,7 @@ export const invoiceSchema = z.object({
   contactId: z.number(),
   reference: z.string().min(1, "Reference is required"),
   description: z.string(),
-  status: z.enum(["pending", "paid", "overdue", "partial"]),
+  status: z.enum(["open", "paid", "overdue", "partial"]),
   lineItems: z.array(
     z.object({
       description: z.string().min(1, "Description is required"),

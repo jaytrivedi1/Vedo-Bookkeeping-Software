@@ -554,7 +554,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || invoiceNumber,
-      status: 'pending' as const, // Default status for open invoices
+      status: 'open' as const, // Default status for open invoices
       description: data.description || '',
       subTotal,
       taxAmount,

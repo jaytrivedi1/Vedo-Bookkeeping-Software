@@ -102,7 +102,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       contactId: undefined,
       reference: defaultInvoiceNumber,
       description: '',
-      status: 'pending' as const,
+      status: 'open' as const,
       lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
     },
   }) as InvoiceFormType;
