@@ -67,8 +67,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
-  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
-  const [selectedCredits, setSelectedCredits] = useState<Record<number, boolean>>({});
   const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
@@ -88,22 +86,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     queryKey: ['/api/products'],
   });
   
-  // Fetch customer's unapplied credits
-  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId, status: 'unapplied_credit' }],
-    queryFn: async () => {
-      if (!watchContactId) return [];
-      // Get all transactions
-      const allTransactions = await apiRequest(`/api/transactions`);
-      // Filter for unapplied credit deposits for this customer
-      return allTransactions.filter((transaction: Transaction) => 
-        transaction.type === 'deposit' && 
-        transaction.contactId === watchContactId &&
-        transaction.status === 'unapplied_credit'
-      );
-    },
-    enabled: !!watchContactId
-  });
+  // Credit functionality has been removed
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -408,18 +391,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     const total = subtotal + totalTaxAmount;
     
-    // Calculate applied credits amount based on selected credits
-    let appliedCreditsAmount = 0;
-    if (customerCredits && customerCredits.length > 0 && Object.keys(selectedCredits).length > 0) {
-      // Sum up the amounts of all selected credits
-      appliedCreditsAmount = customerCredits
-        .filter(credit => selectedCredits[credit.id] === true)
-        .reduce((sum, credit) => {
-          // Credit balance is stored as negative, so we need to use the absolute value
-          return sum + Math.abs(credit.balance || 0);
-        }, 0);
-    }
-    setAppliedCreditAmount(appliedCreditsAmount);
+    // Credit application functionality has been removed
     
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
@@ -434,8 +406,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       subtotal, 
       totalTaxAmount, 
       total,
-      appliedCredits: appliedCreditsAmount,
-      balanceDue: total - appliedCreditsAmount,
       lineItems,
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
@@ -483,17 +453,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     }
   };
   
-  // Handle credit selection via checkbox
-  const handleCreditToggle = (creditId: number, checked: boolean) => {
-    // Update the selected credits state
-    setSelectedCredits(prev => ({
-      ...prev,
-      [creditId]: checked
-    }));
-    
-    // Recalculate totals to update applied credit amount
-    calculateTotals();
-  };
+  // Credit application functionality has been removed
 
   // Update totals whenever line items change
   useEffect(() => {
@@ -574,27 +534,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Add applied credits to the invoice data before submitting
-    const appliedCredits = [];
-    let totalAppliedCreditAmount = 0;
-    
-    if (customerCredits && selectedCredits) {
-      for (const creditId in selectedCredits) {
-        if (selectedCredits[creditId]) {
-          const credit = customerCredits.find(c => c.id === parseInt(creditId));
-          if (credit) {
-            appliedCredits.push({
-              creditId: credit.id,
-              amount: Math.abs(credit.balance || 0)
-            });
-            totalAppliedCreditAmount += Math.abs(credit.balance || 0);
-          }
-        }
-      }
-    }
-    
-    enrichedData.appliedCredits = appliedCredits;
-    enrichedData.appliedCreditAmount = totalAppliedCreditAmount;
+    // Credit application functionality has been removed
     
     console.log("Sending to server:", enrichedData);
     if (createInvoice.isPending) return; // Prevent double submission
@@ -1101,67 +1041,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
                     
-                    {/* Applied credits */}
-                    {appliedCreditAmount > 0 && (
-                      <div className="flex justify-between text-green-600 border-t pt-2">
-                        <span className="text-sm">Applied Credits</span>
-                        <span>-${appliedCreditAmount.toFixed(2)}</span>
-                      </div>
-                    )}
+                    {/* Credit application functionality has been removed */}
                     
                     <div className="flex justify-between font-medium border-t pt-2 mt-1">
                       <span>Balance due</span>
-                      <span>${(totalAmount - appliedCreditAmount).toFixed(2)}</span>
+                      <span>${totalAmount.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               </div>
               
-              {/* Available Credits */}
-              {watchContactId && customerCredits && customerCredits.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center mb-2">
-                    <h3 className="text-sm font-medium">Available Credits</h3>
-                    <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
-                  </div>
-                  
-                  <div className="border rounded-sm overflow-hidden">
-                    <div className="bg-gray-50 grid grid-cols-5 text-xs font-medium p-2 border-b">
-                      <div className="col-span-1">APPLY</div>
-                      <div className="col-span-1">DATE</div>
-                      <div className="col-span-2">REFERENCE</div>
-                      <div className="col-span-1 text-right">AMOUNT</div>
-                    </div>
-                    
-                    {customerCredits.map((credit) => (
-                      <div key={credit.id} className="grid grid-cols-5 p-2 border-b hover:bg-gray-50">
-                        <div className="col-span-1 flex items-center">
-                          <Checkbox 
-                            id={`credit-${credit.id}`}
-                            checked={selectedCredits[credit.id] || false}
-                            onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
-                          />
-                        </div>
-                        <div className="col-span-1 text-sm">
-                          {format(new Date(credit.date), 'dd/MM/yyyy')}
-                        </div>
-                        <div className="col-span-2 text-sm">
-                          {credit.reference || `Credit #${credit.id}`}
-                        </div>
-                        <div className="col-span-1 text-sm text-right">
-                          ${Math.abs(credit.balance || 0).toFixed(2)}
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {customerCredits.length === 0 && (
-                      <div className="p-3 text-center text-gray-500 text-sm">
-                        No credits available for this customer
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              {/* Credit application functionality has been removed */}
               
               {/* Invoice message */}
               <div>
@@ -1177,10 +1067,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             <div>
               <div className="mb-6 text-right">
                 <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${(totalAmount - appliedCreditAmount).toFixed(2)}</div>
-                {appliedCreditAmount > 0 && (
-                  <div className="text-sm text-green-600">Including ${appliedCreditAmount.toFixed(2)} in applied credits</div>
-                )}
+                <div className="text-2xl font-medium">${totalAmount.toFixed(2)}</div>
+                {/* Credit application functionality has been removed */}
               </div>
               
               <div className="space-y-4">
