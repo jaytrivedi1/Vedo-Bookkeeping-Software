@@ -505,7 +505,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || defaultInvoiceNumber,
-      status: 'pending' as const, // Default status for new invoices
+      status: 'open' as const, // Default status for new invoices
       description: data.description || '',
       subTotal,
       taxAmount,

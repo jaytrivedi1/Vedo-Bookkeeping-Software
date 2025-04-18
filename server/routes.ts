@@ -457,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
         // Ensure these fields exist even if they weren't sent
         reference: req.body.reference || `INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
-        status: req.body.status || 'pending',
+        status: req.body.status || 'open',
         description: req.body.description || ''
       };
       
@@ -710,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const invoice = await storage.getTransaction(item.transactionId);
           if (invoice) {
             const newBalance = invoice.balance !== null ? invoice.balance - item.amount : invoice.amount - item.amount;
-            const newStatus = newBalance <= 0 ? 'paid' : 'pending';
+            const newStatus = newBalance <= 0 ? 'paid' : 'open';
             
             await storage.updateTransaction(invoice.id, {
               balance: newBalance,
