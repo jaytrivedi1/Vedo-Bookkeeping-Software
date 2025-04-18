@@ -495,7 +495,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     // Automatically add/apply full credit amount to the invoice
     if (checked && customerCredits) {
-      const selectedCredit = customerCredits.find((c: Transaction) => c.id === creditId);
+      const selectedCredit = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
       if (selectedCredit) {
         // Add the credit to form.appliedCredits
         const creditAmount = (selectedCredit.balance !== null && selectedCredit.balance !== undefined) 
@@ -514,6 +514,9 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             type: 'deposit'
           }
         ]);
+        
+        // Update applied credit amount immediately for display
+        setAppliedCreditAmount(prev => prev + creditAmount);
       }
     } else {
       // Remove this credit from applied credits if unchecked
@@ -521,6 +524,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       form.setValue('appliedCredits', 
         existingAppliedCredits.filter(c => c.transactionId !== creditId)
       );
+      
+      // Find the credit that was unchecked to subtract its amount
+      const unselectedCredit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
+      if (unselectedCredit) {
+        const creditAmount = (unselectedCredit.balance !== null && unselectedCredit.balance !== undefined) 
+          ? Math.abs(unselectedCredit.balance) 
+          : Math.abs(unselectedCredit.amount);
+        
+        // Subtract this amount from applied credits
+        setAppliedCreditAmount(prev => Math.max(0, prev - creditAmount));
+      }
     }
     
     // Recalculate totals to update the applied credit amount
@@ -1036,7 +1050,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="0">None</SelectItem>
-                                    {salesTaxes?.map((tax) => (
+                                    {salesTaxes?.filter(tax => !tax.parentId).map((tax) => (
                                       <SelectItem key={tax.id} value={tax.id.toString()}>
                                         {tax.name} ({tax.rate}%)
                                       </SelectItem>
