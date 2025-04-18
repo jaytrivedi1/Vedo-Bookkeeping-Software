@@ -2193,6 +2193,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Endpoint to update a ledger entry
+  apiRouter.patch("/ledger-entries/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Validate the update data
+      const body = {
+        ...req.body,
+        date: req.body.date ? new Date(req.body.date) : undefined,
+      };
+      
+      // Update the ledger entry
+      const updatedEntry = await storage.updateLedgerEntry(id, body);
+      
+      if (!updatedEntry) {
+        return res.status(404).json({ message: "Ledger entry not found" });
+      }
+      
+      res.json(updatedEntry);
+    } catch (error) {
+      console.error("Error updating ledger entry:", error);
+      res.status(500).json({ message: "Failed to update ledger entry", error: String(error) });
+    }
+  });
+  
   // General Ledger report route - for date range filtering
   apiRouter.get("/reports/general-ledger", async (req: Request, res: Response) => {
     try {

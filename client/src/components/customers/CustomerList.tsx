@@ -489,13 +489,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                 
                 {/* Summary */}
                 <div className="border-t mt-6 p-6">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500">Total Invoiced</h3>
-                      <p className="text-xl font-semibold">
-                        {formatCurrency(customerInvoices.reduce((sum, i) => sum + i.amount, 0))}
-                      </p>
-                    </div>
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Outstanding Balance</h3>
                       <p className="text-xl font-semibold text-blue-700">
