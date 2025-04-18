@@ -160,11 +160,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateTransaction(id: number, transactionUpdate: Partial<Transaction>): Promise<Transaction | undefined> {
-    const [updatedTransaction] = await db.update(transactions)
-      .set(transactionUpdate)
-      .where(eq(transactions.id, id))
-      .returning();
-    return updatedTransaction;
+    try {
+      // If this is an unapplied credit and amount is changing, make sure balance is updated correctly
+      const existingTransaction = await this.getTransaction(id);
+      
+      if (existingTransaction && 
+          existingTransaction.type === 'deposit' && 
+          existingTransaction.status === 'unapplied_credit' && 
+          transactionUpdate.amount !== undefined && 
+          transactionUpdate.balance === undefined) {
+        
+        // For unapplied credits, balance should be negative of the amount
+        transactionUpdate.balance = -transactionUpdate.amount;
+        console.log(`Auto-setting balance to ${transactionUpdate.balance} for unapplied credit ${id}`);
+      }
+      
+      const [updatedTransaction] = await db.update(transactions)
+        .set(transactionUpdate)
+        .where(eq(transactions.id, id))
+        .returning();
+      
+      return updatedTransaction;
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      return undefined;
+    }
   }
   
   /**
