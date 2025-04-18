@@ -502,14 +502,33 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   
   // Handle toggling a credit for application against this invoice
   const handleCreditToggle = (creditId: number, checked: boolean) => {
+    // Update the selected credits state
     setSelectedCredits(prev => ({
       ...prev,
       [creditId]: checked
     }));
     
-    // Automatically add/apply full credit amount to the invoice
-    if (checked && customerCredits) {
-      const selectedCredit = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
+    // If checked, REMOVE the credit (opposite of before)
+    if (!checked && customerCredits) {
+      const unselectedCredit = customerCredits.find((c: Transaction) => c.id === parseInt(creditId.toString()));
+      if (unselectedCredit) {
+        // Remove this credit from applied credits
+        const existingAppliedCredits = form.getValues('appliedCredits') || [];
+        form.setValue('appliedCredits', 
+          existingAppliedCredits.filter(c => c.transactionId !== creditId)
+        );
+        
+        // Calculate the credit amount
+        const creditAmount = (unselectedCredit.balance !== null && unselectedCredit.balance !== undefined) 
+          ? Math.abs(unselectedCredit.balance) 
+          : Math.abs(unselectedCredit.amount);
+        
+        // Subtract this amount from applied credits
+        setAppliedCreditAmount(prev => Math.max(0, prev - creditAmount));
+      }
+    } else {
+      // If unchecked, ADD the credit (opposite of before)
+      const selectedCredit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
       if (selectedCredit) {
         // Add the credit to form.appliedCredits
         const creditAmount = (selectedCredit.balance !== null && selectedCredit.balance !== undefined) 
@@ -531,23 +550,6 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
         
         // Update applied credit amount immediately for display
         setAppliedCreditAmount(prev => prev + creditAmount);
-      }
-    } else {
-      // Remove this credit from applied credits if unchecked
-      const existingAppliedCredits = form.getValues('appliedCredits') || [];
-      form.setValue('appliedCredits', 
-        existingAppliedCredits.filter(c => c.transactionId !== creditId)
-      );
-      
-      // Find the credit that was unchecked to subtract its amount
-      const unselectedCredit = customerCredits?.find((c: Transaction) => c.id === parseInt(creditId.toString()));
-      if (unselectedCredit) {
-        const creditAmount = (unselectedCredit.balance !== null && unselectedCredit.balance !== undefined) 
-          ? Math.abs(unselectedCredit.balance) 
-          : Math.abs(unselectedCredit.amount);
-        
-        // Subtract this amount from applied credits
-        setAppliedCreditAmount(prev => Math.max(0, prev - creditAmount));
       }
     }
     
@@ -1181,7 +1183,7 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
               {/* Available customer credits section */}
               {customerCredits && customerCredits.length > 0 && (
                 <div className="mt-4">
-                  <div className="text-sm font-medium mb-2">Available Credits</div>
+                  <div className="text-sm font-medium mb-2">Available Credits (uncheck to apply credit)</div>
                   <div className="border rounded-sm overflow-hidden">
                     {customerCredits.map((credit: any) => {
                       const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
@@ -1189,13 +1191,18 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                         : Math.abs(credit.amount);
                       
                       return (
-                        <div key={credit.id} className="flex items-center justify-between border-b p-2">
+                        <div key={credit.id} className={`flex items-center justify-between border-b p-2 ${!selectedCredits[credit.id] ? 'bg-green-50' : ''}`}>
                           <div className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`credit-${credit.id}`}
-                              checked={selectedCredits[credit.id] || false}
-                              onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
-                            />
+                            <div className="flex items-center">
+                              <Checkbox
+                                id={`credit-${credit.id}`}
+                                checked={selectedCredits[credit.id] || false}
+                                onCheckedChange={(checked) => handleCreditToggle(credit.id, checked as boolean)}
+                              />
+                              <label htmlFor={`credit-${credit.id}`} className="ml-2 text-xs text-gray-600">
+                                {selectedCredits[credit.id] ? 'Not applied' : 'Applied'}
+                              </label>
+                            </div>
                             <div>
                               <div className="text-sm">{credit.reference || `Credit from ${format(new Date(credit.date), 'MMM d, yyyy')}`}</div>
                               <div className="text-xs text-gray-500">{format(new Date(credit.date), 'MMM d, yyyy')}</div>
