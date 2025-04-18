@@ -1,42 +1,57 @@
-import { pool } from "./db";
+import { db, pool } from './db';
+import { log } from './vite';
+import { eq } from 'drizzle-orm';
+import { transactions } from '@shared/schema';
 
-/**
- * Migration script to update status enum in the database to include 'unapplied_credit'
- */
-async function migrateStatusEnum() {
-  console.log("Starting migration to update status enum...");
-  
+// Migration to add 'open' status to the enum
+export default async function migrateStatusEnum() {
   try {
-    // Check if unapplied_credit is already in the enum type
-    const checkQuery = `
-      SELECT EXISTS (
-        SELECT 1 FROM pg_enum
-        WHERE enumlabel = 'unapplied_credit'
-        AND enumtypid = (
-          SELECT oid FROM pg_type WHERE typname = 'status'
-        )
-      );
-    `;
+    log('Starting migration to update status enum...');
     
-    const checkResult = await pool.query(checkQuery);
-    
-    if (checkResult.rows[0].exists) {
-      console.log("'unapplied_credit' value already exists in status enum. Skipping migration.");
-      return;
-    }
-    
-    console.log("Adding 'unapplied_credit' to status enum type...");
-    
-    // Add the new enum value
-    await pool.query(`
-      ALTER TYPE status ADD VALUE IF NOT EXISTS 'unapplied_credit';
+    // First check if 'open' already exists in the status enum
+    const checkOpenResult = await pool.query(`
+      SELECT 
+        enumlabel 
+      FROM pg_enum 
+      JOIN pg_type ON pg_enum.enumtypid = pg_type.oid 
+      WHERE pg_type.typname = 'status' AND enumlabel = 'open'
     `);
     
-    console.log("Status enum migration completed successfully!");
+    if (checkOpenResult.rows.length === 0) {
+      // Add 'open' value to the status enum if it doesn't exist
+      await pool.query(`
+        ALTER TYPE status ADD VALUE IF NOT EXISTS 'open';
+      `);
+      
+      log("Added 'open' value to status enum");
+      
+      // Update all invoices with status 'pending' to 'open'
+      const result = await pool.query(`
+        UPDATE transactions
+        SET status = 'open'
+        WHERE type = 'invoice' AND status = 'pending'
+        RETURNING id
+      `);
+      
+      log(`Updated ${result.rowCount} invoice statuses from 'pending' to 'open'`);
+    } else {
+      log("'open' value already exists in status enum.");
+      
+      // Even if the enum exists, make sure all pending invoices are updated to open
+      const result = await pool.query(`
+        UPDATE transactions
+        SET status = 'open'
+        WHERE type = 'invoice' AND status = 'pending'
+        RETURNING id
+      `);
+      
+      log(`Updated ${result.rowCount} invoice statuses from 'pending' to 'open'`);
+    }
+    
+    log('Status enum migration completed successfully!');
   } catch (error) {
-    console.error("Error migrating status enum:", error);
+    console.error('Error in status enum migration:', error);
+    log(`Error in status enum migration: ${error}`);
     throw error;
   }
 }
-
-export default migrateStatusEnum;

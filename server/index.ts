@@ -7,6 +7,7 @@ import { migrateCompanyTable } from "./migrate-company";
 import migrateSalesTaxComponents from "./migrate-sales-tax-components";
 import migrateTransactions from "./migrate-transactions";
 import migrateStatusEnum from "./migrate-status-enum";
+import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 
 const app = express();
 app.use(express.json());
@@ -63,6 +64,9 @@ app.use((req, res, next) => {
     
     // Run status enum migration to add unapplied_credit status
     await migrateStatusEnum();
+    
+    // Run migration to add 'open' status to enum and update old 'pending' invoices
+    await migrateOpenStatus();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
