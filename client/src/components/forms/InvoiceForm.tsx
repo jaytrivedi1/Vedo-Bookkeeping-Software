@@ -67,6 +67,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
+  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
+  const [selectedCredits, setSelectedCredits] = useState<Record<number, boolean>>({});
   const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
   const { toast } = useToast();
 
@@ -86,7 +88,22 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     queryKey: ['/api/products'],
   });
   
-  // Credit functionality has been removed
+  // Fetch customer's unapplied credits
+  const { data: customerCredits, isLoading: isCreditsLoading } = useQuery<Transaction[]>({
+    queryKey: ['/api/transactions', { type: 'deposit', contactId: watchContactId, status: 'unapplied_credit' }],
+    queryFn: async () => {
+      if (!watchContactId) return [];
+      // Get all transactions
+      const allTransactions = await apiRequest(`/api/transactions`);
+      // Filter for unapplied credit deposits for this customer
+      return allTransactions.filter((transaction: Transaction) => 
+        transaction.type === 'deposit' && 
+        transaction.contactId === watchContactId &&
+        transaction.status === 'unapplied_credit'
+      );
+    },
+    enabled: !!watchContactId
+  });
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -391,7 +408,18 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     
     const total = subtotal + totalTaxAmount;
     
-    // Credit application functionality has been removed
+    // Calculate applied credits amount based on selected credits
+    let appliedCreditsAmount = 0;
+    if (customerCredits && customerCredits.length > 0 && Object.keys(selectedCredits).length > 0) {
+      // Sum up the amounts of all selected credits
+      appliedCreditsAmount = customerCredits
+        .filter(credit => selectedCredits[credit.id] === true)
+        .reduce((sum, credit) => {
+          // Credit balance is stored as negative, so we need to use the absolute value
+          return sum + Math.abs(credit.balance || 0);
+        }, 0);
+    }
+    setAppliedCreditAmount(appliedCreditsAmount);
     
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
@@ -406,6 +434,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       subtotal, 
       totalTaxAmount, 
       total,
+      appliedCredits: appliedCreditsAmount,
+      balanceDue: total - appliedCreditsAmount,
       lineItems,
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
@@ -453,7 +483,17 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     }
   };
   
-  // Credit application functionality has been removed
+  // Handle credit selection via checkbox
+  const handleCreditToggle = (creditId: number, checked: boolean) => {
+    // Update the selected credits state
+    setSelectedCredits(prev => ({
+      ...prev,
+      [creditId]: checked
+    }));
+    
+    // Recalculate totals to update applied credit amount
+    calculateTotals();
+  };
 
   // Update totals whenever line items change
   useEffect(() => {
@@ -534,7 +574,27 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Credit application functionality has been removed
+    // Add applied credits to the invoice data before submitting
+    const appliedCredits = [];
+    let totalAppliedCreditAmount = 0;
+    
+    if (customerCredits && selectedCredits) {
+      for (const creditId in selectedCredits) {
+        if (selectedCredits[creditId]) {
+          const credit = customerCredits.find(c => c.id === parseInt(creditId));
+          if (credit) {
+            appliedCredits.push({
+              creditId: credit.id,
+              amount: Math.abs(credit.balance || 0)
+            });
+            totalAppliedCreditAmount += Math.abs(credit.balance || 0);
+          }
+        }
+      }
+    }
+    
+    enrichedData.appliedCredits = appliedCredits;
+    enrichedData.appliedCreditAmount = totalAppliedCreditAmount;
     
     console.log("Sending to server:", enrichedData);
     if (createInvoice.isPending) return; // Prevent double submission
