@@ -1365,6 +1365,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingLineItems = await storage.getLineItemsByTransaction(transactionId);
       const existingLedgerEntries = await storage.getLedgerEntriesByTransaction(transactionId);
       
+      // For deposit updates, make sure we update the balance correctly 
+      // when the amount changes (important for unapplied credits)
+      if (existingTransaction.type === 'deposit' && 
+          existingTransaction.status === 'unapplied_credit' &&
+          body.amount !== undefined && 
+          body.amount !== existingTransaction.amount) {
+        // For unapplied credits, the balance should be negative (representing credits)
+        body.balance = -body.amount;
+        console.log(`Updating deposit balance to ${body.balance} for amount ${body.amount}`);
+      }
+      
       // Handle specific transaction types
       if (existingTransaction.type === 'payment') {
         // For payments, we need to update the payment details and ledger entries

@@ -241,6 +241,29 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   const updateDepositMutation = useMutation({
     mutationFn: async (data: any) => {
       if (!initialData?.id) throw new Error("Missing deposit ID for update");
+      
+      // For deposit updates, we need to update the ledger entries as well
+      if (ledgerEntries && ledgerEntries.length > 0) {
+        // Find the debit and credit entries
+        const debitEntry = ledgerEntries.find(entry => entry.debit > 0);
+        const creditEntry = ledgerEntries.find(entry => entry.credit > 0);
+        
+        // Update the ledger entries if the amount has changed
+        if (debitEntry && creditEntry && data.amount !== initialData.amount) {
+          // Update debit entry
+          await apiRequest(`/api/ledger-entries/${debitEntry.id}`, 'PATCH', {
+            debit: data.amount,
+            date: data.date
+          });
+          
+          // Update credit entry
+          await apiRequest(`/api/ledger-entries/${creditEntry.id}`, 'PATCH', {
+            credit: data.amount,
+            date: data.date
+          });
+        }
+      }
+      
       return await apiRequest(`/api/transactions/${initialData.id}`, 'PATCH', data);
     },
     onSuccess: () => {
@@ -250,6 +273,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
       if (onSuccess) {
         onSuccess();
       } else {
