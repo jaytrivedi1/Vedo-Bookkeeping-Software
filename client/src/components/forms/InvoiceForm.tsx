@@ -463,8 +463,8 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     setTaxNames(taxNameList);
     
     // Calculate balance due (total - applied credits)
-    const newBalanceDue = Math.max(0, total - appliedCreditAmount);
-    setBalanceDue(newBalanceDue);
+    const newBalanceDue = total - appliedCreditAmount;
+    setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
   };
 
   const updateLineItemAmount = (index: number) => {
