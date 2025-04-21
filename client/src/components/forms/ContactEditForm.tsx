@@ -34,7 +34,7 @@ const contactEditSchema = z.object({
   email: z.string().email("Invalid email address").optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
-  type: z.enum(['customer', 'vendor', 'both']),
+  type: z.enum(['customer', 'vendor']), // Removed 'both' option
   currency: z.string().optional(),
   defaultTaxRate: z.number().optional().nullable(),
 });
@@ -60,7 +60,12 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
       email: contact.email || "",
       phone: contact.phone || "",
       address: contact.address || "",
-      type: (contact.type as "customer" | "vendor" | "both") || "customer",
+      // Convert "both" to "customer" or handle other types for backward compatibility
+      type: contact.type === "both" 
+        ? "customer" 
+        : (contact.type === "customer" || contact.type === "vendor") 
+          ? contact.type 
+          : "customer",
       currency: contact.currency || "USD",
       defaultTaxRate: contact.defaultTaxRate || null,
     },
@@ -188,7 +193,6 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
                 <SelectContent>
                   <SelectItem value="customer">Customer</SelectItem>
                   <SelectItem value="vendor">Vendor</SelectItem>
-                  <SelectItem value="both">Both</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
