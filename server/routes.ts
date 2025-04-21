@@ -1590,14 +1590,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Deleting ${transaction.type} transaction: ${transaction.reference}`);
       
-      // Check if this is a system-generated unapplied credit transaction
-      if (transaction.type === 'deposit' && 
-          transaction.status === 'unapplied_credit' && 
-          transaction.description?.includes("Unapplied credit from payment")) {
-        // This is a system-generated unapplied credit that shouldn't be directly deleted
-        return res.status(403).json({ 
-          message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
-        });
+      // PROTECTION: Prevent deletion of deposit entries that have been applied to invoices
+      if (transaction.type === 'deposit') {
+        // For deposits with unapplied_credit status
+        if (transaction.status === 'unapplied_credit') {
+          // If this is a system-generated credit (original protection)
+          if (transaction.description?.includes("Unapplied credit from payment")) {
+            return res.status(403).json({ 
+              message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
+            });
+          }
+          
+          // If deposit has been partially applied (balance different from amount)
+          // Using Math.abs because balance is negative for unapplied credits
+          if (transaction.balance !== null && Math.abs(transaction.balance) !== transaction.amount) {
+            return res.status(403).json({ 
+              message: "Cannot delete a deposit that has been partially applied to invoices. The credit must be fully restored first." 
+            });
+          }
+        }
+        
+        // For deposits with completed status (fully applied)
+        if (transaction.status === 'completed') {
+          return res.status(403).json({ 
+            message: "Cannot delete a deposit that has been fully applied to invoices. Remove the credit applications first." 
+          });
+        }
       }
       
       // Get all transactions to search for related ones
