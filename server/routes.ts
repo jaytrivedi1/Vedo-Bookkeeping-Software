@@ -505,6 +505,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: invoiceData.date,
         description: invoiceData.description,
         amount: totalAmount,
+        balance: totalAmount, // Set the initial balance to match the total amount
         contactId: invoiceData.contactId,
         status: invoiceData.status
       };
