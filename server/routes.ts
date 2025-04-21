@@ -688,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             },
             // Add each credit deposit as a line item
             ...req.body.appliedCredits.map((credit: any) => ({
-              transactionId: credit.transactionId,
+              transactionId: credit.id, // Use credit.id instead of credit.transactionId
               amount: credit.amount,
               type: 'deposit'
             }))
