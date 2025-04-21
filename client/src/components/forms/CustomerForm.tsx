@@ -40,9 +40,8 @@ const customerFormSchema = insertContactSchema.extend({
   address: z.string().optional(),
   defaultTaxRate: z.number().optional(),
   documentIds: z.array(z.string()).optional(),
-}).refine(data => data.type === 'customer' || data.type === 'both', {
-  message: "Type must be either 'customer' or 'both'",
-  path: ['type']
+  // Type is always "customer"
+  type: z.literal("customer"),
 });
 
 type CustomerFormValues = z.infer<typeof customerFormSchema>;
@@ -262,30 +261,8 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
             />
           </div>
           
-          <FormField
-            control={form.control}
-            name="type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Contact Type</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select contact type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="both">Customer & Vendor</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Hidden field for type - always "customer" */}
+          <input type="hidden" {...form.register("type")} value="customer" />
           
           {/* Document upload */}
           <div>

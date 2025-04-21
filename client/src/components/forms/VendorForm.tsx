@@ -21,6 +21,8 @@ import { insertContactSchema } from "@shared/schema";
 // Extend the schema with validation
 const vendorFormSchema = insertContactSchema.extend({
   name: z.string().min(1, "Vendor name is required"),
+  // Type is always "vendor"
+  type: z.literal("vendor"),
 });
 
 type VendorFormValues = z.infer<typeof vendorFormSchema>;
