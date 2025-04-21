@@ -415,7 +415,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   transaction.balance !== undefined &&
                                   transaction.balance > 0 && 
                                   transaction.status === 'open'
-                                    ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Open</Badge>
+                                    ? <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>
                                     : getStatusBadge(transaction.status);
                                 
                               return (
