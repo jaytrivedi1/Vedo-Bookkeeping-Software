@@ -1789,68 +1789,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Calculate the current balance - either 0 if completed or some negative value if partially applied
             const currentBalance = deposit.balance || 0;
             
-            // Check if this deposit was previously partially applied to another invoice
-            // and is now being restored
+            // We need to properly track applied credits by fetching all ledger entries
+            // to determine how much of this deposit has already been applied elsewhere
+            const ledgerEntries = await storage.getLedgerEntriesByTransaction(deposit.id);
+            const allLedgerEntries = await storage.getAllLedgerEntries();
             
-            // For completed deposits (fully applied), we need to restore the credit based on original amount
+            // Find all places where this deposit ID has been used as a credit
+            // by looking at descriptions containing references to this deposit
+            const depositRef = deposit.reference;
+            const depositId = deposit.id.toString();
+            
+            // Search all ledger entries for references to this deposit being applied 
+            // to invoices OTHER than the one being deleted
+            const otherApplications = allLedgerEntries.filter(entry => {
+              // Look for credit applications from this deposit
+              const isDepositApplication = 
+                (entry.description?.includes(`from deposit #${depositRef}`) || 
+                 entry.description?.includes(`from deposit #${depositId}`)) &&
+                 entry.debit > 0; // Debit entries represent applications of the credit
+              
+              // If it's related to the deposit and not part of the transaction we're deleting
+              // and not a ledger entry for the deposit itself
+              return isDepositApplication && 
+                     entry.transactionId !== id && // Not the invoice we're deleting
+                     entry.transactionId !== deposit.id; // Not the deposit's own ledger entries
+            });
+            
+            // Calculate total amount of deposit already applied elsewhere
+            const totalAppliedElsewhere = otherApplications.reduce((sum, entry) => sum + entry.debit, 0);
+            console.log(`Deposit #${deposit.id} has ${totalAppliedElsewhere} already applied to other invoices`);
+            
+            // Calculate how much to restore based on the amount that was applied to THIS invoice
+            const amountToRestore = appliedCredit.amount;
+            
+            // The available credit should be the original amount minus amounts applied elsewhere
+            const availableCredit = deposit.amount - totalAppliedElsewhere;
+            
+            // For completed deposits, change to unapplied_credit with correct balance
             if (deposit.status === 'completed') {
-              // Look for Apr 17 deposit special case (ID 102)
-              if (deposit.id === 102) {
-                // For Apr 17 deposit, we know it has $800 total, $400 used on Invoice 1003, and $400 on this deleted invoice
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -400  // Only restore the amount that was applied to this invoice (-400)
-                });
-                console.log(`SPECIAL CASE: Restored deposit #${deposit.id} (Apr 17) to -400 (accounting for Invoice 1003)`);
-              }
-              else if (deposit.id === 111) {
-                // For Apr 21 deposit, we know it has $2000 total
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -2000  // Restore to full amount
-                });
-                console.log(`SPECIAL CASE: Restored deposit #${deposit.id} (Apr 21) to -2000 (full amount)`);
-              }
-              else {
-                // Default case - use full deposit amount
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -deposit.amount  // Full negative balance
-                });
-                console.log(`Restored deposit #${deposit.id} to unapplied_credit with balance -${deposit.amount}`);
-              }
+              await storage.updateTransaction(deposit.id, {
+                status: 'unapplied_credit',
+                balance: -availableCredit  // Negative balance represents available credit
+              });
+              console.log(`Restored deposit #${deposit.id} to unapplied_credit with balance -${availableCredit}`);
             } 
-            // If it's already partially applied, add the applied amount back to its balance
+            // For already partially applied deposits, adjust the balance
             else if (deposit.status === 'unapplied_credit') {
-              // Apply the special case logic again
-              if (deposit.id === 102) {
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -400
-                });
-                console.log(`SPECIAL CASE: Updated partially applied deposit #${deposit.id} (Apr 17) to -400`);
-              }
-              else if (deposit.id === 111) {
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -2000
-                });
-                console.log(`SPECIAL CASE: Updated partially applied deposit #${deposit.id} (Apr 21) to -2000`);
-              }
-              else {
-                // For regular deposits, just add the amount back to the balance
-                // but make sure we're dealing with a valid numeric balance
-                let currentBalanceValue = typeof currentBalance === 'number' ? currentBalance : -deposit.amount;
-                
-                // Calculate how much more credit to add back (make more negative)
-                const newBalance = currentBalanceValue - appliedCredit.amount;
-                
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: newBalance
-                });
-                console.log(`Added ${appliedCredit.amount} back to deposit #${deposit.id}, new balance: ${newBalance}`);
-              }
+              // Get the current negative balance and make it more negative by adding the amount applied to THIS invoice
+              // Note: deposit balances are stored as negative values for available credit
+              const currentBalanceValue = typeof currentBalance === 'number' ? Math.abs(currentBalance) : 0;
+              
+              // The new balance should be the credit amount restored from THIS invoice plus existing balance
+              const newAvailableCredit = currentBalanceValue + amountToRestore;
+              
+              // Double-check we don't exceed original amount
+              const finalBalance = Math.min(newAvailableCredit, availableCredit);
+              
+              await storage.updateTransaction(deposit.id, {
+                status: 'unapplied_credit',
+                balance: -finalBalance  // Always negative for available credit
+              });
+              console.log(`Updated deposit #${deposit.id} balance to -${finalBalance}, restored ${amountToRestore}`);
             }
           }
         }
@@ -1869,28 +1868,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
             for (const credit of possibleCredits) {
               console.log(`Reverting deposit #${credit.id} (${credit.reference}) to unapplied_credit status`);
               
-              // Apply special case handling here too
-              if (credit.id === 102) {
-                await storage.updateTransaction(credit.id, {
-                  status: 'unapplied_credit',
-                  balance: -400  // Only 400 should be available for Apr 17 deposit
-                });
-                console.log(`SPECIAL CASE: Restored deposit #${credit.id} (Apr 17) to -400 (accounting for Invoice 1003)`);
-              }
-              else if (credit.id === 111) {
-                await storage.updateTransaction(credit.id, {
-                  status: 'unapplied_credit',
-                  balance: -2000  // Full 2000 for Apr 21
-                });
-                console.log(`SPECIAL CASE: Restored deposit #${credit.id} (Apr 21) to -2000 (full amount)`);
-              }
-              else {
-                await storage.updateTransaction(credit.id, {
-                  status: 'unapplied_credit',
-                  balance: -credit.amount  // Set negative balance to indicate available credit
-                });
-                console.log(`Reverted deposit #${credit.id} to unapplied_credit with balance -${credit.amount}`);
-              }
+              // For each deposit, calculate how much is already applied elsewhere
+              const allLedgerEntries = await storage.getAllLedgerEntries();
+              
+              // Find all ledger entries referencing this deposit being applied elsewhere
+              const depositRef = credit.reference;
+              const depositId = credit.id.toString();
+              
+              // Look for entries where this deposit was applied to other invoices
+              const otherApplications = allLedgerEntries.filter(entry => {
+                // Look for credit applications from this deposit
+                const isDepositApplication = 
+                  (entry.description?.includes(`from deposit #${depositRef}`) || 
+                   entry.description?.includes(`from deposit #${depositId}`)) &&
+                   entry.debit > 0; // Debit entries represent applications of the credit
+                
+                // Skip the current transaction being deleted and deposit's own entries
+                return isDepositApplication && 
+                       entry.transactionId !== id &&
+                       entry.transactionId !== credit.id;
+              });
+              
+              // Calculate total credit already applied elsewhere
+              const totalAppliedElsewhere = otherApplications.reduce((sum, entry) => sum + entry.debit, 0);
+              console.log(`Deposit #${credit.id} has ${totalAppliedElsewhere} already applied to other invoices`);
+              
+              // Calculate available credit
+              const availableCredit = credit.amount - totalAppliedElsewhere;
+              
+              await storage.updateTransaction(credit.id, {
+                status: 'unapplied_credit',
+                balance: -availableCredit  // Negative balance for available credit
+              });
+              console.log(`Restored deposit #${credit.id} to unapplied_credit with balance -${availableCredit}`);
             }
           }
         }
@@ -1935,28 +1945,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 if (deposit) {
                   console.log(`Found deposit #${deposit.id} (${deposit.reference}) to revert to unapplied_credit`);
                   
-                  // Update the deposit to revert it to unapplied_credit status
-                  if (deposit.id === 102) {
-                    await storage.updateTransaction(deposit.id, {
-                      status: 'unapplied_credit',
-                      balance: -400  // Only 400 should be available for Apr 17 deposit
-                    });
-                    console.log(`SPECIAL CASE: Restored deposit #${deposit.id} (Apr 17) to -400 (accounting for Invoice 1003)`);
-                  }
-                  else if (deposit.id === 111) {
-                    await storage.updateTransaction(deposit.id, {
-                      status: 'unapplied_credit',
-                      balance: -2000  // Full 2000 for Apr 21
-                    });
-                    console.log(`SPECIAL CASE: Restored deposit #${deposit.id} (Apr 21) to -2000 (full amount)`);
-                  }
-                  else {
-                    await storage.updateTransaction(deposit.id, {
-                      status: 'unapplied_credit',
-                      balance: -deposit.amount  // Reset to original negative balance
-                    });
-                    console.log(`Reverted deposit #${deposit.id} to unapplied_credit status with balance -${deposit.amount}`);
-                  }
+                  // Determine how much of this deposit is already applied elsewhere
+                  const allLedgerEntries = await storage.getAllLedgerEntries();
+                  
+                  // Find all ledger entries referencing this deposit being applied elsewhere
+                  const depositRef = deposit.reference;
+                  const depositId = deposit.id.toString();
+                  
+                  // Look for entries where this deposit was applied to other invoices
+                  const otherApplications = allLedgerEntries.filter(entry => {
+                    // Look for credit applications from this deposit
+                    const isDepositApplication = 
+                      (entry.description?.includes(`from deposit #${depositRef}`) || 
+                       entry.description?.includes(`from deposit #${depositId}`)) &&
+                       entry.debit > 0; // Debit entries represent applications
+                    
+                    // Skip entries from the transaction we're deleting or from the deposit itself
+                    return isDepositApplication && 
+                           entry.transactionId !== id &&
+                           entry.transactionId !== deposit.id;
+                  });
+                  
+                  // Calculate total already applied elsewhere
+                  const totalAppliedElsewhere = otherApplications.reduce((sum, entry) => sum + entry.debit, 0);
+                  console.log(`Deposit #${deposit.id} has ${totalAppliedElsewhere} already applied to other invoices`);
+                  
+                  // Calculate available credit
+                  const availableCredit = deposit.amount - totalAppliedElsewhere;
+                  
+                  await storage.updateTransaction(deposit.id, {
+                    status: 'unapplied_credit',
+                    balance: -availableCredit  // Negative balance for available credit
+                  });
+                  console.log(`Restored deposit #${deposit.id} to unapplied_credit with balance -${availableCredit}`);
                 }
               }
             }
