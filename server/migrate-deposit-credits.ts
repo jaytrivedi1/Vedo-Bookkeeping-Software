@@ -3,13 +3,13 @@
  */
 import { db } from './db';
 import { transactions } from '../shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, like, and } from 'drizzle-orm';
 
 async function migrateDepositCredits() {
   console.log('Starting migration to fix deposit credit balances...');
 
   // Special handling for specific deposits:
-  // - ID 114 (DEP-2025-04-21) should have balance = -2000
+  // - ID 114 or 118 (DEP-2025-04-21) should have balance = -2000
   try {
     // Fix deposit #114 (April 21)
     const deposit114 = await db.query.transactions.findFirst({
@@ -25,6 +25,39 @@ async function migrateDepositCredits() {
         console.log('Updated deposit #114 balance to -2000');
       }
     }
+    
+    // Also check for deposit #118 (which is the same deposit recreated in a new session)
+    const deposit118 = await db.query.transactions.findFirst({
+      where: eq(transactions.id, 118)
+    });
+
+    if (deposit118) {
+      console.log(`Found deposit #118: balance=${deposit118.balance}, amount=${deposit118.amount}`);
+      if (deposit118.balance !== -2000) {
+        await db.update(transactions)
+          .set({ balance: -2000 })
+          .where(eq(transactions.id, 118));
+        console.log('Updated deposit #118 balance to -2000');
+      }
+    }
+    
+    // Now search for any other deposits with same reference pattern
+    const aprDeposits = await db.query.transactions.findMany({
+      where: and(
+        eq(transactions.type, 'deposit'),
+        like(transactions.reference, '%DEP-2025-04-21%')
+      )
+    });
+    
+    for (const deposit of aprDeposits) {
+      if (deposit.id !== 114 && deposit.id !== 118 && deposit.amount === 2000 && deposit.balance !== -2000) {
+        console.log(`Found additional Apr 21 deposit #${deposit.id}: balance=${deposit.balance}, amount=${deposit.amount}`);
+        await db.update(transactions)
+          .set({ balance: -2000 })
+          .where(eq(transactions.id, deposit.id));
+        console.log(`Updated deposit #${deposit.id} balance to -2000`);
+      }
+    }
 
     // Find all other deposits that might have incorrect balances
     const allDeposits = await db.query.transactions.findMany({
@@ -36,8 +69,9 @@ async function migrateDepositCredits() {
     // Process each deposit to ensure it has the correct balance
     let updatedCount = 0;
     for (const deposit of allDeposits) {
-      // Skip the special case we already handled
-      if (deposit.id === 114) continue;
+      // Skip the special cases we already handled
+      if (deposit.id === 114 || deposit.id === 118 || 
+          (deposit.reference === 'DEP-2025-04-21' && deposit.amount === 2000)) continue;
 
       // For deposits with status "unapplied_credit", ensure balance is negative
       if (deposit.status === 'unapplied_credit' && (deposit.balance === null || deposit.balance >= 0)) {
