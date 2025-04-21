@@ -181,7 +181,10 @@ export type InsertAccount = z.infer<typeof insertAccountSchema>;
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
 
-export type Transaction = typeof transactions.$inferSelect;
+export type Transaction = typeof transactions.$inferSelect & {
+  appliedCredits?: { id: number; amount: number }[];
+  appliedCreditAmount?: number;
+};
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
 export type LineItem = typeof lineItems.$inferSelect;
