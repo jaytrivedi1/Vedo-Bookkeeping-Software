@@ -269,6 +269,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create contact" });
     }
   });
+  
+  apiRouter.patch("/contacts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const contact = await storage.getContact(id);
+      
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      // Validate the update data
+      const contactUpdate = req.body;
+      const updatedContact = await storage.updateContact(id, contactUpdate);
+      
+      res.json(updatedContact);
+    } catch (error) {
+      console.error("Error updating contact:", error);
+      res.status(500).json({ message: "Failed to update contact" });
+    }
+  });
 
   // Transactions routes
   apiRouter.get("/transactions", async (req: Request, res: Response) => {

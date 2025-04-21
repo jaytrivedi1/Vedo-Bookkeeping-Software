@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Contact, Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, User, ChevronRight, X, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { Search, User, ChevronRight, X, Eye, Trash2, AlertTriangle, Edit, PenLine } from "lucide-react";
+import ContactEditForm from "@/components/forms/ContactEditForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
