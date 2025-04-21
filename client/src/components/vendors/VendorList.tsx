@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Contact, Transaction } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, Building, ChevronRight, X } from "lucide-react";
+import { Search, Building, ChevronRight, X, Edit } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import ContactEditForm from "@/components/forms/ContactEditForm";
 import { 
   Card, 
   CardContent,

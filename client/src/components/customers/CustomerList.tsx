@@ -68,6 +68,7 @@ export default function CustomerList({ className }: CustomerListProps) {
   const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   
   // Fetch customers
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -353,18 +354,29 @@ export default function CustomerList({ className }: CustomerListProps) {
             <ScrollArea className="h-[calc(100vh-80px)]">
               <div>
                 <div className="p-6">
-                  <div>
-                    <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
-                    {selectedCustomer.contactName && (
-                      <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
-                    )}
-                    {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
-                    {selectedCustomer.phone && (
-                      <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
-                    )}
-                    {selectedCustomer.address && (
-                      <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
-                    )}
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-2xl font-bold mb-1">{selectedCustomer.name}</h2>
+                      {selectedCustomer.contactName && (
+                        <p className="text-gray-600 mb-1">Contact: {selectedCustomer.contactName}</p>
+                      )}
+                      {selectedCustomer.email && <p className="text-gray-600 mb-1">Email: {selectedCustomer.email}</p>}
+                      {selectedCustomer.phone && (
+                        <p className="text-gray-600 mb-1">Phone: {selectedCustomer.phone}</p>
+                      )}
+                      {selectedCustomer.address && (
+                        <p className="text-gray-600 mb-4">{selectedCustomer.address}</p>
+                      )}
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex items-center gap-1"
+                      onClick={() => setIsEditDialogOpen(true)}
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </Button>
                   </div>
                 </div>
                 
@@ -776,6 +788,30 @@ export default function CustomerList({ className }: CustomerListProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* Edit Customer Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Edit Customer</DialogTitle>
+            <DialogDescription>
+              Make changes to customer information below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedCustomer && (
+            <ContactEditForm 
+              contact={selectedCustomer} 
+              onSuccess={() => {
+                setIsEditDialogOpen(false);
+                // Refresh the contacts data
+                queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+              }}
+              onCancel={() => setIsEditDialogOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

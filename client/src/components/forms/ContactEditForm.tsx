@@ -37,7 +37,6 @@ const contactEditSchema = z.object({
   type: z.enum(['customer', 'vendor', 'both']),
   currency: z.string().optional(),
   defaultTaxRate: z.number().optional().nullable(),
-  notes: z.string().optional(),
 });
 
 type ContactEditFormValues = z.infer<typeof contactEditSchema>;
@@ -61,10 +60,9 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
       email: contact.email || "",
       phone: contact.phone || "",
       address: contact.address || "",
-      type: contact.type || "customer",
+      type: (contact.type as "customer" | "vendor" | "both") || "customer",
       currency: contact.currency || "USD",
       defaultTaxRate: contact.defaultTaxRate || null,
-      notes: contact.notes || "",
     },
   });
   
@@ -212,19 +210,7 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
           )}
         />
         
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Additional notes" {...field} value={field.value || ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Notes field removed - not in Contact model */}
         
         <div className="flex justify-end space-x-2">
           <Button type="button" variant="outline" onClick={onCancel}>
