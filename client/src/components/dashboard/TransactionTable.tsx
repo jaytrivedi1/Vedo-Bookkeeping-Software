@@ -195,7 +195,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
-                      {transaction.type === 'expense' 
+                      {(transaction.type === 'expense' || transaction.type === 'deposit') 
                         ? '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount) 
                         : '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount)}
                     </TableCell>
