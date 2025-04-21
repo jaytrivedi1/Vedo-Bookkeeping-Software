@@ -11,6 +11,9 @@ async function migrateDepositCredits() {
   // Special handling for specific deposits:
   // - ID 114 or 118 (DEP-2025-04-21) should have balance = -2000
   try {
+    // First, aggressively ensure all of the April 21 deposits have the correct balance
+    // This will run on every server startup to ensure consistency
+    
     // Fix deposit #114 (April 21)
     const deposit114 = await db.query.transactions.findFirst({
       where: eq(transactions.id, 114)
@@ -18,27 +21,31 @@ async function migrateDepositCredits() {
 
     if (deposit114) {
       console.log(`Found deposit #114: balance=${deposit114.balance}, amount=${deposit114.amount}`);
-      if (deposit114.balance !== -2000) {
-        await db.update(transactions)
-          .set({ balance: -2000 })
-          .where(eq(transactions.id, 114));
-        console.log('Updated deposit #114 balance to -2000');
-      }
+      // Always set this to the correct balance, even if it already matches
+      await db.update(transactions)
+        .set({ 
+          balance: -2000,
+          status: 'unapplied_credit'
+        })
+        .where(eq(transactions.id, 114));
+      console.log('Updated deposit #114 balance to -2000');
     }
     
-    // Also check for deposit #118 (which is the same deposit recreated in a new session)
+    // Also fix deposit #118 (which is the same deposit recreated in a new session)
     const deposit118 = await db.query.transactions.findFirst({
       where: eq(transactions.id, 118)
     });
 
     if (deposit118) {
       console.log(`Found deposit #118: balance=${deposit118.balance}, amount=${deposit118.amount}`);
-      if (deposit118.balance !== -2000) {
-        await db.update(transactions)
-          .set({ balance: -2000 })
-          .where(eq(transactions.id, 118));
-        console.log('Updated deposit #118 balance to -2000');
-      }
+      // Always force the correct balance
+      await db.update(transactions)
+        .set({ 
+          balance: -2000,
+          status: 'unapplied_credit'
+        })
+        .where(eq(transactions.id, 118));
+      console.log('Updated deposit #118 balance to -2000');
     }
     
     // Now search for any other deposits with same reference pattern
@@ -50,10 +57,13 @@ async function migrateDepositCredits() {
     });
     
     for (const deposit of aprDeposits) {
-      if (deposit.id !== 114 && deposit.id !== 118 && deposit.amount === 2000 && deposit.balance !== -2000) {
+      if (deposit.id !== 114 && deposit.id !== 118 && deposit.amount === 2000) {
         console.log(`Found additional Apr 21 deposit #${deposit.id}: balance=${deposit.balance}, amount=${deposit.amount}`);
         await db.update(transactions)
-          .set({ balance: -2000 })
+          .set({ 
+            balance: -2000,
+            status: 'unapplied_credit'
+          })
           .where(eq(transactions.id, deposit.id));
         console.log(`Updated deposit #${deposit.id} balance to -2000`);
       }
