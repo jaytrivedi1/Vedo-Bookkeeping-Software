@@ -719,13 +719,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Mark the deposits as applied
+        // Mark the deposits as applied, with proper handling for partial credits
         for (const item of depositItems) {
-          console.log(`Deposit #${item.transactionId} fully applied and changed to 'completed'`);
-          await storage.updateTransaction(item.transactionId, {
-            status: 'completed',
-            balance: 0
-          });
+          // Get the current deposit to check its balance
+          const depositTransaction = await storage.getTransaction(item.transactionId);
+          
+          if (!depositTransaction) {
+            console.log(`Deposit #${item.transactionId} not found, skipping`);
+            continue;
+          }
+          
+          // Get the available credit amount (negative balance as it's a credit)
+          const availableCreditAmount = depositTransaction.balance !== null 
+            ? Math.abs(depositTransaction.balance) 
+            : Math.abs(depositTransaction.amount);
+          
+          // Check if we're applying the full amount or partial
+          const isFullApplication = item.amount >= availableCreditAmount || 
+                                   Math.abs(availableCreditAmount - item.amount) < 0.01; // Allow for tiny floating point differences
+          
+          if (isFullApplication) {
+            // Fully applied - mark as completed with zero balance
+            console.log(`Deposit #${item.transactionId} fully applied and changed to 'completed'`);
+            await storage.updateTransaction(item.transactionId, {
+              status: 'completed',
+              balance: 0
+            });
+          } else {
+            // Partial application - keep as unapplied_credit with reduced balance
+            const remainingCredit = -(availableCreditAmount - item.amount);
+            console.log(`Deposit #${item.transactionId} partially applied (${item.amount} of ${availableCreditAmount}), remaining credit: ${remainingCredit}`);
+            await storage.updateTransaction(item.transactionId, {
+              status: 'unapplied_credit',
+              balance: remainingCredit
+            });
+          }
         }
       }
       
