@@ -419,8 +419,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                                 : transaction.type === 'invoice' && 
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
-                                  transaction.balance > 0 && 
-                                  transaction.status === 'open'
+                                  transaction.balance > 0
                                     ? <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>
                                     : getStatusBadge(transaction.status);
                                 

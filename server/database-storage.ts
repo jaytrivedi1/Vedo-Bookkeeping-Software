@@ -218,10 +218,9 @@ export class DatabaseStorage implements IStorage {
       let status = invoice.status;
       if (remainingBalance <= 0) {
         status = 'paid';
-      } else if (remainingBalance < invoice.amount) {
-        status = 'partial';
       } else {
-        status = 'open'; // Use open instead of outstanding/pending to match our enum
+        // Always use 'open' for unpaid and partially paid invoices
+        status = 'open';
       }
       
       // Update the invoice
