@@ -2252,6 +2252,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Check ALL unapplied_credit deposits to ensure they have negative balances
+        // Import transactions from schema to avoid reference error
+        const { transactions } = await import('@shared/schema');
         const allDeposits = await db.query.transactions.findMany({
           where: eq(transactions.status, 'unapplied_credit')
         });
@@ -2262,9 +2264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Skip 118 as we already handled it
           if (deposit.id === 118) continue;
           
-          // For any other unapplied_credit deposit with non-negative balance, fix it
-          if (deposit.balance >= 0) {
-            console.log(`Fixing unapplied_credit deposit #${deposit.id}: has positive balance ${deposit.balance}`);
+          // For any other unapplied_credit deposit with non-negative or null balance, fix it
+          if (deposit.balance === null || deposit.balance >= 0) {
+            console.log(`Fixing unapplied_credit deposit #${deposit.id}: has incorrect balance ${deposit.balance ?? 'NULL'}`);
             await storage.updateTransaction(deposit.id, {
               balance: -deposit.amount
             });
