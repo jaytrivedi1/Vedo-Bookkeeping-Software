@@ -66,8 +66,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
   const [subTotal, setSubTotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [balanceDue, setBalanceDue] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
   const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
+  const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
+  const [totalUnappliedCredits, setTotalUnappliedCredits] = useState(0);
+  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
   const { toast } = useToast();
 
   // Extract next invoice number
@@ -86,7 +90,37 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     queryKey: ['/api/products'],
   });
   
-  // Credit functionality has been removed
+  // Fetch customer's unapplied credits when a contact is selected
+  const { data: transactions } = useQuery<Transaction[]>({
+    queryKey: ['/api/transactions'],
+    enabled: !!watchContactId,
+  });
+  
+  // Filter for unapplied credits for the selected customer
+  useEffect(() => {
+    if (watchContactId && transactions) {
+      const customerCredits = transactions.filter(transaction => 
+        transaction.type === 'deposit' && 
+        transaction.status === 'unapplied_credit' && 
+        transaction.contactId === Number(watchContactId) &&
+        transaction.balance !== null && 
+        transaction.balance < 0 // Balance should be negative for credits
+      );
+      
+      setUnappliedCredits(customerCredits);
+      
+      // Calculate total unapplied credits amount (absolute value of balance)
+      const totalCredits = customerCredits.reduce((sum, credit) => {
+        const availableCredit = credit.balance !== null ? Math.abs(credit.balance) : 0;
+        return sum + availableCredit;
+      }, 0);
+      
+      setTotalUnappliedCredits(totalCredits);
+    } else {
+      setUnappliedCredits([]);
+      setTotalUnappliedCredits(0);
+    }
+  }, [watchContactId, transactions]);
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -416,6 +450,10 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     setTaxAmount(totalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);
+    
+    // Calculate balance due (total - applied credits)
+    const newBalanceDue = Math.max(0, total - appliedCreditAmount);
+    setBalanceDue(newBalanceDue);
   };
 
   const updateLineItemAmount = (index: number) => {
@@ -453,7 +491,16 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     }
   };
   
-  // Credit application functionality has been removed
+  // Handle credit application 
+  const handleApplyCreditAmount = (amount: number) => {
+    // Make sure we don't apply more than the available credits
+    const validAmount = Math.min(amount, totalUnappliedCredits);
+    // Don't allow negative values
+    const safeAmount = Math.max(0, validAmount);
+    
+    setAppliedCreditAmount(safeAmount);
+    calculateTotals();
+  };
 
   // Update totals whenever line items change
   useEffect(() => {
@@ -534,7 +581,37 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
       return formattedItem;
     });
     
-    // Credit application functionality has been removed
+    // Include applied credit information if there are credits applied
+    if (appliedCreditAmount > 0) {
+      enrichedData.appliedCreditAmount = appliedCreditAmount;
+      
+      // Include the credit transactions that were used (we'll apply the first credits until the amount is satisfied)
+      let remainingAmount = appliedCreditAmount;
+      const appliedCredits: {id: number, amount: number}[] = [];
+      
+      // Sort credits by oldest first to apply them in order
+      const sortedCredits = [...unappliedCredits].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      
+      for (const credit of sortedCredits) {
+        if (remainingAmount <= 0) break;
+        
+        const availableCreditAmount = Math.abs(credit.balance || 0);
+        const amountToApply = Math.min(availableCreditAmount, remainingAmount);
+        
+        if (amountToApply > 0) {
+          appliedCredits.push({
+            id: credit.id,
+            amount: amountToApply
+          });
+          
+          remainingAmount -= amountToApply;
+        }
+      }
+      
+      enrichedData.appliedCredits = appliedCredits;
+    }
     
     console.log("Sending to server:", enrichedData);
     if (createInvoice.isPending) return; // Prevent double submission
