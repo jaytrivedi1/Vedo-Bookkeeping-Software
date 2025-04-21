@@ -738,12 +738,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const isFullApplication = item.amount >= availableCreditAmount || 
                                    Math.abs(availableCreditAmount - item.amount) < 0.01; // Allow for tiny floating point differences
           
+          // Save credit application info to transaction for future reference
+          // This helps when deleting invoices and needing to restore credits
+          const creditApplication = {
+            appliedTo: newTransaction.id,
+            appliedFrom: item.transactionId,
+            amount: item.amount,
+            invoiceReference: newTransaction.reference,
+            date: new Date()
+          };
+          
+          // Store credit application metadata in the description field if it doesn't already have a description
+          let updatedDescription = depositTransaction.description || '';
+          if (!updatedDescription.includes('Applied to invoice')) {
+            updatedDescription += (updatedDescription ? ' ' : '') + 
+                                `Applied to invoice #${newTransaction.reference} on ${format(new Date(), 'yyyy-MM-dd')}`;
+          }
+          
           if (isFullApplication) {
             // Fully applied - mark as completed with zero balance
             console.log(`Deposit #${item.transactionId} fully applied and changed to 'completed'`);
             await storage.updateTransaction(item.transactionId, {
               status: 'completed',
-              balance: 0
+              balance: 0,
+              description: updatedDescription
             });
           } else {
             // Partial application - keep as unapplied_credit with reduced balance
@@ -751,7 +769,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Deposit #${item.transactionId} partially applied (${item.amount} of ${availableCreditAmount}), remaining credit: ${remainingCredit}`);
             await storage.updateTransaction(item.transactionId, {
               status: 'unapplied_credit',
-              balance: remainingCredit
+              balance: remainingCredit,
+              description: updatedDescription
             });
           }
         }
@@ -1681,28 +1700,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Also check for any credit transactions that were completed and match the invoice date
+        // Check for any completed deposit credits that might be related to this invoice
+        // When deleting an invoice, get ALL completed deposits for this contact, regardless of date
         const possibleCredits = allTransactions.filter(t => 
           t.type === 'deposit' && 
           t.status === 'completed' &&
-          t.contactId === transaction.contactId &&
-          // Created within 1 minute of the invoice
-          Math.abs(new Date(t.date).getTime() - new Date(transaction.date).getTime()) < 60000
+          t.contactId === transaction.contactId
         );
         
         if (possibleCredits.length > 0) {
-          console.log(`Found ${possibleCredits.length} possible credit transactions to check for invoice #${transaction.reference}`);
+          console.log(`Found ${possibleCredits.length} completed deposit credits for contact #${transaction.contactId} to check`);
           
           for (const credit of possibleCredits) {
-            // Only revert credits that were actually applied, so their balance is 0
-            if (credit.balance === 0) {
-              console.log(`Reverting credit #${credit.id} (${credit.reference}) that was likely applied to this invoice`);
-              
-              await storage.updateTransaction(credit.id, {
-                status: 'unapplied_credit',
-                balance: -credit.amount
-              });
-            }
+            // All completed deposits with zero balance were likely applied to an invoice
+            // Revert them to unapplied credits when the invoice is deleted
+            console.log(`Reverting deposit #${credit.id} (${credit.reference}) to unapplied_credit status`);
+            
+            await storage.updateTransaction(credit.id, {
+              status: 'unapplied_credit',
+              balance: -credit.amount  // Set negative balance to indicate available credit
+            });
+            
+            console.log(`Reverted deposit #${credit.id} to unapplied_credit with balance -${credit.amount}`);
           }
         }
         
