@@ -124,7 +124,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Total Invoiced</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold">${totalInvoiced.toFixed(2)}</p>
+                <p className="text-2xl font-semibold">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalInvoiced)}</p>
               </CardContent>
             </Card>
             
@@ -133,7 +133,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Paid</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-green-600">${totalPaid.toFixed(2)}</p>
+                <p className="text-2xl font-semibold text-green-600">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalPaid)}</p>
               </CardContent>
             </Card>
             
@@ -142,7 +142,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Open</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-yellow-600">${totalPending.toFixed(2)}</p>
+                <p className="text-2xl font-semibold text-yellow-600">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalPending)}</p>
               </CardContent>
             </Card>
           </div>
