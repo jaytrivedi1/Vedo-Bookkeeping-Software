@@ -1118,11 +1118,53 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
                     
-                    {/* Credit application functionality has been removed */}
+                    {/* Unapplied Credits section - only show if customer has credits */}
+                    {unappliedCredits.length > 0 && (
+                      <div className="mt-3 border rounded-md p-3 bg-gray-50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium">Available Credits</span>
+                          <span className="text-green-600 font-medium">${totalUnappliedCredits.toFixed(2)}</span>
+                        </div>
+                        
+                        <div className="mb-2">
+                          <label htmlFor="appliedCreditAmount" className="text-sm mb-1 block">
+                            Apply credit to this invoice
+                          </label>
+                          <Input
+                            id="appliedCreditAmount"
+                            type="number"
+                            min="0"
+                            max={totalUnappliedCredits}
+                            step="0.01"
+                            className="bg-white border-gray-300"
+                            value={appliedCreditAmount}
+                            onChange={(e) => {
+                              const amount = parseFloat(e.target.value);
+                              if (!isNaN(amount)) {
+                                handleApplyCreditAmount(amount);
+                              } else {
+                                handleApplyCreditAmount(0);
+                              }
+                            }}
+                          />
+                        </div>
+                        
+                        {unappliedCredits.length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {unappliedCredits.map((credit) => (
+                              <div key={credit.id} className="flex justify-between">
+                                <span>Credit #{credit.id}</span>
+                                <span>${Math.abs(credit.balance || 0).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
-                    <div className="flex justify-between font-medium border-t pt-2 mt-1">
+                    <div className="flex justify-between font-medium border-t pt-2 mt-3">
                       <span>Balance due</span>
-                      <span>${totalAmount.toFixed(2)}</span>
+                      <span>${balanceDue.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -1144,8 +1186,12 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
             <div>
               <div className="mb-6 text-right">
                 <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${totalAmount.toFixed(2)}</div>
-                {/* Credit application functionality has been removed */}
+                <div className="text-2xl font-medium">${balanceDue.toFixed(2)}</div>
+                {appliedCreditAmount > 0 && (
+                  <div className="text-sm text-green-600 mt-1">
+                    Credits applied: ${appliedCreditAmount.toFixed(2)}
+                  </div>
+                )}
               </div>
               
               <div className="space-y-4">
