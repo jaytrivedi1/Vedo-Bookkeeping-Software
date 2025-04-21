@@ -9,6 +9,7 @@ import migrateTransactions from "./migrate-transactions";
 import migrateStatusEnum from "./migrate-status-enum";
 import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 import migrateInvoiceBalance from "./migrate-invoice-balance";
+import migrateDepositCredits from "./migrate-deposit-credits";
 
 const app = express();
 app.use(express.json());
@@ -71,6 +72,9 @@ app.use((req, res, next) => {
     
     // Run migration to fix invoice balance issues
     await migrateInvoiceBalance();
+    
+    // Run migration to fix deposit credit balances
+    await migrateDepositCredits();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
