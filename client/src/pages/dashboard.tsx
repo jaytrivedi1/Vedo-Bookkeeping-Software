@@ -68,7 +68,7 @@ export default function Dashboard() {
   const unpaidInvoices = transactions
     ? transactions.filter(
         transaction => transaction.type === 'invoice' && 
-        (transaction.status === 'pending' || transaction.status === 'overdue' || transaction.status === 'partial')
+        (transaction.status === 'open' || transaction.status === 'overdue' || transaction.status === 'partial')
       )
     : [];
   
@@ -215,7 +215,7 @@ export default function Dashboard() {
               amount={new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unpaidInvoicesAmount)}
               icon={<FileText />}
               trend={`${unpaidInvoices.length} invoices`}
-              change="pending payment"
+              change="awaiting payment"
               iconBgColor="bg-yellow-100"
               iconTextColor="text-yellow-600"
             />

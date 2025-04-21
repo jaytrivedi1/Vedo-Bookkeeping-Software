@@ -69,19 +69,19 @@ export default function Invoices() {
       return sum + invoice.amount;
     }
     // For partially paid invoices, add the paid portion (original amount - balance)
-    else if ((invoice.status === "pending" || invoice.status === "partial") && 
+    else if ((invoice.status === "open" || invoice.status === "partial") && 
              invoice.balance !== null && invoice.balance !== undefined) {
       return sum + (invoice.amount - invoice.balance);
     }
     return sum;
   }, 0);
   
-  // Calculate pending amounts based on remaining balances
+  // Calculate open amounts based on remaining balances
   const totalPending = invoices.reduce((sum, invoice) => {
-    if ((invoice.status === "pending" || invoice.status === "overdue" || invoice.status === "partial") && 
+    if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") && 
         invoice.balance !== null && invoice.balance !== undefined) {
       return sum + invoice.balance;
-    } else if ((invoice.status === "pending" || invoice.status === "overdue" || invoice.status === "partial") && 
+    } else if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") && 
                (invoice.balance === null || invoice.balance === undefined)) {
       return sum + invoice.amount;
     }
@@ -139,7 +139,7 @@ export default function Invoices() {
             
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-500">Pending</CardTitle>
+                <CardTitle className="text-sm text-gray-500">Open</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-yellow-600">${totalPending.toFixed(2)}</p>
