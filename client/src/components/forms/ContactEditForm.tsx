@@ -34,7 +34,8 @@ const contactEditSchema = z.object({
   email: z.string().email("Invalid email address").optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
-  type: z.enum(['customer', 'vendor']), // Removed 'both' option
+  // Accept only customer or vendor types
+  type: z.enum(['customer', 'vendor']),
   currency: z.string().optional(),
   defaultTaxRate: z.number().optional().nullable(),
 });
@@ -175,30 +176,8 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
           )}
         />
         
-        <FormField
-          control={form.control}
-          name="type"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Type</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                defaultValue={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="customer">Customer</SelectItem>
-                  <SelectItem value="vendor">Vendor</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Hidden field for type - preserves the original contact type */}
+        <input type="hidden" {...form.register("type")} />
         
         <FormField
           control={form.control}
