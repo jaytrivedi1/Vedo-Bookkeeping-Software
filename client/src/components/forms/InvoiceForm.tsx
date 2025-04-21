@@ -464,19 +464,33 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     setTaxNames(taxNameList);
     
     // Calculate balance due (total - applied credits)
-    // Special case fix for when total is 2299.50 and applied amount is 1400
-    if (Math.abs(total - 2299.50) < 0.01 && Math.abs(appliedCreditAmount - 1400) < 0.01) {
-      console.log("SPECIAL CASE: Fixing balance calculation for total 2299.50 and credits 1400");
-      setBalanceDue(899.50);
-    } else {
-      const newBalanceDue = total - appliedCreditAmount;
-      console.log("Balance calculation:", {
-        total,
-        appliedCreditAmount,
-        newBalanceDue
+    // First, get the accurate total of all applied credits directly from the credit array
+    const accurateAppliedTotal = unappliedCredits.reduce((sum, c) => 
+      sum + (c.appliedAmount || 0), 0
+    );
+    
+    console.log("Accurate applied total from credits array:", accurateAppliedTotal);
+    
+    // Update the appliedCreditAmount state with the accurate value
+    if (Math.abs(accurateAppliedTotal - appliedCreditAmount) > 0.01) {
+      console.log("Correcting applied credit amount:", { 
+        old: appliedCreditAmount, 
+        new: accurateAppliedTotal 
       });
-      setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
+      setAppliedCreditAmount(accurateAppliedTotal);
     }
+    
+    // Now calculate the balance with the accurate credit amount
+    const newBalanceDue = total - accurateAppliedTotal;
+    
+    console.log("Balance calculation:", {
+      total,
+      appliedCreditAmount,
+      accurateAppliedTotal,
+      newBalanceDue
+    });
+    
+    setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
   };
 
   const updateLineItemAmount = (index: number) => {
@@ -1177,25 +1191,15 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                                         // Store the individual credit application amount
                                         credit.appliedAmount = safeAmount;
                                         
-                                        // Recalculate total applied
-                                        const totalApplied = unappliedCredits.reduce((sum, c) => 
-                                          sum + (c.appliedAmount || 0), 0
-                                        );
-                                        
-                                        console.log("Credit input changed. Credit ID:", credit.id, "Amount:", safeAmount, "Total applied:", totalApplied);
-                                        setAppliedCreditAmount(totalApplied);
+                                        // Just call calculateTotals which will compute the accurate sum from all credits
+                                        console.log("Credit input changed. Credit ID:", credit.id, "Amount:", safeAmount);
                                         calculateTotals();
                                       } else {
                                         // If the input is cleared or invalid, set applied amount to 0
                                         credit.appliedAmount = 0;
                                         
-                                        // Recalculate total applied
-                                        const totalApplied = unappliedCredits.reduce((sum, c) => 
-                                          sum + (c.appliedAmount || 0), 0
-                                        );
-                                        
-                                        console.log("Credit input cleared. Credit ID:", credit.id, "Total applied:", totalApplied);
-                                        setAppliedCreditAmount(totalApplied);
+                                        // Just call calculateTotals which will compute the accurate sum from all credits
+                                        console.log("Credit input cleared. Credit ID:", credit.id);
                                         calculateTotals();
                                       }
                                     }}
