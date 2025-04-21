@@ -151,11 +151,17 @@ export default function CustomerList({ className }: CustomerListProps) {
     : [];
     
   // Format currency
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
+    // For deposit transactions (especially unapplied credits), display as negative
+    let displayAmount = amount;
+    if (transactionType === 'deposit') {
+      displayAmount = -Math.abs(amount); // Ensure it's negative
+    }
+    
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-    }).format(amount);
+    }).format(displayAmount);
   };
   
   // Get status badge styles
@@ -425,11 +431,13 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   </TableCell>
                                   <TableCell>{typeDisplay}</TableCell>
                                   <TableCell>{transaction.reference}</TableCell>
-                                  <TableCell>{formatCurrency(transaction.amount)}</TableCell>
+                                  <TableCell>{formatCurrency(transaction.amount, transaction.type, transaction.status)}</TableCell>
                                   <TableCell>
                                     {showBalance && transaction.balance !== null 
                                       ? formatCurrency(transaction.balance) 
-                                      : '—'}
+                                      : transaction.type === 'deposit' && transaction.balance !== null
+                                        ? formatCurrency(transaction.balance, transaction.type, transaction.status)
+                                        : '—'}
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
                                   <TableCell className="text-right">
@@ -611,7 +619,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                       <div>
                         <h3 className="text-sm font-medium text-gray-500">Amount</h3>
                         <p className="text-base font-semibold text-green-700">
-                          {formatCurrency(selectedTransaction.amount)}
+                          {formatCurrency(selectedTransaction.amount, selectedTransaction.type, selectedTransaction.status)}
                         </p>
                       </div>
                       
