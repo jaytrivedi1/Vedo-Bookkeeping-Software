@@ -1677,6 +1677,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 creditRefIds.push(creditId);
               }
             }
+            
+            // Also try to extract deposit reference (format: DEP-YYYY-MM-DD)
+            const depositRefMatch = entry.description?.match(/from deposit #?(DEP-[0-9-]+)/i);
+            if (depositRefMatch && depositRefMatch[1]) {
+              const depositRef = depositRefMatch[1];
+              console.log(`Found deposit reference: ${depositRef}`);
+              
+              // Find the deposit by reference
+              const deposit = allTransactions.find(t => 
+                t.type === 'deposit' && t.reference === depositRef
+              );
+              
+              if (deposit && !creditRefIds.includes(deposit.id)) {
+                creditRefIds.push(deposit.id);
+                console.log(`Added deposit #${deposit.id} to credit references to revert`);
+              }
+            }
           }
         }
         
@@ -1697,6 +1714,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
               
               console.log(`Reverted credit #${creditId} to unapplied_credit status with balance -${creditTransaction.amount}`);
+            }
+          }
+        }
+        
+        // Third approach: Search for all payments with line items that reference this invoice
+        console.log(`Searching for payments that might contain credits applied to invoice #${transaction.reference}`);
+        const paymentsWithCredits = allTransactions.filter(t => 
+          t.type === 'payment' && t.status === 'completed'
+        );
+        
+        if (paymentsWithCredits.length > 0) {
+          // For each payment, check if it has line items connected to this invoice
+          for (const payment of paymentsWithCredits) {
+            // Get line items for this payment to look for applied credits
+            const paymentLineItems = await storage.getLineItemsByTransaction(payment.id);
+            
+            // Check if any line item references this invoice
+            const hasInvoiceLineItem = paymentLineItems.some(item => 
+              item.transactionId === transaction.id || 
+              (item.description && item.description.includes(transaction.reference))
+            );
+            
+            if (hasInvoiceLineItem) {
+              console.log(`Found payment #${payment.id} with line items for invoice #${transaction.reference}`);
+              
+              // Find deposit line items in this payment (they represent applied credits)
+              const depositLineItems = paymentLineItems.filter(item => 
+                item.type === 'deposit'
+              );
+              
+              // For each deposit line item, revert the deposit status
+              for (const depositItem of depositLineItems) {
+                if (depositItem.transactionId) {
+                  const deposit = await storage.getTransaction(depositItem.transactionId);
+                  
+                  if (deposit && deposit.type === 'deposit') {
+                    console.log(`Found deposit #${deposit.id} to revert in payment #${payment.id}`);
+                    
+                    await storage.updateTransaction(deposit.id, {
+                      status: 'unapplied_credit',
+                      balance: -deposit.amount // Restore negative balance
+                    });
+                    
+                    console.log(`Reverted deposit #${deposit.id} to unapplied_credit status with balance -${deposit.amount}`);
+                  }
+                }
+              }
             }
           }
         }
