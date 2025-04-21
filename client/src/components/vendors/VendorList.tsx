@@ -33,6 +33,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 
 interface VendorListProps {
   className?: string;
@@ -42,6 +49,9 @@ export default function VendorList({ className }: VendorListProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedVendor, setSelectedVendor] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Fetch vendors
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -193,17 +203,30 @@ export default function VendorList({ className }: VendorListProps) {
           {selectedVendor && (
             <div>
               <div className="p-6">
-                <h2 className="text-2xl font-bold mb-1">{selectedVendor.name}</h2>
-                {selectedVendor.contactName && (
-                  <p className="text-gray-600 mb-1">Contact: {selectedVendor.contactName}</p>
-                )}
-                {selectedVendor.email && <p className="text-gray-600 mb-1">Email: {selectedVendor.email}</p>}
-                {selectedVendor.phone && (
-                  <p className="text-gray-600 mb-1">Phone: {selectedVendor.phone}</p>
-                )}
-                {selectedVendor.address && (
-                  <p className="text-gray-600 mb-4">{selectedVendor.address}</p>
-                )}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-1">{selectedVendor.name}</h2>
+                    {selectedVendor.contactName && (
+                      <p className="text-gray-600 mb-1">Contact: {selectedVendor.contactName}</p>
+                    )}
+                    {selectedVendor.email && <p className="text-gray-600 mb-1">Email: {selectedVendor.email}</p>}
+                    {selectedVendor.phone && (
+                      <p className="text-gray-600 mb-1">Phone: {selectedVendor.phone}</p>
+                    )}
+                    {selectedVendor.address && (
+                      <p className="text-gray-600 mb-4">{selectedVendor.address}</p>
+                    )}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex items-center gap-1"
+                    onClick={() => setIsEditDialogOpen(true)}
+                  >
+                    <Edit className="h-4 w-4" />
+                    Edit
+                  </Button>
+                </div>
               </div>
               
               <Tabs defaultValue="expenses" className="px-6">
@@ -312,6 +335,30 @@ export default function VendorList({ className }: VendorListProps) {
           )}
         </SheetContent>
       </Sheet>
+      
+      {/* Edit Vendor Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Edit Vendor</DialogTitle>
+            <DialogDescription>
+              Make changes to vendor information below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedVendor && (
+            <ContactEditForm 
+              contact={selectedVendor} 
+              onSuccess={() => {
+                setIsEditDialogOpen(false);
+                // Refresh the contacts data
+                queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+              }}
+              onCancel={() => setIsEditDialogOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
