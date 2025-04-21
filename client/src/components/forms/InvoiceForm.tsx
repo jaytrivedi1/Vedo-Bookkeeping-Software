@@ -4,7 +4,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction } from "@shared/schema";
+import { Invoice as BaseInvoice, invoiceSchema, Contact, SalesTax, Product, Transaction as BaseTransaction } from "@shared/schema";
+
+// Extend the Transaction type to include appliedAmount for credits
+interface Transaction extends BaseTransaction {
+  appliedAmount?: number;
+}
+
+// Extend the Invoice type to include credit application properties
+interface Invoice extends BaseInvoice {
+  appliedCreditAmount?: number;
+  appliedCredits?: {id: number, amount: number}[];
+}
 import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -585,28 +596,16 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
     if (appliedCreditAmount > 0) {
       enrichedData.appliedCreditAmount = appliedCreditAmount;
       
-      // Include the credit transactions that were used (we'll apply the first credits until the amount is satisfied)
-      let remainingAmount = appliedCreditAmount;
+      // Collect all credits that have amounts applied to them
       const appliedCredits: {id: number, amount: number}[] = [];
       
-      // Sort credits by oldest first to apply them in order
-      const sortedCredits = [...unappliedCredits].sort((a, b) => 
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
-      
-      for (const credit of sortedCredits) {
-        if (remainingAmount <= 0) break;
-        
-        const availableCreditAmount = Math.abs(credit.balance || 0);
-        const amountToApply = Math.min(availableCreditAmount, remainingAmount);
-        
-        if (amountToApply > 0) {
+      // Only include credits that have an amount applied
+      for (const credit of unappliedCredits) {
+        if (credit.appliedAmount && credit.appliedAmount > 0) {
           appliedCredits.push({
             id: credit.id,
-            amount: amountToApply
+            amount: credit.appliedAmount
           });
-          
-          remainingAmount -= amountToApply;
         }
       }
       
@@ -1126,37 +1125,63 @@ export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
                           <span className="text-green-600 font-medium">${totalUnappliedCredits.toFixed(2)}</span>
                         </div>
                         
-                        <div className="mb-2">
-                          <label htmlFor="appliedCreditAmount" className="text-sm mb-1 block">
-                            Apply credit to this invoice
-                          </label>
-                          <Input
-                            id="appliedCreditAmount"
-                            type="number"
-                            min="0"
-                            max={totalUnappliedCredits}
-                            step="0.01"
-                            className="bg-white border-gray-300"
-                            value={appliedCreditAmount}
-                            onChange={(e) => {
-                              const amount = parseFloat(e.target.value);
-                              if (!isNaN(amount)) {
-                                handleApplyCreditAmount(amount);
-                              } else {
-                                handleApplyCreditAmount(0);
-                              }
-                            }}
-                          />
+                        <div className="text-sm mb-2">Apply credits to this invoice:</div>
+                        
+                        <div className="space-y-2">
+                          {unappliedCredits.map((credit) => {
+                            const availableAmount = Math.abs(credit.balance || 0);
+                            return (
+                              <div key={credit.id} className="flex items-center gap-3 border-b pb-2">
+                                <div className="flex-grow">
+                                  <div className="flex justify-between">
+                                    <span className="font-medium">Credit #{credit.id}</span>
+                                    <span className="text-green-600">${availableAmount.toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {format(new Date(credit.date), 'MMM dd, yyyy')}
+                                    {credit.description && ` - ${credit.description.substring(0, 40)}${credit.description.length > 40 ? '...' : ''}`}
+                                  </div>
+                                </div>
+                                <div className="w-24">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={availableAmount}
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    className="bg-white border-gray-300 h-8"
+                                    onChange={(e) => {
+                                      // This will need to be modified to track individual credit applications
+                                      const amount = parseFloat(e.target.value);
+                                      if (!isNaN(amount)) {
+                                        // For now we'll just use the sum for the total applied credit
+                                        // but we need to track which credits were applied
+                                        const validAmount = Math.min(amount, availableAmount);
+                                        const safeAmount = Math.max(0, validAmount);
+                                        
+                                        // Store the individual credit application amount
+                                        credit.appliedAmount = safeAmount;
+                                        
+                                        // Recalculate total applied
+                                        const totalApplied = unappliedCredits.reduce((sum, c) => 
+                                          sum + (c.appliedAmount || 0), 0
+                                        );
+                                        
+                                        setAppliedCreditAmount(totalApplied);
+                                        calculateTotals();
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                         
-                        {unappliedCredits.length > 0 && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {unappliedCredits.map((credit) => (
-                              <div key={credit.id} className="flex justify-between">
-                                <span>Credit #{credit.id}</span>
-                                <span>${Math.abs(credit.balance || 0).toFixed(2)}</span>
-                              </div>
-                            ))}
+                        {appliedCreditAmount > 0 && (
+                          <div className="flex justify-between items-center mt-3 text-green-600 font-medium">
+                            <span>Total Applied:</span>
+                            <span>${appliedCreditAmount.toFixed(2)}</span>
                           </div>
                         )}
                       </div>
