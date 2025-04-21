@@ -152,9 +152,9 @@ export default function CustomerList({ className }: CustomerListProps) {
     
   // Format currency
   const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
-    // For deposit transactions (especially unapplied credits), display as negative
+    // For deposit and payment transactions, display as negative
     let displayAmount = amount;
-    if (transactionType === 'deposit') {
+    if (transactionType === 'deposit' || transactionType === 'payment') {
       displayAmount = -Math.abs(amount); // Ensure it's negative
     }
     
