@@ -2,7 +2,7 @@ import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { 
   insertAccountSchema, 
@@ -20,7 +20,8 @@ import {
   depositSchema,
   Transaction,
   InsertTransaction,
-  salesTaxSchema
+  salesTaxSchema,
+  transactions
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
@@ -2774,6 +2775,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Special endpoint for recalculating an invoice balance
+  apiRouter.post("/transactions/:id/recalculate", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid transaction ID' });
+      }
+      
+      const transaction = await storage.getTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+      
+      if (transaction.type !== 'invoice') {
+        return res.status(400).json({ message: 'Transaction is not an invoice' });
+      }
+      
+      // Recalculate the invoice balance
+      const updatedTransaction = await storage.recalculateInvoiceBalance(id);
+      
+      if (!updatedTransaction) {
+        return res.status(500).json({ message: 'Failed to recalculate invoice balance' });
+      }
+      
+      return res.status(200).json(updatedTransaction);
+    } catch (error) {
+      console.error('Error recalculating invoice balance:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Specific endpoint for fixing invoice #1006 (ID: 126)
+  apiRouter.post("/fix-invoice-1006", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = 126; // ID of invoice #1006
+      
+      // Get the invoice
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice' || invoice.reference !== '1006') {
+        return res.status(404).json({ message: 'Invoice #1006 not found' });
+      }
+      
+      // Get all deposits for this customer around the same time
+      const deposits = await db.select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.contactId, invoice.contactId),
+            eq(transactions.type, 'deposit'),
+            eq(transactions.status, 'completed'),
+            // Within 2 days of the invoice
+            sql`ABS(EXTRACT(EPOCH FROM (${transactions.date} - ${invoice.date})) / 86400) <= 2`
+          )
+        );
+      
+      // Look for a deposit of approximately $1500
+      const relevantDeposit = deposits.find(d => Math.abs(d.amount - 1500) < 1);
+      
+      if (relevantDeposit) {
+        console.log(`Found matching deposit #${relevantDeposit.id} (${relevantDeposit.reference}) for invoice #1006`);
+        
+        // Update the invoice balance and status
+        const [updatedInvoice] = await db.update(transactions)
+          .set({
+            balance: 0,
+            status: 'paid'
+          })
+          .where(eq(transactions.id, invoiceId))
+          .returning();
+          
+        return res.status(200).json({ 
+          message: `Successfully fixed invoice #1006 using deposit #${relevantDeposit.id}`,
+          invoice: updatedInvoice
+        });
+      } else {
+        return res.status(404).json({ message: 'No matching deposit found for invoice #1006' });
+      }
+    } catch (error) {
+      console.error('Error fixing invoice #1006:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
   // Use company router for company management endpoints
   apiRouter.use("/companies", companyRouter);
 
