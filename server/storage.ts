@@ -729,6 +729,272 @@ export class MemStorage implements IStorage {
     }
     return this.preferences;
   }
+
+  // User Management Methods
+  async getUsers(): Promise<User[]> {
+    return Array.from(this.users.values());
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.get(id);
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user => user.username === username);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(user => user.email === email);
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const id = this.userIdCounter++;
+    const now = new Date();
+    
+    // Hash the password
+    const hashedPassword = await this.hashPassword(user.password);
+    
+    const newUser: User = {
+      id,
+      username: user.username,
+      email: user.email,
+      password: hashedPassword,
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      role: user.role || 'viewer',
+      isActive: user.isActive !== undefined ? user.isActive : true,
+      lastLogin: null,
+      createdAt: now,
+      updatedAt: now,
+      companyId: user.companyId || null
+    };
+    
+    this.users.set(id, newUser);
+    return newUser;
+  }
+
+  async updateUser(id: number, userUpdate: Partial<User>): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    
+    // Hash the password if it's being updated
+    if (userUpdate.password) {
+      userUpdate.password = await this.hashPassword(userUpdate.password);
+    }
+    
+    const updatedUser = { 
+      ...user, 
+      ...userUpdate,
+      updatedAt: new Date() 
+    };
+    
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    // Check if this is the last admin
+    if (this.users.get(id)?.role === 'admin') {
+      const admins = Array.from(this.users.values()).filter(u => u.role === 'admin');
+      if (admins.length <= 1) {
+        console.error('Cannot delete the last admin user');
+        return false;
+      }
+    }
+    
+    // Delete user-company associations
+    const userCompaniesToDelete = Array.from(this.userCompanies.entries())
+      .filter(([key]) => key.startsWith(`${id}-`));
+      
+    for (const [key] of userCompaniesToDelete) {
+      this.userCompanies.delete(key);
+    }
+    
+    // Delete the user
+    return this.users.delete(id);
+  }
+
+  async updateUserLastLogin(id: number): Promise<User | undefined> {
+    const user = this.users.get(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { 
+      ...user, 
+      lastLogin: new Date(),
+      updatedAt: new Date()
+    };
+    
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+  
+  // User-Company Assignments
+  async getUserCompanies(userId: number): Promise<UserCompany[]> {
+    const userCompanies: UserCompany[] = [];
+    
+    for (const [key, userCompany] of this.userCompanies.entries()) {
+      if (key.startsWith(`${userId}-`)) {
+        userCompanies.push(userCompany);
+      }
+    }
+    
+    return userCompanies;
+  }
+
+  async getCompanyUsers(companyId: number): Promise<UserCompany[]> {
+    const companyUsers: UserCompany[] = [];
+    
+    for (const [key, userCompany] of this.userCompanies.entries()) {
+      if (key.endsWith(`-${companyId}`)) {
+        companyUsers.push(userCompany);
+      }
+    }
+    
+    return companyUsers;
+  }
+
+  async assignUserToCompany(userCompany: InsertUserCompany): Promise<UserCompany> {
+    const key = `${userCompany.userId}-${userCompany.companyId}`;
+    const now = new Date();
+    
+    const newUserCompany: UserCompany = {
+      ...userCompany,
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    this.userCompanies.set(key, newUserCompany);
+    return newUserCompany;
+  }
+
+  async updateUserCompanyRole(userId: number, companyId: number, role: string): Promise<UserCompany | undefined> {
+    const key = `${userId}-${companyId}`;
+    const userCompany = this.userCompanies.get(key);
+    
+    if (!userCompany) return undefined;
+    
+    const updatedUserCompany: UserCompany = {
+      ...userCompany,
+      role,
+      updatedAt: new Date()
+    };
+    
+    this.userCompanies.set(key, updatedUserCompany);
+    return updatedUserCompany;
+  }
+
+  async removeUserFromCompany(userId: number, companyId: number): Promise<boolean> {
+    const key = `${userId}-${companyId}`;
+    return this.userCompanies.delete(key);
+  }
+  
+  // Permissions
+  async getPermissions(): Promise<Permission[]> {
+    return Array.from(this.permissions.values());
+  }
+
+  async getPermission(id: number): Promise<Permission | undefined> {
+    return this.permissions.get(id);
+  }
+
+  async getPermissionByName(name: string): Promise<Permission | undefined> {
+    return Array.from(this.permissions.values()).find(p => p.name === name);
+  }
+
+  async createPermission(permission: InsertPermission): Promise<Permission> {
+    const id = this.permissionIdCounter++;
+    const now = new Date();
+    
+    const newPermission: Permission = {
+      id,
+      name: permission.name,
+      description: permission.description || null,
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    this.permissions.set(id, newPermission);
+    return newPermission;
+  }
+
+  async deletePermission(id: number): Promise<boolean> {
+    // First remove any role-permission associations for this permission
+    const rolePermissionsToDelete = Array.from(this.rolePermissions.entries())
+      .filter(([key]) => key.endsWith(`-${id}`));
+      
+    for (const [key] of rolePermissionsToDelete) {
+      this.rolePermissions.delete(key);
+    }
+    
+    // Delete the permission
+    return this.permissions.delete(id);
+  }
+  
+  // Role Permissions
+  async getRolePermissions(role: string): Promise<RolePermission[]> {
+    const rolePermissions: RolePermission[] = [];
+    
+    for (const [key, rolePermission] of this.rolePermissions.entries()) {
+      if (key.startsWith(`${role}-`)) {
+        rolePermissions.push(rolePermission);
+      }
+    }
+    
+    return rolePermissions;
+  }
+
+  async addPermissionToRole(rolePermission: InsertRolePermission): Promise<RolePermission> {
+    const key = `${rolePermission.role}-${rolePermission.permissionId}`;
+    const now = new Date();
+    
+    const newRolePermission: RolePermission = {
+      ...rolePermission,
+      createdAt: now
+    };
+    
+    this.rolePermissions.set(key, newRolePermission);
+    return newRolePermission;
+  }
+
+  async removePermissionFromRole(role: string, permissionId: number): Promise<boolean> {
+    const key = `${role}-${permissionId}`;
+    return this.rolePermissions.delete(key);
+  }
+  
+  // Authentication helper methods
+  async validatePassword(storedPassword: string, suppliedPassword: string): Promise<boolean> {
+    // Implementation similar to comparePasswords from database-storage.ts
+    const [hash, salt] = storedPassword.split('.');
+    if (!hash || !salt) return false;
+    
+    // Simple implementation for in-memory storage
+    const suppliedHash = await this.hashPasswordWithSalt(suppliedPassword, salt);
+    return suppliedHash === hash;
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    // Implementation similar to hashPassword from database-storage.ts
+    // Generate a random salt
+    const salt = this.generateSalt();
+    const hash = await this.hashPasswordWithSalt(password, salt);
+    return `${hash}.${salt}`;
+  }
+  
+  // Helper methods for password hashing in memory
+  private generateSalt(): string {
+    // Simple salt generation for in-memory storage
+    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+  
+  private async hashPasswordWithSalt(password: string, salt: string): Promise<string> {
+    // Simple hash function for in-memory storage
+    // In a real implementation, we would use a proper crypto function
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + salt);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
 }
 
 // Use DatabaseStorage instead of MemStorage for persistence

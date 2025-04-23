@@ -1,4 +1,4 @@
-import express, { type Express, Request, Response } from "express";
+import express, { type Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
@@ -14,6 +14,9 @@ import {
   insertProductSchema,
   insertCompanySchema,
   insertPreferencesSchema,
+  insertUserSchema,
+  insertPermissionSchema,
+  insertRolePermissionSchema, 
   invoiceSchema,
   expenseSchema,
   journalEntrySchema,
@@ -21,13 +24,19 @@ import {
   Transaction,
   InsertTransaction,
   salesTaxSchema,
-  transactions
+  transactions,
+  User,
+  Permission,
+  RolePermission
 } from "@shared/schema";
 import { z } from "zod";
 import { ZodError } from "zod-validation-error";
 import { companyRouter } from "./company-routes";
+import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Configure authentication
+  setupAuth(app);
   // API routes
   const apiRouter = express.Router();
   
