@@ -804,4 +804,235 @@ export class DatabaseStorage implements IStorage {
       return newPreferences;
     }
   }
+
+  // User Management Methods
+  async getUsers(): Promise<User[]> {
+    return await db.select({
+      id: usersSchema.id,
+      username: usersSchema.username,
+      email: usersSchema.email,
+      fullName: usersSchema.fullName,
+      role: usersSchema.role,
+      isActive: usersSchema.isActive,
+      lastLogin: usersSchema.lastLogin,
+      createdAt: usersSchema.createdAt,
+      updatedAt: usersSchema.updatedAt
+    }).from(usersSchema);
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    const result = await db.select().from(usersSchema).where(eq(usersSchema.id, id));
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const result = await db.select().from(usersSchema).where(eq(usersSchema.username, username));
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await db.select().from(usersSchema).where(eq(usersSchema.email, email));
+    return result[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    // Hash the password before storing it
+    const hashedPassword = await hashPassword(user.password);
+    const [newUser] = await db.insert(usersSchema).values({
+      ...user,
+      password: hashedPassword
+    }).returning();
+    
+    return newUser;
+  }
+
+  async updateUser(id: number, userUpdate: Partial<User>): Promise<User | undefined> {
+    // If password is being updated, hash it
+    if (userUpdate.password) {
+      userUpdate.password = await hashPassword(userUpdate.password);
+    }
+    
+    const [updatedUser] = await db.update(usersSchema)
+      .set(userUpdate)
+      .where(eq(usersSchema.id, id))
+      .returning();
+      
+    return updatedUser;
+  }
+
+  async deleteUser(id: number): Promise<boolean> {
+    try {
+      // Before deleting a user, we should check if they have any associated data
+      // or if they are the last admin (don't delete the last admin)
+      const user = await this.getUser(id);
+      if (!user) return false;
+      
+      // Check if this is the last admin
+      if (user.role === 'admin') {
+        const admins = await db.select()
+          .from(usersSchema)
+          .where(eq(usersSchema.role, 'admin'));
+          
+        if (admins.length <= 1) {
+          console.error('Cannot delete the last admin user');
+          return false;
+        }
+      }
+      
+      // Delete user-company relationships first
+      await db.delete(userCompaniesSchema)
+        .where(eq(userCompaniesSchema.userId, id));
+      
+      // Delete the user
+      const result = await db.delete(usersSchema)
+        .where(eq(usersSchema.id, id));
+        
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting user with ID ${id}:`, error);
+      return false;
+    }
+  }
+
+  async updateUserLastLogin(id: number): Promise<User | undefined> {
+    const [updatedUser] = await db.update(usersSchema)
+      .set({ lastLogin: new Date() })
+      .where(eq(usersSchema.id, id))
+      .returning();
+      
+    return updatedUser;
+  }
+  
+  // User-Company Assignments
+  async getUserCompanies(userId: number): Promise<UserCompany[]> {
+    return await db.select()
+      .from(userCompaniesSchema)
+      .where(eq(userCompaniesSchema.userId, userId));
+  }
+
+  async getCompanyUsers(companyId: number): Promise<UserCompany[]> {
+    return await db.select()
+      .from(userCompaniesSchema)
+      .where(eq(userCompaniesSchema.companyId, companyId));
+  }
+
+  async assignUserToCompany(userCompany: InsertUserCompany): Promise<UserCompany> {
+    const [newUserCompany] = await db.insert(userCompaniesSchema)
+      .values(userCompany)
+      .returning();
+      
+    return newUserCompany;
+  }
+
+  async updateUserCompanyRole(userId: number, companyId: number, role: string): Promise<UserCompany | undefined> {
+    const [updatedUserCompany] = await db.update(userCompaniesSchema)
+      .set({ role })
+      .where(
+        and(
+          eq(userCompaniesSchema.userId, userId),
+          eq(userCompaniesSchema.companyId, companyId)
+        )
+      )
+      .returning();
+      
+    return updatedUserCompany;
+  }
+
+  async removeUserFromCompany(userId: number, companyId: number): Promise<boolean> {
+    try {
+      const result = await db.delete(userCompaniesSchema)
+        .where(
+          and(
+            eq(userCompaniesSchema.userId, userId),
+            eq(userCompaniesSchema.companyId, companyId)
+          )
+        );
+        
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error removing user ${userId} from company ${companyId}:`, error);
+      return false;
+    }
+  }
+  
+  // Permissions
+  async getPermissions(): Promise<Permission[]> {
+    return await db.select().from(permissionsSchema);
+  }
+
+  async getPermission(id: number): Promise<Permission | undefined> {
+    const result = await db.select().from(permissionsSchema).where(eq(permissionsSchema.id, id));
+    return result[0];
+  }
+
+  async getPermissionByName(name: string): Promise<Permission | undefined> {
+    const result = await db.select().from(permissionsSchema).where(eq(permissionsSchema.name, name));
+    return result[0];
+  }
+
+  async createPermission(permission: InsertPermission): Promise<Permission> {
+    const [newPermission] = await db.insert(permissionsSchema)
+      .values(permission)
+      .returning();
+      
+    return newPermission;
+  }
+
+  async deletePermission(id: number): Promise<boolean> {
+    try {
+      // First remove any role-permission associations
+      await db.delete(rolePermissionsSchema)
+        .where(eq(rolePermissionsSchema.permissionId, id));
+      
+      // Then delete the permission
+      const result = await db.delete(permissionsSchema)
+        .where(eq(permissionsSchema.id, id));
+        
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting permission with ID ${id}:`, error);
+      return false;
+    }
+  }
+  
+  // Role Permissions
+  async getRolePermissions(role: string): Promise<RolePermission[]> {
+    return await db.select()
+      .from(rolePermissionsSchema)
+      .where(eq(rolePermissionsSchema.role, role));
+  }
+
+  async addPermissionToRole(rolePermission: InsertRolePermission): Promise<RolePermission> {
+    const [newRolePermission] = await db.insert(rolePermissionsSchema)
+      .values(rolePermission)
+      .returning();
+      
+    return newRolePermission;
+  }
+
+  async removePermissionFromRole(role: string, permissionId: number): Promise<boolean> {
+    try {
+      const result = await db.delete(rolePermissionsSchema)
+        .where(
+          and(
+            eq(rolePermissionsSchema.role, role),
+            eq(rolePermissionsSchema.permissionId, permissionId)
+          )
+        );
+        
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error removing permission ${permissionId} from role ${role}:`, error);
+      return false;
+    }
+  }
+  
+  // Authentication helper methods
+  async validatePassword(storedPassword: string, suppliedPassword: string): Promise<boolean> {
+    return await comparePasswords(suppliedPassword, storedPassword);
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    return await hashPassword(password);
+  }
 }

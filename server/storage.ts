@@ -152,6 +152,12 @@ export class MemStorage implements IStorage {
   private salesTaxes: Map<number, SalesTax>;
   private products: Map<number, Product>;
   private companies: Map<number, Company>;
+  private users: Map<number, User>;
+  private userCompanies: Map<string, UserCompany>; // Composite key: `${userId}-${companyId}`
+  private permissions: Map<number, Permission>;
+  private rolePermissions: Map<string, RolePermission>; // Composite key: `${role}-${permissionId}`
+  private companySettings: CompanySettings | undefined;
+  private preferences: Preferences | undefined;
   
   private accountIdCounter: number;
   private contactIdCounter: number;
@@ -161,6 +167,8 @@ export class MemStorage implements IStorage {
   private salesTaxIdCounter: number;
   private productIdCounter: number;
   private companyIdCounter: number;
+  private userIdCounter: number;
+  private permissionIdCounter: number;
 
   constructor() {
     this.accounts = new Map();
@@ -171,6 +179,10 @@ export class MemStorage implements IStorage {
     this.salesTaxes = new Map();
     this.products = new Map();
     this.companies = new Map();
+    this.users = new Map();
+    this.userCompanies = new Map();
+    this.permissions = new Map();
+    this.rolePermissions = new Map();
     
     this.accountIdCounter = 1;
     this.contactIdCounter = 1;
@@ -180,6 +192,8 @@ export class MemStorage implements IStorage {
     this.salesTaxIdCounter = 1;
     this.productIdCounter = 1;
     this.companyIdCounter = 1;
+    this.userIdCounter = 1;
+    this.permissionIdCounter = 1;
     
     // Create a default company
     this.initializeDefaultCompany();
@@ -188,6 +202,20 @@ export class MemStorage implements IStorage {
     this.initializeDefaultAccounts();
     // Initialize with some default contacts
     this.initializeDefaultContacts();
+    // Initialize with a default admin user
+    this.initializeDefaultUser();
+  }
+  
+  private initializeDefaultUser() {
+    // Create an admin user
+    this.createUser({
+      username: 'admin',
+      password: 'admin123', // This will be hashed in the implementation
+      email: 'admin@example.com',
+      fullName: 'System Administrator',
+      role: 'admin',
+      isActive: true
+    });
   }
 
   private initializeDefaultAccounts() {
