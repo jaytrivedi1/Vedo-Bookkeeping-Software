@@ -427,7 +427,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                               const statusBadge = transaction.type === 'deposit'
                                 ? transaction.status === 'unapplied_credit'
                                   ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
-                                  : <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
+                                  : <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>
                                 : transaction.type === 'invoice' && 
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
