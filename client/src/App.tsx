@@ -20,159 +20,30 @@ import InvoiceEdit from "@/pages/invoice-edit";
 import InvoiceView from "@/pages/invoice-view";
 import PaymentView from "@/pages/payment-view";
 import PaymentReceive from "@/pages/payment-receive";
-import AuthPage from "@/pages/auth-page";
-import { AuthProvider } from "@/hooks/use-auth";
-import { ProtectedRoute } from "@/components/protected-route";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
   return (
     <Switch>
-      {/* Auth route - accessible without authentication */}
-      <Route path="/auth" component={AuthPage} />
-      
-      {/* Protected routes - require authentication */}
-      <Route path="/">
-        <ProtectedRoute>
-          <MainLayout>
-            <Dashboard />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/invoices">
-        <ProtectedRoute>
-          <MainLayout>
-            <Invoices />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/invoice-new">
-        <ProtectedRoute>
-          <MainLayout>
-            <InvoiceNew />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/invoice-edit/:id">
-        {(params) => (
-          <ProtectedRoute>
-            <MainLayout>
-              <InvoiceEdit />
-            </MainLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/invoices/:id">
-        {(params) => (
-          <ProtectedRoute>
-            <MainLayout>
-              <InvoiceView />
-            </MainLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/payments/edit/:id">
-        {(params) => (
-          <ProtectedRoute>
-            <MainLayout>
-              <PaymentReceive />
-            </MainLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/payments/:id">
-        {(params) => (
-          <ProtectedRoute>
-            <MainLayout>
-              <PaymentView />
-            </MainLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/payment-receive">
-        <ProtectedRoute>
-          <MainLayout>
-            <PaymentReceive />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/expenses">
-        <ProtectedRoute>
-          <MainLayout>
-            <Expenses />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/journals">
-        <ProtectedRoute>
-          <MainLayout>
-            <Journals />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/deposits">
-        <ProtectedRoute>
-          <MainLayout>
-            <Deposits />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/deposits/:id">
-        {(params) => (
-          <ProtectedRoute>
-            <MainLayout>
-              <DepositView />
-            </MainLayout>
-          </ProtectedRoute>
-        )}
-      </Route>
-      <Route path="/banking">
-        <ProtectedRoute>
-          <MainLayout>
-            <Banking />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/chart-of-accounts">
-        <ProtectedRoute>
-          <MainLayout>
-            <ChartOfAccounts />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/account-books">
-        <ProtectedRoute>
-          <MainLayout>
-            <AccountBooks />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/sales-taxes">
-        <ProtectedRoute>
-          <MainLayout>
-            <SalesTaxes />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/products">
-        <ProtectedRoute>
-          <MainLayout>
-            <Products />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/reports">
-        <ProtectedRoute>
-          <MainLayout>
-            <Reports />
-          </MainLayout>
-        </ProtectedRoute>
-      </Route>
-      
-      {/* 404 route */}
-      <Route>
-        <NotFound />
-      </Route>
+      <Route path="/" component={Dashboard} />
+      <Route path="/invoices" component={Invoices} />
+      <Route path="/invoice-new" component={InvoiceNew} />
+      <Route path="/invoice-edit/:id" component={InvoiceEdit} />
+      <Route path="/invoices/:id" component={InvoiceView} />
+      <Route path="/payments/edit/:id" component={PaymentReceive} />
+      <Route path="/payments/:id" component={PaymentView} />
+      <Route path="/payment-receive" component={PaymentReceive} />
+      <Route path="/expenses" component={Expenses} />
+      <Route path="/journals" component={Journals} />
+      <Route path="/deposits" component={Deposits} />
+      <Route path="/deposits/:id" component={DepositView} />
+      <Route path="/banking" component={Banking} />
+      <Route path="/chart-of-accounts" component={ChartOfAccounts} />
+      <Route path="/account-books" component={AccountBooks} />
+      <Route path="/sales-taxes" component={SalesTaxes} />
+      <Route path="/products" component={Products} />
+      <Route path="/reports" component={Reports} />
+      <Route component={NotFound} />
     </Switch>
   );
 }
@@ -180,10 +51,10 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
+      <MainLayout>
         <Router />
-        <Toaster />
-      </AuthProvider>
+      </MainLayout>
+      <Toaster />
     </QueryClientProvider>
   );
 }
