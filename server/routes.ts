@@ -2870,6 +2870,360 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Use company router for company management endpoints
   apiRouter.use("/companies", companyRouter);
 
+  // User Management Routes (Protected with requireAdmin middleware)
+  apiRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const users = await storage.getUsers();
+      // Don't send password hashes to the client
+      const sanitizedUsers = users.map(user => ({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isActive: user.isActive,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        companyId: user.companyId
+      }));
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  apiRouter.get("/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Don't send password hash to the client
+      const { password, ...sanitizedUser } = user;
+      res.json(sanitizedUser);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  apiRouter.post("/users", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Check if username is already taken
+      const existingUser = await storage.getUserByUsername(req.body.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username is already taken" });
+      }
+      
+      // Check if email is already in use
+      if (req.body.email) {
+        const existingEmail = await storage.getUserByEmail(req.body.email);
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email is already in use" });
+        }
+      }
+      
+      // Create the new user
+      const userData = insertUserSchema.parse(req.body);
+      const user = await storage.createUser(userData);
+      
+      // Don't send password hash to the client
+      const { password, ...sanitizedUser } = user;
+      res.status(201).json(sanitizedUser);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  apiRouter.patch("/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if changing username and if it's already taken
+      if (req.body.username && req.body.username !== user.username) {
+        const existingUser = await storage.getUserByUsername(req.body.username);
+        if (existingUser) {
+          return res.status(400).json({ message: "Username is already taken" });
+        }
+      }
+      
+      // Check if changing email and if it's already in use
+      if (req.body.email && req.body.email !== user.email) {
+        const existingEmail = await storage.getUserByEmail(req.body.email);
+        if (existingEmail) {
+          return res.status(400).json({ message: "Email is already in use" });
+        }
+      }
+      
+      // Update the user
+      const updatedUser = await storage.updateUser(id, req.body);
+      
+      // Don't send password hash to the client
+      const { password, ...sanitizedUser } = updatedUser!;
+      res.json(sanitizedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  apiRouter.delete("/users/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Don't allow deleting yourself
+      if (req.user?.id === id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      
+      // Delete the user
+      const success = await storage.deleteUser(id);
+      
+      if (success) {
+        res.status(204).end();
+      } else {
+        res.status(500).json({ message: "Failed to delete user" });
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // User-Company Assignment Routes
+  apiRouter.get("/user-companies/:userId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const userCompanies = await storage.getUserCompanies(userId);
+      res.json(userCompanies);
+    } catch (error) {
+      console.error("Error fetching user companies:", error);
+      res.status(500).json({ message: "Failed to fetch user companies" });
+    }
+  });
+
+  apiRouter.get("/company-users/:companyId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const companyId = parseInt(req.params.companyId);
+      const companyUsers = await storage.getCompanyUsers(companyId);
+      res.json(companyUsers);
+    } catch (error) {
+      console.error("Error fetching company users:", error);
+      res.status(500).json({ message: "Failed to fetch company users" });
+    }
+  });
+
+  apiRouter.post("/user-companies", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Validate user and company exist
+      const user = await storage.getUser(req.body.userId);
+      if (!user) {
+        return res.status(400).json({ message: "User does not exist" });
+      }
+      
+      const company = await storage.getCompany(req.body.companyId);
+      if (!company) {
+        return res.status(400).json({ message: "Company does not exist" });
+      }
+      
+      // Check if assignment already exists
+      const existingAssignments = await storage.getUserCompanies(req.body.userId);
+      const alreadyAssigned = existingAssignments.some(uc => uc.companyId === req.body.companyId);
+      
+      if (alreadyAssigned) {
+        return res.status(400).json({ message: "User is already assigned to this company" });
+      }
+      
+      // Create the assignment
+      const userCompany = await storage.assignUserToCompany(req.body);
+      res.status(201).json(userCompany);
+    } catch (error) {
+      console.error("Error assigning user to company:", error);
+      res.status(500).json({ message: "Failed to assign user to company" });
+    }
+  });
+
+  apiRouter.patch("/user-companies/:userId/:companyId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const companyId = parseInt(req.params.companyId);
+      
+      if (!req.body.role) {
+        return res.status(400).json({ message: "Role is required" });
+      }
+      
+      // Update the role
+      const userCompany = await storage.updateUserCompanyRole(userId, companyId, req.body.role);
+      
+      if (!userCompany) {
+        return res.status(404).json({ message: "User-company assignment not found" });
+      }
+      
+      res.json(userCompany);
+    } catch (error) {
+      console.error("Error updating user company role:", error);
+      res.status(500).json({ message: "Failed to update user company role" });
+    }
+  });
+
+  apiRouter.delete("/user-companies/:userId/:companyId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const companyId = parseInt(req.params.companyId);
+      
+      // Don't allow removing the last admin from a company
+      const user = await storage.getUser(userId);
+      if (user?.role === 'admin') {
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const adminCount = companyUsers.filter(cu => cu.role === 'admin').length;
+        
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot remove the last admin from a company" });
+        }
+      }
+      
+      const success = await storage.removeUserFromCompany(userId, companyId);
+      
+      if (success) {
+        res.status(204).end();
+      } else {
+        res.status(404).json({ message: "User-company assignment not found" });
+      }
+    } catch (error) {
+      console.error("Error removing user from company:", error);
+      res.status(500).json({ message: "Failed to remove user from company" });
+    }
+  });
+
+  // Permissions Routes
+  apiRouter.get("/permissions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const permissions = await storage.getPermissions();
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching permissions:", error);
+      res.status(500).json({ message: "Failed to fetch permissions" });
+    }
+  });
+
+  apiRouter.post("/permissions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Check if permission name already exists
+      const existingPermission = await storage.getPermissionByName(req.body.name);
+      if (existingPermission) {
+        return res.status(400).json({ message: "Permission name already exists" });
+      }
+      
+      const permissionData = insertPermissionSchema.parse(req.body);
+      const permission = await storage.createPermission(permissionData);
+      res.status(201).json(permission);
+    } catch (error) {
+      console.error("Error creating permission:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid permission data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create permission" });
+    }
+  });
+
+  apiRouter.delete("/permissions/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deletePermission(id);
+      
+      if (success) {
+        res.status(204).end();
+      } else {
+        res.status(404).json({ message: "Permission not found" });
+      }
+    } catch (error) {
+      console.error("Error deleting permission:", error);
+      res.status(500).json({ message: "Failed to delete permission" });
+    }
+  });
+
+  // Role-Permission Routes
+  apiRouter.get("/role-permissions/:role", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const role = req.params.role;
+      const rolePermissions = await storage.getRolePermissions(role);
+      res.json(rolePermissions);
+    } catch (error) {
+      console.error("Error fetching role permissions:", error);
+      res.status(500).json({ message: "Failed to fetch role permissions" });
+    }
+  });
+
+  apiRouter.post("/role-permissions", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Validate role and permission exist
+      const permission = await storage.getPermission(req.body.permissionId);
+      if (!permission) {
+        return res.status(400).json({ message: "Permission does not exist" });
+      }
+      
+      // Check if role-permission already exists
+      const rolePermissions = await storage.getRolePermissions(req.body.role);
+      const alreadyAssigned = rolePermissions.some(rp => rp.permissionId === req.body.permissionId);
+      
+      if (alreadyAssigned) {
+        return res.status(400).json({ message: "Permission is already assigned to this role" });
+      }
+      
+      const rolePermissionData = insertRolePermissionSchema.parse(req.body);
+      const rolePermission = await storage.addPermissionToRole(rolePermissionData);
+      res.status(201).json(rolePermission);
+    } catch (error) {
+      console.error("Error assigning permission to role:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid role-permission data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to assign permission to role" });
+    }
+  });
+
+  apiRouter.delete("/role-permissions/:role/:permissionId", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const role = req.params.role;
+      const permissionId = parseInt(req.params.permissionId);
+      
+      const success = await storage.removePermissionFromRole(role, permissionId);
+      
+      if (success) {
+        res.status(204).end();
+      } else {
+        res.status(404).json({ message: "Role-permission assignment not found" });
+      }
+    } catch (error) {
+      console.error("Error removing permission from role:", error);
+      res.status(500).json({ message: "Failed to remove permission from role" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

@@ -3,12 +3,13 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { storage } from "./storage";
-import { User } from "@shared/schema";
+import { User as SchemaUser } from "@shared/schema";
 import createMemoryStore from "memorystore";
 
 declare global {
   namespace Express {
-    interface User extends User {}
+    // Extend Express.User with our schema's User type
+    interface User extends SchemaUser {}
   }
 }
 
@@ -64,7 +65,7 @@ export function setupAuth(app: Express): void {
   );
 
   // Serialize user to session
-  passport.serializeUser((user, done) => {
+  passport.serializeUser((user: Express.User, done) => {
     done(null, user.id);
   });
 
@@ -123,14 +124,14 @@ export function setupAuth(app: Express): void {
           lastName: user.lastName,
         });
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
       return res.status(500).json({ message: "Registration failed", error: error.message });
     }
   });
 
   app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: any, user: SchemaUser | false, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
       
