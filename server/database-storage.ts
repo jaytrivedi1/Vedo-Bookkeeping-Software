@@ -200,8 +200,8 @@ export class DatabaseStorage implements IStorage {
         return undefined;
       }
       
-      // Get all payments applied to this invoice through ledger entries
-      const appliedPayments = await db.select({
+      // First check for ledger entries mentioning this specific invoice
+      const appliedPaymentsByDescription = await db.select({
         amount: sql`SUM(${ledgerEntries.credit})`,
       })
       .from(ledgerEntries)
@@ -211,7 +211,71 @@ export class DatabaseStorage implements IStorage {
         ne(ledgerEntries.transactionId, invoiceId) // Exclude the invoice's own ledger entries
       ));
       
-      const totalApplied = appliedPayments[0]?.amount || 0;
+      // Get all ledger entries for this invoice
+      const allLedgerEntries = await db.select()
+        .from(ledgerEntries)
+        .where(eq(ledgerEntries.transactionId, invoiceId));
+
+      // Find the AR entry for this invoice, which will have a debit value equal to the invoice amount
+      const arEntry = allLedgerEntries.find(entry => 
+        entry.accountId === 2 && // Accounts Receivable
+        Math.abs(entry.debit - invoice.amount) < 0.01 // Debit matches invoice amount
+      );
+      
+      // Modified approach: determine if there might be deposit entries
+      // Look for deposits or payments that affect the same customer through AR
+      let additionalCredits = 0;
+      
+      if (invoice.contactId) {
+        // First, get all transactions for this customer
+        const customerTransactions = await db.select()
+          .from(transactions)
+          .where(eq(transactions.contactId, invoice.contactId));
+          
+        // Filter deposits and payments
+        const paymentsAndDeposits = customerTransactions.filter(t => 
+          (t.type === 'deposit' || t.type === 'payment') && 
+          t.status === 'completed'
+        );
+        
+        // For each payment/deposit, check if it might apply to this invoice
+        for (const transaction of paymentsAndDeposits) {
+          // Get all ledger entries for this transaction
+          const txLedgerEntries = await db.select()
+            .from(ledgerEntries)
+            .where(eq(ledgerEntries.transactionId, transaction.id));
+            
+          // Check if there's a credit to AR that's not already counted
+          for (const entry of txLedgerEntries) {
+            if (
+              entry.accountId === 2 && // Accounts Receivable
+              entry.credit > 0 && // Credit entry
+              !entry.description.includes(invoice.reference) && // Not already counted
+              (
+                // Description mentions the invoice was applied in some way
+                entry.description.includes('Applied to invoice') ||
+                // Or it's a deposit that was completed and might be applied to this invoice
+                (transaction.type === 'deposit' && transaction.status === 'completed')
+              )
+            ) {
+              // For transactions around the same time as the invoice
+              const txDate = new Date(transaction.date);
+              const invoiceDate = new Date(invoice.date);
+              const daysDiff = Math.abs((txDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
+              
+              // If transaction is within 2 days of invoice, consider it might apply to this invoice
+              if (daysDiff <= 2) {
+                console.log(`Found potential uncounted payment/deposit #${transaction.id} (${transaction.reference}) for invoice #${invoice.reference}`);
+                additionalCredits += entry.credit;
+              }
+            }
+          }
+        }
+      }
+      
+      console.log(`Invoice #${invoice.reference} - Description-based credits: ${appliedPaymentsByDescription[0]?.amount || 0}, Additional potential credits: ${additionalCredits}`);
+      
+      const totalApplied = (appliedPaymentsByDescription[0]?.amount || 0) + additionalCredits;
       const remainingBalance = Number(invoice.amount) - Number(totalApplied);
       
       // Update invoice balance and status
@@ -222,6 +286,8 @@ export class DatabaseStorage implements IStorage {
         // Always use 'open' for unpaid and partially paid invoices
         status = 'open';
       }
+      
+      console.log(`Recalculating invoice #${invoice.reference}: amount=${invoice.amount}, totalApplied=${totalApplied}, remainingBalance=${remainingBalance}, status=${status}`);
       
       // Update the invoice
       const [updatedInvoice] = await db.update(transactions)
