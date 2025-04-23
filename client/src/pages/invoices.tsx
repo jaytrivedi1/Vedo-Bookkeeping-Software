@@ -64,8 +64,8 @@ export default function Invoices() {
   
   // Calculate paid amounts based on original amounts minus remaining balance
   const totalPaid = invoices.reduce((sum, invoice) => {
-    // If invoice is paid, add full amount
-    if (invoice.status === "paid") {
+    // If invoice is completed, add full amount
+    if (invoice.status === "completed" || invoice.status === "paid") {
       return sum + invoice.amount;
     }
     // For partially paid invoices, add the paid portion (original amount - balance)
@@ -130,7 +130,7 @@ export default function Invoices() {
             
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-500">Paid</CardTitle>
+                <CardTitle className="text-sm text-gray-500">Completed</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-green-600">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalPaid)}</p>
