@@ -170,7 +170,8 @@ export default function CustomerList({ className }: CustomerListProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'paid':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Paid</Badge>;
+      case 'completed':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
       case 'open':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>;
       case 'overdue':

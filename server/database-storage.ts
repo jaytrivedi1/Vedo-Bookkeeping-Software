@@ -281,7 +281,7 @@ export class DatabaseStorage implements IStorage {
       // Update invoice balance and status
       let status = invoice.status;
       if (remainingBalance <= 0) {
-        status = 'paid';
+        status = 'completed'; // Use 'completed' instead of 'paid' for consistency
       } else {
         // Always use 'open' for unpaid and partially paid invoices
         status = 'open';

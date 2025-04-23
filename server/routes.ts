@@ -1050,7 +1050,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // Temporary calculation for immediate update - will be overwritten by recalculation
             const tempNewBalance = Math.max(0, currentBalance - item.amount);
-            const tempNewStatus = tempNewBalance === 0 ? 'paid' : 'open';
+            const tempNewStatus = tempNewBalance === 0 ? 'completed' : 'open';
             
             // Temporary update to allow ledger entries to be created correctly
             await storage.updateTransaction(invoice.id, { 
@@ -2062,11 +2062,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`Found payment applied to invoice: ${invoice.reference}`);
               // Update invoice balance by adding back the payment amount
               const updatedBalance = (invoice.balance || invoice.amount) + entry.credit;
-              console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'paid' : 'open'}`);
+              console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'completed' : 'open'}`);
               await storage.updateTransaction(invoice.id, {
                 balance: updatedBalance,
                 // Also update status if needed - always use 'open' for invoices with a balance
-                status: updatedBalance <= 0 ? 'paid' : 'open'
+                status: updatedBalance <= 0 ? 'completed' : 'open'
               });
             }
           }
