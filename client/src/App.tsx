@@ -57,7 +57,7 @@ function Router() {
         {(params) => (
           <ProtectedRoute>
             <MainLayout>
-              <InvoiceEdit id={params.id} />
+              <InvoiceEdit />
             </MainLayout>
           </ProtectedRoute>
         )}
@@ -66,7 +66,7 @@ function Router() {
         {(params) => (
           <ProtectedRoute>
             <MainLayout>
-              <InvoiceView id={params.id} />
+              <InvoiceView />
             </MainLayout>
           </ProtectedRoute>
         )}
@@ -75,7 +75,7 @@ function Router() {
         {(params) => (
           <ProtectedRoute>
             <MainLayout>
-              <PaymentReceive id={params.id} />
+              <PaymentReceive />
             </MainLayout>
           </ProtectedRoute>
         )}
@@ -84,7 +84,7 @@ function Router() {
         {(params) => (
           <ProtectedRoute>
             <MainLayout>
-              <PaymentView id={params.id} />
+              <PaymentView />
             </MainLayout>
           </ProtectedRoute>
         )}
@@ -121,7 +121,7 @@ function Router() {
         {(params) => (
           <ProtectedRoute>
             <MainLayout>
-              <DepositView id={params.id} />
+              <DepositView />
             </MainLayout>
           </ProtectedRoute>
         )}
