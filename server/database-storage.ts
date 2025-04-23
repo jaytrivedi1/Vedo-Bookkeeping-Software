@@ -10,7 +10,27 @@ import {
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne } from "drizzle-orm";
 import { IStorage } from "./storage";
-import { compare, hash } from "bcrypt";
+import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { promisify } from "util";
+
+// Promisify the scrypt function
+const scryptAsync = promisify(scrypt);
+
+// Password hashing utility functions
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex');
+  const derivedKey = await scryptAsync(password, salt, 64) as Buffer;
+  return `${derivedKey.toString('hex')}.${salt}`;
+}
+
+async function comparePasswords(supplied: string, stored: string): Promise<boolean> {
+  const [hash, salt] = stored.split('.');
+  if (!hash || !salt) return false;
+  
+  const suppliedHash = await scryptAsync(supplied, salt, 64) as Buffer;
+  const storedHash = Buffer.from(hash, 'hex');
+  return timingSafeEqual(storedHash, suppliedHash);
+}
 
 export class DatabaseStorage implements IStorage {
   // Accounts
