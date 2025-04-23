@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal, json } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -193,8 +193,11 @@ export type InsertLineItem = z.infer<typeof insertLineItemSchema>;
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
 
+// Forward declare salesTaxSchema to fix circular reference
+export const salesTaxesTable = 'sales_taxes';
+
 // Sales Tax Schema
-export const salesTaxSchema = pgTable('sales_taxes', {
+export const salesTaxSchema = pgTable(salesTaxesTable, {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
@@ -202,7 +205,7 @@ export const salesTaxSchema = pgTable('sales_taxes', {
   accountId: integer('account_id').references(() => accounts.id),
   isActive: boolean('is_active').default(true),
   isComposite: boolean('is_composite').default(false),
-  parentId: integer('parent_id').references(() => salesTaxSchema.id),
+  parentId: integer('parent_id').references((): any => salesTaxSchema.id),
   displayOrder: integer('display_order').default(0),
 });
 
@@ -317,3 +320,83 @@ export type InsertPreferences = z.infer<typeof insertPreferencesSchema>;
 
 export type Company = typeof companiesSchema.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompaniesSchema>;
+
+// Role-based access control (RBAC)
+export const roleEnum = pgEnum('role', ['admin', 'accountant', 'bookkeeper', 'viewer']);
+
+// Users schema
+export const usersSchema = pgTable('users', {
+  id: serial('id').primaryKey(),
+  username: text('username').notNull().unique(),
+  email: text('email').notNull().unique(),
+  password: text('password').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  role: roleEnum('role').notNull().default('viewer'),
+  isActive: boolean('is_active').notNull().default(true),
+  lastLogin: timestamp('last_login'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  companyId: integer('company_id').references(() => companiesSchema.id),
+});
+
+// Define company-user many-to-many relationship
+export const userCompaniesSchema = pgTable('user_companies', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => usersSchema.id),
+  companyId: integer('company_id').notNull().references(() => companiesSchema.id),
+  role: roleEnum('role').notNull().default('viewer'), // Role can be specific to a company
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Define permissions schema
+export const permissionsSchema = pgTable('permissions', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(), // e.g., "create_invoice", "delete_contact", etc.
+  description: text('description'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Define role-permission many-to-many relationship
+export const rolePermissionsSchema = pgTable('role_permissions', {
+  id: serial('id').primaryKey(),
+  role: roleEnum('role').notNull(),
+  permissionId: integer('permission_id').notNull().references(() => permissionsSchema.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Create schemas
+export const insertUserSchema = createInsertSchema(usersSchema).omit({ 
+  id: true, 
+  lastLogin: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
+export const insertUserCompanySchema = createInsertSchema(userCompaniesSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertPermissionSchema = createInsertSchema(permissionsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertRolePermissionSchema = createInsertSchema(rolePermissionsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+// Define types
+export type User = typeof usersSchema.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type UserCompany = typeof userCompaniesSchema.$inferSelect;
+export type InsertUserCompany = z.infer<typeof insertUserCompanySchema>;
+
+export type Permission = typeof permissionsSchema.$inferSelect;
+export type InsertPermission = z.infer<typeof insertPermissionSchema>;
+
+export type RolePermission = typeof rolePermissionsSchema.$inferSelect;
+export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;

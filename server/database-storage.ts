@@ -1,14 +1,16 @@
 import { db } from "./db";
 import { 
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
-  CompanySettings, Preferences, Company,
+  CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
-  InsertCompanySettings, InsertPreferences, InsertCompany,
+  InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
-  companySchema, preferencesSchema, companiesSchema
+  companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
+  permissionsSchema, rolePermissionsSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne } from "drizzle-orm";
 import { IStorage } from "./storage";
+import { compare, hash } from "bcrypt";
 
 export class DatabaseStorage implements IStorage {
   // Accounts

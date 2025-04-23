@@ -9,6 +9,10 @@ import {
   companySchema,
   preferencesSchema,
   companiesSchema,
+  usersSchema,
+  userCompaniesSchema,
+  permissionsSchema,
+  rolePermissionsSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -29,6 +33,14 @@ import {
   type InsertPreferences,
   type Company,
   type InsertCompany,
+  type User,
+  type InsertUser,
+  type UserCompany,
+  type InsertUserCompany,
+  type Permission,
+  type InsertPermission,
+  type RolePermission,
+  type InsertRolePermission,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -96,6 +108,39 @@ export interface IStorage {
   saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings>;
   getPreferences(): Promise<Preferences | undefined>;
   savePreferences(preferences: InsertPreferences): Promise<Preferences>;
+  
+  // User Management
+  getUsers(): Promise<User[]>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
+  updateUserLastLogin(id: number): Promise<User | undefined>;
+  
+  // User-Company Assignments
+  getUserCompanies(userId: number): Promise<UserCompany[]>;
+  getCompanyUsers(companyId: number): Promise<UserCompany[]>;
+  assignUserToCompany(userCompany: InsertUserCompany): Promise<UserCompany>;
+  updateUserCompanyRole(userId: number, companyId: number, role: string): Promise<UserCompany | undefined>;
+  removeUserFromCompany(userId: number, companyId: number): Promise<boolean>;
+  
+  // Permissions
+  getPermissions(): Promise<Permission[]>;
+  getPermission(id: number): Promise<Permission | undefined>;
+  getPermissionByName(name: string): Promise<Permission | undefined>;
+  createPermission(permission: InsertPermission): Promise<Permission>;
+  deletePermission(id: number): Promise<boolean>;
+  
+  // Role Permissions
+  getRolePermissions(role: string): Promise<RolePermission[]>;
+  addPermissionToRole(rolePermission: InsertRolePermission): Promise<RolePermission>;
+  removePermissionFromRole(role: string, permissionId: number): Promise<boolean>;
+  
+  // Authentication helpers
+  validatePassword(storedPassword: string, suppliedPassword: string): Promise<boolean>;
+  hashPassword(password: string): Promise<string>;
 }
 
 export class MemStorage implements IStorage {
