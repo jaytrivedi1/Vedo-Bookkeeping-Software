@@ -52,7 +52,8 @@ export default function VendorForm({
       email: "",
       phone: "",
       address: "",
-      notes: "",
+      currency: "USD",
+      defaultTaxRate: 0,
     },
   });
   
@@ -150,7 +151,7 @@ export default function VendorForm({
               <FormItem>
                 <FormLabel>Contact Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Contact person's name" {...field} />
+                  <Input placeholder="Contact person's name" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -165,7 +166,7 @@ export default function VendorForm({
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input type="email" placeholder="Email address" {...field} />
+                  <Input type="email" placeholder="Email address" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -180,7 +181,7 @@ export default function VendorForm({
               <FormItem>
                 <FormLabel>Phone</FormLabel>
                 <FormControl>
-                  <Input placeholder="Phone number" {...field} />
+                  <Input placeholder="Phone number" {...field} value={field.value || ""} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -196,27 +197,14 @@ export default function VendorForm({
             <FormItem>
               <FormLabel>Address</FormLabel>
               <FormControl>
-                <Textarea placeholder="Full address" rows={3} {...field} />
+                <Textarea placeholder="Full address" rows={3} {...field} value={field.value || ""} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
         
-        {/* Notes */}
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Additional notes about this vendor" rows={3} {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Notes field removed - not in Contact model */}
         
         {/* Hidden field for type */}
         <input type="hidden" {...form.register("type")} value="vendor" />
