@@ -171,7 +171,7 @@ export default function CustomerList({ className }: CustomerListProps) {
     switch (status) {
       case 'paid':
       case 'completed':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>;
       case 'open':
         return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>;
       case 'overdue':
@@ -427,7 +427,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                               const statusBadge = transaction.type === 'deposit'
                                 ? transaction.status === 'unapplied_credit'
                                   ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
-                                  : <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>
+                                  : <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
                                 : transaction.type === 'invoice' && 
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
@@ -600,7 +600,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                         <div className="mt-1">
                           <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
                             selectedTransaction.status === 'paid' || selectedTransaction.status === 'completed' 
-                              ? 'bg-green-100 text-green-800' 
+                              ? 'bg-blue-100 text-blue-800' 
                               : selectedTransaction.status === 'open' 
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : selectedTransaction.status === 'overdue'
