@@ -2871,59 +2871,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Additionally, look for any deposits that mention this invoice in their descriptions
+      // Look for any deposits from the same customer that mention this invoice in their descriptions
       // This helps catch credits that aren't directly linked in ledger entries
-      let depositCredits = [];
-      
-      // Special case for invoice #1005 - we only want to include the $385 credit
-      if (transaction.reference === '1005') {
-        console.log("Special case handling for invoice #1005 payment history");
-        depositCredits = await db
-          .select()
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.type, 'deposit'),
-              eq(transactions.id, 150) // Only the specific credit we want for invoice #1005
-            )
-          );
-      } else {
-        // For other invoices, get all related deposits
-        depositCredits = await db
-          .select()
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.type, 'deposit'),
-              sql`(${transactions.description} LIKE ${'%Applied to invoice #' + transaction.reference + '%'} OR 
-                   ${transactions.description} LIKE ${'%Applied to invoice ' + transaction.reference + '%'})`
-            )
-          );
-      }
+      const depositCredits = await db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, 'deposit'),
+            eq(transactions.contactId, transaction.contactId), // Ensure deposit is from the same customer
+            sql`(${transactions.description} LIKE ${'%Applied to invoice #' + transaction.reference + '%'} OR 
+                 ${transactions.description} LIKE ${'%Applied to invoice ' + transaction.reference + '%'})`
+          )
+        );
       
       // Add deposit information to payments list
       for (const deposit of depositCredits) {
-        // Special case for invoice #1005, we know it's exactly $385
-        if (transaction.reference === '1005' && deposit.id === 150) {
-          paymentTransactions.push({
-            transaction: deposit,
-            amountApplied: 385, // Hard-coded for the special case
-            date: deposit.date,
-            description: deposit.description
-          });
-        } else {
-          paymentTransactions.push({
-            transaction: deposit,
-            amountApplied: Number(deposit.amount),
-            date: deposit.date,
-            description: deposit.description
-          });
-        }
+        paymentTransactions.push({
+          transaction: deposit,
+          amountApplied: Number(deposit.amount),
+          date: deposit.date,
+          description: deposit.description
+        });
       }
       
       // Calculate invoice summary
-      const totalPaid = paymentEntries.reduce((sum, entry) => sum + entry.credit, 0) + 
-                       (transaction.reference === '1005' ? 385 : 0); // Add fixed amount for invoice #1005
+      const totalPaid = paymentEntries.reduce((sum, entry) => sum + entry.credit, 0) +
+                        depositCredits.reduce((sum, deposit) => sum + Number(deposit.amount), 0)
       const remainingBalance = transaction.amount - totalPaid;
       
       return res.status(200).json({
