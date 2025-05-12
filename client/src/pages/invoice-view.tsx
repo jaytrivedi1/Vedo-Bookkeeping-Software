@@ -156,7 +156,7 @@ export default function InvoiceView() {
     }
   };
   
-  if (invoiceLoading || contactsLoading || taxesLoading) {
+  if (invoiceLoading || contactsLoading || taxesLoading || paymentsLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="animate-pulse">
@@ -351,10 +351,74 @@ export default function InvoiceView() {
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
                 <div className="text-right font-bold">${(invoice.balance || total).toFixed(2)}</div>
+                
+                {paymentHistory && paymentHistory.summary && (
+                  <>
+                    <div className="col-span-2 border-t border-dashed mt-2 pt-2 text-xs text-gray-500 text-right">
+                      * Based on payment history shown below
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
           
+          {/* Payment History */}
+          {paymentHistory && paymentHistory.payments && paymentHistory.payments.length > 0 && (
+            <div className="mt-8 border-t pt-4">
+              <h2 className="text-lg font-medium mb-3">Payment History</h2>
+              <div className="bg-gray-50 rounded-md">
+                <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b text-sm font-medium text-gray-500">
+                  <div className="col-span-3">Date</div>
+                  <div className="col-span-3">Transaction</div>
+                  <div className="col-span-4">Description</div>
+                  <div className="col-span-2 text-right">Amount</div>
+                </div>
+                <div className="divide-y">
+                  {paymentHistory.payments.map((payment, index) => (
+                    <div key={index} className="grid grid-cols-12 gap-4 px-4 py-3 items-center">
+                      <div className="col-span-3">
+                        {payment.date && format(new Date(payment.date), 'MMM d, yyyy')}
+                      </div>
+                      <div className="col-span-3">
+                        <div className="font-medium">{payment.transaction.type.replace('_', ' ')}</div>
+                        <div className="text-sm text-gray-500">#{payment.transaction.reference || payment.transaction.id}</div>
+                      </div>
+                      <div className="col-span-4 text-gray-600">
+                        {payment.description}
+                      </div>
+                      <div className="col-span-2 text-right font-medium">
+                        ${payment.amountApplied.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Summary row */}
+                <div className="px-4 py-3 bg-gray-100 grid grid-cols-12 gap-4 font-medium">
+                  <div className="col-span-10 text-right">Total Applied:</div>
+                  <div className="col-span-2 text-right">${paymentHistory.summary.totalPaid.toFixed(2)}</div>
+                </div>
+              </div>
+              
+              {/* Balance calculation */}
+              <div className="mt-4 bg-blue-50 p-4 rounded-md">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="text-gray-700">Original Amount:</div>
+                  <div className="text-right">${paymentHistory.summary.originalAmount.toFixed(2)}</div>
+                  
+                  <div className="text-gray-700">Total Payments:</div>
+                  <div className="text-right">- ${paymentHistory.summary.totalPaid.toFixed(2)}</div>
+                  
+                  <div className="text-gray-800 font-medium pt-2 border-t border-blue-200">Current Balance:</div>
+                  <div className="text-right font-medium pt-2 border-t border-blue-200">
+                    ${paymentHistory.summary.remainingBalance.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           {invoice.description && (
             <div className="mt-8 border-t pt-4">

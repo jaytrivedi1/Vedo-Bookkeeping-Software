@@ -2,7 +2,7 @@ import express, { type Express, Request, Response, NextFunction } from "express"
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, ne, and, sql } from "drizzle-orm";
 import { format } from "date-fns";
 import { 
   insertAccountSchema, 
@@ -25,6 +25,7 @@ import {
   InsertTransaction,
   salesTaxSchema,
   transactions,
+  ledgerEntries,
   User,
   Permission,
   RolePermission
@@ -2836,13 +2837,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // These are payments or credits applied to this invoice
       const paymentEntries = await db
         .select()
-        .from(ledgerEntriesSchema)
+        .from(ledgerEntries)
         .where(
           and(
-            sql`${ledgerEntriesSchema.description} LIKE ${'%' + transaction.reference + '%'}`,
-            eq(ledgerEntriesSchema.accountId, 2), // Accounts Receivable
-            neq(ledgerEntriesSchema.transactionId, id), // Exclude the invoice's own ledger entries
-            sql`${ledgerEntriesSchema.credit} > 0` // Only include credits (payments)
+            sql`${ledgerEntries.description} LIKE ${'%' + transaction.reference + '%'}`,
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            ne(ledgerEntries.transactionId, id), // Exclude the invoice's own ledger entries
+            sql`${ledgerEntries.credit} > 0` // Only include credits (payments)
           )
         );
       
