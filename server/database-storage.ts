@@ -215,75 +215,21 @@ export class DatabaseStorage implements IStorage {
    */
   async recalculateInvoiceBalance(invoiceId: number): Promise<Transaction | undefined> {
     try {
-      // Get the invoice
+      // Step 1: Get the invoice
       const invoice = await this.getTransaction(invoiceId);
       if (!invoice || invoice.type !== 'invoice') {
         console.error(`Transaction ${invoiceId} is not an invoice or doesn't exist`);
         return undefined;
       }
       
-      // First, try to find specific deposit credit applications (more accurate)
-      // These are ledger entries that explicitly mention applying a deposit/credit to this invoice
-      const depositApplications = await db.select()
+      console.log(`Starting recalculation for invoice #${invoice.reference} (ID: ${invoice.id})`);
+      
+      // Step 2: Get all ledger entries for this invoice itself
+      const allLedgerEntries = await db.select()
         .from(ledgerEntries)
-        .where(
-          and(
-            eq(ledgerEntries.accountId, 2), // Accounts Receivable
-            sql`${ledgerEntries.debit} > 0`, // Debit entry (credit application)
-            sql`${ledgerEntries.description} LIKE ${'%applied credit%' + invoice.reference + '%'}`, // Mentions applying credit to this invoice
-            ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
-          )
-        );
-        
-      // Also check for deposits that mention the invoice reference in their description
-      // This is especially important for credit applications that might not have correct ledger entries
-      console.log(`Looking for deposits mentioning invoice ${invoice.reference} in description`);
-      
-      const depositsWithInvoiceReference = await db.select()
-        .from(transactions)
-        .where(
-          and(
-            eq(transactions.type, 'deposit'),
-            sql`${transactions.description} LIKE ${'%' + invoice.reference + '%'}` // Description mentions this invoice
-          )
-        );
-        
-      console.log(`Found ${depositsWithInvoiceReference.length} deposits mentioning invoice ${invoice.reference}`);
-      
-      // Debug log all deposits found
-      for (const deposit of depositsWithInvoiceReference) {
-        console.log(`Deposit #${deposit.id} (${deposit.reference}): ${deposit.description}, status=${deposit.status}, balance=${deposit.balance}`);
-      }
-      
-      // Analyze these deposits to extract amounts applied to this invoice
-      const depositCreditsFromDescriptions = [];
-      for (const deposit of depositsWithInvoiceReference) {
-        // Skip deposits we've already counted from ledger entries
-        const alreadyCounted = depositApplications.some(da => 
-          da.transactionId === deposit.id
-        );
-        
-        if (alreadyCounted) {
-          console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping description analysis`);
-          continue;
-        }
-        
-        // Create a synthetic ledger entry for this deposit
-        depositCreditsFromDescriptions.push({
-          id: 0, // Synthetic ID
-          transactionId: deposit.id,
-          accountId: 2, // Accounts Receivable
-          description: `Applied credit from deposit #${deposit.reference || deposit.id} (extracted from description)`,
-          debit: deposit.amount, // Use the full amount
-          credit: 0,
-          date: new Date(deposit.date)
-        });
-        
-        console.log(`Found deposit #${deposit.id} (${deposit.reference}) mentioning invoice #${invoice.reference} in description, amount: ${deposit.amount}`);
-      }
-        
-      // Next, find all payments applied to this invoice by looking at ledger entries 
-      // that mention this invoice number in their description
+        .where(eq(ledgerEntries.transactionId, invoiceId));
+
+      // Step 3: Find payments applied to this invoice
       const appliedPayments = await db.select()
         .from(ledgerEntries)
         .where(
@@ -295,79 +241,108 @@ export class DatabaseStorage implements IStorage {
           )
         );
       
-      // Sum up all types of applications
-      const totalDepositCredits = depositApplications.reduce((sum, entry) => sum + entry.debit, 0);
-      const totalCreditsFromDescriptions = depositCreditsFromDescriptions.reduce((sum, entry) => sum + entry.debit, 0);
-      const totalPaymentCredits = appliedPayments.reduce((sum, entry) => sum + entry.credit, 0);
-      const totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
+      const totalPaymentCredits = appliedPayments.reduce((sum, entry) => sum + Number(entry.credit), 0);
+      console.log(`Found ${appliedPayments.length} payment entries totaling ${totalPaymentCredits}`);
       
-      // Count how many unique transactions these payments came from
-      const uniqueTransactionIds = new Set();
-      appliedPayments.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
-      depositApplications.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
-      depositCreditsFromDescriptions.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
-      
-      // Log what we found for debugging purposes
-      console.log(`Invoice #${invoice.reference} - Summary: 
-      - Deposit credits: ${depositApplications.length} entries totaling ${totalDepositCredits}
-      - Credits from descriptions: ${depositCreditsFromDescriptions.length} entries totaling ${totalCreditsFromDescriptions}
-      - Payment credits: ${appliedPayments.length} entries totaling ${totalPaymentCredits}
-      - Total from ${uniqueTransactionIds.size} transactions: ${totalApplied}`);
-      
-      // Get all ledger entries for this invoice itself
-      const allLedgerEntries = await db.select()
+      // Step 4: Find deposit credits explicitly applied to this invoice via ledger entries
+      const depositApplications = await db.select()
         .from(ledgerEntries)
-        .where(eq(ledgerEntries.transactionId, invoiceId));
-
-      // Find the AR entry for this invoice, which will have a debit value equal to the invoice amount
-      const arEntry = allLedgerEntries.find(entry => 
-        entry.accountId === 2 && // Accounts Receivable
-        Math.abs(entry.debit - invoice.amount) < 0.01 // Debit matches invoice amount
-      );
+        .where(
+          and(
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            sql`${ledgerEntries.debit} > 0`, // Debit entry (credit application)
+            sql`${ledgerEntries.description} LIKE ${'%applied credit%' + invoice.reference + '%'}`, // Mentions applying credit to this invoice
+            ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
+          )
+        );
       
-      // Log payment details for debugging
-      if (appliedPayments.length > 0) {
-        console.log(`Payment application details for invoice #${invoice.reference}:`);
-        for (const payment of appliedPayments) {
-          console.log(`- Transaction ID ${payment.transactionId}: ${payment.description}, Amount: ${payment.credit}`);
-        }
+      const totalDepositCredits = depositApplications.reduce((sum, entry) => sum + Number(entry.debit), 0);
+      console.log(`Found ${depositApplications.length} deposit credit entries totaling ${totalDepositCredits}`);
+      
+      // Step 5: Find deposits that mention this invoice in their description
+      console.log(`Looking for deposits mentioning invoice ${invoice.reference} in description`);
+      const depositsWithInvoiceReference = await db.select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, 'deposit'),
+            sql`${transactions.description} LIKE ${'%' + invoice.reference + '%'}` // Description mentions this invoice
+          )
+        );
+      
+      console.log(`Found ${depositsWithInvoiceReference.length} deposits mentioning invoice ${invoice.reference}`);
+      for (const deposit of depositsWithInvoiceReference) {
+        console.log(`Deposit #${deposit.id} (${deposit.reference}): ${deposit.description}, status=${deposit.status}, balance=${deposit.balance}`);
       }
       
-      // Log deposit credit details for debugging
-      if (depositApplications.length > 0) {
-        console.log(`Deposit credit application details for invoice #${invoice.reference}:`);
-        for (const deposit of depositApplications) {
-          console.log(`- Transaction ID ${deposit.transactionId}: ${deposit.description}, Amount: ${deposit.debit}`);
+      // Step 6: Extract amounts from deposit descriptions
+      let totalCreditsFromDescriptions = 0;
+      const depositIdsFromLedger = new Set(depositApplications.map(d => d.transactionId));
+      
+      // Analyze and extract credit amounts from deposit descriptions
+      for (const deposit of depositsWithInvoiceReference) {
+        // Skip if already counted through ledger entries
+        if (depositIdsFromLedger.has(deposit.id)) {
+          console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping`);
+          continue;
         }
+        
+        totalCreditsFromDescriptions += Number(deposit.amount);
+        console.log(`Adding ${deposit.amount} from deposit #${deposit.id} description`);
       }
       
-      // Calculate the remaining balance
-      const remainingBalance = Number(invoice.amount) - Number(totalApplied);
+      // Step 7: Calculate total applied and remaining balance
+      const totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
+      const remainingBalance = Number(invoice.amount) - totalApplied;
       
-      // Update invoice balance and status
-      let status = invoice.status;
+      console.log(`Summary for invoice #${invoice.reference}:
+      - Original amount: ${invoice.amount}
+      - Payment credits: ${totalPaymentCredits}
+      - Deposit credits from ledger: ${totalDepositCredits}
+      - Deposit credits from descriptions: ${totalCreditsFromDescriptions}
+      - Total applied: ${totalApplied}
+      - Remaining balance: ${remainingBalance}
+      - Current status: ${invoice.status}`);
+      
+      // Step 8: Determine correct status based on remaining balance
+      let newStatus: TransactionStatus = invoice.status;
+      
       if (remainingBalance <= 0) {
-        status = 'completed'; // Use 'completed' instead of 'paid' for consistency
+        newStatus = 'completed';
       } else {
         // Always use 'open' for unpaid and partially paid invoices
-        status = 'open';
+        newStatus = 'open';
       }
       
-      console.log(`Recalculating invoice #${invoice.reference}: amount=${invoice.amount}, totalApplied=${totalApplied}, remainingBalance=${remainingBalance}, status=${status}`);
+      // Step 9: Update the invoice if needed
+      let needsUpdate = false;
       
-      // Update the invoice
-      const [updatedInvoice] = await db.update(transactions)
-        .set({
-          balance: remainingBalance > 0 ? remainingBalance : 0,
-          status
-        })
-        .where(eq(transactions.id, invoiceId))
-        .returning();
-        
-      return updatedInvoice;
+      if (invoice.balance !== remainingBalance) {
+        console.log(`Updating balance from ${invoice.balance} to ${remainingBalance}`);
+        needsUpdate = true;
+      }
+      
+      if (invoice.status !== newStatus) {
+        console.log(`Updating status from ${invoice.status} to ${newStatus}`);
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        const [updatedInvoice] = await db.update(transactions)
+          .set({ 
+            balance: remainingBalance > 0 ? remainingBalance : 0,
+            status: newStatus
+          })
+          .where(eq(transactions.id, invoiceId))
+          .returning();
+          
+        return updatedInvoice;
+      }
+      
+      return invoice;
     } catch (error) {
       console.error('Error recalculating invoice balance:', error);
-      return undefined;
+      throw error;
     }
   }
   
