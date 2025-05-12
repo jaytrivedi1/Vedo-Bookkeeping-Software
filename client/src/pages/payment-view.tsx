@@ -285,6 +285,26 @@ export default function PaymentView() {
   const contact = contacts?.find(c => c.id === payment.contactId);
   const depositAccount = accounts?.find(a => a.id === selectedDepositAccountId);
   
+  // Fetch customer's deposits (unapplied credits)
+  const { data: customerDeposits = [], isLoading: isDepositsLoading } = useQuery({
+    queryKey: ['/api/transactions', { type: 'deposit', contactId: payment?.contactId }],
+    queryFn: async () => {
+      if (!payment?.contactId) return [];
+      
+      // Get all deposits for this customer
+      const response = await apiRequest('GET', `/api/transactions`);
+      const allTransactions = await response.json();
+      
+      // Filter for unapplied credit deposits for this customer
+      return allTransactions.filter((tx: any) => 
+        tx.type === 'deposit' && 
+        tx.contactId === payment.contactId &&
+        (tx.balance < 0) // Only include deposits with unapplied credit (negative balance)
+      );
+    },
+    enabled: !!payment?.contactId, // Only run when we have a contactId
+  });
+  
   // Calculate totals from current values
   const totalReceived = isEditing 
     ? parseFloat(amountReceived.replace(/,/g, '') || '0') || 0
@@ -296,6 +316,9 @@ export default function PaymentView() {
       : p.amount;
     return sum + (amount || 0);
   }, 0);
+  
+  // In the future, we would calculate applied credits here
+  const totalCreditsApplied = 0;
   
   const unappliedCredit = totalReceived - totalApplied;
 
@@ -680,41 +703,83 @@ export default function PaymentView() {
             </div>
           </CardHeader>
           <CardContent>
-            <div>
-              <div className="rounded-md border">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Select
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Credit #
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Description
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Apply
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    <tr>
-                      <td colSpan={6} className="px-6 py-4 text-sm text-gray-500 text-center">
-                        No unapplied credits available for this customer
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+            {isDepositsLoading ? (
+              <div className="p-4 flex justify-center">
+                <Loader2 className="h-6 w-6 animate-spin" />
               </div>
-            </div>
+            ) : (
+              <div>
+                <div className="rounded-md border">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Select
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Credit #
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Description
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Amount
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Apply
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {customerDeposits && customerDeposits.length > 0 ? (
+                        customerDeposits.map((deposit: any) => (
+                          <tr key={deposit.id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Checkbox 
+                                disabled={!isEditing || updatePaymentMutation.isPending} 
+                                // Logic for handling credit application would go here
+                              />
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {deposit.reference || `DEP-${format(new Date(deposit.date), 'yyyy-MM-dd')}`}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {format(new Date(deposit.date), 'MMM d, yyyy')}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              {deposit.description || 'Customer deposit'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                              {formatCurrency(Math.abs(deposit.balance))}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              {isEditing ? (
+                                <Input 
+                                  className="w-24 text-right ml-auto"
+                                  disabled={!isEditing || updatePaymentMutation.isPending}
+                                  // Logic for handling credit amount input would go here
+                                />
+                              ) : (
+                                <span className="text-sm text-gray-900">$0.00</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 text-sm text-gray-500 text-center">
+                            No unapplied credits available for this customer
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
         
@@ -742,7 +807,7 @@ export default function PaymentView() {
               <div className="flex justify-between items-center text-sm mt-2">
                 <span>Total Credits Applied:</span>
                 <span className="font-medium">
-                  $0.00
+                  {formatCurrency(totalCreditsApplied)}
                 </span>
               </div>
               
