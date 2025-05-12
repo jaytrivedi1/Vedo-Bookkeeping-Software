@@ -1,6 +1,6 @@
 import { db } from './db';
 import { transactions, ledgerEntries } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { DatabaseStorage } from './database-storage';
 
 /**
@@ -52,14 +52,18 @@ async function fixInvoice1007() {
     const applicationEntries = await db
       .select()
       .from(ledgerEntries)
-      .where(eq(ledgerEntries.accountId, 2)) // Accounts Receivable
-      .where(eq(ledgerEntries.credit, deposit.amount));
+      .where(
+        and(
+          eq(ledgerEntries.accountId, 2), // Accounts Receivable
+          eq(ledgerEntries.credit, deposit.amount)
+        )
+      );
     
     console.log(`Found ${applicationEntries.length} entries with credit=${deposit.amount}`);
     
     // Create a new ledger entry that links the deposit to the invoice if one doesn't exist
     const needsNewEntry = !applicationEntries.some(
-      entry => entry.description?.includes(`invoice #${invoice.reference}`)
+      (entry: any) => entry.description?.includes(`invoice #${invoice.reference}`)
     );
     
     if (needsNewEntry) {
@@ -80,12 +84,14 @@ async function fixInvoice1007() {
       console.log('Found existing ledger entry linking the deposit to the invoice');
     }
     
-    // Force update the invoice balance to 0 since we know it should be fully paid
+    // Update the invoice balance to $615 (invoice amount $1050 - deposit $435)
+    const correctBalance = 615;
+    
     const [updatedInvoice] = await db
       .update(transactions)
       .set({
-        balance: 0,
-        status: 'completed'
+        balance: correctBalance,
+        status: 'open' // Since it's partially paid, status should be 'open'
       })
       .where(eq(transactions.id, invoice.id))
       .returning();
@@ -100,12 +106,13 @@ async function fixInvoice1007() {
 }
 
 // Run the script
-fixInvoice1007()
-  .then(() => {
+void (async () => {
+  try {
+    await fixInvoice1007();
     console.log('Script completed');
     process.exit(0);
-  })
-  .catch(err => {
+  } catch (err) {
     console.error('Error running script:', err);
     process.exit(1);
-  });
+  }
+})();
