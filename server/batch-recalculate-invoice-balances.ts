@@ -7,7 +7,7 @@ import { DatabaseStorage } from './database-storage';
  * Utility script to recalculate all invoice balances to ensure accuracy
  * This fixes issues where payments may have been double-counted
  */
-async function batchRecalculateInvoiceBalances() {
+export async function batchRecalculateInvoiceBalances() {
   console.log('Starting batch recalculation of all invoice balances...');
   
   try {
@@ -54,3 +54,16 @@ async function batchRecalculateInvoiceBalances() {
 }
 
 export default batchRecalculateInvoiceBalances;
+
+// Run the script directly when called from command line
+// Using top level await in ESM modules
+if (process.argv[1].includes('batch-recalculate-invoice-balances')) {
+  await batchRecalculateInvoiceBalances()
+    .then(() => {
+      console.log('Recalculation script completed');
+    })
+    .catch(err => {
+      console.error('Error running recalculation script:', err);
+      process.exit(1);
+    });
+}
