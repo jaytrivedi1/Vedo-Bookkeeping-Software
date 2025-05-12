@@ -222,7 +222,22 @@ export class DatabaseStorage implements IStorage {
         return undefined;
       }
       
-      // Find all credits applied to this invoice by looking at ledger entries 
+      // First, try to find specific deposit credit applications (more accurate)
+      // These are ledger entries that explicitly mention applying a deposit/credit to this invoice
+      const depositApplications = await db.select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            sql`${ledgerEntries.debit} > 0`, // Debit entry (credit application)
+            sql`${ledgerEntries.description} LIKE ${'%applied credit%' + invoice.reference + '%'}`, // Mentions applying credit to this invoice
+            ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
+          )
+        );
+        
+      console.log(`Invoice #${invoice.reference} - Found ${depositApplications.length} specific deposit credit applications`);
+        
+      // Next, find all payments applied to this invoice by looking at ledger entries 
       // that mention this invoice number in their description
       const appliedPayments = await db.select()
         .from(ledgerEntries)
@@ -235,14 +250,21 @@ export class DatabaseStorage implements IStorage {
           )
         );
       
-      // Sum up all these payments - we only count them once!
-      const totalApplied = appliedPayments.reduce((sum, entry) => sum + entry.credit, 0);
+      // Sum up both types of applications
+      const totalDepositCredits = depositApplications.reduce((sum, entry) => sum + entry.debit, 0);
+      const totalPaymentCredits = appliedPayments.reduce((sum, entry) => sum + entry.credit, 0);
+      const totalApplied = totalPaymentCredits + totalDepositCredits;
       
       // Count how many unique transactions these payments came from
-      const uniqueTransactionIds = Array.from(new Set(appliedPayments.map(entry => entry.transactionId)));
+      const uniqueTransactionIds = new Set();
+      appliedPayments.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
+      depositApplications.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
       
       // Log what we found for debugging purposes
-      console.log(`Invoice #${invoice.reference} - Found ${appliedPayments.length} credit entries from ${uniqueTransactionIds.length} transactions, totaling ${totalApplied}`);
+      console.log(`Invoice #${invoice.reference} - Summary: 
+      - Deposit credits: ${depositApplications.length} entries totaling ${totalDepositCredits}
+      - Payment credits: ${appliedPayments.length} entries totaling ${totalPaymentCredits}
+      - Total from ${uniqueTransactionIds.size} transactions: ${totalApplied}`);
       
       // Get all ledger entries for this invoice itself
       const allLedgerEntries = await db.select()
@@ -255,11 +277,19 @@ export class DatabaseStorage implements IStorage {
         Math.abs(entry.debit - invoice.amount) < 0.01 // Debit matches invoice amount
       );
       
-      // For each payment, log details to help debugging
+      // Log payment details for debugging
       if (appliedPayments.length > 0) {
-        console.log(`Payment details for invoice #${invoice.reference}:`);
+        console.log(`Payment application details for invoice #${invoice.reference}:`);
         for (const payment of appliedPayments) {
           console.log(`- Transaction ID ${payment.transactionId}: ${payment.description}, Amount: ${payment.credit}`);
+        }
+      }
+      
+      // Log deposit credit details for debugging
+      if (depositApplications.length > 0) {
+        console.log(`Deposit credit application details for invoice #${invoice.reference}:`);
+        for (const deposit of depositApplications) {
+          console.log(`- Transaction ID ${deposit.transactionId}: ${deposit.description}, Amount: ${deposit.debit}`);
         }
       }
       
