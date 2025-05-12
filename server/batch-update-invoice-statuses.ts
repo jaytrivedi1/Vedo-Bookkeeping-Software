@@ -41,10 +41,8 @@ async function batchUpdateInvoiceStatuses() {
           eq(transactions.type, 'invoice'),
           eq(transactions.status, 'completed'),
           and(
-            and(
-              transactions.balance !== null,
-              transactions.balance !== 0
-            )
+            eq(transactions.balance, null, false),  // balance is not null
+            ne(transactions.balance, 0)            // balance is not 0
           )
         )
       )
