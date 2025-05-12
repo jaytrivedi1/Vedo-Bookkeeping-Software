@@ -664,17 +664,15 @@ export default function PaymentView() {
                         {isEditing ? (
                           <Input
                             type="text"
-                            className="text-right"
+                            className="text-right w-32 ml-auto"
                             value={invoice.amountString || formatCurrency(invoice.amount)}
                             onChange={(e) => handleUpdatePaymentAmount(idx, e.target.value)}
+                            disabled={updatePaymentMutation.isPending}
                           />
                         ) : (
-                          <Input
-                            type="text"
-                            className="text-right"
-                            value={formatCurrency(invoice.amount)}
-                            readOnly
-                          />
+                          <span className="block text-right">
+                            {formatCurrency(invoice.amount)}
+                          </span>
                         )}
                       </td>
                     </tr>
