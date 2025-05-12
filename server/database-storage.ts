@@ -266,8 +266,9 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(transactions.type, 'deposit'),
-            // Be more selective to find deposits specifically applied to this invoice (not just mentioning it)
-            sql`${transactions.description} LIKE ${'%Applied to invoice #' + invoice.reference + '%'}`
+                  // Find deposits that mention this invoice specifically
+            sql`(${transactions.description} LIKE ${'%Applied to invoice #' + invoice.reference + '%'} OR 
+                 ${transactions.description} LIKE ${'%Applied to invoice ' + invoice.reference + '%'})`
           )
         );
       
@@ -280,8 +281,22 @@ export class DatabaseStorage implements IStorage {
       let totalCreditsFromDescriptions = 0;
       const depositIdsFromLedger = new Set(depositApplications.map(d => d.transactionId));
       
-      // For invoice #1005, we know we should only apply the $385 credit from transaction #150
-      // This is a targeted fix for the specific issue
+      // Enhanced credit determination logic
+      console.log("Analyzing deposits for potential over-application of credits...");
+      
+      // Sort deposits by date (newest first) to prioritize most recent credits
+      const sortedDeposits = [...depositsWithInvoiceReference].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      
+      // Calculate how much credit we need to apply
+      const requiredCredit = Number(invoice.amount);
+      let appliedCredit = totalPaymentCredits + totalDepositCredits; // Credits already applied through ledger entries
+      let remainingCreditNeeded = requiredCredit - appliedCredit;
+      
+      console.log(`Invoice amount: ${requiredCredit}, already applied through ledger: ${appliedCredit}, remaining needed: ${remainingCreditNeeded}`);
+      
+      // Special case handling for known problematic invoices
       if (invoice.reference === '1005') {
         console.log("Special case handling for invoice #1005");
         // Find only the $385 credit (CREDIT-78342) explicitly from payment #149
@@ -292,21 +307,34 @@ export class DatabaseStorage implements IStorage {
         if (specificCredit) {
           console.log(`Found specific credit #${specificCredit.id} with amount ${specificCredit.amount}`);
           totalCreditsFromDescriptions = Number(specificCredit.amount);
+          console.log(`Using fixed amount of ${totalCreditsFromDescriptions} for invoice #1005`);
         } else {
           console.log("Could not find the specific $385 credit for invoice #1005");
           totalCreditsFromDescriptions = 0;
         }
       } else {
-        // For other invoices, use the standard logic
-        for (const deposit of depositsWithInvoiceReference) {
+        // For all other invoices
+        for (const deposit of sortedDeposits) {
           // Skip if already counted through ledger entries
           if (depositIdsFromLedger.has(deposit.id)) {
             console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping`);
             continue;
           }
           
-          totalCreditsFromDescriptions += Number(deposit.amount);
-          console.log(`Adding ${deposit.amount} from deposit #${deposit.id} description`);
+          const creditAmount = Number(deposit.amount);
+          
+          // Only apply as much credit as needed to avoid over-applying
+          if (remainingCreditNeeded <= 0) {
+            console.log(`No more credit needed for invoice #${invoice.reference}, skipping deposit #${deposit.id}`);
+            continue;
+          }
+          
+          // Apply only what we need from this deposit
+          const amountToApply = Math.min(creditAmount, remainingCreditNeeded);
+          console.log(`Applying ${amountToApply} from deposit #${deposit.id} (${deposit.reference})`);
+          
+          totalCreditsFromDescriptions += amountToApply;
+          remainingCreditNeeded -= amountToApply;
         }
       }
       
