@@ -399,35 +399,105 @@ export default function CustomerList({ className }: CustomerListProps) {
                             <TableHead>Amount</TableHead>
                             <TableHead>Balance</TableHead>
                             <TableHead>Status</TableHead>
+                            <TableHead>Notes</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {customerInvoicesAndPayments
                             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                            .map((transaction) => {
+                            .map((transaction, index, sortedArray) => {
+                              // Find relationship information
+                              const relatedPayments = [];
+                              const relatedInvoices = [];
+                              let relationshipNote = '';
+                              let rowClasses = '';
+                              
+                              // For payments, find related invoices from description
+                              if (transaction.type === 'payment') {
+                                // Try to extract invoice references from description
+                                const invoiceRefRegex = /invoice #(\d+)/gi;
+                                let match;
+                                const extractedRefs = [];
+                                
+                                while ((match = invoiceRefRegex.exec(transaction.description || '')) !== null) {
+                                  extractedRefs.push(match[1]);
+                                }
+                                
+                                // Find any related invoices
+                                if (extractedRefs.length > 0) {
+                                  for (const ref of extractedRefs) {
+                                    const relatedInvoice = sortedArray.find(t => 
+                                      t.type === 'invoice' && t.reference === ref
+                                    );
+                                    
+                                    if (relatedInvoice) {
+                                      relatedInvoices.push(relatedInvoice);
+                                      rowClasses = 'bg-blue-50';
+                                    }
+                                  }
+                                  
+                                  // Create relationship note
+                                  if (relatedInvoices.length > 0) {
+                                    relationshipNote = `Applied to Invoice${relatedInvoices.length > 1 ? 's' : ''} #${extractedRefs.join(', #')}`;
+                                  }
+                                }
+                              }
+                              
+                              // For invoices, find payments that mention this invoice
+                              else if (transaction.type === 'invoice') {
+                                const invoiceRef = transaction.reference;
+                                if (invoiceRef) {
+                                  // Find payments that mention this invoice
+                                  for (const t of sortedArray) {
+                                    if (t.type === 'payment' && t.description && 
+                                        t.description.toLowerCase().includes(`invoice #${invoiceRef}`)) {
+                                      relatedPayments.push(t);
+                                      rowClasses = 'bg-blue-50';
+                                    }
+                                  }
+                                  
+                                  // Create relationship note
+                                  if (relatedPayments.length > 0) {
+                                    relationshipNote = `Payment${relatedPayments.length > 1 ? 's' : ''} received`;
+                                  }
+                                }
+                              }
+                              
+                              // For deposits/credits, show what they're available for
+                              else if (transaction.type === 'deposit' && transaction.status === 'unapplied_credit') {
+                                rowClasses = 'bg-green-50';
+                                relationshipNote = 'Available credit';
+                                
+                                // If this credit came from a payment, indicate that
+                                if (transaction.description && transaction.description.includes('Unapplied credit from payment')) {
+                                  const paymentMatch = transaction.description.match(/from payment #(\d+)/i);
+                                  if (paymentMatch && paymentMatch[1]) {
+                                    relationshipNote = `Available credit from Payment #${paymentMatch[1]}`;
+                                  }
+                                }
+                              }
+                              
                               // Format transaction type for display
                               const typeDisplay = transaction.type === 'invoice' 
                                 ? 'Invoice'
                                 : transaction.type === 'payment'
                                   ? 'Payment'
                                   : transaction.type === 'deposit'
-                                    ? 'Deposit'
+                                    ? transaction.status === 'unapplied_credit' ? 'Credit' : 'Deposit'
                                     : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                               
-                              // Only show balance for invoices, not for payments or deposits
+                              // Determine balance display approach
                               const showBalance = transaction.type === 'invoice';
                               
-                              // For deposits, check actual status
-                              const isUnappliedCredit = transaction.type === 'deposit' && 
-                                transaction.status === 'unapplied_credit';
-                              
-                              // For invoices, show "Open" badge if there's a balance
-                              // For deposits, respect their status (unapplied_credit or completed)
+                              // Determine status badge
                               const statusBadge = transaction.type === 'deposit'
                                 ? transaction.status === 'unapplied_credit'
                                   ? <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Credit</Badge>
                                   : <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
+                                : transaction.type === 'invoice' && 
+                                  (transaction.balance === 0 || transaction.status === 'paid' || transaction.status === 'completed')
+                                  ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
                                 : transaction.type === 'invoice' && 
                                   transaction.balance !== null && 
                                   transaction.balance !== undefined &&
@@ -436,14 +506,30 @@ export default function CustomerList({ className }: CustomerListProps) {
                                     : getStatusBadge(transaction.status);
                                 
                               return (
-                                <TableRow key={transaction.id}>
+                                <TableRow key={transaction.id} className={rowClasses}>
                                   <TableCell>
                                     {format(new Date(transaction.date), "MMM dd, yyyy")}
                                   </TableCell>
-                                  <TableCell>{typeDisplay}</TableCell>
-                                  <TableCell>{transaction.reference}</TableCell>
-                                  <TableCell>{formatCurrency(transaction.amount, transaction.type, transaction.status)}</TableCell>
+                                  <TableCell className="font-medium">
+                                    {typeDisplay}
+                                  </TableCell>
                                   <TableCell>
+                                    {transaction.reference || (transaction.type === 'payment' ? `PMT-${transaction.id}` : '—')}
+                                  </TableCell>
+                                  <TableCell className={
+                                    transaction.type === 'invoice' 
+                                      ? 'font-semibold' 
+                                      : transaction.type === 'payment' || transaction.type === 'deposit' 
+                                        ? 'font-semibold text-green-700' 
+                                        : ''
+                                  }>
+                                    {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                  </TableCell>
+                                  <TableCell className={
+                                    transaction.balance !== null && transaction.balance > 0 
+                                      ? 'font-semibold text-blue-700' 
+                                      : ''
+                                  }>
                                     {showBalance && transaction.balance !== null 
                                       ? formatCurrency(transaction.balance) 
                                       : transaction.type === 'deposit' && transaction.balance !== null
@@ -451,6 +537,9 @@ export default function CustomerList({ className }: CustomerListProps) {
                                         : '—'}
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
+                                  <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">
+                                    {relationshipNote}
+                                  </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
                                       {transaction.type === 'invoice' ? (
