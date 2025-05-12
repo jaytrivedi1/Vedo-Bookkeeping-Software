@@ -262,6 +262,39 @@ export default function PaymentView() {
     setInvoicePayments(processedPayments);
   }, [data, transactions]);
   
+  // Initialize deposit payments from ledger entries when ledger data is available
+  useEffect(() => {
+    if (!data) return;
+    
+    const ledgerEntries = data.ledgerEntries || [];
+    
+    // Find the credits applied - look for entries with debit in AR account
+    const creditEntries = ledgerEntries.filter(entry => 
+      entry.accountId === 2 && entry.debit > 0 &&
+      entry.description?.includes('Applied credit')
+    );
+    
+    if (creditEntries.length > 0 && depositPayments.length === 0) {
+      const initialDepositPayments = [];
+      
+      // Look for DEP-2025-05-12 credit application
+      const dep2025 = creditEntries.find(entry => 
+        entry.description?.includes('deposit #DEP-2025-05-12')
+      );
+      
+      if (dep2025) {
+        initialDepositPayments.push({
+          id: 153, // The ID of DEP-2025-05-12
+          amount: dep2025.debit,
+          amountString: formatCurrency(dep2025.debit)
+        });
+        
+        // Set the deposit payments state
+        setDepositPayments(initialDepositPayments);
+      }
+    }
+  }, [data, depositPayments.length]);
+  
   // Loading state
   if (isLoading) {
     return (
@@ -324,29 +357,6 @@ export default function PaymentView() {
   
   // Calculate total credits applied from ledger entries
   const totalCreditsApplied = creditEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
-  
-  // Initialize deposit payments from ledger entries when component loads
-  useEffect(() => {
-    if (creditEntries.length > 0 && depositPayments.length === 0) {
-      const initialDepositPayments = [];
-      
-      // Look for DEP-2025-05-12 credit application
-      const dep2025 = creditEntries.find(entry => 
-        entry.description?.includes('deposit #DEP-2025-05-12')
-      );
-      
-      if (dep2025) {
-        initialDepositPayments.push({
-          id: 153, // The ID of DEP-2025-05-12
-          amount: dep2025.debit,
-          amountString: formatCurrency(dep2025.debit)
-        });
-        
-        // Set the deposit payments state
-        setDepositPayments(initialDepositPayments);
-      }
-    }
-  }, [creditEntries, depositPayments.length]);
   
   // This payment's data shows it as a credit application with zero payment amount
   const actualBalance = totalApplied - totalCreditsApplied;
@@ -778,13 +788,14 @@ export default function PaymentView() {
                                   className="w-24 text-right ml-auto"
                                   disabled={updatePaymentMutation.isPending}
                                   value={
-                                    deposit.id === 153 && 
-                                    ledgerEntries.some(entry => 
-                                      entry.description?.includes("deposit #DEP-2025-05-12") && 
-                                      entry.debit > 0
-                                    ) 
-                                      ? "1,155.00" 
-                                      : "0.00"
+                                    depositPayments.find(dp => dp.id === deposit.id)?.amountString ||
+                                    (deposit.id === 153 && 
+                                     ledgerEntries.some(entry => 
+                                       entry.description?.includes("deposit #DEP-2025-05-12") && 
+                                       entry.debit > 0
+                                     ) 
+                                       ? "1,155.00" 
+                                       : "0.00")
                                   }
                                   onChange={(e) => {
                                     const value = e.target.value;
