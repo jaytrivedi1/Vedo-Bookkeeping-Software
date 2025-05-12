@@ -77,16 +77,6 @@ export default function PaymentView() {
   const { data: accounts } = useQuery<Account[]>({ queryKey: ['/api/accounts'] });
   const { data: transactions } = useQuery<Transaction[]>({ queryKey: ['/api/transactions'] });
   
-  // Pre-fetch customer deposits (we'll filter these later based on contactId)
-  const { data: allDeposits = [], isLoading: isAllDepositsLoading } = useQuery({
-    queryKey: ['/api/transactions/deposits'],
-    queryFn: async () => {
-      const response = await apiRequest('GET', `/api/transactions`);
-      const allTransactions = await response.json();
-      return allTransactions.filter((tx: any) => tx.type === 'deposit' && tx.balance < 0);
-    },
-  });
-  
   // Update payment mutation
   const updatePaymentMutation = useMutation({
     mutationFn: async (updatedPayment: any) => {
@@ -296,11 +286,24 @@ export default function PaymentView() {
   const contactId = payment?.contactId;
   const contact = contacts?.find(c => c.id === contactId);
   const depositAccount = accounts?.find(a => a.id === selectedDepositAccountId);
-  
-  // Filter deposits by the current customer ID
-  const customerDeposits = contactId 
-    ? allDeposits.filter((deposit: any) => deposit.contactId === contactId) 
-    : [];
+  const { data: customerDeposits = [], isLoading: isDepositsLoading } = useQuery({
+    queryKey: ['/api/transactions', { type: 'deposit', contactId }],
+    queryFn: async () => {
+      if (!contactId) return [];
+      
+      // Get all deposits for this customer
+      const response = await apiRequest('GET', `/api/transactions`);
+      const allTransactions = await response.json();
+      
+      // Filter for unapplied credit deposits for this customer
+      return allTransactions.filter((tx: any) => 
+        tx.type === 'deposit' && 
+        tx.contactId === contactId &&
+        (tx.balance < 0) // Only include deposits with unapplied credit (negative balance)
+      );
+    },
+    enabled: !!contactId, // Only run when we have a contactId
+  });
   
   // Calculate totals from current values
   const totalReceived = isEditing 
@@ -700,7 +703,7 @@ export default function PaymentView() {
             </div>
           </CardHeader>
           <CardContent>
-            {isAllDepositsLoading ? (
+            {isDepositsLoading ? (
               <div className="p-4 flex justify-center">
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
