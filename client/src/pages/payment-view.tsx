@@ -301,10 +301,18 @@ export default function PaymentView() {
     ? allDeposits.filter((deposit: any) => deposit.contactId === contactId) 
     : [];
   
-  // Calculate totals from current values
+  // Extract the actual data from ledger entries
+  const ledgerEntries = data?.ledgerEntries || [];
+  // Find the credits applied - look for entries with debit in AR account
+  const creditEntries = ledgerEntries.filter(entry => 
+    entry.accountId === 2 && entry.debit > 0 &&
+    entry.description?.includes('Applied credit')
+  );
+
+  // Calculate totals accurately based on ledger entries
   const totalReceived = isEditing 
-    ? parseFloat(amountReceived.replace(/,/g, '') || '0') || 0
-    : payment.amount;
+    ? parseFloat(amountReceived.replace(/,/g, '') || '0') || 0 
+    : payment?.amount || 0;
     
   const totalApplied = invoicePayments.reduce((sum, p) => {
     const amount = isEditing && p.amountString 
@@ -313,9 +321,11 @@ export default function PaymentView() {
     return sum + (amount || 0);
   }, 0);
   
-  // In the future, we would calculate applied credits here
-  const totalCreditsApplied = 0;
+  // Calculate total credits applied from ledger entries
+  const totalCreditsApplied = creditEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
   
+  // This payment's data shows it as a credit application with zero payment amount
+  const actualBalance = totalApplied - totalCreditsApplied;
   const unappliedCredit = totalReceived - totalApplied;
 
   return (
@@ -682,10 +692,14 @@ export default function PaymentView() {
                 <span className="font-medium">Total Applied:</span>
                 <span className="font-medium">{formatCurrency(totalApplied)}</span>
               </div>
+              <div className="flex justify-between py-2">
+                <span className="font-medium">Credits Applied:</span>
+                <span className="font-medium">{formatCurrency(totalCreditsApplied)}</span>
+              </div>
               <Separator className="my-2" />
               <div className="flex justify-between py-2">
-                <span className="font-medium">Unapplied Credit:</span>
-                <span className="font-medium">{formatCurrency(unappliedCredit)}</span>
+                <span className="font-medium">Balance:</span>
+                <span className="font-medium">{formatCurrency(actualBalance)}</span>
               </div>
             </div>
           </CardContent>
@@ -749,7 +763,7 @@ export default function PaymentView() {
                               {deposit.description || 'Customer deposit'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
-                              {formatCurrency(Math.abs(deposit.balance))}
+                              {formatCurrency(deposit.amount || Math.abs(deposit.balance))}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right">
                               {isEditing ? (
@@ -809,9 +823,9 @@ export default function PaymentView() {
               
               <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t">
                 <span className="font-bold">Net Balance Due:</span>
-                <span className={`font-bold ${unappliedCredit < 0 ? "text-red-600" : ""}`}>
-                  {formatCurrency(unappliedCredit)}
-                  {unappliedCredit < 0 && (
+                <span className={`font-bold ${actualBalance < 0 ? "text-red-600" : ""}`}>
+                  {formatCurrency(actualBalance)}
+                  {actualBalance < 0 && (
                     <span className="ml-1 text-xs">(Overpaid)</span>
                   )}
                 </span>
