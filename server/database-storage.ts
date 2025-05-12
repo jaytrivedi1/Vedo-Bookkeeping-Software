@@ -237,16 +237,23 @@ export class DatabaseStorage implements IStorage {
         
       // Also check for deposits that mention the invoice reference in their description
       // This is especially important for credit applications that might not have correct ledger entries
+      console.log(`Looking for deposits mentioning invoice ${invoice.reference} in description`);
+      
       const depositsWithInvoiceReference = await db.select()
         .from(transactions)
         .where(
           and(
             eq(transactions.type, 'deposit'),
-            sql`${transactions.description} LIKE ${'%' + invoice.reference + '%'}`, // Description mentions this invoice
-            eq(transactions.status, 'completed'), // Only include completed deposits
-            sql`${transactions.balance} = 0` // Balance is 0, meaning it was fully applied
+            sql`${transactions.description} LIKE ${'%' + invoice.reference + '%'}` // Description mentions this invoice
           )
         );
+        
+      console.log(`Found ${depositsWithInvoiceReference.length} deposits mentioning invoice ${invoice.reference}`);
+      
+      // Debug log all deposits found
+      for (const deposit of depositsWithInvoiceReference) {
+        console.log(`Deposit #${deposit.id} (${deposit.reference}): ${deposit.description}, status=${deposit.status}, balance=${deposit.balance}`);
+      }
       
       // Analyze these deposits to extract amounts applied to this invoice
       const depositCreditsFromDescriptions = [];
@@ -275,9 +282,6 @@ export class DatabaseStorage implements IStorage {
         console.log(`Found deposit #${deposit.id} (${deposit.reference}) mentioning invoice #${invoice.reference} in description, amount: ${deposit.amount}`);
       }
         
-      console.log(`Invoice #${invoice.reference} - Found ${depositApplications.length} specific deposit credit applications totaling ${totalDepositCredits}`);
-      console.log(`Invoice #${invoice.reference} - Found ${depositCreditsFromDescriptions.length} credit applications from descriptions totaling ${totalCreditsFromDescriptions}`);
-        
       // Next, find all payments applied to this invoice by looking at ledger entries 
       // that mention this invoice number in their description
       const appliedPayments = await db.select()
@@ -301,10 +305,12 @@ export class DatabaseStorage implements IStorage {
       const uniqueTransactionIds = new Set();
       appliedPayments.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
       depositApplications.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
+      depositCreditsFromDescriptions.forEach(entry => uniqueTransactionIds.add(entry.transactionId));
       
       // Log what we found for debugging purposes
       console.log(`Invoice #${invoice.reference} - Summary: 
       - Deposit credits: ${depositApplications.length} entries totaling ${totalDepositCredits}
+      - Credits from descriptions: ${depositCreditsFromDescriptions.length} entries totaling ${totalCreditsFromDescriptions}
       - Payment credits: ${appliedPayments.length} entries totaling ${totalPaymentCredits}
       - Total from ${uniqueTransactionIds.size} transactions: ${totalApplied}`);
       
