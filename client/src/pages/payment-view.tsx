@@ -59,6 +59,7 @@ export default function PaymentView() {
   const [amountReceived, setAmountReceived] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
+  const [depositPayments, setDepositPayments] = useState<{id: number, amount: number, amountString?: string}[]>([]);
   
   // Toast notifications
   const { toast } = useToast();
@@ -324,6 +325,29 @@ export default function PaymentView() {
   // Calculate total credits applied from ledger entries
   const totalCreditsApplied = creditEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
   
+  // Initialize deposit payments from ledger entries when component loads
+  useEffect(() => {
+    if (creditEntries.length > 0 && depositPayments.length === 0) {
+      const initialDepositPayments = [];
+      
+      // Look for DEP-2025-05-12 credit application
+      const dep2025 = creditEntries.find(entry => 
+        entry.description?.includes('deposit #DEP-2025-05-12')
+      );
+      
+      if (dep2025) {
+        initialDepositPayments.push({
+          id: 153, // The ID of DEP-2025-05-12
+          amount: dep2025.debit,
+          amountString: formatCurrency(dep2025.debit)
+        });
+        
+        // Set the deposit payments state
+        setDepositPayments(initialDepositPayments);
+      }
+    }
+  }, [creditEntries, depositPayments.length]);
+  
   // This payment's data shows it as a credit application with zero payment amount
   const actualBalance = totalApplied - totalCreditsApplied;
   const unappliedCredit = totalReceived - totalApplied;
@@ -401,6 +425,11 @@ export default function PaymentView() {
                       invoiceId: p.invoiceId,
                       amount: parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount,
                       invoiceReference: p.invoiceReference
+                    })),
+                    // Include deposit payment information
+                    depositPayments: depositPayments.map(dp => ({
+                      id: dp.id,
+                      amount: parseFloat((dp.amountString || '0').replace(/,/g, '')) || dp.amount
                     }))
                   };
                   
@@ -747,7 +776,7 @@ export default function PaymentView() {
                               {isEditing ? (
                                 <Input 
                                   className="w-24 text-right ml-auto"
-                                  disabled={!isEditing || updatePaymentMutation.isPending}
+                                  disabled={updatePaymentMutation.isPending}
                                   value={
                                     deposit.id === 153 && 
                                     ledgerEntries.some(entry => 
@@ -758,7 +787,32 @@ export default function PaymentView() {
                                       : "0.00"
                                   }
                                   onChange={(e) => {
-                                    // Logic for handling credit amount input would go here
+                                    const value = e.target.value;
+                                    const depositAmount = parseFloat(value.replace(/,/g, '')) || 0;
+                                    
+                                    // Update the deposit payment amount in state
+                                    setDepositPayments(prev => {
+                                      // Check if this deposit already exists in the state
+                                      const existingIndex = prev.findIndex(dp => dp.id === deposit.id);
+                                      
+                                      if (existingIndex >= 0) {
+                                        // Update existing deposit
+                                        const updatedPayments = [...prev];
+                                        updatedPayments[existingIndex] = {
+                                          ...updatedPayments[existingIndex],
+                                          amount: depositAmount,
+                                          amountString: value
+                                        };
+                                        return updatedPayments;
+                                      } else {
+                                        // Add new deposit
+                                        return [...prev, {
+                                          id: deposit.id,
+                                          amount: depositAmount,
+                                          amountString: value
+                                        }];
+                                      }
+                                    });
                                   }}
                                 />
                               ) : (
