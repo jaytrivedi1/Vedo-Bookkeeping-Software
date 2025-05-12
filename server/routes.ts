@@ -2942,7 +2942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Batch recalculation of invoice balances
+  // Batch recalculation of invoice balances (admin only)
   apiRouter.post("/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
     try {
       const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
@@ -2950,6 +2950,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(200).json({ message: 'Invoice balance recalculation completed' });
     } catch (error) {
       console.error('Error in batch recalculation:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
+  // Temporary testing route - no auth required
+  apiRouter.post("/test/recalculate-all-invoice-balances", async (req: Request, res: Response) => {
+    try {
+      const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
+      await batchRecalculateInvoiceBalances();
+      return res.status(200).json({ message: 'Invoice balance recalculation completed' });
+    } catch (error) {
+      console.error('Error in batch recalculation:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
+  // Temporary testing route for updating invoice statuses - no auth required
+  apiRouter.post("/test/update-invoice-statuses", async (req: Request, res: Response) => {
+    try {
+      const batchUpdateInvoiceStatuses = (await import('./batch-update-invoice-statuses')).default;
+      await batchUpdateInvoiceStatuses();
+      return res.status(200).json({ message: 'Invoice status update completed' });
+    } catch (error) {
+      console.error('Error in batch status update:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   });
