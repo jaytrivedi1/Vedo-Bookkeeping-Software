@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
 import { 
@@ -9,7 +9,8 @@ import {
   FileDown, 
   Edit2,
   Mail,
-  HelpCircle
+  HelpCircle,
+  RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,11 +22,14 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
 export default function InvoiceView() {
   const [, navigate] = useLocation();
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const { toast } = useToast();
   
   // Extract the invoice ID from the URL
   useEffect(() => {

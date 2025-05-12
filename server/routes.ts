@@ -2966,6 +2966,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Single invoice recalculation - no admin required
+  apiRouter.post("/transactions/:id/recalculate-balance", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid transaction ID' });
+      }
+      
+      // Get the transaction to verify it's an invoice
+      const transaction = await storage.getTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ error: 'Transaction not found' });
+      }
+      
+      if (transaction.type !== 'invoice') {
+        return res.status(400).json({ error: 'Transaction is not an invoice' });
+      }
+      
+      // Recalculate the balance
+      const updatedInvoice = await storage.recalculateInvoiceBalance(id);
+      
+      if (!updatedInvoice) {
+        return res.status(500).json({ error: 'Failed to recalculate invoice balance' });
+      }
+      
+      res.status(200).json({ 
+        message: 'Invoice balance recalculated successfully', 
+        invoice: updatedInvoice 
+      });
+    } catch (error) {
+      console.error('Error recalculating invoice balance:', error);
+      res.status(500).json({ error: 'Failed to recalculate invoice balance' });
+    }
+  });
+  
   // Temporary testing route for updating invoice statuses - no auth required
   apiRouter.post("/test/update-invoice-statuses", async (req: Request, res: Response) => {
     try {
