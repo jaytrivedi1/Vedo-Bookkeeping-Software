@@ -224,10 +224,31 @@ export default function PaymentReceive() {
   const handleCreditLineItemChange = (index: number, field: 'amount' | 'selected', value: number | boolean) => {
     const updatedItems = [...depositLineItems];
     
+    // Get the total invoice amount selected for payment
+    const totalInvoiceAmount = paymentLineItems.reduce(
+      (sum, item) => sum + (item.selected ? item.amount : 0), 
+      0
+    );
+    
     if (field === 'amount' && typeof value === 'number') {
       // Ensure amount doesn't exceed the deposit amount
       const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
-      const maxAmount = deposit?.amount || 0;
+      const maxDepositAmount = deposit?.amount || 0;
+      
+      // Calculate how much credit has already been applied from other deposit items
+      const otherCreditsApplied = depositLineItems.reduce(
+        (sum, item, i) => i !== index && item.selected ? sum + item.amount : sum, 
+        0
+      );
+      
+      // Calculate the maximum amount that can be applied based on invoice totals
+      // We shouldn't apply more total credits than there are invoice amounts to pay
+      const remainingInvoiceAmount = Math.max(0, totalInvoiceAmount - otherCreditsApplied);
+      
+      // The maximum amount is the smaller of: deposit amount, remaining invoice amount
+      const maxAmount = Math.min(maxDepositAmount, remainingInvoiceAmount);
+      
+      // Apply the limit
       updatedItems[index].amount = Math.min(value, maxAmount);
       
       // If an amount is entered, auto-select the deposit
@@ -239,6 +260,15 @@ export default function PaymentReceive() {
       if (value === 0) {
         updatedItems[index].selected = false;
       }
+      
+      // Show a toast if user tries to apply more credit than total invoice amount
+      if (value > maxAmount && value <= maxDepositAmount) {
+        toast({
+          title: "Credit amount adjusted",
+          description: "You cannot apply more credits than the total invoice amount selected for payment.",
+          variant: "default"
+        });
+      }
     } else if (field === 'selected' && typeof value === 'boolean') {
       updatedItems[index].selected = value;
       
@@ -246,10 +276,31 @@ export default function PaymentReceive() {
       if (!value) {
         updatedItems[index].amount = 0;
       } else {
-        // When selected, auto-fill with the deposit amount
+        // When selected, auto-fill with the appropriate amount
         const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
         const depositAmount = deposit?.amount || 0;
-        updatedItems[index].amount = depositAmount;
+        
+        // Calculate how much credit has already been applied from other deposit items
+        const otherCreditsApplied = depositLineItems.reduce(
+          (sum, item, i) => i !== index && item.selected ? sum + item.amount : sum, 
+          0
+        );
+        
+        // Calculate the maximum amount that can be applied based on invoice totals
+        const remainingInvoiceAmount = Math.max(0, totalInvoiceAmount - otherCreditsApplied);
+        
+        // Use the smaller of deposit amount or remaining invoice amount
+        updatedItems[index].amount = Math.min(depositAmount, remainingInvoiceAmount);
+        
+        // If there's no room to apply any credit, show a message
+        if (remainingInvoiceAmount === 0 && depositAmount > 0) {
+          updatedItems[index].selected = false;
+          toast({
+            title: "Cannot apply credit",
+            description: "You cannot apply more credits than the total invoice amount selected for payment.",
+            variant: "default"
+          });
+        }
       }
     }
     
