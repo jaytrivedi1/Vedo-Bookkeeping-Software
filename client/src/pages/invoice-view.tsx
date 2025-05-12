@@ -45,6 +45,24 @@ export default function InvoiceView() {
     taxAmount?: number;
     paymentTerms?: string;
   }
+
+  // Define payment history interfaces
+  interface PaymentHistoryItem {
+    transaction: Transaction;
+    amountApplied: number;
+    date: string;
+    description: string;
+  }
+
+  interface PaymentHistory {
+    invoice: Transaction;
+    payments: PaymentHistoryItem[];
+    summary: {
+      originalAmount: number;
+      totalPaid: number;
+      remainingBalance: number;
+    }
+  }
   
   // Fetch invoice details
   const { data: invoiceData, isLoading: invoiceLoading } = useQuery({
@@ -66,6 +84,18 @@ export default function InvoiceView() {
   // Fetch sales taxes for tax names
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
+  });
+  
+  // Fetch payment history for this invoice
+  const { data: paymentHistory, isLoading: paymentsLoading } = useQuery<PaymentHistory>({
+    queryKey: ['/api/transactions', invoiceId, 'payment-history'],
+    queryFn: async () => {
+      if (!invoiceId) return null;
+      const response = await fetch(`/api/transactions/${invoiceId}/payment-history`);
+      if (!response.ok) throw new Error('Failed to fetch payment history');
+      return response.json();
+    },
+    enabled: !!invoiceId
   });
   
   // Extract data once fetched
@@ -317,10 +347,10 @@ export default function InvoiceView() {
                 <div className="text-right font-medium pt-2 border-t">${total.toFixed(2)}</div>
                 
                 <div className="text-gray-800 font-medium">Amount Paid:</div>
-                <div className="text-right font-medium">$0.00</div>
+                <div className="text-right font-medium">${(invoice.amount - (invoice.balance || 0)).toFixed(2)}</div>
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
-                <div className="text-right font-bold">${total.toFixed(2)}</div>
+                <div className="text-right font-bold">${(invoice.balance || total).toFixed(2)}</div>
               </div>
             </div>
           </div>

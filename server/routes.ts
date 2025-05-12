@@ -2814,6 +2814,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ message: 'Internal server error' });
     }
   });
+  
+  // Get payment history for an invoice
+  apiRouter.get("/transactions/:id/payment-history", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: 'Invalid transaction ID' });
+      }
+      
+      const transaction = await storage.getTransaction(id);
+      if (!transaction) {
+        return res.status(404).json({ message: 'Transaction not found' });
+      }
+      
+      if (transaction.type !== 'invoice') {
+        return res.status(400).json({ message: 'Transaction is not an invoice' });
+      }
+      
+      // Find all ledger entries that reference this invoice number
+      // These are payments or credits applied to this invoice
+      const paymentEntries = await db
+        .select()
+        .from(ledgerEntriesSchema)
+        .where(
+          and(
+            sql`${ledgerEntriesSchema.description} LIKE ${'%' + transaction.reference + '%'}`,
+            eq(ledgerEntriesSchema.accountId, 2), // Accounts Receivable
+            neq(ledgerEntriesSchema.transactionId, id), // Exclude the invoice's own ledger entries
+            sql`${ledgerEntriesSchema.credit} > 0` // Only include credits (payments)
+          )
+        );
+      
+      // If we have payment entries, get the corresponding transactions
+      const paymentTransactions = [];
+      
+      if (paymentEntries.length > 0) {
+        // Get unique transaction IDs
+        const transactionIds = Array.from(new Set(paymentEntries.map(entry => entry.transactionId)));
+        
+        // Get transaction details for each payment
+        for (const txId of transactionIds) {
+          const paymentTx = await storage.getTransaction(txId);
+          if (paymentTx) {
+            // Find the ledger entry in our results
+            const ledgerEntry = paymentEntries.find(entry => entry.transactionId === txId);
+            
+            paymentTransactions.push({
+              transaction: paymentTx,
+              amountApplied: ledgerEntry ? ledgerEntry.credit : 0,
+              date: ledgerEntry ? ledgerEntry.date : paymentTx.date,
+              description: ledgerEntry ? ledgerEntry.description : ''
+            });
+          }
+        }
+      }
+      
+      // Calculate invoice summary
+      const totalPaid = paymentEntries.reduce((sum, entry) => sum + entry.credit, 0);
+      const remainingBalance = transaction.amount - totalPaid;
+      
+      return res.status(200).json({
+        invoice: transaction,
+        payments: paymentTransactions,
+        summary: {
+          originalAmount: transaction.amount,
+          totalPaid: totalPaid,
+          remainingBalance: remainingBalance > 0 ? remainingBalance : 0
+        }
+      });
+    } catch (error) {
+      console.error('Error getting payment history:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
   // Specific endpoint for fixing invoice #1006 (ID: 126)
   apiRouter.post("/fix-invoice-1006", async (req: Request, res: Response) => {
