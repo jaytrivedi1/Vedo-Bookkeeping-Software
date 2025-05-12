@@ -337,7 +337,7 @@ export default function CustomerList({ className }: CustomerListProps) {
       
       {/* Customer details sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent className="w-[600px] sm:max-w-[600px] p-0">
+        <SheetContent className="w-[80vw] sm:max-w-[1000px] p-0">
           <SheetHeader className="px-6 py-4 border-b">
             <div className="flex justify-between items-center">
               <SheetTitle className="text-xl">Customer Details</SheetTitle>
@@ -384,23 +384,23 @@ export default function CustomerList({ className }: CustomerListProps) {
                     Transactions ({customerInvoicesAndPayments.length})
                   </h3>
                   
-                  <div className="mt-2">
+                  <div className="mt-2 overflow-x-auto">
                     {customerInvoicesAndPayments.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         No transactions found for this customer.
                       </div>
                     ) : (
-                      <Table>
+                      <Table className="min-w-full">
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Reference</TableHead>
-                            <TableHead>Amount</TableHead>
-                            <TableHead>Balance</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Notes</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            <TableHead className="whitespace-nowrap">Date</TableHead>
+                            <TableHead className="whitespace-nowrap">Type</TableHead>
+                            <TableHead className="whitespace-nowrap">Reference</TableHead>
+                            <TableHead className="whitespace-nowrap">Amount</TableHead>
+                            <TableHead className="whitespace-nowrap">Balance</TableHead>
+                            <TableHead className="whitespace-nowrap">Status</TableHead>
+                            <TableHead className="w-[200px]">Notes</TableHead>
+                            <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -537,8 +537,10 @@ export default function CustomerList({ className }: CustomerListProps) {
                                         : '—'}
                                   </TableCell>
                                   <TableCell>{statusBadge}</TableCell>
-                                  <TableCell className="text-sm text-gray-600 max-w-[200px] truncate">
-                                    {relationshipNote}
+                                  <TableCell className="text-sm text-gray-600">
+                                    <div className="max-w-[200px] overflow-hidden text-ellipsis">
+                                      {relationshipNote}
+                                    </div>
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
