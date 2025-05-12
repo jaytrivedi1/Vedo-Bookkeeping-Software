@@ -346,11 +346,16 @@ export default function InvoiceView() {
                 <div className="text-gray-800 font-medium pt-2 border-t">Total:</div>
                 <div className="text-right font-medium pt-2 border-t">${total.toFixed(2)}</div>
                 
+                {/* Use payment history values for accurate numbers */}
                 <div className="text-gray-800 font-medium">Amount Paid:</div>
-                <div className="text-right font-medium">${(invoice.amount - (invoice.balance || 0)).toFixed(2)}</div>
+                <div className="text-right font-medium">
+                  ${paymentHistory?.summary?.totalPaid?.toFixed(2) || '0.00'}
+                </div>
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
-                <div className="text-right font-bold">${(invoice.balance || total).toFixed(2)}</div>
+                <div className="text-right font-bold">
+                  ${paymentHistory?.summary?.remainingBalance?.toFixed(2) || (invoice.balance || total).toFixed(2)}
+                </div>
                 
                 {paymentHistory && paymentHistory.summary && (
                   <>
