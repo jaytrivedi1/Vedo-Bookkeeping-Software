@@ -671,6 +671,93 @@ export default function PaymentView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Available Unapplied Credits Section */}
+        <Card className="mt-6">
+          <CardHeader className="pb-3">
+            <div className="flex justify-between items-center">
+              <CardTitle>Available Unapplied Credits</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div>
+              <div className="rounded-md border">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Select
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Credit #
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Apply
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    <tr>
+                      <td colSpan={6} className="px-6 py-4 text-sm text-gray-500 text-center">
+                        No unapplied credits available for this customer
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        {/* Payment Summary Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Payment Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md bg-gray-50 p-4">
+              <div className="flex justify-between items-center text-sm">
+                <span>Total Received:</span>
+                <span className="font-medium">
+                  {formatCurrency(totalReceived)}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center text-sm mt-2">
+                <span>Total Applied to Invoices:</span>
+                <span className="font-medium">
+                  {formatCurrency(totalApplied)}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center text-sm mt-2">
+                <span>Total Credits Applied:</span>
+                <span className="font-medium">
+                  $0.00
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t">
+                <span className="font-bold">Net Balance Due:</span>
+                <span className={`font-bold ${unappliedCredit < 0 ? "text-red-600" : ""}`}>
+                  {formatCurrency(unappliedCredit)}
+                  {unappliedCredit < 0 && (
+                    <span className="ml-1 text-xs">(Overpaid)</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
