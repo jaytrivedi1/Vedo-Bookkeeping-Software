@@ -1,6 +1,6 @@
 import { db } from './db';
 import { transactions } from '@shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne, isNotNull, sql } from 'drizzle-orm';
 
 /**
  * Utility script to update invoice statuses based on their balance
@@ -40,10 +40,7 @@ async function batchUpdateInvoiceStatuses() {
         and(
           eq(transactions.type, 'invoice'),
           eq(transactions.status, 'completed'),
-          and(
-            eq(transactions.balance, null, false),  // balance is not null
-            ne(transactions.balance, 0)            // balance is not 0
-          )
+          sql`${transactions.balance} IS NOT NULL AND ${transactions.balance} <> 0`
         )
       )
       .returning({ id: transactions.id, reference: transactions.reference, balance: transactions.balance });
@@ -66,8 +63,9 @@ async function batchUpdateInvoiceStatuses() {
 
 export default batchUpdateInvoiceStatuses;
 
-// Run immediately if executed directly
-if (require.main === module) {
+// Run immediately if executed directly using NodeJS CLI
+// This check is compatible with ESM modules
+if (import.meta.url === `file://${process.argv[1]}`) {
   batchUpdateInvoiceStatuses().then(() => {
     console.log('Batch update completed, exiting.');
     process.exit(0);

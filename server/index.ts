@@ -10,6 +10,7 @@ import migrateStatusEnum from "./migrate-status-enum";
 import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 import migrateInvoiceBalance from "./migrate-invoice-balance";
 import migrateDepositCredits from "./migrate-deposit-credits";
+import batchUpdateInvoiceStatuses from "./batch-update-invoice-statuses";
 
 const app = express();
 app.use(express.json());
@@ -75,6 +76,9 @@ app.use((req, res, next) => {
     
     // Run migration to fix deposit credit balances
     await migrateDepositCredits();
+    
+    // Run batch update to fix invoice statuses
+    await batchUpdateInvoiceStatuses();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
