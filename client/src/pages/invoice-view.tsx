@@ -68,6 +68,41 @@ export default function InvoiceView() {
     }
   }
   
+  // Add a mutation for recalculating the invoice balance
+  const recalculateBalanceMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoiceId) {
+        throw new Error('No invoice ID available');
+      }
+      const response = await apiRequest(
+        'POST', 
+        `/api/transactions/${invoiceId}/recalculate-balance`
+      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to recalculate balance');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate relevant queries to refresh the data
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions', invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions', invoiceId, 'payment-history'] });
+      toast({
+        title: "Balance recalculated",
+        description: "Invoice balance has been recalculated successfully",
+        variant: "default"
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to recalculate",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
   // Fetch invoice details
   const { data: invoiceData, isLoading: invoiceLoading } = useQuery({
     queryKey: ['/api/transactions', invoiceId],
@@ -214,6 +249,15 @@ export default function InvoiceView() {
               Edit
             </Button>
           </Link>
+          <Button 
+            size="sm"
+            variant="outline"
+            onClick={() => recalculateBalanceMutation.mutate()}
+            disabled={recalculateBalanceMutation.isPending}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${recalculateBalanceMutation.isPending ? 'animate-spin' : ''}`} />
+            Recalculate Balance
+          </Button>
         </div>
       </div>
       

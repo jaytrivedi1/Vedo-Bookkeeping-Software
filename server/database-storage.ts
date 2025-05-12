@@ -235,7 +235,48 @@ export class DatabaseStorage implements IStorage {
           )
         );
         
-      console.log(`Invoice #${invoice.reference} - Found ${depositApplications.length} specific deposit credit applications`);
+      // Also check for deposits that mention the invoice reference in their description
+      // This is especially important for credit applications that might not have correct ledger entries
+      const depositsWithInvoiceReference = await db.select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, 'deposit'),
+            sql`${transactions.description} LIKE ${'%' + invoice.reference + '%'}`, // Description mentions this invoice
+            eq(transactions.status, 'completed'), // Only include completed deposits
+            sql`${transactions.balance} = 0` // Balance is 0, meaning it was fully applied
+          )
+        );
+      
+      // Analyze these deposits to extract amounts applied to this invoice
+      const depositCreditsFromDescriptions = [];
+      for (const deposit of depositsWithInvoiceReference) {
+        // Skip deposits we've already counted from ledger entries
+        const alreadyCounted = depositApplications.some(da => 
+          da.transactionId === deposit.id
+        );
+        
+        if (alreadyCounted) {
+          console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping description analysis`);
+          continue;
+        }
+        
+        // Create a synthetic ledger entry for this deposit
+        depositCreditsFromDescriptions.push({
+          id: 0, // Synthetic ID
+          transactionId: deposit.id,
+          accountId: 2, // Accounts Receivable
+          description: `Applied credit from deposit #${deposit.reference || deposit.id} (extracted from description)`,
+          debit: deposit.amount, // Use the full amount
+          credit: 0,
+          date: new Date(deposit.date)
+        });
+        
+        console.log(`Found deposit #${deposit.id} (${deposit.reference}) mentioning invoice #${invoice.reference} in description, amount: ${deposit.amount}`);
+      }
+        
+      console.log(`Invoice #${invoice.reference} - Found ${depositApplications.length} specific deposit credit applications totaling ${totalDepositCredits}`);
+      console.log(`Invoice #${invoice.reference} - Found ${depositCreditsFromDescriptions.length} credit applications from descriptions totaling ${totalCreditsFromDescriptions}`);
         
       // Next, find all payments applied to this invoice by looking at ledger entries 
       // that mention this invoice number in their description
@@ -250,10 +291,11 @@ export class DatabaseStorage implements IStorage {
           )
         );
       
-      // Sum up both types of applications
+      // Sum up all types of applications
       const totalDepositCredits = depositApplications.reduce((sum, entry) => sum + entry.debit, 0);
+      const totalCreditsFromDescriptions = depositCreditsFromDescriptions.reduce((sum, entry) => sum + entry.debit, 0);
       const totalPaymentCredits = appliedPayments.reduce((sum, entry) => sum + entry.credit, 0);
-      const totalApplied = totalPaymentCredits + totalDepositCredits;
+      const totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
       
       // Count how many unique transactions these payments came from
       const uniqueTransactionIds = new Set();
