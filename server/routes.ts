@@ -2942,6 +2942,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Batch recalculation of invoice balances
+  apiRouter.post("/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
+      await batchRecalculateInvoiceBalances();
+      return res.status(200).json({ message: 'Invoice balance recalculation completed' });
+    } catch (error) {
+      console.error('Error in batch recalculation:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
   // Use company router for company management endpoints
   apiRouter.use("/companies", companyRouter);
 

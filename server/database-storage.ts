@@ -222,18 +222,29 @@ export class DatabaseStorage implements IStorage {
         return undefined;
       }
       
-      // First check for ledger entries mentioning this specific invoice
-      const appliedPaymentsByDescription = await db.select({
-        amount: sql`SUM(${ledgerEntries.credit})`,
-      })
-      .from(ledgerEntries)
-      .where(and(
-        sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`,
-        eq(ledgerEntries.accountId, 2), // Accounts Receivable
-        ne(ledgerEntries.transactionId, invoiceId) // Exclude the invoice's own ledger entries
-      ));
+      // Find all credits applied to this invoice by looking at ledger entries 
+      // that mention this invoice number in their description
+      const appliedPayments = await db.select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            sql`${ledgerEntries.credit} > 0`, // Credit entry (payment)
+            sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`, // Mentions this invoice 
+            ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
+          )
+        );
       
-      // Get all ledger entries for this invoice
+      // Sum up all these payments - we only count them once!
+      const totalApplied = appliedPayments.reduce((sum, entry) => sum + entry.credit, 0);
+      
+      // Count how many unique transactions these payments came from
+      const uniqueTransactionIds = Array.from(new Set(appliedPayments.map(entry => entry.transactionId)));
+      
+      // Log what we found for debugging purposes
+      console.log(`Invoice #${invoice.reference} - Found ${appliedPayments.length} credit entries from ${uniqueTransactionIds.length} transactions, totaling ${totalApplied}`);
+      
+      // Get all ledger entries for this invoice itself
       const allLedgerEntries = await db.select()
         .from(ledgerEntries)
         .where(eq(ledgerEntries.transactionId, invoiceId));
@@ -244,37 +255,15 @@ export class DatabaseStorage implements IStorage {
         Math.abs(entry.debit - invoice.amount) < 0.01 // Debit matches invoice amount
       );
       
-      // We're not going to assume any additional credits apply to this invoice 
-      // unless they explicitly mention this invoice in their description
-      // This is to avoid overcounting credits that might be intended for other invoices
-      let additionalCredits = 0;
-      
-      // If we want to find additional credits, we should ONLY look for 
-      // ledger entries that specifically reference this invoice
-      if (invoice.contactId && invoice.reference) {
-        // Find any ledger entries with a credit to AR that mention this invoice but weren't caught above
-        const additionalEntries = await db.select()
-          .from(ledgerEntries)
-          .where(
-            and(
-              eq(ledgerEntries.accountId, 2), // Accounts Receivable
-              sql`${ledgerEntries.credit} > 0`, // Credit entry
-              sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`, // Mentions this invoice
-              ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
-            )
-          );
-          
-        // Sum up these additional credits
-        additionalCredits = additionalEntries.reduce((sum, entry) => sum + entry.credit, 0);
-        
-        if (additionalCredits > 0) {
-          console.log(`Found ${additionalEntries.length} additional credit entries totaling ${additionalCredits} for invoice #${invoice.reference}`);
+      // For each payment, log details to help debugging
+      if (appliedPayments.length > 0) {
+        console.log(`Payment details for invoice #${invoice.reference}:`);
+        for (const payment of appliedPayments) {
+          console.log(`- Transaction ID ${payment.transactionId}: ${payment.description}, Amount: ${payment.credit}`);
         }
       }
       
-      console.log(`Invoice #${invoice.reference} - Description-based credits: ${appliedPaymentsByDescription[0]?.amount || 0}, Additional potential credits: ${additionalCredits}`);
-      
-      const totalApplied = (appliedPaymentsByDescription[0]?.amount || 0) + additionalCredits;
+      // Calculate the remaining balance
       const remainingBalance = Number(invoice.amount) - Number(totalApplied);
       
       // Update invoice balance and status
