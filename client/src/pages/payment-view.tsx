@@ -81,9 +81,8 @@ export default function PaymentView() {
   const { data: allDeposits = [], isLoading: isAllDepositsLoading } = useQuery({
     queryKey: ['/api/transactions/deposits'],
     queryFn: async () => {
-      const response = await apiRequest('GET', `/api/transactions`);
-      const allTransactions = await response.json();
-      return allTransactions.filter((tx: any) => tx.type === 'deposit' && tx.balance < 0);
+      const response = await apiRequest(`/api/transactions`);
+      return response.filter((tx: any) => tx.type === 'deposit' && tx.balance < 0);
     },
   });
   
