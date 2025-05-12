@@ -682,26 +682,6 @@ export default function PaymentView() {
                 </tbody>
               </table>
             </div>
-
-            <div className="mt-6">
-              <div className="flex justify-between py-2">
-                <span className="font-medium">Total Received:</span>
-                <span className="font-medium">{formatCurrency(totalReceived)}</span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="font-medium">Total Applied:</span>
-                <span className="font-medium">{formatCurrency(totalApplied)}</span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="font-medium">Credits Applied:</span>
-                <span className="font-medium">{formatCurrency(totalCreditsApplied)}</span>
-              </div>
-              <Separator className="my-2" />
-              <div className="flex justify-between py-2">
-                <span className="font-medium">Balance:</span>
-                <span className="font-medium">{formatCurrency(actualBalance)}</span>
-              </div>
-            </div>
           </CardContent>
         </Card>
 
