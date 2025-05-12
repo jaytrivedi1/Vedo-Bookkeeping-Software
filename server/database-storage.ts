@@ -244,54 +244,31 @@ export class DatabaseStorage implements IStorage {
         Math.abs(entry.debit - invoice.amount) < 0.01 // Debit matches invoice amount
       );
       
-      // Modified approach: determine if there might be deposit entries
-      // Look for deposits or payments that affect the same customer through AR
+      // We're not going to assume any additional credits apply to this invoice 
+      // unless they explicitly mention this invoice in their description
+      // This is to avoid overcounting credits that might be intended for other invoices
       let additionalCredits = 0;
       
-      if (invoice.contactId) {
-        // First, get all transactions for this customer
-        const customerTransactions = await db.select()
-          .from(transactions)
-          .where(eq(transactions.contactId, invoice.contactId));
+      // If we want to find additional credits, we should ONLY look for 
+      // ledger entries that specifically reference this invoice
+      if (invoice.contactId && invoice.reference) {
+        // Find any ledger entries with a credit to AR that mention this invoice but weren't caught above
+        const additionalEntries = await db.select()
+          .from(ledgerEntries)
+          .where(
+            and(
+              eq(ledgerEntries.accountId, 2), // Accounts Receivable
+              sql`${ledgerEntries.credit} > 0`, // Credit entry
+              sql`${ledgerEntries.description} LIKE ${'%' + invoice.reference + '%'}`, // Mentions this invoice
+              ne(ledgerEntries.transactionId, invoiceId) // Not part of the invoice itself
+            )
+          );
           
-        // Filter deposits and payments
-        const paymentsAndDeposits = customerTransactions.filter(t => 
-          (t.type === 'deposit' || t.type === 'payment') && 
-          t.status === 'completed'
-        );
+        // Sum up these additional credits
+        additionalCredits = additionalEntries.reduce((sum, entry) => sum + entry.credit, 0);
         
-        // For each payment/deposit, check if it might apply to this invoice
-        for (const transaction of paymentsAndDeposits) {
-          // Get all ledger entries for this transaction
-          const txLedgerEntries = await db.select()
-            .from(ledgerEntries)
-            .where(eq(ledgerEntries.transactionId, transaction.id));
-            
-          // Check if there's a credit to AR that's not already counted
-          for (const entry of txLedgerEntries) {
-            if (
-              entry.accountId === 2 && // Accounts Receivable
-              entry.credit > 0 && // Credit entry
-              !entry.description.includes(invoice.reference) && // Not already counted
-              (
-                // Description mentions the invoice was applied in some way
-                entry.description.includes('Applied to invoice') ||
-                // Or it's a deposit that was completed and might be applied to this invoice
-                (transaction.type === 'deposit' && transaction.status === 'completed')
-              )
-            ) {
-              // For transactions around the same time as the invoice
-              const txDate = new Date(transaction.date);
-              const invoiceDate = new Date(invoice.date);
-              const daysDiff = Math.abs((txDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
-              
-              // If transaction is within 2 days of invoice, consider it might apply to this invoice
-              if (daysDiff <= 2) {
-                console.log(`Found potential uncounted payment/deposit #${transaction.id} (${transaction.reference}) for invoice #${invoice.reference}`);
-                additionalCredits += entry.credit;
-              }
-            }
-          }
+        if (additionalCredits > 0) {
+          console.log(`Found ${additionalEntries.length} additional credit entries totaling ${additionalCredits} for invoice #${invoice.reference}`);
         }
       }
       
