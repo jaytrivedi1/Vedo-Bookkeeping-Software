@@ -78,6 +78,9 @@ export interface IStorage {
   createTransaction(transaction: InsertTransaction, lineItems: InsertLineItem[], ledgerEntries: InsertLedgerEntry[]): Promise<Transaction>;
   updateTransaction(id: number, transaction: Partial<Transaction>): Promise<Transaction | undefined>;
   deleteTransaction(id: number): Promise<boolean>;
+  getTransactionsByContact(contactId: number): Promise<Transaction[]>;
+  getTransactionsByDescription(searchText: string, type?: string): Promise<Transaction[]>;
+  getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]>;
 
   // Line Items
   getLineItemsByTransaction(transactionId: number): Promise<LineItem[]>;

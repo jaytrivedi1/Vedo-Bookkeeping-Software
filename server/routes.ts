@@ -3115,7 +3115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const items = lineItemsByPayment.get(paymentId) || [];
           
           // First try to find line items by relatedTransactionId (most explicit connection)
-          let invoiceItem = items.find(item => item.relatedTransactionId === id);
+          let invoiceItem = items.find(item => (item as any).relatedTransactionId === id);
           
           // If not found, look for items referencing the invoice in the description
           if (!invoiceItem) {
@@ -3130,6 +3130,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               item.transactionId === id && (item as any).type === 'invoice'
             );
           }
+          
+          console.log(`DEBUG PAYMENT HISTORY: Invoice item found for payment #${paymentId}:`, 
+            invoiceItem ? {
+              id: invoiceItem.id,
+              transactionId: invoiceItem.transactionId,
+              description: invoiceItem.description,
+              amount: invoiceItem.amount
+            } : 'None found'
+          );
           
           // Use the line item amount if available, otherwise use the ledger entry
           const amountApplied = invoiceItem ? invoiceItem.amount : 
@@ -3153,6 +3162,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert Set to Array for iteration
       const depositIdsArray = Array.from(depositIds);
       
+      console.log(`DEBUG PAYMENT HISTORY: Found ${depositIdsArray.length} unique deposit IDs for invoice #${transaction.reference}:`, depositIdsArray);
+      
+      // Also look for deposit transactions that mention this invoice in their description
+      const depositsByDescription = await storage.getTransactionsByDescription(`invoice #${transaction.reference}`, 'deposit');
+      console.log(`DEBUG PAYMENT HISTORY: Found ${depositsByDescription.length} deposits mentioning invoice #${transaction.reference} in description:`, 
+        depositsByDescription.map(d => ({ id: d.id, reference: d.reference, amount: d.amount, description: d.description }))
+      );
+      
+      // Add these deposit IDs to our list if not already included
+      depositsByDescription.forEach(deposit => {
+        if (!depositIds.has(deposit.id)) {
+          depositIds.add(deposit.id);
+          depositIdsArray.push(deposit.id);
+        }
+      });
+      
+      // Check if we should also search for deposits by this contact that were created around the same time
+      const recentDeposits = await storage.getTransactionsByContactAndType(transaction.contactId, 'deposit');
+      console.log(`DEBUG PAYMENT HISTORY: Found ${recentDeposits.length} deposits for contact ID ${transaction.contactId}:`, 
+        recentDeposits.map(d => ({ id: d.id, reference: d.reference, amount: d.amount, description: d.description }))  
+      );
+      
       // Process each deposit
       for (const depositId of depositIdsArray) {
         const deposit = await storage.getTransaction(depositId);
@@ -3163,16 +3194,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           
           // Sum up the amounts from all line items
-          const amountApplied = depositItemsForInvoice.reduce(
+          let amountApplied = depositItemsForInvoice.reduce(
             (sum, item) => sum + item.amount, 0
           );
           
-          paymentTransactions.push({
-            transaction: deposit,
-            amountApplied: amountApplied,
-            date: deposit.date,
-            description: `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`
-          });
+          // If we don't have line items but we know this deposit references our invoice in description
+          // use the deposit amount as a fallback (up to the remaining invoice balance)
+          if (amountApplied === 0 && deposit.description && 
+              deposit.description.toLowerCase().includes(`invoice #${transaction.reference.toLowerCase()}`)) {
+            // Get deposit amount, limited to the invoice balance
+            const maxApplyAmount = Math.min(deposit.amount, transaction.amount);
+            console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+            amountApplied = maxApplyAmount;
+          }
+          
+          if (amountApplied > 0) {
+            paymentTransactions.push({
+              transaction: deposit,
+              amountApplied: amountApplied,
+              date: deposit.date,
+              description: `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`
+            });
+            
+            console.log(`DEBUG PAYMENT HISTORY: Added deposit #${deposit.id} (${deposit.reference}) with amount ${amountApplied} to payment history`);
+          }
         }
       }
       
