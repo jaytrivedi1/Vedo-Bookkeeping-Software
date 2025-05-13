@@ -1743,28 +1743,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // PROTECTION: Prevent deletion of deposit entries that have been applied to invoices
       if (transaction.type === 'deposit') {
-        // For deposits with unapplied_credit status
-        if (transaction.status === 'unapplied_credit') {
-          // If this is a system-generated credit (original protection)
-          if (transaction.description?.includes("Unapplied credit from payment")) {
-            return res.status(403).json({ 
-              message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
-            });
-          }
-          
-          // If deposit has been partially applied (balance different from amount)
-          // Using Math.abs because balance is negative for unapplied credits
-          if (transaction.balance !== null && Math.abs(transaction.balance) !== transaction.amount) {
-            return res.status(403).json({ 
-              message: "Cannot delete a deposit that has been partially applied to invoices. The credit must be fully restored first." 
-            });
-          }
+        // Check for ledger entries that link this deposit to invoice payments
+        const depositLedgerEntries = await storage.getLedgerEntriesByTransaction(id);
+        
+        // Check if this deposit has any ledger entries linking it to an invoice
+        const invoiceLinks = depositLedgerEntries.filter(entry => 
+          entry.description && 
+          entry.description.toLowerCase().includes('invoice') &&
+          entry.description.toLowerCase().includes('applied')
+        );
+        
+        // Only check system-generated credits (from payments)
+        if (transaction.status === 'unapplied_credit' && 
+            transaction.description?.includes("Unapplied credit from payment")) {
+          return res.status(403).json({ 
+            message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
+          });
         }
         
-        // For deposits with completed status (fully applied)
-        if (transaction.status === 'completed') {
+        // Only block deletion if we've found specific evidence this deposit has been applied to invoices
+        if (invoiceLinks.length > 0) {
+          console.log(`Found ${invoiceLinks.length} links to invoices for deposit #${id}`);
           return res.status(403).json({ 
-            message: "Cannot delete a deposit that has been fully applied to invoices. Remove the credit applications first." 
+            message: "Cannot delete a deposit that has been applied to invoices. Remove the credit applications first." 
           });
         }
       }
