@@ -28,6 +28,7 @@ import {
   ledgerEntries,
   User,
   Permission,
+  LineItem,
   RolePermission
 } from "@shared/schema";
 import { z } from "zod";
@@ -3050,7 +3051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // For each payment that references this invoice, add it to the payment transactions list
-      for (const paymentId of invoicePaymentIds) {
+      Array.from(invoicePaymentIds).forEach(paymentId => {
         const payment = payments.find(p => p.id === paymentId);
         if (payment) {
           // Find the ledger entry in our results that corresponds to this payment
@@ -3059,7 +3060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Find the invoice line item to get the exact amount applied
           const items = lineItemsByPayment.get(paymentId) || [];
           const invoiceItem = items.find(item => 
-            item.transactionId === id && item.type === 'invoice'
+            item.transactionId === id && (item as any).type === 'invoice'
           );
           
           // Use the line item amount if available, otherwise use the ledger entry
@@ -3074,13 +3075,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         `Payment for invoice #${transaction.reference}`
           });
         }
-      }
+      });
       
       // Add deposits information to payments list
       // Get unique deposit IDs from line items
-      const depositIds = new Set(depositLineItems.map(item => item.transactionId));
+      const depositIds = new Set<number>();
+      depositLineItems.forEach(item => depositIds.add(item.transactionId));
       
-      for (const depositId of depositIds) {
+      // Convert Set to Array for iteration
+      const depositIdsArray = Array.from(depositIds);
+      
+      // Process each deposit
+      for (const depositId of depositIdsArray) {
         const deposit = await storage.getTransaction(depositId);
         if (deposit) {
           // Find all line items for this deposit to get the exact amount applied
