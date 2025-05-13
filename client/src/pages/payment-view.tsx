@@ -209,8 +209,40 @@ export default function PaymentView() {
     
     setInvoicePayments(invoicePaymentEntries);
     
-    // One-time initialization for payment #160
-    if (payment.id === 160 && customerDeposits.length > 0) {
+    // Find deposit credits from ledger entries
+    const depositCreditsApplied = ledgerEntries
+      .filter(entry => 
+        entry.description?.includes('Applied credit from deposit') && 
+        entry.debit > 0
+      )
+      .map(entry => {
+        // Extract deposit reference from description
+        const depositRefMatch = entry.description?.match(/#([^)\s]+)/);
+        const depositRef = depositRefMatch ? depositRefMatch[1] : '';
+        
+        // Find matching deposit transaction
+        const matchingDeposit = transactions?.find(t => 
+          t.reference === depositRef && 
+          (t.type === 'deposit' || t.type === 'credit')
+        );
+        
+        if (matchingDeposit) {
+          return {
+            id: matchingDeposit.id,
+            selected: true,
+            amount: entry.debit,
+            amountString: entry.debit.toString()
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+    
+    if (depositCreditsApplied.length > 0) {
+      setDepositPayments(depositCreditsApplied as any);
+    }
+    // One-time initialization for payment #160 as fallback
+    else if (payment.id === 160 && customerDeposits.length > 0) {
       const invoiceTotal = invoicePaymentEntries.reduce((sum, p) => sum + p.amount, 0);
       const deposit153 = customerDeposits.find(d => d.id === 153);
       
@@ -255,8 +287,8 @@ export default function PaymentView() {
     return sum + (isNaN(amount) ? 0 : amount);
   }, 0);
   
-  // When viewing, use the actual applied credit from ledger entries
-  const effectiveCreditAmount = isEditing ? totalDepositCreditsBeingApplied : appliedCreditAmount;
+  // Always use the actual credit amount from ledger entries, whether editing or not
+  const effectiveCreditAmount = appliedCreditAmount;
   
   const safeAmountReceived = parseFloat(amountReceived.replace(/,/g, '') || '0');
   const actualBalance = safeAmountReceived - totalInvoicePayments + effectiveCreditAmount;
