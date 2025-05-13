@@ -333,7 +333,18 @@ export class DatabaseStorage implements IStorage {
           continue;
         }
         
-        const creditAmount = Number(deposit.amount);
+        // Check if there's a specific amount mentioned in the description (format: "Applied $3000 to invoice")
+        let creditAmount = Number(deposit.amount);
+        const appliedAmountMatch = deposit.description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+        
+        if (appliedAmountMatch && appliedAmountMatch[1]) {
+          // Extract the amount from the description
+          const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+          if (!isNaN(extractedAmount)) {
+            console.log(`Extracted specific amount $${extractedAmount} from description for deposit #${deposit.id}`);
+            creditAmount = extractedAmount;
+          }
+        }
         
         // Only apply as much credit as needed to avoid over-applying
         if (remainingCreditNeeded <= 0) {
