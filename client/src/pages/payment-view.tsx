@@ -772,8 +772,12 @@ export default function PaymentView() {
                           }
                         />
                       ) : (
+                        // Look for this specific deposit's application in the credit entries
                         formatCurrency(
-                          depositPayments.find(dp => dp.id === deposit.id)?.amount || 0
+                          ledgerEntries.find(entry => 
+                            entry.description?.includes(`from deposit #${deposit.reference}`) && 
+                            entry.debit > 0
+                          )?.debit || 0
                         )
                       )}
                     </td>
