@@ -18,7 +18,7 @@ import Products from "@/pages/products";
 import InvoiceNew from "@/pages/invoice-new";
 import InvoiceEdit from "@/pages/invoice-edit";
 import InvoiceView from "@/pages/invoice-view";
-import PaymentView from "@/pages/payment-view-fix";  // Using the fixed version
+import PaymentView from "@/pages/payment-view";
 import PaymentReceive from "@/pages/payment-receive";
 import MainLayout from "@/components/layout/MainLayout";
 

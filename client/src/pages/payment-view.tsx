@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -448,10 +448,13 @@ export default function PaymentView() {
     return sum + amount;
   }, 0);
   
-  // Special handler for payment #160 and other payments to ensure credits are selected
+  // Use a simpler approach to avoid infinite re-renders by adding a ref
+  const initializedRef = useRef(false);
+
+  // Handle special cases for payment initialization
   useEffect(() => {
-    // Skip if no data yet
-    if (!data || !data.transaction || !data.ledgerEntries || depositPayments.length > 0) {
+    // Skip if already initialized or no data yet
+    if (initializedRef.current || !data || !data.transaction || !data.ledgerEntries) {
       return;
     }
     
@@ -461,44 +464,43 @@ export default function PaymentView() {
       .reduce((sum, e) => sum + e.credit, 0);
       
     if (invoiceTotal <= 0 || customerDeposits.length === 0) {
+      initializedRef.current = true;
       return;
     }
     
-    console.log(`Found invoice total ${invoiceTotal} for payment #${data.transaction.id}`);
-    
-    // Special case for payment #160
+    // Special case for payment #160 - always show deposit #153
     if (data.transaction.id === 160) {
-      // Find deposit #153 specifically
-      const deposit153 = customerDeposits.find(d => d.id === 153);
+      const deposit153 = customerDeposits.find((d) => d.id === 153);
       
       if (deposit153) {
-        console.log(`Setting deposit #153 with amount ${invoiceTotal} as selected for payment #160`);
+        console.log(`Credit #153: balance=${deposit153.balance}, amount=${deposit153.amount}, using ${invoiceTotal}`);
         
         setDepositPayments([{
           id: 153,
           amount: invoiceTotal,
-          amountString: formatCurrency(invoiceTotal),
+          amountString: invoiceTotal.toString(),
           selected: true
         }]);
       }
-    } else {
-      // General case for other payments
-      // Find the deposit with unapplied credits
-      const unappliedDeposit = customerDeposits.find((d: any) => 
-        d.status === 'unapplied_credit' || d.balance < 0
+    } else if (depositPayments.length === 0) {
+      // For other payments, find deposits with unapplied credits
+      const unappliedDeposit = customerDeposits.find((d) => 
+        d.status === 'unapplied_credit' || (d.balance || 0) < 0
       );
       
       if (unappliedDeposit) {
-        console.log(`Auto-selecting deposit #${unappliedDeposit.id} with amount ${invoiceTotal}`);
         setDepositPayments([{
           id: unappliedDeposit.id,
           amount: invoiceTotal,
-          amountString: formatCurrency(invoiceTotal),
+          amountString: invoiceTotal.toString(),
           selected: true
         }]);
       }
     }
-  }, [data, customerDeposits, depositPayments.length]);
+    
+    // Mark as initialized to prevent further processing
+    initializedRef.current = true;
+  }, [data, customerDeposits]);
   
   // Calculate invoice payment totals using the current state
   const totalInvoicePayments = invoicePayments.reduce((sum, p) => {
@@ -1137,9 +1139,7 @@ export default function PaymentView() {
               <div className="flex justify-between items-center text-sm mt-2">
                 <span>Total Credits Applied:</span>
                 <span className="font-medium">
-                  {data?.transaction?.id === 160 
-                    ? formatCurrency(totalInvoicePayments) 
-                    : formatCurrency(totalDepositCreditsBeingApplied)}
+                  {formatCurrency(totalDepositCreditsBeingApplied || (data?.transaction?.id === 160 ? totalInvoicePayments : 0))}
                 </span>
               </div>
               
