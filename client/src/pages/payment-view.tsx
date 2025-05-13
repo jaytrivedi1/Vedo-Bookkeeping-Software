@@ -150,6 +150,9 @@ export default function PaymentView() {
     deposit.contactId === payment?.contactId
   );
   
+  // Calculate applied credit amount
+  const appliedCreditAmount = creditEntries.reduce((total, entry) => total + entry.debit, 0);
+  
   // Initialize form data from fetched payment
   useEffect(() => {
     if (initializedRef.current || !data || !payment) return;
@@ -252,8 +255,11 @@ export default function PaymentView() {
     return sum + (isNaN(amount) ? 0 : amount);
   }, 0);
   
+  // When viewing, use the actual applied credit from ledger entries
+  const effectiveCreditAmount = isEditing ? totalDepositCreditsBeingApplied : appliedCreditAmount;
+  
   const safeAmountReceived = parseFloat(amountReceived.replace(/,/g, '') || '0');
-  const actualBalance = safeAmountReceived - totalInvoicePayments + totalDepositCreditsBeingApplied;
+  const actualBalance = safeAmountReceived - totalInvoicePayments + effectiveCreditAmount;
   
   // Print summary for debugging
   useEffect(() => {
@@ -261,11 +267,12 @@ export default function PaymentView() {
       safeAmountReceived,
       totalInvoicePayments,
       totalDepositCreditsBeingApplied,
+      effectiveCreditAmount,
       actualBalance,
       depositPayments,
       invoicePayments
     });
-  }, [safeAmountReceived, totalInvoicePayments, totalDepositCreditsBeingApplied, actualBalance, depositPayments, invoicePayments]);
+  }, [safeAmountReceived, totalInvoicePayments, totalDepositCreditsBeingApplied, effectiveCreditAmount, actualBalance, depositPayments, invoicePayments]);
   
   // Update handler
   const handleUpdatePayment = () => {
@@ -806,7 +813,7 @@ export default function PaymentView() {
           <div className="flex justify-between items-center py-1">
             <span>Total Credits Applied:</span>
             <span>
-              {formatCurrency(totalDepositCreditsBeingApplied || (payment?.id === 160 ? totalInvoicePayments : 0))}
+              {formatCurrency(effectiveCreditAmount || (payment?.id === 160 ? totalInvoicePayments : 0))}
             </span>
           </div>
           
