@@ -557,6 +557,81 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  /**
+   * Gets transactions for a specific contact
+   */
+  async getTransactionsByContact(contactId: number): Promise<Transaction[]> {
+    try {
+      const transactionsList = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.contactId, contactId))
+        .orderBy(desc(transactions.date));
+      
+      return transactionsList;
+    } catch (error) {
+      console.error(`Error getting transactions for contact ${contactId}:`, error);
+      return [];
+    }
+  }
+  
+  /**
+   * Searches for transactions that contain a specific text in their description
+   * @param searchText Text to search for in transaction descriptions
+   * @param type Optional transaction type filter
+   * @returns Array of matching transactions
+   */
+  async getTransactionsByDescription(searchText: string, type?: string): Promise<Transaction[]> {
+    try {
+      // Build the query
+      let query = db
+        .select()
+        .from(transactions)
+        .where(sql`LOWER(${transactions.description}) LIKE LOWER(${'%' + searchText + '%'})`)
+        .orderBy(desc(transactions.date));
+      
+      // Add type filter if provided
+      if (type) {
+        query = query.where(eq(transactions.type, type as any));
+      }
+      
+      // Execute the query
+      const result = await query;
+      
+      console.log(`Found ${result.length} transactions containing "${searchText}" with type ${type || 'any'}`);
+      return result;
+    } catch (error) {
+      console.error('Error searching transactions by description:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Gets transactions for a specific contact filtered by type
+   * @param contactId The contact ID to filter by
+   * @param type The transaction type to filter by
+   * @returns Array of matching transactions
+   */
+  async getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]> {
+    try {
+      const result = await db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.contactId, contactId),
+            eq(transactions.type, type as any)
+          )
+        )
+        .orderBy(desc(transactions.date));
+      
+      return result;
+    } catch (error) {
+      console.error(`Error getting ${type} transactions for contact ${contactId}:`, error);
+      return [];
+    }
+  }
+
   // Line Items
   async getLineItemsByTransaction(transactionId: number): Promise<LineItem[]> {
     return await db.select()
