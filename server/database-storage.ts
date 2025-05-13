@@ -324,8 +324,9 @@ export class DatabaseStorage implements IStorage {
       console.log(`Invoice amount: ${requiredCredit}, already applied through ledger: ${appliedCredit}, remaining needed: ${remainingCreditNeeded}`);
       
       // Special case handling for known problematic invoices
-      if (invoice.reference === '1005' && forceUpdate !== true) {
+      if (invoice.reference === '1005' && forceUpdate !== true && useOnlyLedgerEntries !== true) {
         // Only use this special case handling when NOT explicitly updating balance
+        // AND when not in edit mode (useOnlyLedgerEntries)
         console.log("Special case handling for invoice #1005");
         // Find only the $385 credit (CREDIT-78342) explicitly from payment #149
         const specificCredit = depositsWithInvoiceReference.find(d => 
@@ -374,6 +375,15 @@ export class DatabaseStorage implements IStorage {
         // When we're updating during a payment edit, only use the ledger entries
         totalApplied = totalPaymentCredits + totalDepositCredits;
         console.log(`EDIT MODE: Using only ledger entries for balance calculation: ${totalApplied}`);
+        
+        // For invoice #1005, we need to make sure we don't double-count credits
+        // This is because the special handling code was applying credits that might
+        // have been already captured in payment ledger entries
+        if (invoice.reference === '1005') {
+          console.log(`EDIT MODE: Special handling for invoice #1005. Using only ledger entries.`);
+          // No additional credits from descriptions in edit mode
+          totalCreditsFromDescriptions = 0;
+        }
       } else {
         // Normal calculation including all sources
         totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
