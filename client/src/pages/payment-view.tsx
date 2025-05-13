@@ -448,67 +448,57 @@ export default function PaymentView() {
     return sum + amount;
   }, 0);
   
-  // Special handler for payment #160 - ensure deposit #153 is always selected with the right amount
+  // Special handler for payment #160 and other payments to ensure credits are selected
   useEffect(() => {
-    // Even if we're in read mode, initialize the deposit payments for display purposes
-    // This is important for the payment summary to show the correct amounts
-    
-    // Specific fix for payment #160
-    if (data?.transaction?.id === 160) {
-      const invoiceTotal = data.ledgerEntries
-        .filter(e => e.accountId === 2 && e.credit > 0)
-        .reduce((sum, e) => sum + e.credit, 0);
-      
-      console.log(`Special handling for payment #160: Found invoice total ${invoiceTotal}`);
-      
-      // Find deposit #153 in customer deposits
-      const deposit153 = customerDeposits.find(d => d.id === 153);
-      
-      if (deposit153) {
-        // Check if we already have this deposit in our list
-        const existingPayments = depositPayments.filter(dp => dp.id !== 153);
-        
-        console.log(`Setting deposit #153 with amount ${invoiceTotal} as selected`);
-        
-        // Always set this deposit with the full amount for payment #160
-        setDepositPayments([
-          ...existingPayments,
-          {
-            id: 153,
-            amount: invoiceTotal,
-            amountString: formatCurrency(invoiceTotal),
-            selected: true
-          }
-        ]);
-      }
+    // Skip if no data yet
+    if (!data || !data.transaction || !data.ledgerEntries || depositPayments.length > 0) {
       return;
     }
     
-    // Generic handling for other payments
-    if (depositPayments.length === 0 && data && data.ledgerEntries) {
-      const invoiceTotal = data.ledgerEntries
-        .filter(e => e.accountId === 2 && e.credit > 0)
-        .reduce((sum, e) => sum + e.credit, 0);
+    // Calculate invoice total from ledger entries (credits applied to invoices)
+    const invoiceTotal = data.ledgerEntries
+      .filter(e => e.accountId === 2 && e.credit > 0)
+      .reduce((sum, e) => sum + e.credit, 0);
+      
+    if (invoiceTotal <= 0 || customerDeposits.length === 0) {
+      return;
+    }
+    
+    console.log(`Found invoice total ${invoiceTotal} for payment #${data.transaction.id}`);
+    
+    // Special case for payment #160
+    if (data.transaction.id === 160) {
+      // Find deposit #153 specifically
+      const deposit153 = customerDeposits.find(d => d.id === 153);
+      
+      if (deposit153) {
+        console.log(`Setting deposit #153 with amount ${invoiceTotal} as selected for payment #160`);
         
-      if (invoiceTotal > 0 && customerDeposits.length > 0) {
-        // Find the deposit with unapplied credits
-        const unappliedDeposit = customerDeposits.find((d: any) => 
-          d.status === 'unapplied_credit' || d.balance < 0
-        );
-        
-        if (unappliedDeposit) {
-          // Auto-select this deposit with the invoice amount
-          console.log(`Auto-selecting deposit #${unappliedDeposit.id} with amount ${invoiceTotal}`);
-          setDepositPayments([{
-            id: unappliedDeposit.id,
-            amount: invoiceTotal,
-            amountString: formatCurrency(invoiceTotal),
-            selected: true
-          }]);
-        }
+        setDepositPayments([{
+          id: 153,
+          amount: invoiceTotal,
+          amountString: formatCurrency(invoiceTotal),
+          selected: true
+        }]);
+      }
+    } else {
+      // General case for other payments
+      // Find the deposit with unapplied credits
+      const unappliedDeposit = customerDeposits.find((d: any) => 
+        d.status === 'unapplied_credit' || d.balance < 0
+      );
+      
+      if (unappliedDeposit) {
+        console.log(`Auto-selecting deposit #${unappliedDeposit.id} with amount ${invoiceTotal}`);
+        setDepositPayments([{
+          id: unappliedDeposit.id,
+          amount: invoiceTotal,
+          amountString: formatCurrency(invoiceTotal),
+          selected: true
+        }]);
       }
     }
-  }, [isEditing, depositPayments, data, customerDeposits]);
+  }, [data, customerDeposits, depositPayments.length]);
   
   // Calculate invoice payment totals using the current state
   const totalInvoicePayments = invoicePayments.reduce((sum, p) => {
@@ -982,14 +972,7 @@ export default function PaymentView() {
                                 disabled={!isEditing || updatePaymentMutation.isPending}
                                 checked={
                                   // Check if deposit is already in our state
-                                  depositPayments.some(dp => dp.id === deposit.id && dp.selected) ||
-                                  // Auto-select deposit #153 when viewing payment #160 (specific fix)
-                                  (data?.transaction?.id === 160 && deposit.id === 153) ||
-                                  // Auto-select if it's the only available deposit and payment is by credit
-                                  (depositPayments.length === 0 && 
-                                   data && data.ledgerEntries &&
-                                   data.ledgerEntries.some(e => e.description?.includes('Applied credit') && e.debit > 0) &&
-                                   customerDeposits.length === 1 && customerDeposits[0].id === deposit.id)
+                                  depositPayments.some(dp => dp.id === deposit.id && dp.selected)
                                 }
                                 onCheckedChange={(checked) => {
                                   if (!isEditing) return;
