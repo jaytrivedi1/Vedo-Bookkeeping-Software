@@ -461,11 +461,13 @@ export default function PaymentView() {
                       amount: parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount,
                       invoiceReference: p.invoiceReference
                     })),
-                    // Include deposit payment information
-                    depositPayments: depositPayments.map(dp => ({
-                      id: dp.id,
-                      amount: parseFloat((dp.amountString || '0').replace(/,/g, '')) || dp.amount
-                    }))
+                    // Include deposit payment information - only include deposits with amounts > 0
+                    depositPayments: depositPayments
+                      .filter(dp => !isNaN(dp.amount) && dp.amount > 0)
+                      .map(dp => ({
+                        id: dp.id,
+                        amount: parseFloat((dp.amountString || '0').replace(/,/g, '')) || dp.amount
+                      }))
                   };
                   
                   // Submit the update
@@ -832,6 +834,17 @@ export default function PaymentView() {
                                       toast({
                                         title: "Invalid amount",
                                         description: "Please enter an amount that is 0 or greater.",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+                                    
+                                    // Ensure amount doesn't exceed the original deposit amount
+                                    const maxDepositAmount = deposit.amount || 0;
+                                    if (depositAmount > maxDepositAmount) {
+                                      toast({
+                                        title: "Invalid amount",
+                                        description: "Credit amount cannot exceed the original deposit amount.",
                                         variant: "destructive",
                                       });
                                       return;
