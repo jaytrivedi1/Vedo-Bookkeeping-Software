@@ -3011,29 +3011,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`DEBUG PAYMENT HISTORY: Found ${payments.length} payments and ${flatLineItems.length} line items`);
       
-      // Debug - log line items that reference this invoice
-      const invoiceLineItemsDebug = flatLineItems.filter(item => item.transactionId === id);
-      console.log(`DEBUG PAYMENT HISTORY: Found ${invoiceLineItemsDebug.length} line items referencing invoice #${transaction.reference}:`, 
-        invoiceLineItemsDebug.map(i => ({id: i.id, transactionId: i.transactionId, amount: i.amount, description: i.description}))
+      // First, let's look for all line items in payments that reference this invoice in any way
+      
+      // 1. Look for line items with the transaction ID matching this invoice
+      const invoiceLineItemsByTransactionId = flatLineItems.filter(item => 
+        item.transactionId === id
+      );
+      console.log(`DEBUG PAYMENT HISTORY: Found ${invoiceLineItemsByTransactionId.length} line items with transactionId matching invoice #${transaction.reference}:`, 
+        invoiceLineItemsByTransactionId.map(i => ({id: i.id, transactionId: i.transactionId, amount: i.amount, description: i.description}))
       );
       
-      // Find line items that reference this invoice
-      const invoiceLineItems = flatLineItems.filter(item => 
-        item.transactionId === id && item.type === 'invoice'
+      // 2. Look for line items referencing this invoice by relatedTransactionId (if exists)
+      const invoiceLineItemsByRelatedId = flatLineItems.filter(item => 
+        (item as any).relatedTransactionId === id
+      );
+      console.log(`DEBUG PAYMENT HISTORY: Found ${invoiceLineItemsByRelatedId.length} line items with relatedTransactionId matching invoice #${transaction.reference}:`, 
+        invoiceLineItemsByRelatedId.map(i => ({
+          id: i.id, 
+          transactionId: i.transactionId, 
+          relatedTransactionId: (i as any).relatedTransactionId, 
+          amount: i.amount, 
+          description: i.description
+        }))
       );
       
-      // Group line items by payment ID
+      // 3. Look for line items that mention this invoice number in their description
+      const invoiceLineItemsByDescription = flatLineItems.filter(item => 
+        item.description && item.description.toLowerCase().includes(`invoice #${transaction.reference.toLowerCase()}`)
+      );
+      console.log(`DEBUG PAYMENT HISTORY: Found ${invoiceLineItemsByDescription.length} line items with description mentioning invoice #${transaction.reference}:`, 
+        invoiceLineItemsByDescription.map(i => ({id: i.id, transactionId: i.transactionId, amount: i.amount, description: i.description}))
+      );
+      
+      // Combine all methods of finding relevant line items
+      const allRelevantLineItems = [
+        ...invoiceLineItemsByTransactionId, 
+        ...invoiceLineItemsByRelatedId, 
+        ...invoiceLineItemsByDescription
+      ];
+      
+      // Find unique line items (could be duplicates across methods)
+      const uniqueLineItems = Array.from(new Map(allRelevantLineItems.map(item => [item.id, item])).values());
+      
+      console.log(`DEBUG PAYMENT HISTORY: Found ${uniqueLineItems.length} total unique line items referring to invoice #${transaction.reference}`);
+      
+      // Group by the payment they belong to
       const lineItemsByPayment = new Map<number, LineItem[]>();
+      
+      // For each payment
       for (const payment of payments) {
-        const items = flatLineItems.filter(item => 
-          item.transactionId === payment.id || 
-          // Also include deposit items that are part of the same payment
-          (payment.id && item.id && 
-           item.id.toString().includes(payment.id.toString()))
+        // Find any line items that are part of this payment
+        const itemsForThisPayment = flatLineItems.filter(item => 
+          item.transactionId === payment.id
         );
         
-        if (items.length > 0) {
-          lineItemsByPayment.set(payment.id, items);
+        // Check if any of these line items reference our invoice
+        const itemsReferencingInvoice = itemsForThisPayment.filter(item => {
+          if ((item as any).relatedTransactionId === id) return true;
+          if (item.description && item.description.toLowerCase().includes(`invoice #${transaction.reference.toLowerCase()}`)) return true;
+          return false;
+        });
+        
+        // If we found any line items linking this payment to our invoice, add them
+        if (itemsReferencingInvoice.length > 0) {
+          console.log(`DEBUG PAYMENT HISTORY: Payment #${payment.id} has ${itemsReferencingInvoice.length} line items referencing invoice #${transaction.reference}`);
+          lineItemsByPayment.set(payment.id, itemsReferencingInvoice);
         }
       }
       
@@ -3043,17 +3085,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Convert entries to array for iteration
       Array.from(lineItemsByPayment.entries()).forEach(([paymentId, items]) => {
-        // Find any items that reference this invoice
-        const hasInvoiceItem = items.some(item => 
-          item.transactionId === id && 
-          (item as any).type === 'invoice'  // Type assertion for LineItem.type
-        );
-        
-        if (hasInvoiceItem) {
+        // We've already filtered for items that reference this invoice, so if we have any items,
+        // the payment is connected to this invoice
+        if (items.length > 0) {
+          console.log(`DEBUG PAYMENT HISTORY: Adding payment #${paymentId} to invoice payment history`);
           invoicePaymentIds.add(paymentId);
           
           // Find deposit items in this payment (these are the credits)
-          const deposits = items.filter(item => (item as any).type === 'deposit');
+          const deposits = items.filter(item => 
+            (item as any).type === 'deposit' || 
+            (item.description && item.description.toLowerCase().includes('deposit'))
+          );
+          
+          console.log(`DEBUG PAYMENT HISTORY: Found ${deposits.length} deposit line items for payment #${paymentId}`);
           depositLineItems.push(...deposits);
         }
       });
@@ -3062,14 +3106,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       Array.from(invoicePaymentIds).forEach(paymentId => {
         const payment = payments.find(p => p.id === paymentId);
         if (payment) {
+          console.log(`DEBUG PAYMENT HISTORY: Processing payment #${paymentId} for payment history`);
+          
           // Find the ledger entry in our results that corresponds to this payment
           const ledgerEntry = paymentEntries.find(entry => entry.transactionId === paymentId);
           
-          // Find the invoice line item to get the exact amount applied
+          // Find a line item that references our invoice
           const items = lineItemsByPayment.get(paymentId) || [];
-          const invoiceItem = items.find(item => 
-            item.transactionId === id && (item as any).type === 'invoice'
-          );
+          
+          // First try to find line items by relatedTransactionId (most explicit connection)
+          let invoiceItem = items.find(item => item.relatedTransactionId === id);
+          
+          // If not found, look for items referencing the invoice in the description
+          if (!invoiceItem) {
+            invoiceItem = items.find(item => 
+              item.description && item.description.toLowerCase().includes(`invoice #${transaction.reference.toLowerCase()}`)
+            );
+          }
+          
+          // If still not found, try the old method
+          if (!invoiceItem) {
+            invoiceItem = items.find(item => 
+              item.transactionId === id && (item as any).type === 'invoice'
+            );
+          }
           
           // Use the line item amount if available, otherwise use the ledger entry
           const amountApplied = invoiceItem ? invoiceItem.amount : 
