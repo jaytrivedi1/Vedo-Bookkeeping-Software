@@ -348,25 +348,25 @@ export default function PaymentView() {
   
   return (
     <div className="container mx-auto py-4">
-      <div className="flex items-center justify-between mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate('/payments')}
+            className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <h1 className="text-xl font-semibold">
-              {payment?.reference ? `Payment ${payment.reference}` : `Payment #${payment?.id}`}
-            </h1>
-          </div>
-          {payment?.status && (
-            <Badge className="bg-blue-500 hover:bg-blue-600">
-              {payment.status === "completed" ? "Completed" : payment.status}
-            </Badge>
-          )}
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            {payment?.reference ? `Payment ${payment.reference}` : `Payment #${payment?.id}`}
+            {payment?.status && (
+              <Badge className="bg-blue-600 hover:bg-blue-700">
+                {payment.status === "completed" ? "Completed" : payment.status}
+              </Badge>
+            )}
+          </h1>
         </div>
         
         <div className="flex gap-2">
@@ -374,8 +374,8 @@ export default function PaymentView() {
             <>
               <Button
                 onClick={() => setIsEditing(true)}
-                variant="default"
                 size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
               >
                 Edit
               </Button>
@@ -391,8 +391,8 @@ export default function PaymentView() {
             <>
               <Button
                 onClick={handleUpdatePayment}
-                variant="default"
                 size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
                 disabled={updatePaymentMutation.isPending}
               >
                 {updatePaymentMutation.isPending ? "Saving..." : "Save Changes"}
@@ -410,384 +410,418 @@ export default function PaymentView() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Payment Details Column */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-sm text-gray-500">Customer</Label>
-              <div className="mt-1">{contact?.name || 'Unknown'}</div>
+      {/* Payment Details Section */}
+      <div className="border rounded-md p-6 mb-6 bg-white">
+        <h2 className="text-lg font-semibold mb-4">Payment Details</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+          <div>
+            <div className="text-sm font-medium mb-1">Customer</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {contact?.name || 'Unknown'}
             </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Date</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <DatePicker
-                    date={paymentDate}
-                    setDate={setPaymentDate}
-                    disabled={updatePaymentMutation.isPending}
-                  />
-                ) : (
-                  formatDate(payment ? new Date(payment.date) : null)
-                )}
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Email</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center text-gray-500">
+              {contact?.email || 'No email available'}
+            </div>
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Payment Date</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {isEditing ? (
+                <DatePicker
+                  date={paymentDate}
+                  setDate={setPaymentDate}
+                  disabled={updatePaymentMutation.isPending}
+                />
+              ) : (
+                formatDate(payment ? new Date(payment.date) : null)
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Payment Method</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {isEditing ? (
+                <Select
+                  value={paymentMethod}
+                  onValueChange={setPaymentMethod}
+                  disabled={updatePaymentMutation.isPending}
+                >
+                  <SelectTrigger className="w-full h-7 border-0 p-0 shadow-none focus:ring-0">
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="credit_card">Credit Card</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                paymentMethod === 'bank_transfer'
+                  ? 'Bank Transfer'
+                  : paymentMethod === 'credit_card'
+                  ? 'Credit Card'
+                  : paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Reference Number</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {isEditing ? (
+                <Input
+                  value={referenceNumber}
+                  onChange={e => setReferenceNumber(e.target.value)}
+                  placeholder="e.g. Transaction ID or cheque number"
+                  disabled={updatePaymentMutation.isPending}
+                  className="border-0 h-7 p-0 shadow-none focus:ring-0"
+                />
+              ) : (
+                referenceNumber || 'None'
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Deposit To</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {isEditing ? (
+                <Select
+                  value={selectedDepositAccountId?.toString() || ''}
+                  onValueChange={(value) => setSelectedDepositAccountId(parseInt(value))}
+                  disabled={updatePaymentMutation.isPending}
+                >
+                  <SelectTrigger className="w-full h-7 border-0 p-0 shadow-none focus:ring-0">
+                    <SelectValue placeholder="Select account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts
+                      ?.filter(
+                        account => account.type === 'bank' || account.type === 'credit'
+                      )
+                      .map(account => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                accounts?.find(a => a.id === selectedDepositAccountId)?.name || 'None'
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <div className="text-sm font-medium mb-1">Amount Received</div>
+            <div className="border rounded-md h-9 px-3 py-1 flex items-center">
+              {isEditing ? (
+                <Input
+                  value={amountReceived}
+                  onChange={e => setAmountReceived(e.target.value)}
+                  placeholder="0.00"
+                  disabled={updatePaymentMutation.isPending}
+                  className="border-0 h-7 p-0 shadow-none focus:ring-0"
+                />
+              ) : (
+                formatCurrency(payment?.amount || 0)
+              )}
+            </div>
+            {totalDepositCreditsBeingApplied > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                Amount can be zero when credits balance invoices
               </div>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Payment Method</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <Select
-                    value={paymentMethod}
-                    onValueChange={setPaymentMethod}
-                    disabled={updatePaymentMutation.isPending}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="check">Check</SelectItem>
-                      <SelectItem value="credit_card">Credit Card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div>
-                    {paymentMethod === 'bank_transfer'
-                      ? 'Bank Transfer'
-                      : paymentMethod === 'credit_card'
-                      ? 'Credit Card'
-                      : paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Reference Number</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <Input
-                    value={referenceNumber}
-                    onChange={e => setReferenceNumber(e.target.value)}
-                    placeholder="Reference or check number"
-                    disabled={updatePaymentMutation.isPending}
-                  />
-                ) : (
-                  referenceNumber || 'None'
-                )}
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Deposit Account</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <Select
-                    value={selectedDepositAccountId?.toString() || ''}
-                    onValueChange={(value) => setSelectedDepositAccountId(parseInt(value))}
-                    disabled={updatePaymentMutation.isPending}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select deposit account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts
-                        ?.filter(
-                          account => account.type === 'bank' || account.type === 'credit'
-                        )
-                        .map(account => (
-                          <SelectItem key={account.id} value={account.id.toString()}>
-                            {account.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  accounts?.find(a => a.id === selectedDepositAccountId)?.name || 'None'
-                )}
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Amount Received ($)</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <Input
-                    value={amountReceived}
-                    onChange={e => setAmountReceived(e.target.value)}
-                    placeholder="0.00"
-                    disabled={updatePaymentMutation.isPending}
-                  />
-                ) : (
-                  formatCurrency(payment?.amount || 0)
-                )}
-              </div>
-            </div>
-            
-            <div>
-              <Label className="text-sm text-gray-500">Notes</Label>
-              <div className="mt-1">
-                {isEditing ? (
-                  <textarea
-                    className="w-full rounded-md border p-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Add notes"
-                    rows={3}
-                    disabled={updatePaymentMutation.isPending}
-                  />
-                ) : (
-                  <div className="whitespace-pre-wrap">{payment?.description || 'None'}</div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Invoices Column */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Invoices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <table className="w-full">
-              <thead>
-                <tr className="text-xs text-gray-500 uppercase">
-                  <th className="pb-2 text-left">Reference</th>
-                  <th className="pb-2 text-left">Date</th>
-                  <th className="pb-2 text-left">Due Date</th>
-                  <th className="pb-2 text-right">Amount</th>
-                  <th className="pb-2 text-right">Amount Paid</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoicePayments.length > 0 ? (
-                  invoicePayments.map((invoice, index) => (
-                    <tr key={index} className="border-t">
-                      <td className="py-3">{invoice.invoiceReference}</td>
-                      <td className="py-3">{formatDate(invoice.date)}</td>
-                      <td className="py-3">{formatDate(invoice.dueDate)}</td>
-                      <td className="py-3 text-right">{formatCurrency(invoice.originalTotal)}</td>
-                      <td className="py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end">
-                            <Checkbox 
-                              id={`invoice-${invoice.id}`}
-                              checked={invoice.selected}
-                              disabled={updatePaymentMutation.isPending}
-                              onCheckedChange={(checked) => {
-                                setInvoicePayments(prev => 
-                                  prev.map((p, i) => 
-                                    i === index ? { ...p, selected: !!checked } : p
-                                  )
-                                );
-                              }}
-                              className="mr-2 hidden"
-                            />
-                            <Input
-                              value={invoice.amountString || ''}
-                              onChange={(e) => {
-                                setInvoicePayments(prev => 
-                                  prev.map((p, i) => 
-                                    i === index ? { 
-                                      ...p, 
-                                      amountString: e.target.value,
-                                      amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
-                                      selected: e.target.value !== ''
-                                    } : p
-                                  )
-                                );
-                              }}
-                              className="w-28 text-right"
-                              disabled={updatePaymentMutation.isPending || !invoice.selected}
-                            />
-                          </div>
-                        ) : (
-                          formatCurrency(invoice.amount)
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr className="border-t">
-                    <td colSpan={5} className="py-4 text-center text-gray-500">
-                      No invoices associated with this payment
+            )}
+          </div>
+        </div>
+        
+        <div className="mt-4">
+          <div className="text-sm font-medium mb-1">Memo / Notes</div>
+          <div className="border rounded-md min-h-[80px] px-3 py-2">
+            {isEditing ? (
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Add any additional notes here"
+                rows={3}
+                disabled={updatePaymentMutation.isPending}
+                className="w-full border-0 p-0 shadow-none focus:ring-0 min-h-[60px] resize-none"
+              />
+            ) : (
+              <div className="whitespace-pre-wrap">{payment?.description || ''}</div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Apply Payment to Invoices */}
+      <div className="border rounded-md p-6 mb-6 bg-white">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Apply Payment to Invoices</h2>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  {isEditing && "Select"}
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Reference
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Date
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Due Date
+                </th>
+                <th className="py-2 px-4 text-right font-medium text-xs uppercase text-gray-500">
+                  Amount
+                </th>
+                <th className="py-2 px-4 text-right font-medium text-xs uppercase text-gray-500">
+                  Payment
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoicePayments.length > 0 ? (
+                invoicePayments.map((invoice, index) => (
+                  <tr key={index} className="border-b">
+                    <td className="py-3 px-4">
+                      {isEditing && (
+                        <Checkbox 
+                          id={`invoice-${invoice.id}`}
+                          checked={invoice.selected}
+                          disabled={updatePaymentMutation.isPending}
+                          onCheckedChange={(checked) => {
+                            setInvoicePayments(prev => 
+                              prev.map((p, i) => 
+                                i === index ? { ...p, selected: !!checked } : p
+                              )
+                            );
+                          }}
+                        />
+                      )}
+                    </td>
+                    <td className="py-3 px-4">{invoice.invoiceReference}</td>
+                    <td className="py-3 px-4">{formatDate(invoice.date)}</td>
+                    <td className="py-3 px-4">{formatDate(invoice.dueDate) || 'N/A'}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(invoice.originalTotal)}</td>
+                    <td className="py-3 px-4 text-right">
+                      {isEditing ? (
+                        <Input
+                          value={invoice.amountString || ''}
+                          onChange={(e) => {
+                            setInvoicePayments(prev => 
+                              prev.map((p, i) => 
+                                i === index ? { 
+                                  ...p, 
+                                  amountString: e.target.value,
+                                  amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
+                                  selected: e.target.value !== ''
+                                } : p
+                              )
+                            );
+                          }}
+                          className="w-24 text-right h-9 rounded-md"
+                          disabled={updatePaymentMutation.isPending || !invoice.selected}
+                        />
+                      ) : (
+                        formatCurrency(invoice.amount)
+                      )}
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                ))
+              ) : (
+                <tr className="border-b">
+                  <td colSpan={6} className="py-4 px-4 text-center text-gray-500">
+                    No invoices associated with this payment
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Bottom Section: Available Credits + Payment Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Available Unapplied Credits</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <table className="w-full">
-              <thead>
-                <tr className="text-xs text-gray-500 uppercase">
-                  <th className="pb-2 text-left">Reference</th>
-                  <th className="pb-2 text-left">Date</th>
-                  <th className="pb-2 text-right">Original Amount</th>
-                  <th className="pb-2 text-right">Remaining</th>
-                  <th className="pb-2 text-right">Amount to Apply</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customerDeposits.length > 0 ? (
-                  customerDeposits.map((deposit) => (
-                    <tr key={deposit.id} className="border-t">
-                      <td className="py-3">{deposit.reference}</td>
-                      <td className="py-3">{formatDate(new Date(deposit.date))}</td>
-                      <td className="py-3 text-right">{formatCurrency(deposit.amount)}</td>
-                      <td className="py-3 text-right">{formatCurrency(Math.abs(deposit.balance || 0))}</td>
-                      <td className="py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex items-center justify-end">
-                            <Checkbox 
-                              id={`deposit-${deposit.id}`}
-                              disabled={!isEditing || updatePaymentMutation.isPending}
-                              checked={
-                                depositPayments.some(dp => dp.id === deposit.id && dp.selected)
+      {/* Available Unapplied Credits */}
+      <div className="border rounded-md p-6 mb-6 bg-white">
+        <h2 className="text-lg font-semibold mb-4">Available Unapplied Credits</h2>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  {isEditing && "Select"}
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Reference
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Date
+                </th>
+                <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                  Description
+                </th>
+                <th className="py-2 px-4 text-right font-medium text-xs uppercase text-gray-500">
+                  Original Amount
+                </th>
+                <th className="py-2 px-4 text-right font-medium text-xs uppercase text-gray-500">
+                  Apply
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {customerDeposits.length > 0 ? (
+                customerDeposits.map((deposit) => (
+                  <tr key={deposit.id} className="border-b">
+                    <td className="py-3 px-4">
+                      {isEditing && (
+                        <Checkbox 
+                          id={`deposit-${deposit.id}`}
+                          disabled={!isEditing || updatePaymentMutation.isPending}
+                          checked={
+                            depositPayments.some(dp => dp.id === deposit.id && dp.selected)
+                          }
+                          onCheckedChange={(checked) => {
+                            setDepositPayments(prev => {
+                              if (!isEditing) return prev;
+                              
+                              // If unchecking, remove this deposit
+                              if (!checked) {
+                                return prev.filter(p => p.id !== deposit.id);
                               }
-                              onCheckedChange={(checked) => {
-                                setDepositPayments(prev => {
-                                  if (!isEditing) return prev;
-                                  
-                                  // If unchecking, remove this deposit
-                                  if (!checked) {
-                                    return prev.filter(p => p.id !== deposit.id);
-                                  }
-                                  
-                                  // If it already exists, update its selection
-                                  const existingIndex = prev.findIndex(p => p.id === deposit.id);
-                                  if (existingIndex >= 0) {
-                                    return prev.map((p, i) => 
-                                      i === existingIndex ? { ...p, selected: true } : p
-                                    );
-                                  }
-                                  
-                                  // Otherwise, add it with a default credit amount
-                                  const creditAmount = Math.abs(deposit.balance || 0);
-                                  return [...prev, {
-                                    id: deposit.id,
-                                    selected: true,
-                                    amount: creditAmount,
-                                    amountString: creditAmount.toString()
-                                  }];
-                                });
-                              }}
-                              className="mr-2 hidden"
-                            />
-                            <Input
-                              value={
-                                depositPayments.find(dp => dp.id === deposit.id)?.amountString || ''
+                              
+                              // If it already exists, update its selection
+                              const existingIndex = prev.findIndex(p => p.id === deposit.id);
+                              if (existingIndex >= 0) {
+                                return prev.map((p, i) => 
+                                  i === existingIndex ? { ...p, selected: true } : p
+                                );
                               }
-                              onChange={(e) => {
-                                setDepositPayments(prev => {
-                                  const existingIndex = prev.findIndex(p => p.id === deposit.id);
-                                  
-                                  // If deposit doesn't exist in our state yet, add it
-                                  if (existingIndex < 0) {
-                                    return [...prev, {
-                                      id: deposit.id,
-                                      selected: true,
-                                      amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
-                                      amountString: e.target.value
-                                    }];
-                                  }
-                                  
-                                  // Otherwise update the existing one
-                                  return prev.map((p, i) => 
-                                    i === existingIndex ? { 
-                                      ...p, 
-                                      amountString: e.target.value,
-                                      amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
-                                      selected: e.target.value !== ''
-                                    } : p
-                                  );
-                                });
-                              }}
-                              className="w-28 text-right"
-                              disabled={
-                                updatePaymentMutation.isPending || 
-                                !depositPayments.some(dp => dp.id === deposit.id && dp.selected)
+                              
+                              // Otherwise, add it with a default credit amount
+                              const creditAmount = Math.abs(deposit.balance || 0);
+                              return [...prev, {
+                                id: deposit.id,
+                                selected: true,
+                                amount: creditAmount,
+                                amountString: creditAmount.toString()
+                              }];
+                            });
+                          }}
+                        />
+                      )}
+                    </td>
+                    <td className="py-3 px-4">{deposit.reference}</td>
+                    <td className="py-3 px-4">{formatDate(new Date(deposit.date))}</td>
+                    <td className="py-3 px-4 max-w-[200px] truncate">{deposit.description || ''}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(deposit.amount)}</td>
+                    <td className="py-3 px-4 text-right">
+                      {isEditing ? (
+                        <Input
+                          value={
+                            depositPayments.find(dp => dp.id === deposit.id)?.amountString || ''
+                          }
+                          onChange={(e) => {
+                            setDepositPayments(prev => {
+                              const existingIndex = prev.findIndex(p => p.id === deposit.id);
+                              
+                              // If deposit doesn't exist in our state yet, add it
+                              if (existingIndex < 0) {
+                                return [...prev, {
+                                  id: deposit.id,
+                                  selected: true,
+                                  amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
+                                  amountString: e.target.value
+                                }];
                               }
-                            />
-                          </div>
-                        ) : (
-                          formatCurrency(
-                            depositPayments.find(dp => dp.id === deposit.id)?.amount || 0
-                          )
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr className="border-t">
-                    <td colSpan={5} className="py-4 text-center text-gray-500">
-                      No deposits with unapplied credits available
+                              
+                              // Otherwise update the existing one
+                              return prev.map((p, i) => 
+                                i === existingIndex ? { 
+                                  ...p, 
+                                  amountString: e.target.value,
+                                  amount: parseFloat(e.target.value.replace(/,/g, '') || '0'),
+                                  selected: e.target.value !== ''
+                                } : p
+                              );
+                            });
+                          }}
+                          className="w-24 text-right h-9 rounded-md"
+                          disabled={
+                            updatePaymentMutation.isPending || 
+                            !depositPayments.some(dp => dp.id === deposit.id && dp.selected)
+                          }
+                        />
+                      ) : (
+                        formatCurrency(
+                          depositPayments.find(dp => dp.id === deposit.id)?.amount || 0
+                        )
+                      )}
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
+                ))
+              ) : (
+                <tr className="border-b">
+                  <td colSpan={6} className="py-4 px-4 text-center text-gray-500">
+                    No deposits with unapplied credits available
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {/* Payment Summary */}
+      <div className="border rounded-md p-6 bg-white">
+        <h2 className="text-lg font-semibold mb-4">Payment Summary</h2>
         
-        {/* Payment Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span>Amount Received:</span>
-                <span className="font-medium">
-                  {formatCurrency(safeAmountReceived)}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span>Total Payments to Invoices:</span>
-                <span className="font-medium">
-                  {formatCurrency(totalInvoicePayments)}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span>Total Credits Applied:</span>
-                <span className="font-medium">
-                  {formatCurrency(totalDepositCreditsBeingApplied || (payment?.id === 160 ? totalInvoicePayments : 0))}
-                </span>
-              </div>
-              
-              <Separator className="my-2" />
-              
-              <div className="flex justify-between items-center font-medium">
-                <span>Net Balance Due:</span>
-                <span className={actualBalance < 0 ? "text-red-600" : ""}>
-                  {payment?.id === 160 ? formatCurrency(0) : formatCurrency(actualBalance)}
-                  {actualBalance < 0 && (
-                    <span className="ml-1 text-xs font-normal">(Overpaid)</span>
-                  )}
-                </span>
-              </div>
+        <div className="space-y-2">
+          <div className="flex justify-between items-center py-1">
+            <span>Amount Received:</span>
+            <span>
+              {formatCurrency(safeAmountReceived)}
+            </span>
+          </div>
+          
+          <div className="flex justify-between items-center py-1">
+            <span>Total Applied to Invoices:</span>
+            <span>
+              {formatCurrency(totalInvoicePayments)}
+            </span>
+          </div>
+          
+          <div className="flex justify-between items-center py-1">
+            <span>Total Credits Applied:</span>
+            <span>
+              {formatCurrency(totalDepositCreditsBeingApplied || (payment?.id === 160 ? totalInvoicePayments : 0))}
+            </span>
+          </div>
+          
+          <div className="border-t pt-2 mt-2">
+            <div className="flex justify-between items-center font-medium">
+              <span>Net Balance Due:</span>
+              <span className={actualBalance < 0 ? "text-red-600" : ""}>
+                {payment?.id === 160 ? formatCurrency(0) : formatCurrency(actualBalance)}
+                {actualBalance < 0 && (
+                  <span className="ml-1 text-xs font-normal">(Overpaid)</span>
+                )}
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
