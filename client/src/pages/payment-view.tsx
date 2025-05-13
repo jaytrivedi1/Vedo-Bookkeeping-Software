@@ -110,7 +110,33 @@ export default function PaymentView() {
   // Mutation for updating the payment
   const updatePaymentMutation = useMutation({
     mutationFn: async (updatedData: any) => {
-      const response = await apiRequest(`/api/transactions/${paymentId}`, 'PATCH', updatedData);
+      console.log('Updating payment with data:', updatedData);
+      // First, we need to prepare the data in the format that the backend expects
+      // Create line item entries for each invoice and deposit
+      const lineItems = [
+        ...invoicePayments.filter(p => p.selected).map(p => ({
+          transactionId: p.invoiceId,
+          amount: parseFloat(p.amountString?.replace(/,/g, '') || '0') || p.amount,
+          type: 'invoice'
+        })),
+        ...depositPayments.filter(dp => dp.selected).map(dp => {
+          const depositTransaction = allDeposits.find((d: any) => d.id === dp.id);
+          return {
+            transactionId: dp.id,
+            amount: parseFloat(dp.amountString?.replace(/,/g, '') || '0') || dp.amount,
+            type: 'deposit'
+          };
+        })
+      ].filter(item => item.transactionId);
+      
+      // Create the complete update payload
+      const completePayload = {
+        transaction: updatedData.transaction,
+        ledgerEntries: updatedData.ledgerEntries,
+        lineItems: lineItems
+      };
+      
+      const response = await apiRequest(`/api/transactions/${paymentId}`, 'PATCH', completePayload);
       return response;
     },
     onSuccess: () => {
