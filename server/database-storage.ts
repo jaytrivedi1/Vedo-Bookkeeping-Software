@@ -323,58 +323,44 @@ export class DatabaseStorage implements IStorage {
       
       console.log(`Invoice amount: ${requiredCredit}, already applied through ledger: ${appliedCredit}, remaining needed: ${remainingCreditNeeded}`);
       
-      // Special case handling only happens during regular operation
-      // We completely skip it for invoice #1005 since it has a complicated credit history
-      if (invoice.reference === '1005') {
-        // NEVER apply special case handling to this invoice
-        console.log("INVOICE #1005 DETECTED - DISABLING ALL SPECIAL HANDLING");
-        // Only count explicit ledger entries for this invoice
-        totalCreditsFromDescriptions = 0;
-      } else {
-        // For all other invoices
-        for (const deposit of sortedDeposits) {
-          // Skip if already counted through ledger entries
-          if (depositIdsFromLedger.has(deposit.id)) {
-            console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping`);
-            continue;
-          }
-          
-          const creditAmount = Number(deposit.amount);
-          
-          // Only apply as much credit as needed to avoid over-applying
-          if (remainingCreditNeeded <= 0) {
-            console.log(`No more credit needed for invoice #${invoice.reference}, skipping deposit #${deposit.id}`);
-            continue;
-          }
-          
-          // Apply only what we need from this deposit
-          const amountToApply = Math.min(creditAmount, remainingCreditNeeded);
-          console.log(`Applying ${amountToApply} from deposit #${deposit.id} (${deposit.reference})`);
-          
-          totalCreditsFromDescriptions += amountToApply;
-          remainingCreditNeeded -= amountToApply;
+      // For all invoices, apply the same standard logic
+      // No special cases for any specific invoice or reference number
+      // Process all deposits consistently
+      for (const deposit of sortedDeposits) {
+        // Skip if already counted through ledger entries
+        if (depositIdsFromLedger.has(deposit.id)) {
+          console.log(`Deposit #${deposit.id} already counted from ledger entries, skipping`);
+          continue;
         }
+        
+        const creditAmount = Number(deposit.amount);
+        
+        // Only apply as much credit as needed to avoid over-applying
+        if (remainingCreditNeeded <= 0) {
+          console.log(`No more credit needed for invoice #${invoice.reference}, skipping deposit #${deposit.id}`);
+          continue;
+        }
+        
+        // Apply only what we need from this deposit
+        const amountToApply = Math.min(creditAmount, remainingCreditNeeded);
+        console.log(`Applying ${amountToApply} from deposit #${deposit.id} (${deposit.reference})`);
+        
+        totalCreditsFromDescriptions += amountToApply;
+        remainingCreditNeeded -= amountToApply;
       }
       
       // Step 7: Calculate total applied and remaining balance
       // When editing a payment, we need to use ONLY the ledger entries
       let totalApplied;
       
-      // For Invoice #1005, we ONLY want to count the explicit ledger entries
-      // due to its special history with credits
-      if (useOnlyLedgerEntries || invoice.reference === '1005') {
-        // When we're updating during a payment edit OR dealing with invoice #1005
-        // we ONLY use the ledger entries (nothing from descriptions)
+      // Determine how to calculate the total applied amount
+      if (useOnlyLedgerEntries) {
+        // In edit mode (when updating a payment) we ONLY use explicit ledger entries
+        // to ensure user-specified values are maintained
         totalApplied = totalPaymentCredits + totalDepositCredits;
-        console.log(`STRICT MODE: Using only ledger entries for balance calculation: ${totalApplied}`);
-        
-        // Just to be doubly sure, set descriptions credits to 0 for this invoice
-        if (invoice.reference === '1005') {
-          console.log(`STRICT MODE: Invoice #1005 detected. Enforcing ledger-only balance calculation.`);
-          totalCreditsFromDescriptions = 0;
-        }
+        console.log(`EDIT MODE: Using only ledger entries for balance calculation: ${totalApplied}`);
       } else {
-        // Normal calculation for all other invoices including credits from descriptions
+        // Normal calculation for all invoices including credits from descriptions
         totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
       }
       
