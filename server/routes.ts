@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, ne, and, sql } from "drizzle-orm";
+import { fixAllBalances } from "./fix-all-balances";
 import { format } from "date-fns";
 import { 
   insertAccountSchema, 

@@ -467,66 +467,35 @@ export class DatabaseStorage implements IStorage {
           .from(ledgerEntries)
           .where(eq(ledgerEntries.transactionId, id));
         
-        // Special handling for payments - need to update invoice balances
-        if (transaction.type === 'payment') {
-          console.log(`Deleting payment transaction: ${transaction.reference}`);
-          
-          // Find ledger entries related to Accounts Receivable (typically account ID 2)
-          // These entries indicate which invoices the payment was applied to
-          const invoicePaymentEntries = ledgerEntriesToDelete.filter(entry => 
-            entry.accountId === 2 && 
-            entry.credit > 0 && 
-            entry.description && 
-            entry.description.includes('invoice')
-          );
-          
-          // Process each payment application to restore invoice balances
-          for (const entry of invoicePaymentEntries) {
-            if (!entry.description) continue;
+        // Special handling based on transaction type
+        switch (transaction.type) {
+          case 'payment':
+            console.log(`Deleting payment transaction: ${transaction.reference}`);
             
-            // Extract invoice reference from description (e.g., "Payment applied to invoice #1002")
-            const invoiceRefMatch = entry.description.match(/invoice\s+#(\d+)/i);
+            // Handle payment-to-invoice relationships
+            await this.handlePaymentDeletion(tx, transaction, ledgerEntriesToDelete);
+            break;
             
-            if (invoiceRefMatch && invoiceRefMatch[1]) {
-              const invoiceRef = invoiceRefMatch[1];
-              console.log(`Found payment applied to invoice: ${invoiceRef}`);
-              
-              // Find the invoice by reference number
-              const [invoice] = await tx
-                .select()
-                .from(transactions)
-                .where(
-                  and(
-                    eq(transactions.reference, invoiceRef),
-                    eq(transactions.type, 'invoice')
-                  )
-                );
-              
-              if (invoice) {
-                // When a payment is deleted, we need to:
-                // 1. Restore the full invoice balance (amount) if it was fully paid
-                // 2. Add the payment credit back to the balance if it was partially paid
-                
-                // Always restore the full invoice amount on deletion of a payment
-                // This ensures we don't have any balance calculation errors
-                const newBalance = invoice.amount;
-                
-                // Set status to 'open' since we're restoring the invoice
-                const newStatus = 'open';
-                
-                console.log(`Updating invoice #${invoiceRef} balance from ${invoice.balance || invoice.amount} to ${newBalance}, status from ${invoice.status || 'unknown'} to ${newStatus}`);
-                
-                // Update the invoice
-                await tx
-                  .update(transactions)
-                  .set({ 
-                    balance: newBalance, 
-                    status: newStatus 
-                  })
-                  .where(eq(transactions.id, invoice.id));
-              }
+          case 'invoice':
+            console.log(`Deleting invoice transaction: ${transaction.reference}`);
+            
+            // Handle credits applied to invoice
+            await this.handleInvoiceDeletion(tx, transaction);
+            break;
+            
+          case 'deposit':
+            console.log(`Deleting deposit transaction: ${transaction.reference || transaction.id}`);
+            
+            // Only delete if not actually connected to invoices
+            const isApplied = await this.isDepositAppliedToInvoices(tx, transaction);
+            if (isApplied) {
+              console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}) as it has been applied to invoices`);
+              return false;
             }
-          }
+            
+            // Handle any potential references to this deposit
+            await this.handleDepositDeletion(tx, transaction);
+            break;
         }
         
         // Reverse the effect on account balances - subtract debits and add credits
@@ -571,11 +540,409 @@ export class DatabaseStorage implements IStorage {
           .delete(transactions)
           .where(eq(transactions.id, id));
         
+        // Run final balance recalculation for all invoices referenced in ledger entries that are being deleted
+        await this.recalculateReferencedInvoiceBalances(tx, ledgerEntriesToDelete);
+        
         return deleteResult.rowCount !== null && deleteResult.rowCount > 0;
       });
     } catch (error) {
       console.error('Error deleting transaction:', error);
       return false;
+    }
+  }
+  
+  private async handlePaymentDeletion(tx: any, payment: any, ledgerEntriesToDelete: any[]) {
+    console.log(`Processing payment deletion for payment ID ${payment.id}`);
+    
+    // Find ledger entries related to Accounts Receivable (typically account ID 2)
+    // These entries indicate which invoices the payment was applied to
+    const invoicePaymentEntries = ledgerEntriesToDelete.filter(entry => 
+      entry.accountId === 2 && 
+      entry.credit > 0 && 
+      entry.description && 
+      entry.description.includes('invoice')
+    );
+    
+    // Find entries that show which deposits/credits were applied in this payment
+    const depositApplicationEntries = ledgerEntriesToDelete.filter(entry => 
+      entry.accountId === 2 && 
+      entry.debit > 0 && 
+      entry.description && 
+      entry.description.includes('Applied credit from deposit')
+    );
+    
+    // Process invoice payment entries
+    for (const entry of invoicePaymentEntries) {
+      if (!entry.description) continue;
+      
+      // Extract invoice reference from description (e.g., "Payment applied to invoice #1002")
+      const invoiceRefMatch = entry.description.match(/invoice\s+#?(\d+)/i);
+      
+      if (invoiceRefMatch && invoiceRefMatch[1]) {
+        const invoiceRef = invoiceRefMatch[1];
+        console.log(`Found payment applied to invoice: ${invoiceRef}`);
+        
+        // Find the invoice by reference number
+        const [invoice] = await tx
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.reference, invoiceRef),
+              eq(transactions.type, 'invoice')
+            )
+          );
+        
+        if (invoice) {
+          // Get all existing ledger entries for this invoice to recalculate its true balance
+          const allInvoiceEntries = await tx
+            .select()
+            .from(ledgerEntries)
+            .where(
+              and(
+                eq(ledgerEntries.accountId, 2), // Accounts Receivable
+                sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoiceRef + '%'}`
+              )
+            );
+          
+          // Filter out the entries we're about to delete
+          const remainingEntries = allInvoiceEntries.filter(e => e.transactionId !== payment.id);
+          
+          // Calculate total payments applied from remaining entries
+          const totalApplied = remainingEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
+          
+          // Calculate new balance
+          const newBalance = Math.max(0, Number(invoice.amount) - totalApplied);
+          
+          // Calculate appropriate status
+          const newStatus = newBalance > 0 ? 'open' : 'completed';
+          
+          console.log(`Recalculating invoice #${invoiceRef}: amount=${invoice.amount}, applied=${totalApplied}, new balance=${newBalance}`);
+          
+          // Update the invoice
+          await tx
+            .update(transactions)
+            .set({ 
+              balance: newBalance, 
+              status: newStatus 
+            })
+            .where(eq(transactions.id, invoice.id));
+        }
+      }
+    }
+    
+    // Process deposit credit application entries
+    for (const entry of depositApplicationEntries) {
+      if (!entry.description) continue;
+      
+      // Extract deposit reference from description
+      const depositMatch = entry.description.match(/deposit #?([^,\s]+)/i);
+      if (depositMatch && depositMatch[1]) {
+        const depositRef = depositMatch[1];
+        console.log(`Found deposit credit application for deposit: ${depositRef}`);
+        
+        // Find the deposit by reference or ID
+        const [deposit] = await tx
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.type, 'deposit'),
+              or(
+                eq(transactions.reference, depositRef),
+                eq(transactions.id, parseInt(depositRef, 10))
+              )
+            )
+          );
+          
+        if (deposit) {
+          // Calculate new balance (restore the credit as negative)
+          const appliedAmount = entry.debit;
+          const currentBalance = Number(deposit.balance || 0);
+          const newBalance = currentBalance - appliedAmount;
+          
+          console.log(`Restoring ${appliedAmount} to deposit #${depositRef}: current balance=${currentBalance}, new balance=${newBalance}`);
+          
+          // Update the deposit
+          await tx
+            .update(transactions)
+            .set({
+              balance: newBalance,
+              status: 'unapplied_credit'
+            })
+            .where(eq(transactions.id, deposit.id));
+          
+          // Update description if needed
+          if (deposit.description && deposit.description.includes('Applied')) {
+            // Get the invoice reference
+            const invoiceMatch = entry.description.match(/invoice #?(\d+)/i);
+            if (invoiceMatch && invoiceMatch[1]) {
+              const invoiceRef = invoiceMatch[1];
+              
+              // Remove the application reference from the description
+              const newDescription = deposit.description.replace(
+                new RegExp(`Applied \\$?([0-9,]+(?:\\.[0-9]+)?)\\s+to\\s+invoice #?${invoiceRef}[^,]*`, 'i'),
+                ''
+              ).trim();
+              
+              await tx
+                .update(transactions)
+                .set({
+                  description: newDescription
+                })
+                .where(eq(transactions.id, deposit.id));
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  private async handleInvoiceDeletion(tx: any, invoice: any) {
+    console.log(`Processing invoice deletion for invoice #${invoice.reference}`);
+    
+    // Find all ledger entries that refer to this invoice
+    const relatedEntries = await tx
+      .select()
+      .from(ledgerEntries)
+      .where(
+        sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`
+      );
+      
+    // Find all payments that applied credits to this invoice
+    const paymentIds = new Set();
+    
+    for (const entry of relatedEntries) {
+      if (entry.description && entry.description.includes('Applied credit from deposit') && 
+          entry.transactionId !== invoice.id) {
+        paymentIds.add(entry.transactionId);
+      }
+    }
+    
+    // Process each payment that applied credits to this invoice
+    for (const paymentId of paymentIds) {
+      const [payment] = await tx
+        .select()
+        .from(transactions)
+        .where(eq(transactions.id, paymentId));
+      
+      if (!payment) continue;
+      
+      // Find deposit applications in this payment for this invoice
+      const depositApplications = relatedEntries.filter(e => 
+        e.transactionId === paymentId && 
+        e.description && 
+        e.description.includes('Applied credit from deposit') &&
+        e.description.includes(`invoice #${invoice.reference}`)
+      );
+      
+      // For each deposit application, restore the deposit balance
+      for (const application of depositApplications) {
+        if (!application.description) continue;
+        
+        // Extract deposit reference
+        const depositMatch = application.description.match(/deposit #?([^,\s]+)/i);
+        if (depositMatch && depositMatch[1]) {
+          const depositRef = depositMatch[1];
+          
+          // Find the deposit
+          const [deposit] = await tx
+            .select()
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.type, 'deposit'),
+                or(
+                  eq(transactions.reference, depositRef),
+                  eq(transactions.id, parseInt(depositRef, 10))
+                )
+              )
+            );
+          
+          if (deposit) {
+            // Restore the credit amount to the deposit
+            const appliedAmount = application.debit;
+            const currentBalance = Number(deposit.balance || 0);
+            const newBalance = currentBalance - appliedAmount;
+            
+            console.log(`Restoring ${appliedAmount} to deposit #${depositRef} when deleting invoice #${invoice.reference}`);
+            
+            // Update the deposit
+            await tx
+              .update(transactions)
+              .set({
+                balance: newBalance,
+                status: 'unapplied_credit'
+              })
+              .where(eq(transactions.id, deposit.id));
+            
+            // Update description
+            if (deposit.description && deposit.description.includes(`invoice #${invoice.reference}`)) {
+              const newDescription = deposit.description.replace(
+                new RegExp(`Applied \\$?([0-9,]+(?:\\.[0-9]+)?)\\s+to\\s+invoice #?${invoice.reference}[^,]*`, 'i'),
+                ''
+              ).trim();
+              
+              await tx
+                .update(transactions)
+                .set({
+                  description: newDescription
+                })
+                .where(eq(transactions.id, deposit.id));
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  private async handleDepositDeletion(tx: any, deposit: any) {
+    console.log(`Processing deposit deletion for deposit ID ${deposit.id} (${deposit.reference || 'no reference'})`);
+    
+    // Find any payments that used this deposit's credit
+    const applicationsToThis = await tx
+      .select()
+      .from(ledgerEntries)
+      .where(
+        sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit #' + (deposit.reference || deposit.id) + '%'}`
+      );
+    
+    if (applicationsToThis.length > 0) {
+      // This should never happen as isDepositAppliedToInvoices should have returned true
+      console.error(`Found ${applicationsToThis.length} applications of this deposit that should have prevented deletion!`);
+      return;
+    }
+  }
+  
+  private async isDepositAppliedToInvoices(tx: any, deposit: any): Promise<boolean> {
+    console.log(`Checking if deposit #${deposit.id} (${deposit.reference || 'no reference'}) has been applied to invoices`);
+    
+    // Method 1: Check for ledger entries that show this deposit being applied
+    const depositApplications = await tx
+      .select()
+      .from(ledgerEntries)
+      .where(
+        sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit #' + (deposit.reference || deposit.id) + '%'}`
+      );
+    
+    if (depositApplications.length > 0) {
+      console.log(`Found ${depositApplications.length} ledger entries showing this deposit was applied`);
+      
+      // Check if any of these are actual credit applications rather than just mentions
+      for (const entry of depositApplications) {
+        if (entry.debit > 0 && entry.description && entry.description.includes('Applied credit from deposit')) {
+          // This is a proper credit application entry
+          return true;
+        }
+      }
+    }
+    
+    // Method 2: Check the deposit's description for evidence it was applied
+    if (deposit.description && 
+        deposit.description.includes('Applied') && 
+        deposit.description.includes('to invoice #')) {
+      
+      // Check if there's a specific amount mentioned (format: "Applied $3000 to invoice")
+      const appliedAmountMatch = deposit.description.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+      
+      if (appliedAmountMatch && appliedAmountMatch[1]) {
+        // Extract and check the amount
+        const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+        
+        if (!isNaN(extractedAmount) && extractedAmount > 0) {
+          console.log(`Deposit description indicates it was applied: "${deposit.description}"`);
+          // Get the invoice reference
+          const invoiceMatch = deposit.description.match(/invoice #?(\d+)/i);
+          
+          if (invoiceMatch && invoiceMatch[1]) {
+            // Find the invoice to verify it exists
+            const [invoice] = await tx
+              .select()
+              .from(transactions)
+              .where(
+                and(
+                  eq(transactions.type, 'invoice'),
+                  eq(transactions.reference, invoiceMatch[1])
+                )
+              );
+            
+            if (invoice) {
+              // If the referenced invoice exists, this is an actual application
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    // This deposit can be safely deleted
+    return false;
+  }
+  
+  private async recalculateReferencedInvoiceBalances(tx: any, ledgerEntries: any[]) {
+    // Get all invoice references from the ledger entries
+    const invoiceReferences = new Set<string>();
+    
+    for (const entry of ledgerEntries) {
+      if (!entry.description) continue;
+      
+      const match = entry.description.match(/invoice\s+#?(\d+)/i);
+      if (match && match[1]) {
+        invoiceReferences.add(match[1]);
+      }
+    }
+    
+    // Recalculate balance for each invoice
+    for (const invoiceRef of invoiceReferences) {
+      // Find the invoice
+      const [invoice] = await tx
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.type, 'invoice'),
+            eq(transactions.reference, invoiceRef)
+          )
+        );
+      
+      if (!invoice) continue;
+      
+      // Get all ledger entries related to this invoice
+      const allEntries = await tx
+        .select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoiceRef + '%'}`
+          )
+        );
+      
+      // Calculate total applied credits
+      const totalApplied = allEntries.reduce((sum, entry) => {
+        // Credit to A/R is a payment
+        if (entry.credit > 0) {
+          return sum + entry.credit;
+        }
+        return sum;
+      }, 0);
+      
+      // Calculate new balance
+      const newBalance = Math.max(0, Number(invoice.amount) - totalApplied);
+      
+      // Set appropriate status
+      const newStatus = newBalance > 0 ? 'open' : 'completed';
+      
+      console.log(`Final recalculation for invoice #${invoiceRef}: amount=${invoice.amount}, applied=${totalApplied}, new balance=${newBalance}`);
+      
+      // Update the invoice
+      await tx
+        .update(transactions)
+        .set({ 
+          balance: newBalance, 
+          status: newStatus 
+        })
+        .where(eq(transactions.id, invoice.id));
     }
   }
 
