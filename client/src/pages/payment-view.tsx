@@ -287,8 +287,8 @@ export default function PaymentView() {
     return sum + (isNaN(amount) ? 0 : amount);
   }, 0);
   
-  // Always use the actual credit amount from ledger entries, whether editing or not
-  const effectiveCreditAmount = appliedCreditAmount;
+  // Use the edited amount when in edit mode, otherwise use ledger entries
+  const effectiveCreditAmount = isEditing ? totalDepositCreditsBeingApplied : appliedCreditAmount;
   
   const safeAmountReceived = parseFloat(amountReceived.replace(/,/g, '') || '0');
   const actualBalance = safeAmountReceived - totalInvoicePayments + effectiveCreditAmount;
