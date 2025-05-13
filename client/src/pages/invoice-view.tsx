@@ -76,7 +76,7 @@ export default function InvoiceView() {
       }
       const response = await apiRequest(
         'POST', 
-        `/api/transactions/${invoiceId}/recalculate-balance`
+        `/api/transactions/${invoiceId}/recalculate`
       );
       if (!response.ok) {
         const errorText = await response.text();

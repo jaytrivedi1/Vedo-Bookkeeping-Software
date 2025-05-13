@@ -3014,7 +3014,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Group line items by payment ID
-      const lineItemsByPayment = new Map();
+      const lineItemsByPayment = new Map<number, LineItem[]>();
       for (const payment of payments) {
         const items = flatLineItems.filter(item => 
           item.transactionId === payment.id || 
@@ -3029,23 +3029,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Get all deposit line items connected to this invoice through payments
-      const depositLineItems = [];
-      const invoicePaymentIds = new Set();
+      const depositLineItems: LineItem[] = [];
+      const invoicePaymentIds = new Set<number>();
       
-      for (const [paymentId, items] of lineItemsByPayment.entries()) {
+      // Convert entries to array for iteration
+      Array.from(lineItemsByPayment.entries()).forEach(([paymentId, items]) => {
         // Find any items that reference this invoice
         const hasInvoiceItem = items.some(item => 
-          item.transactionId === id && item.type === 'invoice'
+          item.transactionId === id && 
+          (item as any).type === 'invoice'  // Type assertion for LineItem.type
         );
         
         if (hasInvoiceItem) {
           invoicePaymentIds.add(paymentId);
           
           // Find deposit items in this payment (these are the credits)
-          const deposits = items.filter(item => item.type === 'deposit');
+          const deposits = items.filter(item => (item as any).type === 'deposit');
           depositLineItems.push(...deposits);
         }
-      }
+      });
       
       // For each payment that references this invoice, add it to the payment transactions list
       for (const paymentId of invoicePaymentIds) {
