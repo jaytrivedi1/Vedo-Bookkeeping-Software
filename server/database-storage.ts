@@ -8,7 +8,7 @@ import {
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";

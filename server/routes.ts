@@ -3342,6 +3342,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Comprehensive fix for all balances - no auth required for testing
+  apiRouter.post("/test/fix-all-balances", async (req: Request, res: Response) => {
+    try {
+      console.log('Running comprehensive fix for all transaction balances');
+      await fixAllBalances();
+      return res.status(200).json({ message: 'Comprehensive balance fix completed successfully' });
+    } catch (error) {
+      console.error('Error in fix-all-balances:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
   // Single invoice recalculation - no admin required
   apiRouter.post("/transactions/:id/recalculate-balance", async (req: Request, res: Response) => {
     try {
