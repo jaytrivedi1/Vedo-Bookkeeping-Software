@@ -656,23 +656,52 @@ export class DatabaseStorage implements IStorage {
         console.log(`Found deposit credit application for deposit: ${depositRef}`);
         
         // Find the deposit by reference or ID
-        const [deposit] = await tx
-          .select()
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.type, 'deposit'),
-              or(
-                eq(transactions.reference, depositRef),
-                eq(transactions.id, parseInt(depositRef, 10))
+        // First try to see if it's a numeric ID
+        const isNumeric = /^\d+$/.test(depositRef);
+        const depositId = isNumeric ? parseInt(depositRef, 10) : NaN;
+        
+        // Query with proper conditions based on whether depositRef is numeric
+        const [deposit] = isNumeric 
+          ? await tx
+              .select()
+              .from(transactions)
+              .where(
+                and(
+                  eq(transactions.type, 'deposit'),
+                  or(
+                    eq(transactions.reference, depositRef),
+                    eq(transactions.id, depositId)
+                  )
+                )
               )
-            )
-          );
+          : await tx
+              .select()
+              .from(transactions)
+              .where(
+                and(
+                  eq(transactions.type, 'deposit'),
+                  eq(transactions.reference, depositRef)
+                )
+              );
           
         if (deposit) {
           // Calculate new balance (restore the credit as negative)
-          const appliedAmount = entry.debit;
-          const currentBalance = Number(deposit.balance || 0);
+          const appliedAmount = Number(entry.debit || 0);
+          
+          // Make sure we have valid numbers for calculations
+          let currentBalance = 0;
+          if (deposit.balance !== null && deposit.balance !== undefined) {
+            currentBalance = Number(deposit.balance);
+          } else if (deposit.amount !== null && deposit.amount !== undefined) {
+            // If no balance is set, use negative of the amount 
+            // (deposit credits are stored as negative balances)
+            currentBalance = -Number(deposit.amount);
+          }
+          
+          // Ensure we have valid numbers before calculation
+          if (isNaN(currentBalance)) currentBalance = 0;
+          if (isNaN(appliedAmount)) appliedAmount = 0;
+          
           const newBalance = currentBalance - appliedAmount;
           
           console.log(`Restoring ${appliedAmount} to deposit #${depositRef}: current balance=${currentBalance}, new balance=${newBalance}`);
