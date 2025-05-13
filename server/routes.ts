@@ -1538,35 +1538,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Handle deposit credit updates if provided
+        // Handle deposit credit updates if provided (supports both formats - new lineItems array and old depositCredits array)
+        const depositCredits = [];
+        
+        // Check for new format (lineItems with type 'deposit')
+        if (body.lineItems && Array.isArray(body.lineItems)) {
+          console.log('Found lineItems in request:', body.lineItems);
+          for (const item of body.lineItems) {
+            if (item.type === 'deposit' && item.transactionId) {
+              depositCredits.push({
+                selected: true,
+                depositId: item.transactionId,
+                amount: item.amount
+              });
+            }
+          }
+        }
+        
+        // Also check for old format (depositCredits array) for backward compatibility
         if (body.depositCredits && Array.isArray(body.depositCredits)) {
           for (const credit of body.depositCredits) {
-            if (!credit.selected || !credit.depositId) continue;
+            if (credit.selected && credit.depositId) {
+              depositCredits.push(credit);
+            }
+          }
+        }
+        
+        // Process all deposit credits
+        console.log('Processing deposit credits:', depositCredits);
+        for (const credit of depositCredits) {
+          // Get the deposit transaction
+          const deposit = await storage.getTransaction(credit.depositId);
+          
+          if (!deposit || deposit.type !== 'deposit') {
+            console.log(`Deposit #${credit.depositId} not found or not a deposit type, skipping`);
+            continue;
+          }
+          
+          // Find the ledger entry that applies this credit
+          const existingCreditEntry = existingLedgerEntries.find(entry => 
+            entry.description?.includes('Applied credit from deposit') && 
+            entry.description?.includes(deposit.reference || deposit.id.toString())
+          );
+          
+          // If we have a ledger entry already, update it
+          if (existingCreditEntry) {
+            console.log(`Updating ledger entry for deposit #${deposit.id} credit to amount: ${credit.amount}`);
+            await storage.updateLedgerEntry(existingCreditEntry.id, {
+              debit: credit.amount,
+              date: body.date || existingCreditEntry.date,
+            });
+          }
+          
+          // Update deposit status and balance based on how much credit is applied
+          if (deposit.status === 'unapplied_credit') {
+            // Calculate remaining balance
+            const remainingBalance = deposit.amount - credit.amount;
             
-            // Get the deposit transaction
-            const deposit = await storage.getTransaction(credit.depositId);
-            
-            if (!deposit || deposit.type !== 'deposit') continue;
-            
-            // Update deposit status and balance based on how much credit is applied
-            if (deposit.status === 'unapplied_credit') {
-              // Calculate remaining balance
-              const remainingBalance = deposit.amount - credit.amount;
-              
-              if (remainingBalance <= 0) {
-                // Fully applied - mark as completed
-                await storage.updateTransaction(deposit.id, {
-                  status: 'completed',
-                  balance: 0
-                });
-                console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) status to 'completed'`);
-              } else {
-                // Partially applied - update balance but keep status as unapplied_credit
-                await storage.updateTransaction(deposit.id, {
-                  balance: -remainingBalance // Keep negative balance for credits
-                });
-                console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) remaining balance: ${-remainingBalance}`);
-              }
+            if (remainingBalance <= 0) {
+              // Fully applied - mark as completed
+              await storage.updateTransaction(deposit.id, {
+                status: 'completed',
+                balance: 0
+              });
+              console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) status to 'completed'`);
+            } else {
+              // Partially applied - update balance but keep status as unapplied_credit
+              await storage.updateTransaction(deposit.id, {
+                balance: -remainingBalance // Keep negative balance for credits
+              });
+              console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) remaining balance: ${-remainingBalance}`);
             }
           }
         }
