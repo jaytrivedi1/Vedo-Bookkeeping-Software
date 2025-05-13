@@ -301,8 +301,20 @@ export default function PaymentView() {
       
     const initialDepositPayments: DepositPayment[] = [];
     
-    // We know the payment is using deposit #DEP-2025-05-12 for this case
-    // Let's hardcode the amount for now to get consistent display
+    // First, let's determine the invoice payment amount from the ledger
+    // This is typically the credit amount in the ledger entries for invoice payments
+    const invoiceEntries = ledgerEntries.filter(entry => 
+      entry.accountId === 2 && entry.credit > 0 &&
+      entry.description?.includes('Payment applied to invoice')
+    );
+    
+    // Calculate the total invoice payment amount
+    const totalInvoiceAmount = invoiceEntries.reduce((sum, entry) => sum + entry.credit, 0);
+    
+    // Now we know how much was actually applied to the invoice
+    console.log("Found invoice payment amount:", totalInvoiceAmount);
+    
+    // Process credits by looking at the ledger entries
     if (creditEntries.length > 0) {
       // First check by extracting deposit reference from description
       for (const entry of creditEntries) {
@@ -320,8 +332,8 @@ export default function PaymentView() {
             // Check if we already have this deposit in our list
             const existingIndex = initialDepositPayments.findIndex(dp => dp.id === matchingDeposit.id);
             
-            // Fixed known amount to match the invoice payment
-            const creditAmount = matchingDeposit.id === 153 ? 1000 : entry.debit;
+            // Use the actual amount from ledger or total invoice amount as fallback
+            const creditAmount = entry.debit > 0 ? entry.debit : totalInvoiceAmount;
             
             if (existingIndex >= 0) {
               // Update existing entry
@@ -341,17 +353,18 @@ export default function PaymentView() {
       }
     }
     
-    // Fallback for DEP-2025-05-12 (deposit ID 153)
-    if (initialDepositPayments.length === 0) {
-      // Find deposit 153 in the customer deposits
-      const deposit153 = deposits.find((d: any) => d.id === 153);
+    // Fallback when no specific deposit references found
+    if (initialDepositPayments.length === 0 && totalInvoiceAmount > 0) {
+      // Find deposit 153 or any other unapplied deposit from this customer
+      const unappliedDeposit = deposits.find((d: any) => 
+        d.status === 'unapplied_credit' || d.balance < 0
+      );
       
-      if (deposit153) {
-        // Fixed amount to match what we see in the payment summary
+      if (unappliedDeposit) {
         initialDepositPayments.push({
-          id: 153,
-          amount: 1000, // Fixed amount to match invoice payment
-          amountString: formatCurrency(1000),
+          id: unappliedDeposit.id,
+          amount: totalInvoiceAmount,
+          amountString: formatCurrency(totalInvoiceAmount),
           selected: true
         });
       }
@@ -894,9 +907,13 @@ export default function PaymentView() {
                                 id={`deposit-${deposit.id}`}
                                 disabled={!isEditing || updatePaymentMutation.isPending}
                                 checked={
+                                  // Check if deposit is already in our state
                                   depositPayments.some(dp => dp.id === deposit.id && dp.selected) ||
-                                  // Special handling for deposit #153
-                                  (deposit.id === 153 && depositPayments.length === 0)
+                                  // Auto-select if it's the only available deposit and payment is by credit
+                                  (depositPayments.length === 0 && 
+                                   data && data.ledgerEntries &&
+                                   data.ledgerEntries.some(e => e.description?.includes('Applied credit') && e.debit > 0) &&
+                                   customerDeposits.length === 1 && customerDeposits[0].id === deposit.id)
                                 }
                                 onCheckedChange={(checked) => {
                                   if (!isEditing) return;
@@ -946,8 +963,12 @@ export default function PaymentView() {
                                   value={
                                     // Check current state in depositPayments first
                                     depositPayments.find(dp => dp.id === deposit.id)?.amountString ||
-                                    // Special case for deposit #153 (DEP-2025-05-12)
-                                    (deposit.id === 153 ? formatCurrency(1000) : "0.00")
+                                    // Get amount based on the total invoice payment or zeroed out
+                                    (data && data.ledgerEntries ? 
+                                      formatCurrency(data.ledgerEntries
+                                        .filter(e => e.accountId === 2 && e.credit > 0)
+                                        .reduce((sum, e) => sum + e.credit, 0)) 
+                                      : "0.00")
                                   }
                                   onChange={(e) => {
                                     const value = e.target.value;
@@ -1007,9 +1028,11 @@ export default function PaymentView() {
                                 />
                               ) : (
                                 <span className="text-sm text-gray-900">
-                                  {/* Show credit amount consistently */}
-                                  {deposit.id === 153 
-                                    ? formatCurrency(1000) 
+                                  {/* Show credit amount based on invoice payment amount */}
+                                  {data && data.ledgerEntries
+                                    ? formatCurrency(data.ledgerEntries
+                                        .filter(e => e.accountId === 2 && e.credit > 0)
+                                        .reduce((sum, e) => sum + e.credit, 0))
                                     : formatCurrency(0)}
                                 </span>
                               )}
