@@ -3009,6 +3009,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Flatten the line items array
       const flatLineItems = allLineItems.flat();
       
+      console.log(`DEBUG PAYMENT HISTORY: Found ${payments.length} payments and ${flatLineItems.length} line items`);
+      
+      // Debug - log line items that reference this invoice
+      const invoiceLineItemsDebug = flatLineItems.filter(item => item.transactionId === id);
+      console.log(`DEBUG PAYMENT HISTORY: Found ${invoiceLineItemsDebug.length} line items referencing invoice #${transaction.reference}:`, 
+        invoiceLineItemsDebug.map(i => ({id: i.id, transactionId: i.transactionId, amount: i.amount, description: i.description}))
+      );
+      
       // Find line items that reference this invoice
       const invoiceLineItems = flatLineItems.filter(item => 
         item.transactionId === id && item.type === 'invoice'
