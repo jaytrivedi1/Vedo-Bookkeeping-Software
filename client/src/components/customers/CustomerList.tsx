@@ -514,7 +514,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                                     {typeDisplay}
                                   </TableCell>
                                   <TableCell>
-                                    {transaction.reference || (transaction.type === 'payment' ? `PMT-${transaction.id}` : '—')}
+                                    {transaction.reference || '—'}
                                   </TableCell>
                                   <TableCell className={
                                     transaction.type === 'invoice' 
