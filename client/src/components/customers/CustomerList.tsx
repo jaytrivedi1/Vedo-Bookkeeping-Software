@@ -623,13 +623,13 @@ export default function CustomerList({ className }: CustomerListProps) {
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Unapplied Credits</h3>
-                      <p className="text-xl font-semibold text-green-700">
+                      <p className="text-xl font-semibold text-blue-700">
                         {formatCurrency(customerUnappliedCredits.reduce((sum, credit) => {
-                          // For unapplied credits, use the negative of the balance (which is already negative)
-                          // Balance is the actual remaining available credit
+                          // Keep the balance as negative for consistency
+                          // This ensures unapplied credits always show as negative throughout the app
                           const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
-                            ? Math.abs(credit.balance) // Balance should be negative for credits, so make it positive
-                            : Math.abs(credit.amount); // Fallback to amount if balance not set
+                            ? credit.balance // Keep it negative for consistency
+                            : -Math.abs(credit.amount); // Ensure it's negative if balance not set
                           
                           console.log(`Credit #${credit.id}: balance=${credit.balance}, amount=${credit.amount}, using ${creditAmount}`);
                           return sum + creditAmount;
