@@ -386,10 +386,15 @@ export class DatabaseStorage implements IStorage {
         totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
       }
       
+      // CRITICAL FIX: Prevent over-application of credits
       // Cap the total applied at the invoice amount to avoid negative balances
-      if (totalApplied > Number(invoice.amount)) {
-        console.log(`Warning: Total applied (${totalApplied}) exceeds invoice amount (${invoice.amount}). Capping at invoice amount.`);
-        totalApplied = Number(invoice.amount);
+      const invoiceAmount = Number(invoice.amount);
+      if (totalApplied > invoiceAmount) {
+        console.log(`CRITICAL ERROR: Total applied (${totalApplied}) exceeds invoice amount (${invoiceAmount}) for invoice #${invoice.reference}.`);
+        console.log(`Details: Payment credits: ${totalPaymentCredits}, Deposit credits from ledger: ${totalDepositCredits}, Credits from descriptions: ${totalCreditsFromDescriptions}`);
+        console.log(`Capping applied amount at invoice amount to prevent accounting errors.`);
+        
+        totalApplied = invoiceAmount;
       }
       
       const remainingBalance = Number(invoice.amount) - totalApplied;
@@ -427,9 +432,18 @@ export class DatabaseStorage implements IStorage {
       }
       
       if (needsUpdate) {
+        // Do one final check to ensure balance is never negative
+        // This is a critical accounting principle that must be enforced
+        const finalBalance = remainingBalance > 0 ? remainingBalance : 0;
+        
+        // Extra validation for data integrity
+        if (remainingBalance < 0) {
+          console.log(`CRITICAL INTEGRITY CHECK: Caught negative balance (${remainingBalance}) for invoice #${invoice.reference}. Setting to 0.`);
+        }
+        
         const [updatedInvoice] = await db.update(transactions)
           .set({ 
-            balance: remainingBalance > 0 ? remainingBalance : 0,
+            balance: finalBalance,
             status: newStatus
           })
           .where(eq(transactions.id, invoiceId))

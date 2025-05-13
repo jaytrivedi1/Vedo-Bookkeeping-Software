@@ -1041,6 +1041,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
     
     try {
+      // Validate that we're not over-applying payments or credits to any invoice
+      const paymentInvoiceItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
+      
+      for (const invoiceItem of paymentInvoiceItems) {
+        if (!invoiceItem.transactionId) continue;
+        
+        // Get the invoice
+        const invoice = await storage.getTransaction(invoiceItem.transactionId);
+        if (!invoice) {
+          return res.status(400).json({ 
+            message: "Invoice not found", 
+            errors: [{ path: ["lineItems"], message: `Invoice #${invoiceItem.transactionId} not found` }] 
+          });
+        }
+        
+        // Get the amount we're applying directly from this payment
+        const directPaymentAmount = Number(invoiceItem.amount || 0);
+        
+        // Calculate credits being applied to this invoice in this payment
+        const creditItems = lineItems.filter((item: any) => 
+          item.type === 'deposit' && 
+          item.invoiceId === invoiceItem.transactionId
+        );
+        const creditAmount = creditItems.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
+        
+        // Total being applied in this payment
+        const totalBeingApplied = directPaymentAmount + creditAmount;
+        
+        // Get existing payments already applied to this invoice
+        const existingPayments = await db.select()
+          .from(ledgerEntries)
+          .where(
+            and(
+              eq(ledgerEntries.accountId, 2), // Accounts Receivable
+              sql`${ledgerEntries.credit} > 0`, // Credit entries only
+              sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`, // Referencing this invoice
+              ne(ledgerEntries.transactionId, invoice.id) // Not the invoice itself
+            )
+          );
+        
+        // Calculate total already applied
+        const alreadyApplied = existingPayments.reduce((sum: number, entry: any) => sum + Number(entry.credit || 0), 0);
+        
+        // Calculate maximum payment that can be applied
+        const maxAllowedPayment = Number(invoice.amount) - alreadyApplied;
+        
+        console.log(`Validating payment for invoice #${invoice.reference}:
+- Invoice amount: ${invoice.amount}
+- Already applied: ${alreadyApplied}
+- Max allowed payment: ${maxAllowedPayment}
+- Total being applied now: ${totalBeingApplied}
+- Direct payment: ${directPaymentAmount}
+- Credits applied: ${creditAmount}`);
+        
+        // Validate the amount doesn't exceed what's allowed
+        if (totalBeingApplied > maxAllowedPayment) {
+          return res.status(400).json({ 
+            message: "Payment exceeds invoice balance", 
+            errors: [{ 
+              path: ["lineItems"], 
+              message: `Cannot apply ${totalBeingApplied} to invoice #${invoice.reference} as it exceeds the remaining balance of ${maxAllowedPayment}` 
+            }] 
+          });
+        }
+      }
       // Create the payment transaction
       const paymentData = {
         reference: data.reference,
