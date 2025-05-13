@@ -45,6 +45,18 @@ interface InvoicePayment {
   originalTotal: number;
 }
 
+interface DepositPayment {
+  id: number;
+  selected: boolean;
+  invoiceReference?: string;
+  date?: Date | null;
+  dueDate?: Date | null;
+  amount: number;
+  amountString?: string;
+  balance?: number;
+  originalTotal?: number;
+}
+
 export default function PaymentView() {
   const [, navigate] = useLocation();
   const params = useParams();
@@ -113,10 +125,13 @@ export default function PaymentView() {
   // Function to handle updating payment amounts
   const handleUpdatePaymentAmount = (index: number, value: string) => {
     const updatedPayments = [...invoicePayments];
+    const amount = parseFloat(value.replace(/,/g, '')) || 0;
     updatedPayments[index] = {
       ...updatedPayments[index],
       amountString: value,
-      amount: parseFloat(value.replace(/,/g, '')) || 0
+      amount: amount,
+      // Auto-select the invoice if an amount is entered
+      selected: amount > 0 ? true : updatedPayments[index].selected
     };
     setInvoicePayments(updatedPayments);
   };
@@ -884,8 +899,8 @@ export default function PaymentView() {
                                           ...updatedPayments[existingIndex],
                                           amount: finalAmount,
                                           amountString: value,
-                                          // Auto-select if amount > 0
-                                          selected: finalAmount > 0 ? true : updatedPayments[existingIndex].selected
+                                          // Auto-check if amount > 0
+                                          selected: finalAmount > 0
                                         };
                                         return updatedPayments;
                                       } else {
