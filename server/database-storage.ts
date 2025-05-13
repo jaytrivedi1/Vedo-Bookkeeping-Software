@@ -8,7 +8,7 @@ import {
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne, or, isNull } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull, like } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -749,7 +749,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(ledgerEntries)
       .where(
-        sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`
+        like(ledgerEntries.description, `%invoice #${invoice.reference}%`)
       );
       
     // Find all payments that applied credits to this invoice
