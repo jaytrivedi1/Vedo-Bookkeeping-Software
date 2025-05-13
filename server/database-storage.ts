@@ -213,7 +213,7 @@ export class DatabaseStorage implements IStorage {
    * Recalculates the balance for an invoice by summing all payments applied to it
    * @param invoiceId The ID of the invoice to recalculate
    */
-  async recalculateInvoiceBalance(invoiceId: number): Promise<Transaction | undefined> {
+  async recalculateInvoiceBalance(invoiceId: number, forceUpdate: boolean = false): Promise<Transaction | undefined> {
     try {
       // Step 1: Get the invoice
       const invoice = await this.getTransaction(invoiceId);
@@ -297,7 +297,8 @@ export class DatabaseStorage implements IStorage {
       console.log(`Invoice amount: ${requiredCredit}, already applied through ledger: ${appliedCredit}, remaining needed: ${remainingCreditNeeded}`);
       
       // Special case handling for known problematic invoices
-      if (invoice.reference === '1005') {
+      if (invoice.reference === '1005' && !forceUpdate) {
+        // Only use this special case handling when NOT explicitly updating balance
         console.log("Special case handling for invoice #1005");
         // Find only the $385 credit (CREDIT-78342) explicitly from payment #149
         const specificCredit = depositsWithInvoiceReference.find(d => 
