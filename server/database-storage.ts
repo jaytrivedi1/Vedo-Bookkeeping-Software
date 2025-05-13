@@ -343,6 +343,17 @@ export class DatabaseStorage implements IStorage {
           if (!isNaN(extractedAmount)) {
             console.log(`Extracted specific amount $${extractedAmount} from description for deposit #${deposit.id}`);
             creditAmount = extractedAmount;
+            
+            // If this is a partial application of a credit, also update the balance
+            if (extractedAmount < Math.abs(Number(deposit.amount)) && deposit.balance === deposit.amount) {
+              const newBalance = -(Math.abs(Number(deposit.amount)) - extractedAmount);
+              console.log(`Updating deposit #${deposit.id} balance from ${deposit.balance} to ${newBalance} due to partial application`);
+              
+              // Update the balance directly
+              await db.update(transactions)
+                .set({ balance: newBalance })
+                .where(eq(transactions.id, deposit.id));
+            }
           }
         }
         
