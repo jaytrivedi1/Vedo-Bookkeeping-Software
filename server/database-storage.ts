@@ -240,7 +240,7 @@ export class DatabaseStorage implements IStorage {
    * Recalculates the balance for an invoice by summing all payments applied to it
    * @param invoiceId The ID of the invoice to recalculate
    */
-  async recalculateInvoiceBalance(invoiceId: number, forceUpdate: boolean = false): Promise<Transaction | undefined> {
+  async recalculateInvoiceBalance(invoiceId: number, forceUpdate: boolean = false, useOnlyLedgerEntries: boolean = false): Promise<Transaction | undefined> {
     try {
       // Step 1: Get the invoice
       const invoice = await this.getTransaction(invoiceId);
@@ -367,7 +367,17 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Step 7: Calculate total applied and remaining balance
-      let totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
+      // When editing a payment, we need to use ONLY the ledger entries
+      let totalApplied;
+      
+      if (useOnlyLedgerEntries) {
+        // When we're updating during a payment edit, only use the ledger entries
+        totalApplied = totalPaymentCredits + totalDepositCredits;
+        console.log(`EDIT MODE: Using only ledger entries for balance calculation: ${totalApplied}`);
+      } else {
+        // Normal calculation including all sources
+        totalApplied = totalPaymentCredits + totalDepositCredits + totalCreditsFromDescriptions;
+      }
       
       // Cap the total applied at the invoice amount to avoid negative balances
       if (totalApplied > Number(invoice.amount)) {

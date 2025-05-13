@@ -1648,7 +1648,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
                 
                 // Force recalculate the invoice balance with the updated payment amount
-                await storage.recalculateInvoiceBalance(invoice.id, true);
+                // Use true, true to force update and use only ledger entries
+                await storage.recalculateInvoiceBalance(invoice.id, true, true);
               }
             }
           }
@@ -1657,7 +1658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Now recalculate all affected invoices
         for (const item of invoiceItems) {
           if (item.transactionId) {
-            await storage.recalculateInvoiceBalance(item.transactionId, true);
+            await storage.recalculateInvoiceBalance(item.transactionId, true, true);
           }
         }
       
