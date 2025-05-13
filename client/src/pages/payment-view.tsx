@@ -436,14 +436,34 @@ export default function PaymentView() {
                     0
                   );
                   
-                  // Validate that total applied doesn't exceed amount received
-                  if (totalAppliedFromInvoices > parsedAmount) {
-                    toast({
-                      title: "Invalid payment allocation",
-                      description: "The total applied amount cannot exceed the amount received.",
-                      variant: "destructive",
-                    });
-                    return;
+                  // Get total credits being applied from deposit payments
+                  const totalCreditsBeingApplied = depositPayments.reduce((sum, dp) => {
+                    const amount = parseFloat((dp.amountString || '0').replace(/,/g, '')) || dp.amount || 0;
+                    return sum + (isNaN(amount) ? 0 : amount);
+                  }, 0);
+                  
+                  // For credit applications, validate that credits applied equals invoice payments
+                  // Only check this rule if there are deposits with amounts > 0 and amount received is 0
+                  if (totalCreditsBeingApplied > 0 && parsedAmount === 0) {
+                    // Credits are being applied and there's no direct payment
+                    if (Math.abs(totalAppliedFromInvoices - totalCreditsBeingApplied) > 0.01) {
+                      toast({
+                        title: "Credit application mismatch",
+                        description: "When applying credits with no payment amount, total credits must equal total applied to invoices.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                  } else if (totalCreditsBeingApplied === 0) {
+                    // No credits being applied, ensure payments don't exceed amount received
+                    if (totalAppliedFromInvoices > parsedAmount) {
+                      toast({
+                        title: "Invalid payment allocation",
+                        description: "The total applied amount cannot exceed the amount received.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                   }
                   
                   // Prepare the update data
@@ -855,21 +875,26 @@ export default function PaymentView() {
                                       // Check if this deposit already exists in the state
                                       const existingIndex = prev.findIndex(dp => dp.id === deposit.id);
                                       
+                                      const finalAmount = isNaN(depositAmount) ? 0 : depositAmount;
+                                      
                                       if (existingIndex >= 0) {
                                         // Update existing deposit
                                         const updatedPayments = [...prev];
                                         updatedPayments[existingIndex] = {
                                           ...updatedPayments[existingIndex],
-                                          amount: isNaN(depositAmount) ? 0 : depositAmount,
-                                          amountString: value
+                                          amount: finalAmount,
+                                          amountString: value,
+                                          // Auto-select if amount > 0
+                                          selected: finalAmount > 0 ? true : updatedPayments[existingIndex].selected
                                         };
                                         return updatedPayments;
                                       } else {
                                         // Add new deposit
                                         return [...prev, {
                                           id: deposit.id,
-                                          amount: isNaN(depositAmount) ? 0 : depositAmount,
-                                          amountString: value
+                                          amount: finalAmount,
+                                          amountString: value,
+                                          selected: finalAmount > 0 // Auto-select if amount > 0
                                         }];
                                       }
                                     });
