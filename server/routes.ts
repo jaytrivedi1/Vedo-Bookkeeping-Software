@@ -3255,7 +3255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         summary: {
           originalAmount: transaction.amount,
           totalPaid: totalPaid,
-          remainingBalance: transaction.balance // Use the actual balance from the database
+          remainingBalance: transaction.balance !== null ? transaction.balance : remainingBalance
         }
       });
     } catch (error) {

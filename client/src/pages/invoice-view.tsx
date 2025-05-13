@@ -402,7 +402,9 @@ export default function InvoiceView() {
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
                 <div className="text-right font-bold">
-                  ${paymentHistory?.summary?.remainingBalance?.toFixed(2) || (invoice.balance || total).toFixed(2)}
+                  ${invoice.balance !== null && invoice.balance !== undefined 
+                    ? invoice.balance.toFixed(2) 
+                    : (paymentHistory?.summary?.remainingBalance?.toFixed(2) || total.toFixed(2))}
                 </div>
                 
                 {paymentHistory && paymentHistory.summary && (
