@@ -2990,33 +2990,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Look for any deposits from the same customer that mention this invoice in their descriptions
-      // This helps catch credits that aren't directly linked in ledger entries
-      const depositCredits = await db
+      // Find payments that have line items referencing this invoice 
+      // This is necessary to find exact amounts of credits applied
+      const payments = await db
         .select()
         .from(transactions)
         .where(
-          and(
-            eq(transactions.type, 'deposit'),
-            eq(transactions.contactId, transaction.contactId), // Ensure deposit is from the same customer
-            sql`(${transactions.description} LIKE ${'%Applied to invoice #' + transaction.reference + '%'} OR 
-                 ${transactions.description} LIKE ${'%Applied to invoice ' + transaction.reference + '%'})`
-          )
+          eq(transactions.type, 'payment')
         );
       
-      // Add deposit information to payments list
-      for (const deposit of depositCredits) {
-        paymentTransactions.push({
-          transaction: deposit,
-          amountApplied: Number(deposit.amount),
-          date: deposit.date,
-          description: deposit.description
-        });
+      // Get all line items for the payments
+      const lineItemPromises = payments.map(payment => 
+        storage.getLineItemsByTransaction(payment.id)
+      );
+      const allLineItems = await Promise.all(lineItemPromises);
+      
+      // Flatten the line items array
+      const flatLineItems = allLineItems.flat();
+      
+      // Find line items that reference this invoice
+      const invoiceLineItems = flatLineItems.filter(item => 
+        item.transactionId === id && item.type === 'invoice'
+      );
+      
+      // Group line items by payment ID
+      const lineItemsByPayment = new Map();
+      for (const payment of payments) {
+        const items = flatLineItems.filter(item => 
+          item.transactionId === payment.id || 
+          // Also include deposit items that are part of the same payment
+          (payment.id && item.id && 
+           item.id.toString().includes(payment.id.toString()))
+        );
+        
+        if (items.length > 0) {
+          lineItemsByPayment.set(payment.id, items);
+        }
       }
       
-      // Calculate invoice summary
-      const totalPaid = paymentEntries.reduce((sum, entry) => sum + entry.credit, 0) +
-                        depositCredits.reduce((sum, deposit) => sum + Number(deposit.amount), 0)
+      // Get all deposit line items connected to this invoice through payments
+      const depositLineItems = [];
+      const invoicePaymentIds = new Set();
+      
+      for (const [paymentId, items] of lineItemsByPayment.entries()) {
+        // Find any items that reference this invoice
+        const hasInvoiceItem = items.some(item => 
+          item.transactionId === id && item.type === 'invoice'
+        );
+        
+        if (hasInvoiceItem) {
+          invoicePaymentIds.add(paymentId);
+          
+          // Find deposit items in this payment (these are the credits)
+          const deposits = items.filter(item => item.type === 'deposit');
+          depositLineItems.push(...deposits);
+        }
+      }
+      
+      // For each payment that references this invoice, add it to the payment transactions list
+      for (const paymentId of invoicePaymentIds) {
+        const payment = payments.find(p => p.id === paymentId);
+        if (payment) {
+          // Find the ledger entry in our results that corresponds to this payment
+          const ledgerEntry = paymentEntries.find(entry => entry.transactionId === paymentId);
+          
+          // Find the invoice line item to get the exact amount applied
+          const items = lineItemsByPayment.get(paymentId) || [];
+          const invoiceItem = items.find(item => 
+            item.transactionId === id && item.type === 'invoice'
+          );
+          
+          // Use the line item amount if available, otherwise use the ledger entry
+          const amountApplied = invoiceItem ? invoiceItem.amount : 
+                               (ledgerEntry ? ledgerEntry.credit : 0);
+          
+          paymentTransactions.push({
+            transaction: payment,
+            amountApplied: amountApplied,
+            date: ledgerEntry ? ledgerEntry.date : payment.date,
+            description: ledgerEntry ? ledgerEntry.description : 
+                        `Payment for invoice #${transaction.reference}`
+          });
+        }
+      }
+      
+      // Add deposits information to payments list
+      // Get unique deposit IDs from line items
+      const depositIds = new Set(depositLineItems.map(item => item.transactionId));
+      
+      for (const depositId of depositIds) {
+        const deposit = await storage.getTransaction(depositId);
+        if (deposit) {
+          // Find all line items for this deposit to get the exact amount applied
+          const depositItemsForInvoice = depositLineItems.filter(item => 
+            item.transactionId === depositId
+          );
+          
+          // Sum up the amounts from all line items
+          const amountApplied = depositItemsForInvoice.reduce(
+            (sum, item) => sum + item.amount, 0
+          );
+          
+          paymentTransactions.push({
+            transaction: deposit,
+            amountApplied: amountApplied,
+            date: deposit.date,
+            description: `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`
+          });
+        }
+      }
+      
+      // Calculate invoice summary - use the accurate line item based totals
+      const totalPaid = paymentTransactions.reduce(
+        (sum, payment) => sum + payment.amountApplied, 0
+      );
       const remainingBalance = transaction.amount - totalPaid;
       
       return res.status(200).json({
