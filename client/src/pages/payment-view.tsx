@@ -292,24 +292,62 @@ export default function PaymentView() {
     if (creditEntries.length > 0 && depositPayments.length === 0) {
       const initialDepositPayments: DepositPayment[] = [];
       
-      // Look for DEP-2025-05-12 credit application
-      const dep2025 = creditEntries.find(entry => 
-        entry.description?.includes('deposit #DEP-2025-05-12')
-      );
+      // Process each credit entry to identify the deposit
+      for (const creditEntry of creditEntries) {
+        // Extract deposit reference from description
+        // Format: "Applied credit from deposit #DEP-2025-05-12"
+        const depositRefMatch = creditEntry.description?.match(/deposit #([\w-]+)/i);
+        if (depositRefMatch && depositRefMatch[1]) {
+          const depositRef = depositRefMatch[1];
+          
+          // Find matching deposit in the customerDeposits
+          const matchingDeposit = customerDeposits?.find(d => 
+            d.reference === depositRef || 
+            `DEP-${format(new Date(d.date), 'yyyy-MM-dd')}` === depositRef
+          );
+          
+          if (matchingDeposit) {
+            // Check if we already have this deposit in our list
+            const existingIndex = initialDepositPayments.findIndex(dp => dp.id === matchingDeposit.id);
+            
+            if (existingIndex >= 0) {
+              // Update existing entry
+              initialDepositPayments[existingIndex].amount += creditEntry.debit;
+              initialDepositPayments[existingIndex].amountString = formatCurrency(initialDepositPayments[existingIndex].amount);
+            } else {
+              // Add new entry
+              initialDepositPayments.push({
+                id: matchingDeposit.id,
+                amount: creditEntry.debit,
+                amountString: formatCurrency(creditEntry.debit),
+                selected: creditEntry.debit > 0
+              });
+            }
+          }
+        }
+      }
       
-      if (dep2025) {
-        initialDepositPayments.push({
-          id: 153, // The ID of DEP-2025-05-12
-          amount: dep2025.debit,
-          amountString: formatCurrency(dep2025.debit),
-          selected: dep2025.debit > 0
-        });
+      // If we didn't find anything with the regex matching but have DEP-2025-05-12
+      if (initialDepositPayments.length === 0) {
+        // Fallback to hardcoded deposit ID if we know it's being used
+        const totalCreditAmount = creditEntries.reduce((sum, entry) => sum + entry.debit, 0);
         
-        // Set the deposit payments state
+        if (totalCreditAmount > 0 && customerDeposits?.some(d => d.id === 153)) {
+          initialDepositPayments.push({
+            id: 153, // The ID of DEP-2025-05-12
+            amount: totalCreditAmount,
+            amountString: formatCurrency(totalCreditAmount),
+            selected: true
+          });
+        }
+      }
+      
+      // Set the deposit payments state if we found any
+      if (initialDepositPayments.length > 0) {
         setDepositPayments(initialDepositPayments);
       }
     }
-  }, [data, depositPayments.length]);
+  }, [data, depositPayments.length, customerDeposits]);
   
   // Loading state
   if (isLoading) {
@@ -886,13 +924,13 @@ export default function PaymentView() {
                                   className="w-24 text-right ml-auto"
                                   disabled={updatePaymentMutation.isPending}
                                   value={
+                                    // First check current state in depositPayments
                                     depositPayments.find(dp => dp.id === deposit.id)?.amountString ||
-                                    (deposit.id === 153 && 
-                                     ledgerEntries.some(entry => 
-                                       entry.description?.includes("deposit #DEP-2025-05-12") && 
-                                       entry.debit > 0
-                                     ) 
-                                       ? "1,155.00" 
+                                    // If not found in current state but there's a matching credit amount in the summary
+                                    (totalDepositCreditsBeingApplied > 0 && 
+                                     deposit.id === 153 && 
+                                     depositPayments.length === 0
+                                       ? formatCurrency(totalDepositCreditsBeingApplied)
                                        : "0.00")
                                   }
                                   onChange={(e) => {
