@@ -615,7 +615,7 @@ export class DatabaseStorage implements IStorage {
             .where(
               and(
                 eq(ledgerEntries.accountId, 2), // Accounts Receivable
-                like(ledgerEntries.description, `%invoice #%${invoiceRef}%`)
+                sql`${ledgerEntries.description} LIKE '%invoice #%' || ${invoiceRef} || '%'`
               )
             );
           
@@ -749,7 +749,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(ledgerEntries)
       .where(
-        like(ledgerEntries.description, `%invoice #%${invoice.reference}%`)
+        sql`${ledgerEntries.description} LIKE '%invoice #%' || ${invoice.reference} || '%'`
       );
       
     // Find all payments that applied credits to this invoice
@@ -958,7 +958,7 @@ export class DatabaseStorage implements IStorage {
           and(
             eq(ledgerEntries.accountId, 2), // Accounts Receivable
             // Fix SQL syntax with proper parameter binding
-            like(ledgerEntries.description, `%invoice #%${invoiceRef}%`)
+            sql`${ledgerEntries.description} LIKE '%invoice #%' || ${invoiceRef} || '%'`
           )
         );
       
