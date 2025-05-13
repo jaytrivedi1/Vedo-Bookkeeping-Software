@@ -1612,6 +1612,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // We need to update the invoice ledger entry as well to match our invoice payment amount
+        if (body.lineItems && Array.isArray(body.lineItems)) {
+          for (const item of body.lineItems) {
+            if (item.type === 'invoice' && item.transactionId) {
+              // Find the matching invoice ledger entry
+              const invoiceEntry = existingLedgerEntries.find(entry => 
+                entry.description?.includes(`Payment applied to invoice`) && 
+                entry.credit > 0
+              );
+              
+              if (invoiceEntry) {
+                console.log(`Updating invoice ledger entry for invoice #${item.transactionId} to amount: ${item.amount}`);
+                
+                // Update the invoice ledger entry credit amount
+                await storage.updateLedgerEntry(invoiceEntry.id, {
+                  credit: item.amount,
+                  date: body.date || invoiceEntry.date,
+                });
+                
+                // Recalculate the invoice balance
+                if (item.transactionId) {
+                  await storage.recalculateInvoiceBalance(item.transactionId);
+                }
+              }
+            }
+          }
+        }
+      
         // Return updated payment data with fresh data from database
         res.status(200).json({
           transaction: updatedTransaction,
