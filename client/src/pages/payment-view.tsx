@@ -279,9 +279,11 @@ export default function PaymentView() {
   
   // Initialize deposit payments from ledger entries when ledger data is available
   useEffect(() => {
-    if (!data) return;
+    if (!data || !data.transaction || !data.ledgerEntries) return;
     
+    const payment = data.transaction;
     const ledgerEntries = data.ledgerEntries || [];
+    const paymentContactId = payment?.contactId;
     
     // Find the credits applied - look for entries with debit in AR account
     const creditEntries = ledgerEntries.filter(entry => 
@@ -289,65 +291,71 @@ export default function PaymentView() {
       entry.description?.includes('Applied credit')
     );
     
-    if (creditEntries.length > 0 && depositPayments.length === 0) {
-      const initialDepositPayments: DepositPayment[] = [];
+    // Skip if either no credits or payments already loaded
+    if (creditEntries.length === 0 || depositPayments.length > 0) return;
+    
+    // Get deposits for this customer
+    const deposits = paymentContactId
+      ? allDeposits.filter((deposit: any) => deposit.contactId === paymentContactId)
+      : [];
       
-      // Process each credit entry to identify the deposit
-      for (const creditEntry of creditEntries) {
-        // Extract deposit reference from description
-        // Format: "Applied credit from deposit #DEP-2025-05-12"
-        const depositRefMatch = creditEntry.description?.match(/deposit #([\w-]+)/i);
-        if (depositRefMatch && depositRefMatch[1]) {
-          const depositRef = depositRefMatch[1];
+    const initialDepositPayments: DepositPayment[] = [];
+    
+    // If specific deposit matches are found
+    creditEntries.forEach(entry => {
+      // Extract deposit reference from description
+      const depositRefMatch = entry.description?.match(/deposit #([\w-]+)/i);
+      if (depositRefMatch && depositRefMatch[1]) {
+        const depositRef = depositRefMatch[1];
+        
+        // Find matching deposit
+        const matchingDeposit = deposits.find((d: any) => 
+          d.reference === depositRef || 
+          `DEP-${format(new Date(d.date), 'yyyy-MM-dd')}` === depositRef
+        );
+        
+        if (matchingDeposit) {
+          // Check if we already have this deposit in our list
+          const existingIndex = initialDepositPayments.findIndex(dp => dp.id === matchingDeposit.id);
           
-          // Find matching deposit in the customerDeposits
-          const matchingDeposit = customerDeposits?.find(d => 
-            d.reference === depositRef || 
-            `DEP-${format(new Date(d.date), 'yyyy-MM-dd')}` === depositRef
-          );
-          
-          if (matchingDeposit) {
-            // Check if we already have this deposit in our list
-            const existingIndex = initialDepositPayments.findIndex(dp => dp.id === matchingDeposit.id);
-            
-            if (existingIndex >= 0) {
-              // Update existing entry
-              initialDepositPayments[existingIndex].amount += creditEntry.debit;
-              initialDepositPayments[existingIndex].amountString = formatCurrency(initialDepositPayments[existingIndex].amount);
-            } else {
-              // Add new entry
-              initialDepositPayments.push({
-                id: matchingDeposit.id,
-                amount: creditEntry.debit,
-                amountString: formatCurrency(creditEntry.debit),
-                selected: creditEntry.debit > 0
-              });
-            }
+          if (existingIndex >= 0) {
+            // Update existing entry
+            initialDepositPayments[existingIndex].amount += entry.debit;
+            initialDepositPayments[existingIndex].amountString = formatCurrency(initialDepositPayments[existingIndex].amount);
+          } else {
+            // Add new entry
+            initialDepositPayments.push({
+              id: matchingDeposit.id,
+              amount: entry.debit,
+              amountString: formatCurrency(entry.debit),
+              selected: entry.debit > 0
+            });
           }
         }
       }
+    });
+    
+    // Fallback for DEP-2025-05-12
+    if (initialDepositPayments.length === 0) {
+      // Check for specific deposit we know about
+      const totalCreditAmount = creditEntries.reduce((sum, entry) => sum + entry.debit, 0);
+      const hasDeposit153 = deposits.some((d: any) => d.id === 153);
       
-      // If we didn't find anything with the regex matching but have DEP-2025-05-12
-      if (initialDepositPayments.length === 0) {
-        // Fallback to hardcoded deposit ID if we know it's being used
-        const totalCreditAmount = creditEntries.reduce((sum, entry) => sum + entry.debit, 0);
-        
-        if (totalCreditAmount > 0 && customerDeposits?.some(d => d.id === 153)) {
-          initialDepositPayments.push({
-            id: 153, // The ID of DEP-2025-05-12
-            amount: totalCreditAmount,
-            amountString: formatCurrency(totalCreditAmount),
-            selected: true
-          });
-        }
-      }
-      
-      // Set the deposit payments state if we found any
-      if (initialDepositPayments.length > 0) {
-        setDepositPayments(initialDepositPayments);
+      if (totalCreditAmount > 0 && hasDeposit153) {
+        initialDepositPayments.push({
+          id: 153, // The ID of DEP-2025-05-12
+          amount: totalCreditAmount,
+          amountString: formatCurrency(totalCreditAmount),
+          selected: true
+        });
       }
     }
-  }, [data, depositPayments.length, customerDeposits]);
+    
+    // Update state if we found anything
+    if (initialDepositPayments.length > 0) {
+      setDepositPayments(initialDepositPayments);
+    }
+  }, [data, depositPayments.length, allDeposits]);
   
   // Loading state
   if (isLoading) {
@@ -882,8 +890,8 @@ export default function PaymentView() {
                                 checked={
                                   depositPayments.some(dp => dp.id === deposit.id && dp.selected) ||
                                   // Auto-check if this is the deposit with applied credits
-                                  (deposit.id === 153 && 
-                                   ledgerEntries.some(entry => 
+                                  (deposit.id === 153 && data && data.ledgerEntries && 
+                                   data.ledgerEntries.some(entry => 
                                      entry.description?.includes("deposit #DEP-2025-05-12") && 
                                      entry.debit > 0
                                    ) && 
@@ -936,8 +944,9 @@ export default function PaymentView() {
                                     // First check current state in depositPayments
                                     depositPayments.find(dp => dp.id === deposit.id)?.amountString ||
                                     // Check if this deposit has credits applied in the ledger entries
-                                    (deposit.id === 153 && 
-                                     ledgerEntries.some(entry => 
+                                    // Look for a specific credit application
+                                    (deposit.id === 153 && data && data.ledgerEntries && 
+                                     data.ledgerEntries.some(entry => 
                                        entry.description?.includes("deposit #DEP-2025-05-12") && 
                                        entry.debit > 0
                                      ) 
@@ -1003,8 +1012,8 @@ export default function PaymentView() {
                               ) : (
                                 <span className="text-sm text-gray-900">
                                   {/* Show the actual applied credit based on ledger entries */}
-                                  {deposit.id === 153 && 
-                                   ledgerEntries.some(entry => 
+                                  {deposit.id === 153 && data && data.ledgerEntries && 
+                                   data.ledgerEntries.some(entry => 
                                      entry.description?.includes("deposit #DEP-2025-05-12") && 
                                      entry.debit > 0
                                    ) 
