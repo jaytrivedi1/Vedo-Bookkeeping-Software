@@ -11,6 +11,7 @@ import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 import migrateInvoiceBalance from "./migrate-invoice-balance";
 import migrateDepositCredits from "./migrate-deposit-credits";
 import batchUpdateInvoiceStatuses from "./batch-update-invoice-statuses";
+import { fixAllBalances } from "./fix-all-balances";
 
 const app = express();
 app.use(express.json());
@@ -79,6 +80,9 @@ app.use((req, res, next) => {
     
     // Run batch update to fix invoice statuses
     await batchUpdateInvoiceStatuses();
+    
+    // Run comprehensive balance fixer to ensure all invoice and credit balances are correct
+    await fixAllBalances();
   } catch (error) {
     log(`Error in database initialization: ${error}`);
   }
