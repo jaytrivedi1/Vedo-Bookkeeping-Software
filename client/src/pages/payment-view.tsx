@@ -358,9 +358,18 @@ export default function PaymentView() {
   // Calculate total credits applied from ledger entries
   const totalCreditsApplied = creditEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
   
+  // Calculate the current total of credits being applied
+  const totalDepositCreditsBeingApplied = depositPayments.reduce((sum, dp) => sum + dp.amount, 0);
+  
+  // Calculate invoice payment totals using the current state
+  const totalInvoicePayments = invoicePayments.reduce((sum, p) => {
+    const amount = parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount;
+    return sum + amount;
+  }, 0);
+  
   // This payment's data shows it as a credit application with zero payment amount
-  const actualBalance = totalApplied - totalCreditsApplied;
-  const unappliedCredit = totalReceived - totalApplied;
+  const actualBalance = totalInvoicePayments - totalDepositCreditsBeingApplied;
+  const unappliedCredit = parseFloat(amountReceived.replace(/,/g, '')) - totalInvoicePayments;
 
   return (
     <div className="py-6">
@@ -866,21 +875,21 @@ export default function PaymentView() {
               <div className="flex justify-between items-center text-sm">
                 <span>Total Received:</span>
                 <span className="font-medium">
-                  {formatCurrency(totalReceived)}
+                  {formatCurrency(parseFloat(amountReceived.replace(/,/g, '')) || 0)}
                 </span>
               </div>
               
               <div className="flex justify-between items-center text-sm mt-2">
                 <span>Total Applied to Invoices:</span>
                 <span className="font-medium">
-                  {formatCurrency(totalApplied)}
+                  {formatCurrency(totalInvoicePayments)}
                 </span>
               </div>
               
               <div className="flex justify-between items-center text-sm mt-2">
                 <span>Total Credits Applied:</span>
                 <span className="font-medium">
-                  {formatCurrency(totalCreditsApplied)}
+                  {formatCurrency(totalDepositCreditsBeingApplied)}
                 </span>
               </div>
               
