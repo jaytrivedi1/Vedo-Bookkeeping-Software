@@ -486,14 +486,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         date: new Date(req.body.date),
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
-        // Ensure these fields exist even if they weren't sent
-        reference: req.body.reference || `INV-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
         status: req.body.status || 'open',
         description: req.body.description || ''
       };
       
-      // Check if invoice reference already exists
+      // Get all transactions for reference check and auto-numbering
       const transactions = await storage.getTransactions();
+      
+      // If reference not provided, generate the next invoice number by incrementing the highest existing number
+      if (!req.body.reference) {
+        // Filter only invoice transactions
+        const invoices = transactions.filter(t => t.type === 'invoice');
+        
+        // Default starting invoice number if no invoices exist
+        let nextInvoiceNumber = 1001;
+        
+        if (invoices.length > 0) {
+          // Extract numeric parts from existing invoice references
+          const invoiceNumbers = invoices
+            .map(invoice => {
+              // Try to extract a numeric value from the reference
+              const match = invoice.reference?.match(/(\d+)/);
+              return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(num => !isNaN(num) && num > 0);
+          
+          // Find the highest invoice number and increment by 1
+          if (invoiceNumbers.length > 0) {
+            nextInvoiceNumber = Math.max(...invoiceNumbers) + 1;
+          }
+        }
+        
+        // Set the reference to the next invoice number
+        body.reference = nextInvoiceNumber.toString();
+      }
+      
+      // Check if invoice reference already exists
       const existingInvoice = transactions.find(t => 
         t.reference === body.reference && 
         t.type === 'invoice'
