@@ -1612,31 +1612,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // We need to update the invoice ledger entry as well to match our invoice payment amount
-        if (body.lineItems && Array.isArray(body.lineItems)) {
-          for (const item of body.lineItems) {
-            if (item.type === 'invoice' && item.transactionId) {
-              // Find the matching invoice ledger entry
-              const invoiceEntry = existingLedgerEntries.find(entry => 
-                entry.description?.includes(`Payment applied to invoice`) && 
-                entry.credit > 0
-              );
+        // We need to update both invoice and deposit ledger entries consistently
+        // First, collect all our line items by type for easy reference
+        const invoiceItems = body.lineItems?.filter(item => item.type === 'invoice') || [];
+        const depositItems = body.lineItems?.filter(item => item.type === 'deposit') || [];
+        
+        // Create maps for easy lookup
+        const invoiceAmountMap = new Map();
+        invoiceItems.forEach(item => {
+          if (item.transactionId && item.amount) {
+            invoiceAmountMap.set(item.transactionId, item.amount);
+          }
+        });
+        
+        // First update all invoice entries
+        for (const entry of existingLedgerEntries) {
+          // Check if this is an invoice payment entry
+          if (entry.credit > 0 && entry.description?.includes('Payment applied to invoice')) {
+            // Extract invoice reference from description
+            const invoiceMatch = entry.description.match(/invoice #(\w+)/i);
+            if (invoiceMatch && invoiceMatch[1]) {
+              const invoiceRef = invoiceMatch[1];
               
-              if (invoiceEntry) {
-                console.log(`Updating invoice ledger entry for invoice #${item.transactionId} to amount: ${item.amount}`);
+              // Find matching invoice transaction
+              const invoice = await storage.getTransactionByReference(invoiceRef, 'invoice');
+              
+              if (invoice && invoiceAmountMap.has(invoice.id)) {
+                const newAmount = invoiceAmountMap.get(invoice.id);
+                console.log(`Updating ledger entry ${entry.id} for invoice #${invoiceRef} to amount: ${newAmount}`);
                 
-                // Update the invoice ledger entry credit amount
-                await storage.updateLedgerEntry(invoiceEntry.id, {
-                  credit: item.amount,
-                  date: body.date || invoiceEntry.date,
+                // Update the ledger entry
+                await storage.updateLedgerEntry(entry.id, { 
+                  credit: newAmount,
+                  date: body.date || entry.date
                 });
                 
-                // Recalculate the invoice balance
-                if (item.transactionId) {
-                  await storage.recalculateInvoiceBalance(item.transactionId);
-                }
+                // Force recalculate the invoice balance with the updated payment amount
+                await storage.recalculateInvoiceBalance(invoice.id, true);
               }
             }
+          }
+        }
+        
+        // Now recalculate all affected invoices
+        for (const item of invoiceItems) {
+          if (item.transactionId) {
+            await storage.recalculateInvoiceBalance(item.transactionId, true);
           }
         }
       

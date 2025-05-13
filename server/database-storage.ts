@@ -125,6 +125,33 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select().from(transactions).where(eq(transactions.id, id));
     return result[0];
   }
+  
+  async getTransactionByReference(reference: string, type?: string): Promise<Transaction | undefined> {
+    try {
+      // Create base query with reference filter
+      let query;
+      if (type) {
+        // If type is specified, filter by both reference and type
+        query = db.select().from(transactions).where(
+          and(
+            eq(transactions.reference, reference),
+            eq(transactions.type, type as any)
+          )
+        );
+      } else {
+        // Otherwise just filter by reference
+        query = db.select().from(transactions).where(
+          eq(transactions.reference, reference)
+        );
+      }
+      
+      const results = await query;
+      return results[0];
+    } catch (error) {
+      console.error('Error getting transaction by reference:', error);
+      return undefined;
+    }
+  }
 
   async createTransaction(
     transaction: InsertTransaction,
@@ -297,7 +324,7 @@ export class DatabaseStorage implements IStorage {
       console.log(`Invoice amount: ${requiredCredit}, already applied through ledger: ${appliedCredit}, remaining needed: ${remainingCreditNeeded}`);
       
       // Special case handling for known problematic invoices
-      if (invoice.reference === '1005' && !forceUpdate) {
+      if (invoice.reference === '1005' && forceUpdate !== true) {
         // Only use this special case handling when NOT explicitly updating balance
         console.log("Special case handling for invoice #1005");
         // Find only the $385 credit (CREDIT-78342) explicitly from payment #149
