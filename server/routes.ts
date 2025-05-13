@@ -3202,18 +3202,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // use the deposit amount as a fallback (up to the remaining invoice balance)
           if (amountApplied === 0 && deposit.description && 
               deposit.description.toLowerCase().includes(`invoice #${transaction.reference.toLowerCase()}`)) {
-            // Get deposit amount, limited to the invoice balance
-            const maxApplyAmount = Math.min(deposit.amount, transaction.amount);
-            console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
-            amountApplied = maxApplyAmount;
+            
+            // Check if there's a specific amount mentioned in the description (format: "Applied $3000 to invoice")
+            const appliedAmountMatch = deposit.description.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+            
+            if (appliedAmountMatch && appliedAmountMatch[1]) {
+              // Extract the amount from the description
+              const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+              if (!isNaN(extractedAmount)) {
+                console.log(`DEBUG PAYMENT HISTORY: Extracted specific amount $${extractedAmount} from description for deposit #${deposit.id}`);
+                amountApplied = extractedAmount;
+              }
+            } else {
+              // Get deposit amount, limited to the invoice balance
+              const maxApplyAmount = Math.min(deposit.amount, transaction.amount);
+              console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+              amountApplied = maxApplyAmount;
+            }
           }
           
           if (amountApplied > 0) {
+            // Create a more specific description when we have an extracted amount
+            const appliedAmountMatch = deposit.description.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+            let description = `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`;
+            
+            // If we found a specific amount in the description and it's different from the full deposit amount
+            if (appliedAmountMatch && appliedAmountMatch[1] && Math.abs(amountApplied - deposit.amount) > 0.01) {
+              description = `Unapplied credit from deposit #${deposit.reference || deposit.id} partially applied ($${amountApplied.toFixed(2)})`;
+            }
+            
             paymentTransactions.push({
               transaction: deposit,
               amountApplied: amountApplied,
               date: deposit.date,
-              description: `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`
+              description: description
             });
             
             console.log(`DEBUG PAYMENT HISTORY: Added deposit #${deposit.id} (${deposit.reference}) with amount ${amountApplied} to payment history`);
