@@ -290,7 +290,7 @@ export default function PaymentView() {
     );
     
     if (creditEntries.length > 0 && depositPayments.length === 0) {
-      const initialDepositPayments = [];
+      const initialDepositPayments: DepositPayment[] = [];
       
       // Look for DEP-2025-05-12 credit application
       const dep2025 = creditEntries.find(entry => 
@@ -301,7 +301,8 @@ export default function PaymentView() {
         initialDepositPayments.push({
           id: 153, // The ID of DEP-2025-05-12
           amount: dep2025.debit,
-          amountString: formatCurrency(dep2025.debit)
+          amountString: formatCurrency(dep2025.debit),
+          selected: dep2025.debit > 0
         });
         
         // Set the deposit payments state
