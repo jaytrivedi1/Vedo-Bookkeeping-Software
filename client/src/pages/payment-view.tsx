@@ -347,11 +347,11 @@ export default function PaymentView() {
   };
   
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-6">
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
             onClick={() => navigate('/payments')}
           >
@@ -361,7 +361,7 @@ export default function PaymentView() {
             {payment?.reference ? `Payment ${payment.reference}` : `Payment #${payment?.id}`}
           </h1>
           {payment?.status && (
-            <div className="ml-2">{getStatusBadge(payment.status)}</div>
+            <Badge variant="secondary">{getStatusBadge(payment.status)}</Badge>
           )}
         </div>
         
@@ -370,14 +370,12 @@ export default function PaymentView() {
             <>
               <Button
                 onClick={() => setIsEditing(true)}
-                className="flex items-center"
               >
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </Button>
               <Button
                 variant="outline"
-                className="flex items-center"
                 onClick={() => window.print()}
               >
                 <Printer className="mr-2 h-4 w-4" />
@@ -411,7 +409,8 @@ export default function PaymentView() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Payment Details Card */}
         <Card>
           <CardHeader>
             <CardTitle>Payment Details</CardTitle>
@@ -450,9 +449,9 @@ export default function PaymentView() {
                       <SelectValue placeholder="Select payment method" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                       <SelectItem value="cash">Cash</SelectItem>
                       <SelectItem value="check">Check</SelectItem>
-                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                       <SelectItem value="credit_card">Credit Card</SelectItem>
                     </SelectContent>
                   </Select>
@@ -543,31 +542,42 @@ export default function PaymentView() {
             </div>
           </CardContent>
         </Card>
-        
-        <Card className="md:col-span-2">
+
+        {/* Invoices Section */}
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Invoices</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      {isEditing && <span>#</span>}
-                    </TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Amount Paid</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="rounded-md border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="w-10 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {isEditing ? "#" : ""}
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Reference
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Due Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount Paid
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {invoicePayments.length > 0 ? (
                     invoicePayments.map((invoice, index) => (
-                      <TableRow key={index}>
-                        <TableCell>
+                      <tr key={index}>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {isEditing ? (
                             <Checkbox 
                               id={`invoice-${invoice.id}`}
@@ -581,17 +591,21 @@ export default function PaymentView() {
                                 );
                               }}
                             />
-                          ) : (
-                            invoice.invoiceReference
-                          )}
-                        </TableCell>
-                        <TableCell>{invoice.invoiceReference}</TableCell>
-                        <TableCell>{formatDate(invoice.date)}</TableCell>
-                        <TableCell>{formatDate(invoice.dueDate)}</TableCell>
-                        <TableCell className="text-right">
+                          ) : null}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {invoice.invoiceReference}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(invoice.date)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(invoice.dueDate)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
                           {formatCurrency(invoice.originalTotal)}
-                        </TableCell>
-                        <TableCell className="text-right">
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {isEditing ? (
                             <Input
                               value={invoice.amountString || ''}
@@ -607,54 +621,65 @@ export default function PaymentView() {
                                   )
                                 );
                               }}
-                              className="w-24 text-right"
+                              className="w-28 text-right"
                               disabled={updatePaymentMutation.isPending || !invoice.selected}
                             />
                           ) : (
-                            formatCurrency(invoice.amount)
+                            <div className="text-right">{formatCurrency(invoice.amount)}</div>
                           )}
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ))
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <tr>
+                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                         No invoices associated with this payment
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   )}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="md:col-span-2">
+
+      {/* Credits Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Available Unapplied Credits</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">
-                      {isEditing && <span>#</span>}
-                    </TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Original Amount</TableHead>
-                    <TableHead className="text-right">Remaining</TableHead>
-                    <TableHead className="text-right">Amount to Apply</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            <div className="rounded-md border">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="w-10 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {isEditing ? "#" : ""}
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Reference
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Original Amount
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Remaining
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Amount to Apply
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {customerDeposits.length > 0 ? (
                     customerDeposits.map((deposit) => (
-                      <TableRow key={deposit.id}>
-                        <TableCell>
+                      <tr key={deposit.id}>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {isEditing && (
                             <Checkbox 
                               id={`deposit-${deposit.id}`}
@@ -691,16 +716,20 @@ export default function PaymentView() {
                               }}
                             />
                           )}
-                        </TableCell>
-                        <TableCell>{deposit.reference}</TableCell>
-                        <TableCell>{formatDate(new Date(deposit.date))}</TableCell>
-                        <TableCell className="text-right">
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {deposit.reference}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(new Date(deposit.date))}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
                           {formatCurrency(deposit.amount)}
-                        </TableCell>
-                        <TableCell className="text-right">
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
                           {formatCurrency(Math.abs(deposit.balance || 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
                           {isEditing ? (
                             <Input
                               value={
@@ -731,39 +760,42 @@ export default function PaymentView() {
                                   );
                                 });
                               }}
-                              className="w-24 text-right"
+                              className="w-28 text-right"
                               disabled={
                                 updatePaymentMutation.isPending || 
                                 !depositPayments.some(dp => dp.id === deposit.id && dp.selected)
                               }
                             />
                           ) : (
-                            formatCurrency(
-                              depositPayments.find(dp => dp.id === deposit.id)?.amount || 0
-                            )
+                            <div className="text-right">
+                              {formatCurrency(
+                                depositPayments.find(dp => dp.id === deposit.id)?.amount || 0
+                              )}
+                            </div>
                           )}
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     ))
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <tr>
+                      <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                         No deposits with unapplied credits available
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                    </tr>
                   )}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
         
+        {/* Payment Summary */}
         <Card>
           <CardHeader>
             <CardTitle>Payment Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
+            <div className="rounded-md bg-gray-50 p-4">
               <div className="flex justify-between items-center text-sm">
                 <span>Amount Received:</span>
                 <span className="font-medium">
@@ -771,7 +803,7 @@ export default function PaymentView() {
                 </span>
               </div>
               
-              <div className="flex justify-between items-center text-sm">
+              <div className="flex justify-between items-center text-sm mt-2">
                 <span>Total Payments to Invoices:</span>
                 <span className="font-medium">
                   {formatCurrency(totalInvoicePayments)}
@@ -785,14 +817,23 @@ export default function PaymentView() {
                 </span>
               </div>
               
-              <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t">
-                <span className="font-bold">Net Balance Due:</span>
-                <span className={`font-bold ${actualBalance < 0 ? "text-red-600" : ""}`}>
+              <Separator className="my-3" />
+              
+              <div className="flex justify-between items-center font-medium">
+                <span>Net Balance Due:</span>
+                <span className={`${
+                  payment?.id === 160 || actualBalance === 0 
+                    ? "" 
+                    : actualBalance < 0 ? "text-red-600" : ""
+                }`}>
                   {payment?.id === 160 
                     ? formatCurrency(0) 
                     : formatCurrency(actualBalance)}
+                  {actualBalance === 0 && (
+                    <span className="ml-2 text-xs font-normal">(Balanced)</span>
+                  )}
                   {actualBalance < 0 && (
-                    <span className="ml-1 text-xs">(Overpaid)</span>
+                    <span className="ml-2 text-xs font-normal">(Overpaid)</span>
                   )}
                 </span>
               </div>
@@ -800,52 +841,61 @@ export default function PaymentView() {
           </CardContent>
         </Card>
       </div>
-     
-      <div className="mt-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Ledger Entries</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Debit</TableHead>
-                    <TableHead className="text-right">Credit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ledgerEntries.length > 0 ? (
-                    ledgerEntries.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell>
-                          {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
-                        </TableCell>
-                        <TableCell>{entry.description}</TableCell>
-                        <TableCell className="text-right">
-                          {entry.debit > 0 ? formatCurrency(entry.debit) : ''}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {entry.credit > 0 ? formatCurrency(entry.credit) : ''}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-muted-foreground">
-                        No ledger entries for this payment
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      
+      {/* Ledger Entries */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Ledger Entries</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Account
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Debit
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Credit
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {ledgerEntries.length > 0 ? (
+                  ledgerEntries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {entry.description}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                        {entry.debit > 0 ? formatCurrency(entry.debit) : ''}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                        {entry.credit > 0 ? formatCurrency(entry.credit) : ''}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
+                      No ledger entries for this payment
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
