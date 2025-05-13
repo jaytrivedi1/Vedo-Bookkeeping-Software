@@ -71,7 +71,7 @@ export default function PaymentView() {
   const [amountReceived, setAmountReceived] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
-  const [depositPayments, setDepositPayments] = useState<{id: number, amount: number, amountString?: string}[]>([]);
+  const [depositPayments, setDepositPayments] = useState<DepositPayment[]>([]);
   
   // Toast notifications
   const { toast } = useToast();
@@ -745,8 +745,18 @@ export default function PaymentView() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Checkbox
                           id={`invoice-${invoice.id}`}
-                          checked={true}
-                          disabled
+                          checked={invoice.selected}
+                          onCheckedChange={(checked) => {
+                            if (!isEditing) return;
+                            
+                            const updatedPayments = [...invoicePayments];
+                            updatedPayments[idx] = {
+                              ...updatedPayments[idx],
+                              selected: !!checked
+                            };
+                            setInvoicePayments(updatedPayments);
+                          }}
+                          disabled={!isEditing || updatePaymentMutation.isPending}
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -828,8 +838,33 @@ export default function PaymentView() {
                           <tr key={deposit.id}>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <Checkbox 
-                                disabled={!isEditing || updatePaymentMutation.isPending} 
-                                // Logic for handling credit application would go here
+                                id={`deposit-${deposit.id}`}
+                                disabled={!isEditing || updatePaymentMutation.isPending}
+                                checked={depositPayments.some(dp => dp.id === deposit.id && dp.selected)}
+                                onCheckedChange={(checked) => {
+                                  if (!isEditing) return;
+                                  
+                                  setDepositPayments(prev => {
+                                    const existingIndex = prev.findIndex(dp => dp.id === deposit.id);
+                                    
+                                    if (existingIndex >= 0) {
+                                      // Update existing deposit
+                                      const updatedPayments = [...prev];
+                                      updatedPayments[existingIndex] = {
+                                        ...updatedPayments[existingIndex],
+                                        selected: !!checked
+                                      };
+                                      return updatedPayments;
+                                    } else {
+                                      // Add new deposit
+                                      return [...prev, {
+                                        id: deposit.id,
+                                        amount: 0,
+                                        selected: !!checked
+                                      }];
+                                    }
+                                  });
+                                }}
                               />
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
