@@ -233,7 +233,8 @@ export default function PaymentReceive() {
     if (field === 'amount' && typeof value === 'number') {
       // Ensure amount doesn't exceed the deposit amount
       const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
-      const maxDepositAmount = deposit?.amount || 0;
+      const maxDepositAmount = Math.abs(deposit?.balance || 0);
+      const depositReference = deposit?.reference || '';
       
       // Calculate how much credit has already been applied from other deposit items
       const otherCreditsApplied = depositLineItems.reduce(
@@ -261,13 +262,23 @@ export default function PaymentReceive() {
         updatedItems[index].selected = false;
       }
       
-      // Show a toast if user tries to apply more credit than total invoice amount
-      if (value > maxAmount && value <= maxDepositAmount) {
-        toast({
-          title: "Critical Accounting Rule",
-          description: "Credits cannot exceed invoice amounts. This prevents incorrect accounting balances and ensures proper financial record-keeping.",
-          variant: "destructive"
-        });
+      // Show detailed error message based on which limit was hit
+      if (value > maxAmount) {
+        if (remainingInvoiceAmount < maxDepositAmount && value > remainingInvoiceAmount) {
+          // Case: User tried to apply more credits than total invoice amounts
+          toast({
+            title: "Critical Accounting Rule",
+            description: "Credits cannot exceed invoice amounts. This prevents incorrect accounting balances and ensures proper financial record-keeping.",
+            variant: "destructive"
+          });
+        } else if (value > maxDepositAmount) {
+          // Case: User tried to apply more than the available credit balance
+          toast({
+            title: "Insufficient Credit",
+            description: `Credit from ${depositReference} has only $${maxDepositAmount.toFixed(2)} available. You cannot apply more than the available balance.`,
+            variant: "destructive"
+          });
+        }
       }
     } else if (field === 'selected' && typeof value === 'boolean') {
       updatedItems[index].selected = value;
@@ -278,7 +289,7 @@ export default function PaymentReceive() {
       } else {
         // When selected, auto-fill with the appropriate amount
         const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
-        const depositAmount = deposit?.amount || 0;
+        const depositAmount = Math.abs(deposit?.balance || 0);
         
         // Calculate how much credit has already been applied from other deposit items
         const otherCreditsApplied = depositLineItems.reduce(
@@ -296,9 +307,9 @@ export default function PaymentReceive() {
         if (remainingInvoiceAmount === 0 && depositAmount > 0) {
           updatedItems[index].selected = false;
           toast({
-            title: "Cannot apply credit",
-            description: "You cannot apply more credits than the total invoice amount selected for payment.",
-            variant: "default"
+            title: "Critical Accounting Rule",
+            description: "Credits cannot exceed invoice amounts. Please select invoices before applying credits.",
+            variant: "destructive"
           });
         }
       }
@@ -442,11 +453,34 @@ export default function PaymentReceive() {
       netBalance: netBalance
     });
     
-    // Only show error if net balance is greater than 0 (amounts don't balance)
+    // Check for accounting issues with balance or credits
     if (netBalance > 0) {
       toast({
-        title: "Error",
-        description: "The net balance must be zero or negative. Please adjust the amounts.",
+        title: "Accounting Balance Error",
+        description: "The total amounts applied must equal or exceed the payment amount plus applied credits. Please adjust your entries.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Verify no invoice is overpaid with credits
+    const invoiceOverpayments = paymentLineItems
+      .filter(item => item.selected)
+      .map(item => {
+        const invoice = customerInvoices?.find((inv: any) => inv.id === item.transactionId);
+        const invoiceBalance = invoice?.balance || 0;
+        return {
+          invoice,
+          overpayment: Math.max(0, item.amount - invoiceBalance)
+        };
+      })
+      .filter(check => check.overpayment > 0);
+      
+    if (invoiceOverpayments.length > 0) {
+      const firstOverpayment = invoiceOverpayments[0];
+      toast({
+        title: "Invoice Overpayment Prevented",
+        description: `Invoice #${firstOverpayment.invoice?.reference} would be overpaid by $${firstOverpayment.overpayment.toFixed(2)}. Please correct the amount.`,
         variant: "destructive",
       });
       return;
