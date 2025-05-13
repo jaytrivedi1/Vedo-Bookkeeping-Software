@@ -359,17 +359,27 @@ export default function PaymentView() {
   const totalCreditsApplied = creditEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
   
   // Calculate the current total of credits being applied
-  const totalDepositCreditsBeingApplied = depositPayments.reduce((sum, dp) => sum + dp.amount, 0);
-  
-  // Calculate invoice payment totals using the current state
-  const totalInvoicePayments = invoicePayments.reduce((sum, p) => {
-    const amount = parseFloat((p.amountString || '0').replace(/,/g, '')) || p.amount;
+  const totalDepositCreditsBeingApplied = depositPayments.reduce((sum, dp) => {
+    // Ensure we have a valid number (not NaN)
+    const amount = isNaN(dp.amount) ? 0 : dp.amount;
     return sum + amount;
   }, 0);
   
-  // This payment's data shows it as a credit application with zero payment amount
+  // Calculate invoice payment totals using the current state
+  const totalInvoicePayments = invoicePayments.reduce((sum, p) => {
+    // Parse from string and handle fallbacks
+    const amount = parseFloat((p.amountString || '0').replace(/,/g, ''));
+    // Use the parsed amount if valid, otherwise fall back to original amount, then to 0
+    return sum + (isNaN(amount) ? (p.amount || 0) : amount);
+  }, 0);
+  
+  // Parse the amount received (default to 0 if invalid)
+  const parsedAmountReceived = parseFloat(amountReceived.replace(/,/g, ''));
+  const safeAmountReceived = isNaN(parsedAmountReceived) ? 0 : parsedAmountReceived;
+  
+  // Calculate balance values
   const actualBalance = totalInvoicePayments - totalDepositCreditsBeingApplied;
-  const unappliedCredit = parseFloat(amountReceived.replace(/,/g, '')) - totalInvoicePayments;
+  const unappliedCredit = safeAmountReceived - totalInvoicePayments;
 
   return (
     <div className="py-6">
@@ -393,9 +403,15 @@ export default function PaymentView() {
                 variant="default"
                 className="bg-primary text-white"
                 onClick={() => {
-                  // Make sure we have a valid amount
+                  // Make sure we have a valid amount (can be zero for credit applications)
                   const parsedAmount = parseFloat(amountReceived.replace(/,/g, ''));
-                  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+                  
+                  // Check if this is a direct payment (not applying credits)
+                  const isDirectPayment = depositPayments.length === 0 || 
+                    depositPayments.every(dp => dp.amount === 0);
+                    
+                  // Only validate amount > 0 for direct payments
+                  if (isDirectPayment && (isNaN(parsedAmount) || parsedAmount <= 0)) {
                     toast({
                       title: "Invalid amount",
                       description: "Please enter a valid amount greater than zero.",
@@ -808,9 +824,20 @@ export default function PaymentView() {
                                   }
                                   onChange={(e) => {
                                     const value = e.target.value;
-                                    const depositAmount = parseFloat(value.replace(/,/g, '')) || 0;
+                                    // Don't use || 0 here to ensure we can detect NaN
+                                    const depositAmount = parseFloat(value.replace(/,/g, ''));
                                     
-                                    // Update the deposit payment amount in state
+                                    // Validate amount is not negative
+                                    if (depositAmount < 0) {
+                                      toast({
+                                        title: "Invalid amount",
+                                        description: "Please enter an amount that is 0 or greater.",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+                                    
+                                    // Update the deposit payment amount in state (use 0 if NaN)
                                     setDepositPayments(prev => {
                                       // Check if this deposit already exists in the state
                                       const existingIndex = prev.findIndex(dp => dp.id === deposit.id);
@@ -820,7 +847,7 @@ export default function PaymentView() {
                                         const updatedPayments = [...prev];
                                         updatedPayments[existingIndex] = {
                                           ...updatedPayments[existingIndex],
-                                          amount: depositAmount,
+                                          amount: isNaN(depositAmount) ? 0 : depositAmount,
                                           amountString: value
                                         };
                                         return updatedPayments;
@@ -828,7 +855,7 @@ export default function PaymentView() {
                                         // Add new deposit
                                         return [...prev, {
                                           id: deposit.id,
-                                          amount: depositAmount,
+                                          amount: isNaN(depositAmount) ? 0 : depositAmount,
                                           amountString: value
                                         }];
                                       }
@@ -875,7 +902,7 @@ export default function PaymentView() {
               <div className="flex justify-between items-center text-sm">
                 <span>Total Received:</span>
                 <span className="font-medium">
-                  {formatCurrency(parseFloat(amountReceived.replace(/,/g, '')) || 0)}
+                  {formatCurrency(safeAmountReceived)}
                 </span>
               </div>
               
