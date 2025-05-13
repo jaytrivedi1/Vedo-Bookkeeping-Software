@@ -264,9 +264,9 @@ export default function PaymentReceive() {
       // Show a toast if user tries to apply more credit than total invoice amount
       if (value > maxAmount && value <= maxDepositAmount) {
         toast({
-          title: "Credit amount adjusted",
-          description: "You cannot apply more credits than the total invoice amount selected for payment.",
-          variant: "default"
+          title: "Critical Accounting Rule",
+          description: "Credits cannot exceed invoice amounts. This prevents incorrect accounting balances and ensures proper financial record-keeping.",
+          variant: "destructive"
         });
       }
     } else if (field === 'selected' && typeof value === 'boolean') {
