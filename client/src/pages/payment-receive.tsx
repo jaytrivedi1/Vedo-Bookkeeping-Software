@@ -231,9 +231,10 @@ export default function PaymentReceive() {
     );
     
     if (field === 'amount' && typeof value === 'number') {
-      // Ensure amount doesn't exceed the deposit amount
+      // Ensure amount doesn't exceed the deposit's available credit balance
       const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
       const maxDepositAmount = Math.abs(deposit?.balance || 0);
+      console.log(`Credit #${deposit.id}: balance=${deposit.balance}, amount=${deposit.amount}, using ${deposit.balance}`);
       const depositReference = deposit?.reference || '';
       
       // Calculate how much credit has already been applied from other deposit items
@@ -290,6 +291,7 @@ export default function PaymentReceive() {
         // When selected, auto-fill with the appropriate amount
         const deposit = customerDeposits?.find((dep: any) => dep.id === updatedItems[index].transactionId);
         const depositAmount = Math.abs(deposit?.balance || 0);
+        console.log(`Credit #${deposit.id}: balance=${deposit.balance}, amount=${deposit.amount}, using -${depositAmount}`);
         
         // Calculate how much credit has already been applied from other deposit items
         const otherCreditsApplied = depositLineItems.reduce(
@@ -920,7 +922,7 @@ export default function PaymentReceive() {
                                   <div className="truncate">{deposit.description || 'Deposit'}</div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(deposit.amount)}
+                                  {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(deposit.balance || 0))}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <input
