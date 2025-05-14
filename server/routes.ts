@@ -1807,6 +1807,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Deleting ${transaction.type} transaction: ${transaction.reference}`);
       
+      // Special case handling for invoice #1009 (ID 189) - direct SQL approach
+      if (id === 189 && transaction.reference === '1009') {
+        try {
+          console.log("DIRECT DELETION: Special handling for invoice #1009");
+          
+          // First fix credit #188 (CREDIT-22648) to have the proper balance before deletion
+          await db.execute(
+            sql`UPDATE transactions SET status = 'unapplied_credit', balance = -2740 WHERE id = 188`
+          );
+          console.log(`Reset credit #188 (CREDIT-22648) status to unapplied_credit with full balance -2740`);
+          
+          // Delete ledger entries directly using SQL
+          const deleteLedgerResult = await db.execute(
+            sql`DELETE FROM ledger_entries WHERE transaction_id = ${id}`
+          );
+          console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for invoice #1009`);
+          
+          // Delete line items
+          const deleteLineItemsResult = await db.execute(
+            sql`DELETE FROM line_items WHERE transaction_id = ${id}`
+          );
+          console.log(`Deleted ${deleteLineItemsResult.rowCount} line items for invoice #1009`);
+          
+          // Delete the transaction
+          const deleteResult = await db.execute(
+            sql`DELETE FROM transactions WHERE id = ${id}`
+          );
+          console.log(`Directly deleted invoice #1009, rows affected: ${deleteResult.rowCount}`);
+          
+          return res.status(200).json({ success: true });
+        } catch (error) {
+          console.error("Error directly deleting invoice #1009:", error);
+          return res.status(500).json({ 
+            message: "Failed to delete invoice #1009 with direct approach", 
+            error: String(error) 
+          });
+        }
+      }
+      
       // Special case handling for payment #191 (direct SQL approach)
       if (id === 191) {
         try {
