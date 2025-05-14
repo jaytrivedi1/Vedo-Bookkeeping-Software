@@ -3837,111 +3837,150 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Special endpoint to fix invoice #1009 credit (ID 189) and its relationship with credit #188 
-  apiRouter.post("/fix-invoice-1009-credit", async (req: Request, res: Response) => {
+  // Generic endpoint to apply credit with specific amount to invoice (replaced special case endpoint)
+  apiRouter.post("/apply-credit-to-invoice", async (req: Request, res: Response) => {
     try {
-      console.log("Running comprehensive fix for invoice #1009 and credit #188");
+      const { invoiceId, creditId, amount } = req.body;
       
-      // This is a permanent fix for the Invoice #1009 issue
-      // 1. Update the invoice to be fully paid
+      if (!invoiceId || !creditId || !amount) {
+        return res.status(400).json({ message: "Missing required fields: invoiceId, creditId, amount" });
+      }
+      
+      // Get the invoice and credit
+      const [invoice] = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.id, invoiceId));
+        
+      const [credit] = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.id, creditId));
+        
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      if (!credit || credit.type !== 'deposit' || credit.status !== 'unapplied_credit') {
+        return res.status(404).json({ message: "Valid unapplied credit not found" });
+      }
+      
+      console.log(`Applying credit #${credit.reference || credit.id} for amount $${amount} to invoice #${invoice.reference}`);
+      
+      // Update the invoice balance and status
+      const newInvoiceBalance = Math.max(0, Number(invoice.amount) - amount);
+      const newInvoiceStatus = newInvoiceBalance === 0 ? 'completed' : 'open';
+      
       await db
         .update(transactions)
         .set({
-          balance: 0, // Invoice is fully paid
-          status: 'completed' // Invoice is completed
+          balance: newInvoiceBalance,
+          status: newInvoiceStatus
         })
-        .where(eq(transactions.id, 189));
+        .where(eq(transactions.id, invoiceId));
       
-      // 2. Update the credit to show the correct applied amount
+      // Update the credit description and balance
+      const appliedAmount = Math.min(amount, Math.abs(credit.amount));
+      const newCreditBalance = -(Math.abs(credit.amount) - appliedAmount);
+      const newCreditStatus = newCreditBalance === 0 ? 'completed' : 'unapplied_credit';
+      
       await db
         .update(transactions)
         .set({
-          balance: 0, // Credit is fully applied
-          status: 'completed', // Credit is fully applied
-          description: "Credit from payment #187 applied to invoice #1009 on 2025-05-14 ($2,500.00)"
+          balance: newCreditBalance,
+          status: newCreditStatus,
+          description: `Credit applied to invoice #${invoice.reference} on ${new Date().toISOString().split('T')[0]} ($${appliedAmount.toFixed(2)})`
         })
-        .where(eq(transactions.id, 188));
+        .where(eq(transactions.id, creditId));
       
-      // 3. Create or update a dedicated ledger entry to show the specific $2,500 credit application
+      // Create or update proper ledger entries to record this application
       const existingCreditEntry = await db
         .select()
         .from(ledgerEntries)
         .where(
           and(
-            eq(ledgerEntries.transactionId, 188),
-            sql`${ledgerEntries.description} LIKE ${'%Applied to invoice #1009%'}`
+            eq(ledgerEntries.transactionId, creditId),
+            sql`${ledgerEntries.description} LIKE ${'%Applied%to invoice #' + invoice.reference + '%'}`
           )
         );
       
       if (existingCreditEntry.length) {
-        // Update the existing entry with the correct amount
+        // Update existing ledger entry for the credit
         await db
           .update(ledgerEntries)
           .set({
-            description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 ($2,500.00)",
-            debit: 2500, // The actual amount applied
+            description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
+            debit: appliedAmount,
             credit: 0
           })
           .where(eq(ledgerEntries.id, existingCreditEntry[0].id));
       } else {
-        // Create a new ledger entry
+        // Create new ledger entry for the credit
         await db
           .insert(ledgerEntries)
           .values({
-            transactionId: 188,
+            transactionId: creditId,
             accountId: 2, // Accounts Receivable
-            description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 ($2,500.00)",
-            debit: 2500, // The actual amount applied
+            description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
+            debit: appliedAmount,
             credit: 0,
             date: new Date()
           });
       }
       
-      // 4. Add a corresponding entry to the invoice ledger if needed
+      // Create or update corresponding invoice ledger entry
       const existingInvoiceEntry = await db
         .select()
         .from(ledgerEntries)
         .where(
           and(
-            eq(ledgerEntries.transactionId, 189),
-            sql`${ledgerEntries.description} LIKE ${'%Credit applied from deposit #CREDIT-22648%'}`
+            eq(ledgerEntries.transactionId, invoiceId),
+            sql`${ledgerEntries.description} LIKE ${'%Credit applied from deposit #' + (credit.reference || credit.id) + '%'}`
           )
         );
       
       if (existingInvoiceEntry.length) {
-        // Update the existing entry
+        // Update existing ledger entry for the invoice
         await db
           .update(ledgerEntries)
           .set({
-            description: "Credit applied from deposit #CREDIT-22648 ($2,500.00)",
+            description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
             debit: 0,
-            credit: 2500 // The actual amount applied
+            credit: appliedAmount
           })
           .where(eq(ledgerEntries.id, existingInvoiceEntry[0].id));
       } else {
-        // Create a new entry
+        // Create new ledger entry for the invoice
         await db
           .insert(ledgerEntries)
           .values({
-            transactionId: 189,
+            transactionId: invoiceId,
             accountId: 2, // Accounts Receivable
-            description: "Credit applied from deposit #CREDIT-22648 ($2,500.00)",
+            description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
             debit: 0,
-            credit: 2500, // The actual amount applied
+            credit: appliedAmount,
             date: new Date()
           });
       }
       
-      // Return detailed success message
+      // Return success message with updated objects
       res.status(200).json({ 
-        message: "Successfully fixed invoice #1009 and credit #188",
-        invoice: { id: 189, balance: 0, status: 'completed' },
-        credit: { id: 188, balance: 0, status: 'completed' },
-        appliedAmount: 2500
+        message: `Successfully applied $${appliedAmount} from credit #${credit.reference || credit.id} to invoice #${invoice.reference}`,
+        invoice: { 
+          id: invoiceId, 
+          balance: newInvoiceBalance, 
+          status: newInvoiceStatus 
+        },
+        credit: { 
+          id: creditId, 
+          balance: newCreditBalance, 
+          status: newCreditStatus 
+        },
+        appliedAmount: appliedAmount
       });
     } catch (error) {
-      console.error("Error fixing invoice #1009 and credit #188:", error);
-      res.status(500).json({ message: "Failed to fix invoice #1009 and credit #188" });
+      console.error("Error applying credit to invoice:", error);
+      res.status(500).json({ message: "Failed to apply credit to invoice" });
     }
   });
 

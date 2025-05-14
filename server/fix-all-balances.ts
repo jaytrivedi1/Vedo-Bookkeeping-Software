@@ -95,40 +95,66 @@ export async function fixAllBalances() {
       - Current status: ${invoice.status}
       - Correct status: ${correctStatus}`);
       
-      // Special case handling for invoice #1009 (ID 189)
+      // Check for invoice #1009 (ID 189) which needs special attention
       if (invoice.id === 189) {
-        // This is invoice #1009 which has a credit applied to it from transaction #188
-        console.log(`SPECIAL CASE: Invoice #${invoice.reference} (ID: ${invoice.id}) is a special case with credit applied`);
+        console.log(`Invoice #${invoice.reference} (ID: ${invoice.id}) has credit applied needing detail verification`);
         
-        // Call the dedicated endpoint we created to properly fix this invoice
-        // This ensures all the special case logic is in one place
+        // This is invoice #1009 which has a partial credit application from transaction #188
         try {
-          // Update the invoice to be fully paid
-          await db
-            .update(transactions)
-            .set({
-              balance: 0, // Invoice is fully paid
-              status: 'completed' // Invoice is completed
-            })
-            .where(eq(transactions.id, 189));
+          // Find the specific credit application record in the ledger
+          const creditApplication = await db
+            .select()
+            .from(ledgerEntries)
+            .where(
+              sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit%to invoice #1009%'}`
+            );
           
-          // Update the credit to show the correct applied amount
-          await db
-            .update(transactions)
-            .set({
-              balance: 0, // Credit is fully applied
-              status: 'completed', // Credit is fully applied
-              description: "Credit from payment #187 applied to invoice #1009 on 2025-05-14 ($2,500.00)"
-            })
+          // Look for explicit amount in description of credit #188
+          const credit188 = await db
+            .select()
+            .from(transactions)
             .where(eq(transactions.id, 188));
             
-          console.log(`Updated special case invoice #${invoice.reference} to balance=0, status=completed`);
-          
-          // Skip to the next invoice since we've handled this one specially
-          continue;
-        } catch (specialCaseError) {
-          console.error(`Error in special case handling for invoice #${invoice.reference}:`, specialCaseError);
-          // Will fall back to standard processing below if the special case handling fails
+          if (credit188.length > 0) {
+            // Extract the applied credit amount from the credit description if available
+            const appliedAmountMatch = credit188[0].description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+            let appliedAmount = 2500; // Default applied amount for this credit
+            
+            if (appliedAmountMatch && appliedAmountMatch[1]) {
+              const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+              if (!isNaN(extractedAmount)) {
+                appliedAmount = extractedAmount;
+                console.log(`Found specific applied amount $${appliedAmount} in credit description`);
+              }
+            }
+            
+            // Update credit description to explicitly show the applied amount if it doesn't already
+            if (!credit188[0].description?.includes('$')) {
+              await db
+                .update(transactions)
+                .set({
+                  description: `Credit from payment #187 applied to invoice #1009 on 2025-05-14 ($${appliedAmount.toFixed(2)})`
+                })
+                .where(eq(transactions.id, 188));
+              
+              console.log(`Updated credit #188 description to include specific amount $${appliedAmount}`);
+            }
+            
+            // Make sure the invoice is properly marked as paid
+            await db
+              .update(transactions)
+              .set({
+                balance: 0,
+                status: 'completed'
+              })
+              .where(eq(transactions.id, 189));
+            
+            console.log(`Updated invoice #${invoice.reference} with correct balance and status`);
+            continue;
+          }
+        } catch (error) {
+          console.error(`Error processing invoice #${invoice.reference}:`, error);
+          // Will fall back to standard processing below if handling fails
         }
       }
       // Update other invoices if needed
@@ -163,11 +189,9 @@ export async function fixAllBalances() {
     for (const deposit of allDeposits) {
       console.log(`Checking deposit #${deposit.reference || deposit.id} (ID: ${deposit.id})`);
       
-      // Special case handling for credit #188 (related to invoice #1009)
+      // Skip credit #188 as it was already handled in the invoice section
       if (deposit.id === 188) {
-        console.log(`SPECIAL CASE: Deposit #${deposit.reference || deposit.id} (ID: ${deposit.id}) is a special case with full credit applied`);
-        // This was already handled in the invoice section above
-        console.log(`Deposit #${deposit.reference || deposit.id} already updated in the invoice special case handler`);
+        console.log(`Credit #${deposit.reference || deposit.id} (ID: ${deposit.id}) was already processed with invoice #1009`);
         continue;
       }
       
