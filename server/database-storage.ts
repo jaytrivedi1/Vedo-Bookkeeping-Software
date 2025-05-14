@@ -658,7 +658,7 @@ export class DatabaseStorage implements IStorage {
         // Find the deposit by reference or ID
         // First try to see if it's a numeric ID
         const isNumeric = /^\d+$/.test(depositRef);
-        const depositId = isNumeric ? parseInt(depositRef, 10) : NaN;
+        const depositId = isNumeric ? parseInt(depositRef, 10) : 0;
         
         // Query with proper conditions based on whether depositRef is numeric
         const [deposit] = isNumeric 
@@ -670,7 +670,7 @@ export class DatabaseStorage implements IStorage {
                   eq(transactions.type, 'deposit'),
                   or(
                     eq(transactions.reference, depositRef),
-                    eq(transactions.id, depositId)
+                    depositId > 0 ? eq(transactions.id, depositId) : eq(transactions.reference, depositRef)
                   )
                 )
               )
@@ -700,11 +700,14 @@ export class DatabaseStorage implements IStorage {
           
           // Ensure we have valid numbers before calculation
           if (isNaN(currentBalance)) currentBalance = 0;
-          if (isNaN(appliedAmount)) appliedAmount = 0;
           
-          const newBalance = currentBalance - appliedAmount;
+          // Create a validated applied amount (don't modify the original const)
+          let validAppliedAmount = appliedAmount;
+          if (isNaN(validAppliedAmount)) validAppliedAmount = 0;
           
-          console.log(`Restoring ${appliedAmount} to deposit #${depositRef}: current balance=${currentBalance}, new balance=${newBalance}`);
+          const newBalance = currentBalance - validAppliedAmount;
+          
+          console.log(`Restoring ${validAppliedAmount} to deposit #${depositRef}: current balance=${currentBalance}, new balance=${newBalance}`);
           
           // Update the deposit
           await tx
