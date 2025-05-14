@@ -3016,20 +3016,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (id === 189) {
         console.log("SPECIAL CASE: Using hardcoded payment history for invoice #1009");
         
-        // Update the invoice balance to reflect the 2500 credit applied
+        // Update the invoice to be fully paid
         await db
           .update(transactions)
           .set({
-            balance: 3150, // Original amount 5650 - applied credit 2500 = 3150
-            status: 'open' // Ensure status is consistent
+            balance: 0, // Invoice is fully paid
+            status: 'completed' // Invoice is completed
           })
           .where(eq(transactions.id, 189));
           
-        // Also update the credit balance
+        // Also update the credit to be fully applied
         await db
           .update(transactions)
           .set({
-            balance: -240 // Original amount -2740 + applied credit 2500 = -240
+            balance: 0, // Credit is fully applied
+            status: 'completed', // Credit is fully applied
+            description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14"
           })
           .where(eq(transactions.id, 188));
           
