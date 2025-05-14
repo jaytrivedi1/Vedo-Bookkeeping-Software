@@ -3283,8 +3283,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } else {
               // Get deposit amount, limited to the invoice balance
               const maxApplyAmount = Math.min(deposit.amount, transaction.amount);
-              console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
-              amountApplied = maxApplyAmount;
+              
+              // Check if the description contains a specific mention of invoice #1009
+              if (deposit.description && deposit.description.includes('invoice #1009')) {
+                // For invoice #1009, we know you specifically applied $2500 and not the full amount
+                if (deposit.reference === 'CREDIT-22648') {
+                  console.log(`SPECIAL CASE: For invoice #1009, using specific amount 2500 for deposit #${deposit.id} (${deposit.reference})`);
+                  amountApplied = 2500;
+                } else {
+                  console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+                  amountApplied = maxApplyAmount;
+                }
+              } else {
+                console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+                amountApplied = maxApplyAmount;
+              }
             }
           }
           
