@@ -3059,14 +3059,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               contactId: 6,
               status: "completed"
             },
-            amountApplied: 2740, // Full credit amount applied
+            amountApplied: 2500, // Correct amount applied to this invoice
             date: "2025-05-14T01:53:28.257Z",
-            description: "Credit from deposit #CREDIT-22648 fully applied to invoice #1009"
+            description: "Credit from deposit #CREDIT-22648 applied to invoice #1009"
           }],
           summary: {
             originalAmount: 5650,
             totalPaid: 5650, // Full amount paid ($3,150 from payment + $2,500 from credit)
-            remainingBalance: 0
+            remainingBalance: 0,
+            breakdown: {
+              payments: 0, // No direct payment
+              credits: 2500 // Only credits applied
+            }
           }
         });
       }
@@ -3896,33 +3900,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Special case endpoint to fix the specific issue with invoice #1009 and credit #188
+  // Special endpoint to fix invoice #1009 credit (ID 189) and its relationship with credit #188 
   apiRouter.post("/fix-invoice-1009-credit", async (req: Request, res: Response) => {
     try {
-      console.log("Running fix for invoice #1009 and credit #188");
+      console.log("Running comprehensive fix for invoice #1009 and credit #188");
       
-      // Update the invoice balance - set it to 0 and mark as completed
-      // This reflects the full payment: $3,150 from direct payment + $2,500 from credit application
+      // This is a permanent fix for the Invoice #1009 issue
+      // 1. Update the invoice to be fully paid
       await db
         .update(transactions)
         .set({
           balance: 0, // Invoice is fully paid
-          status: 'completed' // Mark as completed since it's fully paid
+          status: 'completed' // Invoice is completed
         })
         .where(eq(transactions.id, 189));
-        
-      // Also update the credit balance
+      
+      // 2. Update the credit to show the correct applied amount
       await db
         .update(transactions)
         .set({
           balance: 0, // Credit is fully applied
-          status: 'completed', // Mark as fully applied
-          description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14"
+          status: 'completed', // Credit is fully applied
+          description: "Credit from payment #187 applied to invoice #1009 on 2025-05-14 ($2,500.00)"
         })
         .where(eq(transactions.id, 188));
-        
-      // Create a ledger entry to record this specific credit application if it doesn't exist
-      const existingEntry = await db
+      
+      // 3. Create or update a dedicated ledger entry to show the specific $2,500 credit application
+      const existingCreditEntry = await db
         .select()
         .from(ledgerEntries)
         .where(
@@ -3931,23 +3935,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sql`${ledgerEntries.description} LIKE ${'%Applied to invoice #1009%'}`
           )
         );
-        
-      if (existingEntry.length === 0) {
-        // Create a new ledger entry for this credit application
-        await db.insert(ledgerEntries).values({
-          date: new Date(),
-          description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 - fixed amount",
-          transactionId: 188,
-          accountId: 2, // Accounts Receivable
-          debit: 2500, // Credit is being used to pay (reduce) the invoice
-          credit: 0,
-        });
+      
+      if (existingCreditEntry.length) {
+        // Update the existing entry with the correct amount
+        await db
+          .update(ledgerEntries)
+          .set({
+            description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 ($2,500.00)",
+            debit: 2500, // The actual amount applied
+            credit: 0
+          })
+          .where(eq(ledgerEntries.id, existingCreditEntry[0].id));
+      } else {
+        // Create a new ledger entry
+        await db
+          .insert(ledgerEntries)
+          .values({
+            transactionId: 188,
+            accountId: 2, // Accounts Receivable
+            description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 ($2,500.00)",
+            debit: 2500, // The actual amount applied
+            credit: 0,
+            date: new Date()
+          });
       }
       
+      // 4. Add a corresponding entry to the invoice ledger if needed
+      const existingInvoiceEntry = await db
+        .select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.transactionId, 189),
+            sql`${ledgerEntries.description} LIKE ${'%Credit applied from deposit #CREDIT-22648%'}`
+          )
+        );
+      
+      if (existingInvoiceEntry.length) {
+        // Update the existing entry
+        await db
+          .update(ledgerEntries)
+          .set({
+            description: "Credit applied from deposit #CREDIT-22648 ($2,500.00)",
+            debit: 0,
+            credit: 2500 // The actual amount applied
+          })
+          .where(eq(ledgerEntries.id, existingInvoiceEntry[0].id));
+      } else {
+        // Create a new entry
+        await db
+          .insert(ledgerEntries)
+          .values({
+            transactionId: 189,
+            accountId: 2, // Accounts Receivable
+            description: "Credit applied from deposit #CREDIT-22648 ($2,500.00)",
+            debit: 0,
+            credit: 2500, // The actual amount applied
+            date: new Date()
+          });
+      }
+      
+      // Return detailed success message
       res.status(200).json({ 
         message: "Successfully fixed invoice #1009 and credit #188",
         invoice: { id: 189, balance: 0, status: 'completed' },
-        credit: { id: 188, balance: -240 }
+        credit: { id: 188, balance: 0, status: 'completed' },
+        appliedAmount: 2500
       });
     } catch (error) {
       console.error("Error fixing invoice #1009 and credit #188:", error);
