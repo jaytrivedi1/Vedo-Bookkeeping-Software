@@ -1076,7 +1076,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             and(
               eq(ledgerEntries.accountId, 2), // Accounts Receivable
               sql`${ledgerEntries.credit} > 0`, // Credit entries only
-              sql`${ledgerEntries.description} LIKE '%invoice #' || ${invoice.reference} || '%'`, // Referencing this invoice
+              sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`, // Referencing this invoice
               ne(ledgerEntries.transactionId, invoice.id) // Not the invoice itself
             )
           );

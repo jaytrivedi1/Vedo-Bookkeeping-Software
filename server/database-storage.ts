@@ -958,7 +958,7 @@ export class DatabaseStorage implements IStorage {
           and(
             eq(ledgerEntries.accountId, 2), // Accounts Receivable
             // Fix SQL syntax with proper parameter binding
-            sql`${ledgerEntries.description} LIKE '%invoice #%' || ${invoiceRef} || '%'`
+            sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoiceRef + '%'}`
           )
         );
       
