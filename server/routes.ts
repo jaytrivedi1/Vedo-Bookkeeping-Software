@@ -1118,7 +1118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       // Prepare ledger entries
-      const ledgerEntries = [
+      const paymentLedgerEntries = [
         // Debit the bank account (increase)
         {
           accountId: data.depositAccountId,
@@ -1164,7 +1164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
             
             // Add credit to Accounts Receivable (decrease)
-            ledgerEntries.push({
+            paymentLedgerEntries.push({
               accountId: 2, // Accounts Receivable (ID 2 from the database)
               debit: 0,
               credit: item.amount,
@@ -1184,7 +1184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // For deposit applications, we need to debit Accounts Receivable 
             // This correctly records the application of an existing credit
-            ledgerEntries.push({
+            paymentLedgerEntries.push({
               accountId: 2, // Accounts Receivable (ID 2 from the database)
               debit: item.amount,
               credit: 0,
@@ -1218,7 +1218,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle unapplied credit ledger entry for the main payment
       if (unappliedAmount > 0) {
         // For unapplied credits, we should credit back to Accounts Receivable
-        ledgerEntries.push({
+        paymentLedgerEntries.push({
           accountId: 2, // Accounts Receivable (ID 2 from the database)
           debit: 0,
           credit: unappliedAmount,
