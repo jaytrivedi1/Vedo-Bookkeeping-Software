@@ -117,7 +117,7 @@ export async function fixAllBalances() {
             
           if (credit188.length > 0) {
             // Extract the applied credit amount from the credit description if available
-            const appliedAmountMatch = credit188[0].description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+            const appliedAmountMatch = credit188[0].description?.match(/\(\$([0-9,]+(?:\.[0-9]+)?)\)/i);
             let appliedAmount = 2500; // Default applied amount for this credit
             
             if (appliedAmountMatch && appliedAmountMatch[1]) {
@@ -179,6 +179,22 @@ export async function fixAllBalances() {
                   status: correctStatus
                 })
                 .where(eq(transactions.id, 189));
+              
+              // CRITICAL FIX: Also update the credit balance to reflect applied amount
+              const originalCreditAmount = Number(credit188[0].amount);
+              const remainingCredit = originalCreditAmount - appliedAmount;
+              
+              console.log(`Updating credit #CREDIT-22648 balance: original=${originalCreditAmount}, applied=${appliedAmount}, remaining=${remainingCredit}`);
+              
+              // Update the credit balance to show remaining unapplied amount
+              await db
+                .update(transactions)
+                .set({
+                  balance: -remainingCredit // Negative for credits
+                })
+                .where(eq(transactions.id, 188));
+              
+              console.log(`Updated credit #CREDIT-22648 balance to ${-remainingCredit}`);
             }
             
             console.log(`Updated invoice #${invoice.reference} with correct balance and status`);
