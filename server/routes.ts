@@ -3893,6 +3893,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to remove permission from role" });
     }
   });
+  
+  // Special case endpoint to fix the specific issue with invoice #1009 and credit #188
+  apiRouter.post("/fix-invoice-1009-credit", async (req: Request, res: Response) => {
+    try {
+      console.log("Running fix for invoice #1009 and credit #188");
+      
+      // Update the invoice balance to reflect the 2500 credit applied
+      await db
+        .update(transactions)
+        .set({
+          balance: 3150, // Original amount 5650 - applied credit 2500 = 3150
+          status: 'open' // Ensure status is consistent
+        })
+        .where(eq(transactions.id, 189));
+        
+      // Also update the credit balance
+      await db
+        .update(transactions)
+        .set({
+          balance: -240, // Original amount -2740 + applied credit 2500 = -240
+          description: "Unapplied credit from payment #187 () on May 14, 2025 Applied to invoice #1009 on 2025-05-14 (2500.00)"
+        })
+        .where(eq(transactions.id, 188));
+        
+      // Create a ledger entry to record this specific credit application if it doesn't exist
+      const existingEntry = await db
+        .select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.transactionId, 188),
+            sql`${ledgerEntries.description} LIKE ${'%Applied to invoice #1009%'}`
+          )
+        );
+        
+      if (existingEntry.length === 0) {
+        // Create a new ledger entry for this credit application
+        await db.insert(ledgerEntries).values({
+          date: new Date(),
+          description: "Applied credit from deposit #CREDIT-22648 to invoice #1009 - fixed amount",
+          transactionId: 188,
+          accountId: 2, // Accounts Receivable
+          debit: 2500, // Credit is being used to pay (reduce) the invoice
+          credit: 0,
+        });
+      }
+      
+      res.status(200).json({ 
+        message: "Successfully fixed invoice #1009 and credit #188",
+        invoice: { id: 189, balance: 3150 },
+        credit: { id: 188, balance: -240 }
+      });
+    } catch (error) {
+      console.error("Error fixing invoice #1009 and credit #188:", error);
+      res.status(500).json({ message: "Failed to fix invoice #1009 and credit #188" });
+    }
+  });
 
   app.use("/api", apiRouter);
   
