@@ -140,14 +140,30 @@ export async function fixAllBalances() {
               console.log(`Updated credit #188 description to include specific amount $${appliedAmount}`);
             }
             
-            // Make sure the invoice is properly marked as paid
-            await db
-              .update(transactions)
-              .set({
-                balance: 0,
-                status: 'completed'
-              })
+            // Get the invoice to calculate the correct balance
+            const [invoice1009] = await db
+              .select()
+              .from(transactions)
               .where(eq(transactions.id, 189));
+              
+            if (invoice1009) {
+              // Calculate the correct balance - for invoice #1009, total amount is $5,650 and total paid is $5,500
+              const invoiceAmount = Number(invoice1009.amount);
+              const paidAmount = 5500; // $3,000 from payment + $2,500 from credit
+              const correctBalance = invoiceAmount - paidAmount;
+              const correctStatus = correctBalance <= 0 ? 'completed' : 'open';
+              
+              console.log(`Setting invoice #1009 balance to ${correctBalance} based on amount ${invoiceAmount} - paid ${paidAmount}`);
+              
+              // Update with correct balance
+              await db
+                .update(transactions)
+                .set({
+                  balance: correctBalance,
+                  status: correctStatus
+                })
+                .where(eq(transactions.id, 189));
+            }
             
             console.log(`Updated invoice #${invoice.reference} with correct balance and status`);
             continue;
