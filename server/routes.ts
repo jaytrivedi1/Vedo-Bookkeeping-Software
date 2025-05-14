@@ -1232,7 +1232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const payment = await storage.createTransaction(
         paymentData,
         [], // No line items for the payment itself
-        ledgerEntries
+        paymentLedgerEntries
       );
       
       // Now create unapplied credit entry if there's any amount not applied to invoices
