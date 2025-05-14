@@ -1894,17 +1894,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // PROTECTION: Perform comprehensive check for deposit usage
       if (transaction.type === 'deposit') {
         try {
-          // Use our improved method to check if the deposit has been applied anywhere
-          const applicationCheck = await storage.isDepositAppliedToInvoices(db, transaction);
+          console.log(`Performing comprehensive check for deposit usage: ${transaction.reference} (ID: ${transaction.id})`);
+          // Check for ledger entries that link this deposit to invoice payments
+          const depositLedgerEntries = await storage.getLedgerEntriesByTransaction(id);
           
-          if (applicationCheck.isApplied) {
-            console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}): ${applicationCheck.details}`);
+          // First basic check: Look for ledger entries linking to invoices
+          const invoiceLinks = depositLedgerEntries.filter(entry => 
+            entry.description && 
+            entry.description.toLowerCase().includes('invoice') &&
+            entry.description.toLowerCase().includes('applied')
+          );
+          
+          // Second check: Is balance different from original amount?
+          const isPartiallyApplied = transaction.balance && 
+                                    Math.abs(Math.abs(transaction.balance) - transaction.amount) > 0.001;
+          
+          // Third check: Find any ledger entries linking this deposit to other transactions
+          const allLedgerEntries = await storage.getAllLedgerEntries();
+          const relatedEntries = allLedgerEntries.filter(entry => 
+            entry.description && 
+            entry.description.toLowerCase().includes(transaction.reference?.toLowerCase() || '') &&
+            entry.description.toLowerCase().includes('credit') && 
+            entry.transactionId !== transaction.id
+          );
+          
+          // Enhanced detection logic with all checks combined
+          if (invoiceLinks.length > 0 || isPartiallyApplied || relatedEntries.length > 0) {
+            // Generate a detailed explanation based on what we found
+            let details = "";
+            
+            if (isPartiallyApplied) {
+              details = `This deposit (${transaction.reference}) has been partially applied to invoices. The original amount was $${transaction.amount} and the remaining balance is $${Math.abs(transaction.balance || 0)}.`;
+            } else if (invoiceLinks.length > 0) {
+              details = `This deposit has already been applied to invoices: ${invoiceLinks.map(e => e.description).join('; ')}`;
+            } else if (relatedEntries.length > 0) {
+              // Find distinct transaction IDs where this deposit was referenced
+              // Create an array of unique transaction IDs to avoid Set spread issues
+              const transactionIdsSet = new Set();
+              relatedEntries.forEach(e => {
+                if (e.transactionId) {
+                  transactionIdsSet.add(e.transactionId);
+                }
+              });
+              const relatedTransactionIds = Array.from(transactionIdsSet);
+              
+              details = `This deposit (${transaction.reference}) has been applied to ${relatedTransactionIds.length} transaction(s). Applied credit cannot be deleted directly. You must delete the transactions where this credit was applied first.`;
+            }
+            
+            console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}): ${details}`);
             
             return res.status(403).json({ 
-              message: `Cannot delete this deposit: ${applicationCheck.details}`,
+              message: `Cannot delete this deposit: ${details}`,
               type: "credit_in_use",
               transactionId: id,
-              details: applicationCheck.details
+              details: details
             });
           }
           
@@ -2544,11 +2587,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Delete the transaction
-      const deleted = await storage.deleteTransaction(id);
-      
-      if (!deleted) {
-        return res.status(500).json({ message: "Failed to delete transaction" });
+      // Delete the transaction with improved error handling
+      try {
+        const deleted = await storage.deleteTransaction(id);
+        
+        if (!deleted) {
+          return res.status(500).json({ message: "Failed to delete transaction" });
+        }
+      } catch (deletionError) {
+        console.error("Error during transaction deletion:", deletionError);
+        
+        // Extract the error message for more detailed information
+        const errorMessage = String(deletionError);
+        
+        // Check for specific dependency errors
+        if (errorMessage.includes("Cannot delete this credit")) {
+          return res.status(403).json({ 
+            message: errorMessage,
+            type: "credit_dependency",
+            details: "This credit has been applied to other transactions and cannot be deleted directly."
+          });
+        } else {
+          return res.status(500).json({ 
+            message: "Failed to delete transaction", 
+            error: errorMessage 
+          });
+        }
       }
       
       // SPECIAL HANDLING: Ensure Apr 21 deposit (and any other deposits) have correct balances
