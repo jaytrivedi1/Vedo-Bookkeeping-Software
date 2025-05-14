@@ -402,9 +402,15 @@ export default function InvoiceView() {
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
                 <div className="text-right font-bold">
-                  ${invoice.balance !== null && invoice.balance !== undefined 
-                    ? invoice.balance.toFixed(2) 
-                    : (paymentHistory?.summary?.remainingBalance?.toFixed(2) || total.toFixed(2))}
+                  ${
+                    // Calculate balance due as follows:
+                    // 1. Start with invoice total
+                    // 2. Subtract any payments from payment history
+                    // 3. Subtract any applied credits
+                    invoice.balance !== null && invoice.balance !== undefined 
+                    ? Math.max(0, invoice.balance).toFixed(2) 
+                    : Math.max(0, (total - (paymentHistory?.summary?.totalPaid || 0))).toFixed(2)
+                  }
                 </div>
                 
                 {paymentHistory && paymentHistory.summary && (

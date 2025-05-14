@@ -5,7 +5,35 @@
  */
 import { db } from "./db";
 import { transactions, ledgerEntries } from "@shared/schema";
-import { eq, and, sql, isNull, ne } from "drizzle-orm";
+import { eq, and, sql, isNull, ne, like } from "drizzle-orm";
+
+// Helper function to find the applied credit amount from invoice metadata
+async function findAppliedCreditAmountFromInvoices(depositId: number): Promise<number> {
+  // Look for transactions that mention this deposit ID in their metadata or description
+  const relatedInvoices = await db
+    .select()
+    .from(transactions)
+    .where(
+      sql`(${transactions.description} LIKE ${'%Applied $% from deposit #' + depositId + '%'} OR
+           ${transactions.description} LIKE ${'%Applied credit from deposit #' + depositId + '%'})`
+    );
+  
+  let totalApplied = 0;
+  
+  for (const invoice of relatedInvoices) {
+    // Try to extract amount from description
+    const appliedAmountMatch = invoice.description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+from/i);
+    if (appliedAmountMatch && appliedAmountMatch[1]) {
+      const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+      if (!isNaN(extractedAmount)) {
+        console.log(`Found applied amount $${extractedAmount} in invoice #${invoice.reference} description`);
+        totalApplied += extractedAmount;
+      }
+    }
+  }
+  
+  return totalApplied;
+}
 
 export async function fixAllBalances() {
   console.log("Starting comprehensive balance fix...");
@@ -126,13 +154,51 @@ export async function fixAllBalances() {
         appliedAmount = applicationEntries.reduce((sum, entry) => sum + entry.debit, 0);
       }
       
+      // Find any ledger entries that specifically track applied amounts from credit applications
+      // This is critical for invoices where you applied a partial credit amount instead of the full deposit
+      const creditApplicationLedgerEntries = await db
+        .select()
+        .from(ledgerEntries)
+        .where(
+          and(
+            eq(ledgerEntries.accountId, 2), // Accounts Receivable
+            sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit #' + (deposit.reference || deposit.id) + '%'}`,
+            eq(ledgerEntries.debit, 1) // Debit = 1 means this is a credit application record
+          )
+        );
+      
+      // If we have credit application ledger entries, use that to determine applied amount
+      // This handles cases where a partial amount was applied and should be preserved
+      let actualAppliedAmount = appliedAmount;
+      if (creditApplicationLedgerEntries.length > 0) {
+        actualAppliedAmount = creditApplicationLedgerEntries.reduce((sum, entry) => sum + entry.debit, 0);
+        console.log(`Found ${creditApplicationLedgerEntries.length} specific credit application ledger entries with total amount: ${actualAppliedAmount}`);
+      }
+      
+      // Look for applied_credits records in transaction metadata
+      const invoiceAppliedAmount = await findAppliedCreditAmountFromInvoices(deposit.id); 
+      if (invoiceAppliedAmount > 0) {
+        actualAppliedAmount = invoiceAppliedAmount;
+        console.log(`Found specific applied credit amount ${actualAppliedAmount} from invoice metadata`);
+      }
+      
       // Calculate remaining balance (keep negative for credits)
       const originalAmount = deposit.amount;
-      const remainingBalance = -(Math.abs(originalAmount) - appliedAmount);
+      // If there's evidence the credit was partially applied, we must respect the previous balance as-is
+      let remainingBalance;
+      if (deposit.balance && Math.abs(deposit.balance) !== Math.abs(originalAmount) && 
+          Math.abs(deposit.balance) + actualAppliedAmount === Math.abs(originalAmount)) {
+        // This means the balance is already accounting for partial application correctly
+        remainingBalance = deposit.balance;
+        console.log(`Preserving existing balance ${remainingBalance} as it correctly accounts for partial application`);
+      } else {
+        // Otherwise calculate based on applied amount
+        remainingBalance = -(Math.abs(originalAmount) - actualAppliedAmount);
+      }
       
       console.log(`Deposit #${deposit.reference || deposit.id} analysis:
       - Original amount: ${originalAmount}
-      - Applied amount: ${appliedAmount}
+      - Applied amount: ${actualAppliedAmount}
       - Current balance: ${deposit.balance}
       - Correct balance: ${remainingBalance}`);
       
