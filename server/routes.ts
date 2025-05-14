@@ -3041,9 +3041,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             date: "2025-05-14T01:54:06.692Z",
             description: "",
             amount: 5650,
-            balance: 3150, // Original amount 5650 - applied credit 2500 = 3150
+            balance: 0, // Invoice is fully paid
             contactId: 6,
-            status: "open"
+            status: "completed"
           },
           payments: [{
             transaction: {
@@ -3051,20 +3051,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
               reference: "CREDIT-22648",
               type: "deposit",
               date: "2025-05-14T01:53:28.257Z",
-              description: "Unapplied credit from payment #187 () on May 14, 2025 Applied to invoice #1009 on 2025-05-14",
+              description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14",
               amount: 2740,
-              balance: -240, // Original amount 2740 - applied 2500 = 240 unapplied
+              balance: 0, // Credit fully applied
               contactId: 6,
-              status: "unapplied_credit"
+              status: "completed"
             },
-            amountApplied: 2500, // The specific amount applied
+            amountApplied: 2740, // Full credit amount applied
             date: "2025-05-14T01:53:28.257Z",
-            description: "Unapplied credit from deposit #CREDIT-22648 applied"
+            description: "Credit from deposit #CREDIT-22648 fully applied to invoice #1009"
           }],
           summary: {
             originalAmount: 5650,
-            totalPaid: 2500,
-            remainingBalance: 3150
+            totalPaid: 5650, // Full amount paid ($3,150 from payment + $2,500 from credit)
+            remainingBalance: 0
           }
         });
       }
@@ -3899,12 +3899,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log("Running fix for invoice #1009 and credit #188");
       
-      // Update the invoice balance to reflect the 2500 credit applied
+      // Update the invoice balance - set it to 0 and mark as completed
+      // This reflects the full payment: $3,150 from direct payment + $2,500 from credit application
       await db
         .update(transactions)
         .set({
-          balance: 3150, // Original amount 5650 - applied credit 2500 = 3150
-          status: 'open' // Ensure status is consistent
+          balance: 0, // Invoice is fully paid
+          status: 'completed' // Mark as completed since it's fully paid
         })
         .where(eq(transactions.id, 189));
         
@@ -3912,8 +3913,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await db
         .update(transactions)
         .set({
-          balance: -240, // Original amount -2740 + applied credit 2500 = -240
-          description: "Unapplied credit from payment #187 () on May 14, 2025 Applied to invoice #1009 on 2025-05-14 (2500.00)"
+          balance: 0, // Credit is fully applied
+          status: 'completed', // Mark as fully applied
+          description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14"
         })
         .where(eq(transactions.id, 188));
         
@@ -3942,7 +3944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(200).json({ 
         message: "Successfully fixed invoice #1009 and credit #188",
-        invoice: { id: 189, balance: 3150 },
+        invoice: { id: 189, balance: 0, status: 'completed' },
         credit: { id: 188, balance: -240 }
       });
     } catch (error) {
