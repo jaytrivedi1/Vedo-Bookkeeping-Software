@@ -1891,32 +1891,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // PROTECTION: Prevent deletion of deposit entries that have been applied to invoices
+      // PROTECTION: Perform comprehensive check for deposit usage
       if (transaction.type === 'deposit') {
-        // Check for ledger entries that link this deposit to invoice payments
-        const depositLedgerEntries = await storage.getLedgerEntriesByTransaction(id);
-        
-        // Check if this deposit has any ledger entries linking it to an invoice
-        const invoiceLinks = depositLedgerEntries.filter(entry => 
-          entry.description && 
-          entry.description.toLowerCase().includes('invoice') &&
-          entry.description.toLowerCase().includes('applied')
-        );
-        
-        // Only check system-generated credits (from payments)
-        if (transaction.status === 'unapplied_credit' && 
-            transaction.description?.includes("Unapplied credit from payment")) {
-          return res.status(403).json({ 
-            message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead." 
-          });
-        }
-        
-        // Only block deletion if we've found specific evidence this deposit has been applied to invoices
-        if (invoiceLinks.length > 0) {
-          console.log(`Found ${invoiceLinks.length} links to invoices for deposit #${id}`);
-          return res.status(403).json({ 
-            message: "Cannot delete a deposit that has been applied to invoices. Remove the credit applications first." 
-          });
+        try {
+          // Use our improved method to check if the deposit has been applied anywhere
+          const applicationCheck = await storage.isDepositAppliedToInvoices(db, transaction);
+          
+          if (applicationCheck.isApplied) {
+            console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}): ${applicationCheck.details}`);
+            
+            return res.status(403).json({ 
+              message: `Cannot delete this deposit: ${applicationCheck.details}`,
+              type: "credit_in_use",
+              transactionId: id,
+              details: applicationCheck.details
+            });
+          }
+          
+          // Special check for system-generated credits (from payments)
+          if (transaction.status === 'unapplied_credit' && 
+              transaction.description?.includes("Unapplied credit from payment")) {
+            return res.status(403).json({ 
+              message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead.",
+              type: "system_credit"
+            });
+          }
+        } catch (checkError) {
+          console.error("Error checking deposit usage:", checkError);
+          // Continue with deletion attempt even if the check fails
         }
       }
       
