@@ -500,15 +500,20 @@ export class DatabaseStorage implements IStorage {
           case 'deposit':
             console.log(`Deleting deposit transaction: ${transaction.reference || transaction.id}`);
             
-            // Only delete if not actually connected to invoices
-            const isApplied = await this.isDepositAppliedToInvoices(tx, transaction);
-            if (isApplied) {
-              console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}) as it has been applied to invoices`);
-              return false;
+            // Comprehensive check for deposit usage
+            const applicationCheck = await this.isDepositAppliedToInvoices(tx, transaction);
+            
+            if (applicationCheck.isApplied) {
+              console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}): ${applicationCheck.details}`);
+              
+              // Return more detailed information about why deletion is blocked
+              throw new Error(`Cannot delete this credit: ${applicationCheck.details}`);
             }
             
             // Handle any potential references to this deposit
             await this.handleDepositDeletion(tx, transaction);
+            
+            console.log(`Deposit #${transaction.id} (${transaction.reference}) can be safely deleted - no applications found`);
             break;
         }
         
@@ -926,30 +931,89 @@ export class DatabaseStorage implements IStorage {
     }
   }
   
-  private async isDepositAppliedToInvoices(tx: any, deposit: any): Promise<boolean> {
+  private async isDepositAppliedToInvoices(tx: any, deposit: any): Promise<{isApplied: boolean, details: string}> {
     console.log(`Checking if deposit #${deposit.id} (${deposit.reference || 'no reference'}) has been applied to invoices`);
     
-    // Method 1: Check for ledger entries that show this deposit being applied
-    const depositApplications = await tx
+    // Method 1: Check for ANY ledger entries that reference this deposit, not just our own
+    // This catches cases where other transactions (like payments) have applied this credit
+    const allReferencingLedgerEntries = await tx
       .select()
       .from(ledgerEntries)
       .where(
-        sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit #' + (deposit.reference || deposit.id) + '%'}`
+        and(
+          ne(ledgerEntries.transactionId, deposit.id), // Not our own ledger entries
+          or(
+            sql`${ledgerEntries.description} LIKE ${'%deposit #' + (deposit.reference || deposit.id) + '%'}`,
+            sql`${ledgerEntries.description} LIKE ${'%' + (deposit.reference || deposit.id) + '%credit%'}`
+          )
+        )
       );
     
-    if (depositApplications.length > 0) {
-      console.log(`Found ${depositApplications.length} ledger entries showing this deposit was applied`);
+    if (allReferencingLedgerEntries.length > 0) {
+      // Analyze each reference to determine if it's an actual credit application
+      let actualApplications = [];
       
-      // Check if any of these are actual credit applications rather than just mentions
-      for (const entry of depositApplications) {
-        if (entry.debit > 0 && entry.description && entry.description.includes('Applied credit from deposit')) {
-          // This is a proper credit application entry
-          return true;
+      for (const entry of allReferencingLedgerEntries) {
+        if (entry.description) {
+          // Most explicit check: "Applied credit from deposit"
+          if (entry.description.includes('Applied credit from deposit') && entry.debit > 0) {
+            // Get the transaction that applied this credit
+            const [applicationType] = await tx
+              .select()
+              .from(transactions)
+              .where(eq(transactions.id, entry.transactionId));
+              
+            const applicatorInfo = applicationType ? 
+              `${applicationType.type} #${applicationType.reference || applicationType.id}` :
+              `transaction #${entry.transactionId}`;
+              
+            // Extract any invoice references
+            const invoiceMatch = entry.description.match(/invoice #?(\d+)/i);
+            const invoiceReference = invoiceMatch && invoiceMatch[1] ? invoiceMatch[1] : 'unknown invoice';
+            
+            actualApplications.push(`Applied to ${invoiceReference} via ${applicatorInfo}`);
+            continue;
+          }
+          
+          // Check for any credit application pattern
+          if ((entry.description.toLowerCase().includes('credit') || 
+               entry.description.toLowerCase().includes('deposit')) && 
+              entry.debit > 0) {
+            actualApplications.push(`Referenced in transaction #${entry.transactionId} with amount ${entry.debit}`);
+          }
         }
+      }
+      
+      if (actualApplications.length > 0) {
+        console.log(`Found ${actualApplications.length} actual credit applications for deposit #${deposit.reference || deposit.id}`);
+        return {
+          isApplied: true, 
+          details: `Credit has been applied to transactions: ${actualApplications.join('; ')}`
+        };
       }
     }
     
-    // Method 2: Check the deposit's description for evidence it was applied
+    // Method 2: Compare original amount vs current balance
+    // If there's a difference, it indicates the credit has been applied
+    if (deposit.amount && deposit.balance) {
+      // For deposits in our system, expected pattern is:
+      // - Original amount: positive value (e.g., 5000)
+      // - Balance: negative value representing available credit (e.g., -2090 if partially applied)
+      const originalAmount = Math.abs(Number(deposit.amount));
+      const availableCredit = Math.abs(Number(deposit.balance));
+      
+      // If available credit is less than original amount, credit has been applied
+      if (availableCredit < originalAmount) {
+        const appliedAmount = originalAmount - availableCredit;
+        console.log(`Deposit has been partially applied: original=${originalAmount}, available=${availableCredit}, applied=${appliedAmount}`);
+        return {
+          isApplied: true,
+          details: `Credit has been partially applied (${appliedAmount} of original ${originalAmount})`
+        };
+      }
+    }
+    
+    // Method 3: Check the deposit's description for evidence it was applied
     if (deposit.description && 
         deposit.description.includes('Applied') && 
         deposit.description.includes('to invoice #')) {
@@ -963,32 +1027,21 @@ export class DatabaseStorage implements IStorage {
         
         if (!isNaN(extractedAmount) && extractedAmount > 0) {
           console.log(`Deposit description indicates it was applied: "${deposit.description}"`);
+          
           // Get the invoice reference
           const invoiceMatch = deposit.description.match(/invoice #?(\d+)/i);
+          const invoiceReference = invoiceMatch && invoiceMatch[1] ? invoiceMatch[1] : 'unknown invoice';
           
-          if (invoiceMatch && invoiceMatch[1]) {
-            // Find the invoice to verify it exists
-            const [invoice] = await tx
-              .select()
-              .from(transactions)
-              .where(
-                and(
-                  eq(transactions.type, 'invoice'),
-                  eq(transactions.reference, invoiceMatch[1])
-                )
-              );
-            
-            if (invoice) {
-              // If the referenced invoice exists, this is an actual application
-              return true;
-            }
-          }
+          return {
+            isApplied: true,
+            details: `Credit description indicates application to invoice #${invoiceReference} of ${extractedAmount}`
+          };
         }
       }
     }
     
     // This deposit can be safely deleted
-    return false;
+    return { isApplied: false, details: "No applications found" };
   }
   
   private async recalculateReferencedInvoiceBalances(tx: any, ledgerEntries: any[]) {
