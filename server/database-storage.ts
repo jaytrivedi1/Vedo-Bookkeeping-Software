@@ -749,7 +749,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(ledgerEntries)
       .where(
-        sql`${ledgerEntries.description} LIKE '%invoice #%' || ${invoice.reference} || '%'`
+        sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`
       );
       
     // Find all payments that applied credits to this invoice
