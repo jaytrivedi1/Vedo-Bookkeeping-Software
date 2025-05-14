@@ -147,13 +147,29 @@ export async function fixAllBalances() {
               .where(eq(transactions.id, 189));
               
             if (invoice1009) {
-              // Calculate the correct balance - for invoice #1009, total amount is $5,650 and total paid is $5,500
+              // Calculate the correct balance using actual ledger entries
               const invoiceAmount = Number(invoice1009.amount);
-              const paidAmount = 5500; // $3,000 from payment + $2,500 from credit
-              const correctBalance = invoiceAmount - paidAmount;
+              
+              // Find all credit entries in ledger for invoice #1009
+              const creditEntries = await db
+                .select()
+                .from(ledgerEntries)
+                .where(
+                  sql`${ledgerEntries.description} LIKE ${'%invoice #1009%'}`
+                );
+              
+              // Sum all debits from credit applications
+              const totalCreditsApplied = creditEntries.reduce((sum, entry) => {
+                return sum + Number(entry.debit || 0);
+              }, 0);
+              
+              console.log(`Found ${creditEntries.length} credit entries for invoice #1009 totaling ${totalCreditsApplied}`);
+              
+              // Calculate the correct balance using actual ledger entries
+              const correctBalance = invoiceAmount - totalCreditsApplied;
               const correctStatus = correctBalance <= 0 ? 'completed' : 'open';
               
-              console.log(`Setting invoice #1009 balance to ${correctBalance} based on amount ${invoiceAmount} - paid ${paidAmount}`);
+              console.log(`Setting invoice #1009 balance to ${correctBalance} based on amount ${invoiceAmount} - paid ${totalCreditsApplied}`);
               
               // Update with correct balance
               await db
