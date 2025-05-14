@@ -3011,70 +3011,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Invalid transaction ID' });
       }
       
-      // Special case for invoice #1009 (ID 189) and credit #188
-      // This is a hard-coded fix for the specific issue with this transaction
-      if (id === 189) {
-        console.log("SPECIAL CASE: Using hardcoded payment history for invoice #1009");
-        
-        // Update the invoice to be fully paid
-        await db
-          .update(transactions)
-          .set({
-            balance: 0, // Invoice is fully paid
-            status: 'completed' // Invoice is completed
-          })
-          .where(eq(transactions.id, 189));
-          
-        // Also update the credit to be fully applied
-        await db
-          .update(transactions)
-          .set({
-            balance: 0, // Credit is fully applied
-            status: 'completed', // Credit is fully applied
-            description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14"
-          })
-          .where(eq(transactions.id, 188));
-          
-        return res.json({
-          invoice: {
-            id: 189,
-            reference: "1009",
-            type: "invoice",
-            date: "2025-05-14T01:54:06.692Z",
-            description: "",
-            amount: 5650,
-            balance: 0, // Invoice is fully paid
-            contactId: 6,
-            status: "completed"
-          },
-          payments: [{
-            transaction: {
-              id: 188,
-              reference: "CREDIT-22648",
-              type: "deposit",
-              date: "2025-05-14T01:53:28.257Z",
-              description: "Credit from payment #187 fully applied to invoice #1009 on 2025-05-14",
-              amount: 2740,
-              balance: 0, // Credit fully applied
-              contactId: 6,
-              status: "completed"
-            },
-            amountApplied: 2500, // Correct amount applied to this invoice
-            date: "2025-05-14T01:53:28.257Z",
-            description: "Credit from deposit #CREDIT-22648 applied to invoice #1009"
-          }],
-          summary: {
-            originalAmount: 5650,
-            totalPaid: 5650, // Full amount paid ($3,150 from payment + $2,500 from credit)
-            remainingBalance: 0,
-            breakdown: {
-              payments: 0, // No direct payment
-              credits: 2500 // Only credits applied
-            }
-          }
-        });
-      }
-      
       const transaction = await storage.getTransaction(id);
       if (!transaction) {
         return res.status(404).json({ message: 'Transaction not found' });
@@ -3348,18 +3284,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Get deposit amount, limited to the invoice balance
               const maxApplyAmount = Math.min(deposit.amount, transaction.amount);
               
-              // Check if the description contains a specific mention of invoice #1009
-              if (deposit.description && deposit.description.includes('invoice #1009')) {
-                // For invoice #1009, we know you specifically applied $2500 and not the full amount
-                if (deposit.reference === 'CREDIT-22648') {
-                  console.log(`SPECIAL CASE: For invoice #1009, using specific amount 2500 for deposit #${deposit.id} (${deposit.reference})`);
-                  amountApplied = 2500;
+              // Check if the description explicitly mentions an applied amount (more precise)
+              const appliedAmountMatch = deposit.description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+              if (appliedAmountMatch && appliedAmountMatch[1]) {
+                const extractedAmount = parseFloat(appliedAmountMatch[1].replace(/,/g, ''));
+                if (!isNaN(extractedAmount)) {
+                  console.log(`Found specific applied amount $${extractedAmount} in description for deposit #${deposit.id} (${deposit.reference})`);
+                  amountApplied = extractedAmount;
                 } else {
-                  console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+                  console.log(`Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
                   amountApplied = maxApplyAmount;
                 }
               } else {
-                console.log(`DEBUG PAYMENT HISTORY: Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
+                console.log(`Using deposit amount ${maxApplyAmount} for deposit #${deposit.id} (${deposit.reference})`);
                 amountApplied = maxApplyAmount;
               }
             }
@@ -3367,7 +3304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (amountApplied > 0) {
             // Create a more specific description when we have an extracted amount
-            const appliedAmountMatch = deposit.description.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
+            const appliedAmountMatch = deposit.description?.match(/Applied\s+\$?([0-9,]+(?:\.[0-9]+)?)\s+to\s+invoice/i);
             let description = `Unapplied credit from deposit #${deposit.reference || deposit.id} applied`;
             
             // If we found a specific amount in the description and it's different from the full deposit amount
