@@ -1005,23 +1005,42 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Method 2: Compare original amount vs current balance
-    // If there's a difference, it indicates the credit has been applied
-    if (deposit.amount && deposit.balance) {
+    // Method 2: Carefully compare original amount vs current balance
+    // We need to VERIFY that the difference is actually due to applied credits
+    if (deposit.amount !== undefined && deposit.balance !== undefined) {
       // For deposits in our system, expected pattern is:
       // - Original amount: positive value (e.g., 5000)
       // - Balance: negative value representing available credit (e.g., -2090 if partially applied)
       const originalAmount = Math.abs(Number(deposit.amount));
       const availableCredit = Math.abs(Number(deposit.balance));
       
-      // If available credit is less than original amount, credit has been applied
-      if (availableCredit < originalAmount) {
-        const appliedAmount = originalAmount - availableCredit;
-        console.log(`Deposit has been partially applied: original=${originalAmount}, available=${availableCredit}, applied=${appliedAmount}`);
-        return {
-          isApplied: true,
-          details: `Credit has been partially applied (${appliedAmount} of original ${originalAmount})`
-        };
+      // Only if balance is different AND we can confirm it's due to applications
+      if (availableCredit !== originalAmount) {
+        // IMPORTANT: Verify this is an actual credit application via ledger entries
+        // Don't just rely on balance != amount, which can give false positives
+        const creditApplicationLedgers = await tx
+          .select()
+          .from(ledgerEntries)
+          .where(
+            and(
+              ne(ledgerEntries.transactionId, deposit.id),
+              sql`${ledgerEntries.description} LIKE ${'%Applied credit from deposit #' + deposit.reference + '%'}`
+            )
+          );
+          
+        if (creditApplicationLedgers.length > 0) {
+          // We found ACTUAL ledger entries showing this credit was applied
+          const appliedAmount = originalAmount - availableCredit;
+          console.log(`Deposit has been partially applied: original=${originalAmount}, available=${availableCredit}, applied=${appliedAmount}`);
+          return {
+            isApplied: true,
+            details: `This deposit (${deposit.reference}) has been partially applied to invoices. The original amount was $${originalAmount.toFixed(2)} and the remaining balance is $${availableCredit.toFixed(2)}.`
+          };
+        } else {
+          // Balance mismatch without ledger entries is likely a data issue
+          console.log(`Balance mismatch for deposit #${deposit.reference} (${deposit.id}) but no ledger entries found confirming applications`);
+          console.log(`This appears to be a data issue, not an actual credit application`);
+        }
       }
     }
     
