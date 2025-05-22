@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
@@ -23,7 +23,7 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 
 export default function BillCreate() {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState("details");
   const [vendors, setVendors] = useState<Contact[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
@@ -270,7 +270,6 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="date">Bill Date</Label>
                       <DatePicker
-                        id="date"
                         date={form.getValues("date")}
                         setDate={(date) => form.setValue("date", date)}
                       />
@@ -424,8 +423,7 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="dueDate">Due Date</Label>
                       <DatePicker
-                        id="dueDate"
-                        date={form.getValues("dueDate")}
+                        date={form.getValues("dueDate") || new Date()}
                         setDate={(date) => form.setValue("dueDate", date)}
                       />
                     </div>

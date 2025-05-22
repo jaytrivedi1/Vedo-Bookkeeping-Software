@@ -9,6 +9,7 @@ import Expenses from "@/pages/expenses";
 import Journals from "@/pages/journals";
 import Deposits from "@/pages/deposits";
 import DepositView from "@/pages/deposit-view";
+import BillCreate from "@/pages/bill-create";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/payments/edit/:id" component={PaymentReceive} />
       <Route path="/payments/:id" component={PaymentView} />
       <Route path="/payment-receive" component={PaymentReceive} />
+      <Route path="/bill-create" component={BillCreate} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
