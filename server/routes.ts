@@ -1846,46 +1846,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Special case handling for payment #191 (direct SQL approach)
-      if (id === 191) {
+      // Enhanced payment deletion - works for all payment transactions
+      if (transaction.type === 'payment') {
         try {
-          console.log("DIRECT DELETION: Special handling for payment #191");
-          // Delete ledger entries directly using SQL
+          // Delete ledger entries first (required for foreign key constraints)
           const deleteLedgerResult = await db.execute(
             sql`DELETE FROM ledger_entries WHERE transaction_id = ${id}`
           );
-          console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for transaction #${id}`);
+          console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for payment #${id}`);
           
-          // Update invoice #1009 to show correct balance
-          await db.execute(
-            sql`UPDATE transactions SET status = 'open', balance = 5650 WHERE id = 189`
+          // Delete line items if any
+          const deleteLineItemsResult = await db.execute(
+            sql`DELETE FROM line_items WHERE transaction_id = ${id}`
           );
-          console.log(`Reset invoice #1009 status to open with balance 5650`);
+          console.log(`Deleted ${deleteLineItemsResult.rowCount} line items for payment #${id}`);
           
-          // Update deposit #190 (DEP-2025-05-14) to restore balance
-          await db.execute(
-            sql`UPDATE transactions SET status = 'unapplied_credit', balance = -4000 WHERE id = 190`
-          );
-          console.log(`Reset deposit #190 (DEP-2025-05-14) to unapplied_credit with balance -4000`);
-          
-          // Update deposit #188 (CREDIT-22648) to restore balance
-          await db.execute(
-            sql`UPDATE transactions SET status = 'unapplied_credit', balance = -2740 WHERE id = 188`
-          );
-          console.log(`Reset deposit #188 (CREDIT-22648) to unapplied_credit with balance -2740`);
-          
-          // Delete payment transaction directly
+          // Now delete the transaction itself
           const deleteResult = await db.execute(
             sql`DELETE FROM transactions WHERE id = ${id}`
           );
-          console.log(`Directly deleted payment transaction #${id}, rows affected: ${deleteResult.rowCount}`);
+          console.log(`Successfully deleted payment transaction #${id}, rows affected: ${deleteResult.rowCount}`);
           
           // If we got here, deletion was successful
           return res.status(200).json({ message: "Transaction deleted successfully" });
         } catch (directError) {
-          console.error("Error in direct deletion approach:", directError);
+          console.error("Error deleting payment transaction:", directError);
           return res.status(500).json({ 
-            message: "Failed to delete transaction with direct approach", 
+            message: "Failed to delete transaction", 
             error: String(directError)
           });
         }
