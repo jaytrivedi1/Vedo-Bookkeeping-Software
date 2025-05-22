@@ -12,6 +12,7 @@ import migrateInvoiceBalance from "./migrate-invoice-balance";
 import migrateDepositCredits from "./migrate-deposit-credits";
 import batchUpdateInvoiceStatuses from "./batch-update-invoice-statuses";
 import { fixAllBalances } from "./fix-all-balances";
+import { fixCreditApplicationLogic } from "./fix-credit-logic";
 
 const app = express();
 app.use(express.json());

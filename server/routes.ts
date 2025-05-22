@@ -6,6 +6,7 @@ import { eq, ne, and, sql } from "drizzle-orm";
 import { fixAllBalances } from "./fix-all-balances";
 import { fixCreditIssues } from "./credit-fix";
 import { fixCreditTracking } from "./fix-credit-tracking";
+import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { format } from "date-fns";
 import { 
   insertAccountSchema, 
