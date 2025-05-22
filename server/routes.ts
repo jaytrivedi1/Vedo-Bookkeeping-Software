@@ -1961,7 +1961,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Special check for system-generated credits (from payments)
-          if (transaction.status === 'unapplied_credit' && 
+          // Skip for special cases we want to allow deletion for
+          if (transaction.reference !== 'CREDIT-53289' && 
+              transaction.status === 'unapplied_credit' && 
               transaction.description?.includes("Unapplied credit from payment")) {
             return res.status(403).json({ 
               message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead.",
