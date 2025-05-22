@@ -175,7 +175,7 @@ export async function fixSpecificCredit(creditRef: string) {
       })
       .where(eq(transactions.id, credit.id));
     
-    console.log(`Successfully updated ${creditRef} status to 'applied_credit'`);
+    console.log(`Successfully updated ${creditRef} status to 'completed'`);
     return true;
   } catch (error) {
     console.error(`Error fixing specific credit ${creditRef}:`, error);
