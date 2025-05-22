@@ -22,6 +22,7 @@ import {
   insertPermissionSchema,
   insertRolePermissionSchema, 
   invoiceSchema,
+  billSchema,
   expenseSchema,
   journalEntrySchema,
   depositSchema,

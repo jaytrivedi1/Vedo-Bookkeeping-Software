@@ -28,7 +28,7 @@ export enum AccountType {
 }
 
 export const transactionTypeEnum = pgEnum('transaction_type', [
-  'invoice', 'expense', 'journal_entry', 'deposit', 'payment'
+  'invoice', 'expense', 'journal_entry', 'deposit', 'payment', 'bill'
 ]);
 
 export const statusEnum = pgEnum('status', [
@@ -260,7 +260,32 @@ export const insertProductSchema = createInsertSchema(productsSchema, {
 export type Product = typeof productsSchema.$inferSelect;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 
+// Bill schema for vendor purchases
+export const billSchema = z.object({
+  date: z.date(),
+  contactId: z.number(),
+  reference: z.string().min(1, "Reference is required"),
+  description: z.string(),
+  status: z.enum(["open", "paid", "overdue", "partial"]),
+  lineItems: z.array(
+    z.object({
+      description: z.string().min(1, "Description is required"),
+      quantity: z.number().min(0.01, "Quantity must be greater than 0"),
+      unitPrice: z.number().min(0, "Price cannot be negative"),
+      amount: z.number(),
+      accountId: z.number().optional() // expense account
+    })
+  ).min(1, "At least one line item is required"),
+  // Additional fields for bill functionality
+  subTotal: z.number().optional(),
+  taxAmount: z.number().optional(),
+  totalAmount: z.number().optional(),
+  dueDate: z.date().optional(),
+  paymentTerms: z.string().optional(),
+});
+
 export type Invoice = z.infer<typeof invoiceSchema>;
+export type Bill = z.infer<typeof billSchema>;
 export type Expense = z.infer<typeof expenseSchema>;
 export type JournalEntry = z.infer<typeof journalEntrySchema>;
 export type Deposit = z.infer<typeof depositSchema>;
