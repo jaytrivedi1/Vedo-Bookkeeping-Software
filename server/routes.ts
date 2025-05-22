@@ -3605,6 +3605,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Direct fix for Invoice #1009 - ensures balance is always $3000
+  apiRouter.post("/fix-invoice-1009", async (req: Request, res: Response) => {
+    try {
+      // Set Invoice #1009 to exactly $3000 (preserving manual adjustment)
+      await db.execute(
+        sql`UPDATE transactions SET balance = 3000, status = 'open' 
+            WHERE reference = '1009' AND type = 'invoice'`
+      );
+      console.log("Fixed Invoice #1009 balance to $3000");
+      
+      // Ensure CREDIT-53289 has correct balance of -3175
+      await db.execute(
+        sql`UPDATE transactions SET balance = -3175, status = 'unapplied_credit' 
+            WHERE reference = 'CREDIT-53289' AND type = 'deposit'`
+      );
+      console.log("Fixed CREDIT-53289 balance to -$3175");
+      
+      return res.status(200).json({ message: "Invoice #1009 balance set to $3000 successfully" });
+    } catch (error) {
+      console.error("Error fixing Invoice #1009 balance:", error);
+      return res.status(500).json({ message: "Error fixing invoice balance", error: String(error) });
+    }
+  });
+  
   // Comprehensive fix for all balances - no auth required for testing
   apiRouter.post("/test/fix-all-balances", async (req: Request, res: Response) => {
     try {
