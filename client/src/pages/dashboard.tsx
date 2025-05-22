@@ -122,10 +122,12 @@ export default function Dashboard() {
               
               <DropdownMenuSeparator />
               
-              <DropdownMenuItem>
-                <Receipt className="mr-2 h-4 w-4" />
-                <span>Bill</span>
-              </DropdownMenuItem>
+              <Link href="/bill-create">
+                <DropdownMenuItem>
+                  <Receipt className="mr-2 h-4 w-4" />
+                  <span>Bill</span>
+                </DropdownMenuItem>
+              </Link>
               <DropdownMenuItem>
                 <DollarSign className="mr-2 h-4 w-4" />
                 <span>Pay Bill</span>
