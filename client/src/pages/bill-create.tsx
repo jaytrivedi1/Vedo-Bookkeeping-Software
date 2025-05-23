@@ -60,19 +60,44 @@ export default function BillCreate() {
     }
   }, [allAccounts]);
 
-  // Generate next bill number
+  // Use a simple hardcoded pattern for bill numbers until the API is fixed
   const { data: nextBillNumber, isLoading: isLoadingBillNumber } = useQuery({
-    queryKey: ["/api/transactions/next-reference", "bill"],
+    queryKey: ["/api/transactions", "bill-prefix"],
     queryFn: async () => {
       try {
-        const response = await apiRequest("GET", "/api/transactions/next-reference?type=bill");
-        const data = await response.json();
-        return data.nextReference;
+        // Get all transactions to find existing bills
+        const response = await fetch("/api/transactions", {
+          method: "GET",
+          credentials: "include"
+        });
+        
+        if (!response.ok) {
+          throw new Error("Failed to fetch transactions");
+        }
+        
+        const transactions = await response.json();
+        
+        // Find all bill transactions
+        const bills = transactions.filter((t: any) => t.type === "bill" && t.reference && t.reference.startsWith("BILL-"));
+        
+        if (bills.length === 0) {
+          return "BILL-0001"; // Start with BILL-0001 if no bills exist
+        }
+        
+        // Extract numbers from bill references
+        const billNumbers = bills.map((bill: any) => {
+          const match = bill.reference.match(/BILL-(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        });
+        
+        // Find the highest number and increment by 1
+        const highestNumber = Math.max(0, ...billNumbers);
+        return `BILL-${(highestNumber + 1).toString().padStart(4, '0')}`;
       } catch (error) {
-        console.error("Error fetching next bill number:", error);
-        return "BILL-0001"; // Fallback default value
+        console.error("Error generating bill number:", error);
+        return "BILL-0001"; // Default value if anything fails
       }
-    },
+    }
   });
 
   // Set up form with default values

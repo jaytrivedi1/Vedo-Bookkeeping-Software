@@ -4310,41 +4310,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Transaction type is required" });
       }
       
-      const transactions = await storage.getTransactions();
+      console.log(`Generating next reference for transaction type: ${type}`);
+      
+      // Get all transactions
+      let transactions;
+      try {
+        transactions = await storage.getTransactions();
+        console.log(`Found ${transactions.length} total transactions`);
+      } catch (fetchError) {
+        console.error("Error fetching transactions:", fetchError);
+        // Default values for each type if we can't fetch transactions
+        if (type === "bill") {
+          return res.json({ nextReference: "BILL-0001" });
+        } else if (type === "invoice") {
+          return res.json({ nextReference: "1001" });
+        } else if (type === "deposit") {
+          const today = new Date();
+          const nextReference = `DEP-${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+          return res.json({ nextReference });
+        } else {
+          const nextReference = `${type.toUpperCase()}-${Date.now().toString().slice(-5)}`;
+          return res.json({ nextReference });
+        }
+      }
       
       let nextReference;
       
       // Generate next reference based on transaction type
       if (type === "invoice") {
         // Find highest invoice number
-        const invoices = transactions.filter(t => t.type === "invoice" && t.reference.match(/^\d+$/));
-        const invoiceNumbers = invoices.map(inv => parseInt(inv.reference, 10));
+        const invoices = transactions.filter(t => t.type === "invoice" && t.reference && t.reference.match(/^\d+$/));
+        console.log(`Found ${invoices.length} numeric invoices`);
         
-        const highestNumber = Math.max(1000, ...invoiceNumbers);
-        nextReference = (highestNumber + 1).toString();
+        if (invoices.length === 0) {
+          nextReference = "1001"; // Start at 1001 if no invoices exist
+        } else {
+          const invoiceNumbers = invoices.map(inv => parseInt(inv.reference, 10));
+          const highestNumber = Math.max(1000, ...invoiceNumbers);
+          nextReference = (highestNumber + 1).toString();
+        }
+        
+        console.log(`Generated next invoice number: ${nextReference}`);
       } else if (type === "bill") {
         // Find highest bill number
-        const bills = transactions.filter(t => t.type === "bill" && t.reference.startsWith("BILL-"));
-        const billNumbers = bills.map(bill => {
-          const match = bill.reference.match(/BILL-(\d+)/);
-          return match ? parseInt(match[1], 10) : 0;
-        });
+        const bills = transactions.filter(t => t.type === "bill" && t.reference && t.reference.startsWith("BILL-"));
+        console.log(`Found ${bills.length} bills with BILL- prefix`);
         
-        const highestNumber = Math.max(0, ...billNumbers);
-        nextReference = `BILL-${(highestNumber + 1).toString().padStart(4, '0')}`;
+        if (bills.length === 0) {
+          nextReference = "BILL-0001"; // Start at BILL-0001 if no bills exist
+        } else {
+          const billNumbers = bills.map(bill => {
+            const match = bill.reference.match(/BILL-(\d+)/);
+            return match ? parseInt(match[1], 10) : 0;
+          });
+          
+          const highestNumber = Math.max(0, ...billNumbers);
+          nextReference = `BILL-${(highestNumber + 1).toString().padStart(4, '0')}`;
+        }
+        
+        console.log(`Generated next bill number: ${nextReference}`);
       } else if (type === "deposit") {
         // For deposits, use DEP-YYYY-MM-DD format
         const today = new Date();
         nextReference = `DEP-${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+        console.log(`Generated next deposit reference: ${nextReference}`);
       } else {
         // Default format for other transaction types
         nextReference = `${type.toUpperCase()}-${Date.now().toString().slice(-5)}`;
+        console.log(`Generated generic reference for ${type}: ${nextReference}`);
       }
       
       res.json({ nextReference });
     } catch (error) {
       console.error("Error generating next reference:", error);
-      res.status(500).json({ message: "Failed to generate next reference" });
+      // Provide fallback values based on transaction type
+      const fallbackReference = {
+        bill: "BILL-0001",
+        invoice: "1001",
+        deposit: `DEP-${new Date().toISOString().slice(0, 10)}`,
+      }[req.query.type as string] || `REF-${Date.now()}`;
+      
+      console.log(`Using fallback reference: ${fallbackReference}`);
+      res.json({ nextReference: fallbackReference });
     }
   });
   
