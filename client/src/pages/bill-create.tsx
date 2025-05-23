@@ -483,18 +483,26 @@ export default function BillCreate() {
                               </td>
                               <td className="p-2">
                                 <Select
-                                  value={form.getValues(`lineItems.${index}.salesTaxId`)?.toString() || ""}
+                                  defaultValue="none"
+                                  value={form.getValues(`lineItems.${index}.salesTaxId`) ? 
+                                    form.getValues(`lineItems.${index}.salesTaxId`).toString() : 
+                                    "none"
+                                  }
                                   onValueChange={(value) => {
-                                    form.setValue(`lineItems.${index}.salesTaxId`, value ? parseInt(value) : null);
+                                    if (value === "none") {
+                                      form.setValue(`lineItems.${index}.salesTaxId`, null);
+                                    } else {
+                                      form.setValue(`lineItems.${index}.salesTaxId`, parseInt(value));
+                                    }
                                     updateTotals();
                                   }}
                                 >
                                   <SelectTrigger>
-                                    <SelectValue placeholder="None" />
+                                    <SelectValue placeholder="Select tax" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">None</SelectItem>
-                                    {salesTaxes && salesTaxes.map((tax: any) => (
+                                    <SelectItem value="none">None</SelectItem>
+                                    {Array.isArray(salesTaxes) && salesTaxes.map((tax: any) => (
                                       <SelectItem key={tax.id} value={tax.id.toString()}>
                                         {tax.name} ({tax.rate}%)
                                       </SelectItem>
