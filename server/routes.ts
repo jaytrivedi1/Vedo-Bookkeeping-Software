@@ -36,8 +36,7 @@ import {
   LineItem,
   RolePermission
 } from "@shared/schema";
-import { z } from "zod";
-import { ZodError } from "zod-validation-error";
+import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 
@@ -4198,6 +4197,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bills API endpoint
+  apiRouter.post("/bills", async (req: Request, res: Response) => {
+    try {
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date),
+        dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
+      };
+      
+      // Check if bill reference already exists
+      const transactions = await storage.getTransactions();
+      const existingBill = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'bill'
+      );
+      
+      if (existingBill) {
+        return res.status(400).json({ 
+          message: "Bill reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A bill with this reference number already exists" 
+          }] 
+        });
+      }
+      
+      // Validate bill data
+      const billData = billSchema.parse(body);
+      
+      // Calculate the total amount from line items
+      const totalAmount = billData.lineItems.reduce(
+        (sum, item) => sum + Number(item.amount), 0
+      );
+      
+      // Create the bill transaction
+      const transaction = {
+        reference: billData.reference,
+        type: 'bill' as const,
+        date: billData.date,
+        description: billData.description,
+        amount: totalAmount,
+        balance: totalAmount,
+        contactId: billData.contactId,
+        status: 'open' as const,
+      };
+      
+      // Prepare line items
+      const lineItemsData = billData.lineItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        amount: item.amount,
+        transactionId: 0 // Will be set by createTransaction
+      }));
+      
+      // Prepare ledger entries for double-entry accounting
+      // 1. Debit expense accounts for each line item
+      const ledgerEntriesData = billData.lineItems.map(item => ({
+        accountId: item.accountId || 28, // Default to a generic expense account if none specified
+        description: `Bill ${billData.reference} - ${item.description}`,
+        debit: item.amount,
+        credit: 0,
+        date: billData.date,
+        transactionId: 0 // Will be set by createTransaction
+      }));
+      
+      // 2. Credit Accounts Payable for the total amount
+      ledgerEntriesData.push({
+        accountId: 3, // Accounts Payable account
+        description: `Bill ${billData.reference}`,
+        debit: 0,
+        credit: totalAmount,
+        date: billData.date,
+        transactionId: 0 // Will be set by createTransaction
+      });
+      
+      // Create the transaction using the storage interface
+      const billTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+      
+      // Get the created line items and ledger entries
+      const createdLineItems = await storage.getLineItemsByTransaction(billTransaction.id);
+      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(billTransaction.id);
+      
+      const result = {
+        transaction: billTransaction,
+        lineItems: createdLineItems,
+        ledgerEntries: createdLedgerEntries,
+      };
+      
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating bill:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid bill data", 
+          errors: error.format() 
+        });
+      }
+      res.status(500).json({
+        message: "Failed to create bill",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  apiRouter.get("/transactions/next-reference", async (req: Request, res: Response) => {
+    try {
+      const type = req.query.type as string;
+      if (!type) {
+        return res.status(400).json({ message: "Transaction type is required" });
+      }
+      
+      const transactions = await storage.getTransactions();
+      
+      let nextReference;
+      
+      // Generate next reference based on transaction type
+      if (type === "invoice") {
+        // Find highest invoice number
+        const invoices = transactions.filter(t => t.type === "invoice" && t.reference.match(/^\d+$/));
+        const invoiceNumbers = invoices.map(inv => parseInt(inv.reference, 10));
+        
+        const highestNumber = Math.max(1000, ...invoiceNumbers);
+        nextReference = (highestNumber + 1).toString();
+      } else if (type === "bill") {
+        // Find highest bill number
+        const bills = transactions.filter(t => t.type === "bill" && t.reference.startsWith("BILL-"));
+        const billNumbers = bills.map(bill => {
+          const match = bill.reference.match(/BILL-(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        });
+        
+        const highestNumber = Math.max(0, ...billNumbers);
+        nextReference = `BILL-${(highestNumber + 1).toString().padStart(4, '0')}`;
+      } else if (type === "deposit") {
+        // For deposits, use DEP-YYYY-MM-DD format
+        const today = new Date();
+        nextReference = `DEP-${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+      } else {
+        // Default format for other transaction types
+        nextReference = `${type.toUpperCase()}-${Date.now().toString().slice(-5)}`;
+      }
+      
+      res.json({ nextReference });
+    } catch (error) {
+      console.error("Error generating next reference:", error);
+      res.status(500).json({ message: "Failed to generate next reference" });
+    }
+  });
+  
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
