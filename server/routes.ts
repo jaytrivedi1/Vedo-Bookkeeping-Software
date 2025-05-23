@@ -1849,42 +1849,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Simplified payment deletion that preserves manual adjustments and balance integrity
+      // Improved payment deletion that correctly resets invoice balances and removes related credits
       if (transaction.type === 'payment') {
         try {
-          // First, identify which invoices and deposits are affected by this payment
+          // First, identify which invoices and credits are affected by this payment
           console.log(`Analyzing payment #${id} for deletion`);
           
-          // Delete ledger entries first (required for foreign key constraints)
-          const deleteLedgerResult = await db.execute(
-            sql`DELETE FROM ledger_entries WHERE transaction_id = ${id}`
-          );
-          console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for payment #${id}`);
+          // Step 1: Find any credit transactions generated from this payment
+          const paymentDescription = `Unapplied credit from payment #${id}`;
+          const relatedCredits = await db.select().from(transactions)
+            .where(and(
+              eq(transactions.type, 'deposit'),
+              like(transactions.description, `%${paymentDescription}%`)
+            ));
           
-          // Delete line items if any
-          const deleteLineItemsResult = await db.execute(
-            sql`DELETE FROM line_items WHERE transaction_id = ${id}`
-          );
-          console.log(`Deleted ${deleteLineItemsResult.rowCount} line items for payment #${id}`);
+          console.log(`Found ${relatedCredits.length} credit transactions created from payment #${id}`);
           
-          // Delete the transaction itself
-          const deleteResult = await db.execute(
-            sql`DELETE FROM transactions WHERE id = ${id}`
-          );
-          console.log(`Deleted payment transaction #${id}, rows affected: ${deleteResult.rowCount}`);
+          // Step 2: Find invoices affected by this payment through ledger entries
+          const ledgerEntries = await db.select().from(ledgerEntries)
+            .where(eq(ledgerEntries.transactionId, id));
           
-          // Make sure invoice #1009 is set to $3000 balance (preserving your manual adjustment)
-          console.log(`Ensuring invoice #1009 maintains $3000 balance`);
-          await db.execute(
-            sql`UPDATE transactions SET balance = 3000 WHERE reference = '1009' AND type = 'invoice'`
-          );
+          // Extract invoice references from ledger entry descriptions
+          const invoiceReferences = new Set<string>();
+          for (const entry of ledgerEntries) {
+            const match = entry.description?.match(/invoice #([a-zA-Z0-9-]+)/i);
+            if (match && match[1]) {
+              invoiceReferences.add(match[1]);
+            }
+          }
           
-          // Restore CREDIT-53289 deposit to full value
-          console.log(`Ensuring CREDIT-53289 has correct balance of -3175`);
-          await db.execute(
-            sql`UPDATE transactions SET balance = -3175, status = 'unapplied_credit' 
-              WHERE reference = 'CREDIT-53289' AND type = 'deposit'`
-          );
+          console.log(`Found ${invoiceReferences.size} invoices affected by payment #${id}`);
+          
+          // Begin transaction for atomic operations
+          await db.transaction(async (tx) => {
+            // Step 3: Delete any credit transactions created from this payment
+            for (const credit of relatedCredits) {
+              // Delete ledger entries for the credit
+              const deleteCreditLedgerResult = await tx.execute(
+                sql`DELETE FROM ledger_entries WHERE transaction_id = ${credit.id}`
+              );
+              console.log(`Deleted ${deleteCreditLedgerResult.rowCount} ledger entries for credit #${credit.id}`);
+              
+              // Delete the credit transaction
+              const deleteCreditResult = await tx.execute(
+                sql`DELETE FROM transactions WHERE id = ${credit.id}`
+              );
+              console.log(`Deleted credit transaction #${credit.id}, rows affected: ${deleteCreditResult.rowCount}`);
+            }
+            
+            // Step 4: Restore invoices to their original status
+            for (const reference of invoiceReferences) {
+              // Find the invoice
+              const [invoice] = await tx.select().from(transactions)
+                .where(and(
+                  eq(transactions.type, 'invoice'),
+                  eq(transactions.reference, reference)
+                ));
+              
+              if (invoice) {
+                // Find the amount paid through this payment
+                let amountPaid = 0;
+                for (const entry of ledgerEntries) {
+                  if (entry.description?.includes(`invoice #${reference}`)) {
+                    amountPaid += Number(entry.credit) || 0;
+                  }
+                }
+                
+                // Calculate new balance (add back the amount that was paid)
+                const newBalance = Number(invoice.balance) + amountPaid;
+                const newStatus = newBalance > 0 ? 'open' : 'completed';
+                
+                console.log(`Updating invoice #${reference} to balance ${newBalance} and status ${newStatus}`);
+                await tx.execute(
+                  sql`UPDATE transactions 
+                      SET balance = ${newBalance}, status = ${newStatus}
+                      WHERE id = ${invoice.id}`
+                );
+              }
+            }
+            
+            // Step 5: Delete payment ledger entries
+            const deleteLedgerResult = await tx.execute(
+              sql`DELETE FROM ledger_entries WHERE transaction_id = ${id}`
+            );
+            console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for payment #${id}`);
+            
+            // Step 6: Delete payment line items if any
+            const deleteLineItemsResult = await tx.execute(
+              sql`DELETE FROM line_items WHERE transaction_id = ${id}`
+            );
+            console.log(`Deleted ${deleteLineItemsResult.rowCount} line items for payment #${id}`);
+            
+            // Step 7: Delete the payment transaction itself
+            const deleteResult = await tx.execute(
+              sql`DELETE FROM transactions WHERE id = ${id}`
+            );
+            console.log(`Deleted payment transaction #${id}, rows affected: ${deleteResult.rowCount}`);
+          });
           
           // If we got here, deletion was successful
           return res.status(200).json({ message: "Transaction deleted successfully" });
