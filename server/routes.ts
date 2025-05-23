@@ -2,7 +2,7 @@ import express, { type Express, Request, Response, NextFunction } from "express"
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, ne, and, sql } from "drizzle-orm";
+import { eq, ne, and, sql, like } from "drizzle-orm";
 import { fixAllBalances } from "./fix-all-balances";
 import { fixCreditIssues } from "./credit-fix";
 import { fixCreditTracking } from "./fix-credit-tracking";
