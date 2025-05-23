@@ -7,6 +7,7 @@ import { fixAllBalances } from "./fix-all-balances";
 import { fixCreditIssues } from "./credit-fix";
 import { fixCreditTracking } from "./fix-credit-tracking";
 import { fixCreditApplicationLogic } from "./fix-credit-logic";
+import { deletePaymentAndRelatedTransactions } from "./payment-delete-handler";
 import { format } from "date-fns";
 import { 
   insertAccountSchema, 
@@ -1798,6 +1799,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dedicated payment deletion endpoint
+  apiRouter.delete("/payments/:id/delete", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Use the specialized handler for payment deletion
+      const result = await deletePaymentAndRelatedTransactions(id);
+      res.status(200).json(result);
+    } catch (error) {
+      console.error("Payment deletion error:", error);
+      return res.status(400).json({ 
+        message: error instanceof Error ? error.message : "Failed to delete payment",
+        error: String(error)
+      });
+    }
+  });
+
   // Transaction delete endpoint
   apiRouter.delete("/transactions/:id", async (req: Request, res: Response) => {
     try {
@@ -1809,6 +1826,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`Deleting ${transaction.type} transaction: ${transaction.reference}`);
+      
+      // For payment transactions, redirect to the dedicated payment deletion endpoint
+      if (transaction.type === 'payment') {
+        return res.status(400).json({
+          message: "Payments must be deleted using the dedicated endpoint",
+          redirectTo: `/api/payments/${id}/delete`,
+          info: "Please use the payments deletion endpoint for proper handling of related transactions"
+        });
+      }
       
       // Special case handling for invoice #1009 (ID 189) - direct SQL approach
       if (id === 189 && transaction.reference === '1009') {
