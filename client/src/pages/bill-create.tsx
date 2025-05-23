@@ -64,7 +64,13 @@ export default function BillCreate() {
   const { data: nextBillNumber, isLoading: isLoadingBillNumber } = useQuery({
     queryKey: ["/api/transactions/next-reference", "bill"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/transactions/next-reference?type=bill");
+      const res = await fetch(`/api/transactions/next-reference?type=bill`, {
+        method: "GET",
+        credentials: "include"
+      });
+      if (!res.ok) {
+        throw new Error("Failed to get next bill number");
+      }
       const data = await res.json();
       return data.nextReference;
     },
