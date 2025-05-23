@@ -34,10 +34,15 @@ export default function BillCreate() {
     select: (data: Contact[]) => data,
   });
 
-  // Fetch expense accounts
+  // Fetch all accounts
   const { data: allAccounts, isLoading: isLoadingAccounts } = useQuery({
     queryKey: ["/api/accounts"],
     select: (data: Account[]) => data,
+  });
+
+  // Fetch sales tax options
+  const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery({
+    queryKey: ["/api/sales-tax"],
   });
 
   useEffect(() => {
@@ -52,9 +57,9 @@ export default function BillCreate() {
 
   useEffect(() => {
     if (allAccounts) {
-      // Filter accounts to only include expense-type accounts
+      // Filter accounts to exclude Accounts Payable and Accounts Receivable
       const filteredAccounts = allAccounts.filter(
-        (account) => account.type === "expenses" || account.type === "cost_of_goods_sold"
+        (account) => account.type !== "accounts_payable" && account.type !== "accounts_receivable"
       );
       setExpenseAccounts(filteredAccounts);
     }
@@ -115,10 +120,13 @@ export default function BillCreate() {
           quantity: 1,
           unitPrice: 0,
           amount: 0,
+          accountId: undefined,
+          salesTaxId: null,
         },
       ],
       dueDate: new Date(new Date().setDate(new Date().getDate() + 30)), // 30 days from now
       paymentTerms: "30",
+      attachment: "",
     },
   });
 
@@ -249,7 +257,6 @@ export default function BillCreate() {
           <Tabs defaultValue="details" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="details">Bill Details</TabsTrigger>
-              <TabsTrigger value="payment">Payment Details</TabsTrigger>
             </TabsList>
 
             <Card>
@@ -306,6 +313,67 @@ export default function BillCreate() {
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <Label htmlFor="dueDate">Due Date</Label>
+                      <DatePicker
+                        date={form.getValues("dueDate")}
+                        setDate={(date) => form.setValue("dueDate", date)}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="paymentTerms">Payment Terms</Label>
+                      <Select
+                        value={form.getValues("paymentTerms")}
+                        onValueChange={(value) => {
+                          form.setValue("paymentTerms", value);
+                          
+                          // Set due date based on payment terms
+                          const billDate = form.getValues("date") || new Date();
+                          let dueDate = new Date(billDate);
+                          
+                          if (value === "15") {
+                            dueDate.setDate(dueDate.getDate() + 15);
+                          } else if (value === "30") {
+                            dueDate.setDate(dueDate.getDate() + 30);
+                          } else if (value === "60") {
+                            dueDate.setDate(dueDate.getDate() + 60);
+                          }
+                          
+                          form.setValue("dueDate", dueDate);
+                        }}
+                      >
+                        <SelectTrigger id="paymentTerms">
+                          <SelectValue placeholder="Select payment terms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Due on Receipt</SelectItem>
+                          <SelectItem value="15">Net 15</SelectItem>
+                          <SelectItem value="30">Net 30</SelectItem>
+                          <SelectItem value="60">Net 60</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="attachment">File Attachment</Label>
+                      <div className="flex items-center space-x-2">
+                        <Input
+                          id="attachment"
+                          type="file"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              // In a real implementation, this would upload the file
+                              console.log("File selected:", file.name);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div>
                     <Label htmlFor="description">Description</Label>
                     <Textarea
@@ -323,17 +391,22 @@ export default function BillCreate() {
                       <table className="w-full">
                         <thead>
                           <tr className="bg-muted/50">
+                            <th className="text-center p-2 w-12">#</th>
                             <th className="text-left p-2 pl-3">Description</th>
                             <th className="text-left p-2">Account</th>
                             <th className="text-right p-2">Quantity</th>
                             <th className="text-right p-2">Unit Price</th>
-                            <th className="text-right p-2 pr-3">Amount</th>
+                            <th className="text-right p-2">Amount</th>
+                            <th className="text-left p-2">Sales Tax</th>
                             <th className="w-10 p-2"></th>
                           </tr>
                         </thead>
                         <tbody>
                           {form.getValues("lineItems").map((_, index) => (
                             <tr key={index} className="border-t">
+                              <td className="p-2 text-center text-muted-foreground">
+                                {index + 1}
+                              </td>
                               <td className="p-2 pl-3">
                                 <Input
                                   {...form.register(`lineItems.${index}.description`)}
@@ -400,13 +473,34 @@ export default function BillCreate() {
                                   }
                                 />
                               </td>
-                              <td className="p-2 pr-3">
+                              <td className="p-2">
                                 <Input
                                   type="number"
                                   readOnly
                                   {...form.register(`lineItems.${index}.amount`)}
                                   className="bg-muted text-right"
                                 />
+                              </td>
+                              <td className="p-2">
+                                <Select
+                                  value={form.getValues(`lineItems.${index}.salesTaxId`)?.toString() || ""}
+                                  onValueChange={(value) => {
+                                    form.setValue(`lineItems.${index}.salesTaxId`, value ? parseInt(value) : null);
+                                    updateTotals();
+                                  }}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="None" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">None</SelectItem>
+                                    {salesTaxes && salesTaxes.map((tax: any) => (
+                                      <SelectItem key={tax.id} value={tax.id.toString()}>
+                                        {tax.name} ({tax.rate}%)
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </td>
                               <td className="p-2">
                                 <Button

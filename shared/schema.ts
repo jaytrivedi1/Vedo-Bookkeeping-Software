@@ -273,7 +273,8 @@ export const billSchema = z.object({
       quantity: z.number().min(0.01, "Quantity must be greater than 0"),
       unitPrice: z.number().min(0, "Price cannot be negative"),
       amount: z.number(),
-      accountId: z.number().optional() // expense account
+      accountId: z.number().optional(), // expense account
+      salesTaxId: z.number().nullable().optional() // sales tax ID reference
     })
   ).min(1, "At least one line item is required"),
   // Additional fields for bill functionality
@@ -282,6 +283,7 @@ export const billSchema = z.object({
   totalAmount: z.number().optional(),
   dueDate: z.date().optional(),
   paymentTerms: z.string().optional(),
+  attachment: z.string().optional(), // File attachment name or reference
 });
 
 export type Invoice = z.infer<typeof invoiceSchema>;
