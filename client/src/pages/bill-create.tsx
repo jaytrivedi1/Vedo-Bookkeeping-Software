@@ -317,7 +317,7 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="dueDate">Due Date</Label>
                       <DatePicker
-                        date={form.getValues("dueDate")}
+                        date={form.getValues("dueDate") || new Date()}
                         setDate={(date) => form.setValue("dueDate", date)}
                       />
                     </div>
