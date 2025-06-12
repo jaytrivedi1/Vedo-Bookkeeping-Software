@@ -1891,7 +1891,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // For non-payment transactions, continue with regular deletion process
-     }
       
       // PROTECTION: Perform comprehensive check for deposit usage
       if (transaction.type === 'deposit') {
