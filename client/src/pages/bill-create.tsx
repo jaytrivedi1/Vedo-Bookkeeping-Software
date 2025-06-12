@@ -51,8 +51,6 @@ export default function BillCreate() {
       const vendorContacts = allContacts.filter(
         (contact) => contact.type === "vendor" || contact.type === "both"
       );
-      console.log("All contacts:", allContacts);
-      console.log("Filtered vendor contacts:", vendorContacts);
       setVendors(vendorContacts);
     }
   }, [allContacts]);
@@ -112,7 +110,7 @@ export default function BillCreate() {
     resolver: zodResolver(billSchema),
     defaultValues: {
       date: new Date(),
-      contactId: undefined, // Changed from 0 to undefined
+      contactId: 0, // Using 0 as placeholder since contactId is required
       reference: "",
       description: "",
       status: "open",
@@ -268,8 +266,14 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="vendor">Vendor</Label>
                       <Select
-                        value={form.getValues("contactId") ? form.getValues("contactId")?.toString() : ""}
-                        onValueChange={(value) => form.setValue("contactId", value ? parseInt(value) : undefined)}
+                        value={form.watch("contactId") > 0 ? form.watch("contactId").toString() : ""}
+                        onValueChange={(value) => {
+                          const contactId = parseInt(value, 10);
+                          if (!isNaN(contactId)) {
+                            form.setValue("contactId", contactId);
+                            form.trigger("contactId");
+                          }
+                        }}
                       >
                         <SelectTrigger 
                           id="vendor" 
