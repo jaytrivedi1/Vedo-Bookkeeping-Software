@@ -70,10 +70,12 @@ export default function TransactionTable({ transactions, loading = false, onDele
     
     setIsDeleteLoading(true);
     try {
-      await apiRequest(
-        `/api/transactions/${transactionToDelete.id}`, 
-        'DELETE'
-      );
+      // Use the dedicated payment deletion endpoint for payments
+      const endpoint = transactionToDelete.type === 'payment' 
+        ? `/api/payments/${transactionToDelete.id}/delete`
+        : `/api/transactions/${transactionToDelete.id}`;
+      
+      await apiRequest(endpoint, 'DELETE');
       
       // Clear the transaction to delete
       setTransactionToDelete(null);

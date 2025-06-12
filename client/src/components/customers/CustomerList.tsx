@@ -217,7 +217,11 @@ export default function CustomerList({ className }: CustomerListProps) {
   
   const deleteTransactionMutation = useMutation({
     mutationFn: async (transactionId: number) => {
-      return apiRequest(`/api/transactions/${transactionId}`, 'DELETE');
+      // Use the dedicated payment deletion endpoint for payments
+      const endpoint = selectedTransactionToDelete?.type === 'payment' 
+        ? `/api/payments/${transactionId}/delete`
+        : `/api/transactions/${transactionId}`;
+      return apiRequest(endpoint, 'DELETE');
     },
     onSuccess: () => {
       toast({
