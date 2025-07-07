@@ -40,6 +40,7 @@ import {
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
+import { ShopifySync } from "./shopify/sync";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure authentication
@@ -4390,6 +4391,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Shopify Integration API endpoints
+  apiRouter.get("/shopify/status", async (req: Request, res: Response) => {
+    try {
+      const shopifySync = new ShopifySync(storage);
+      const status = await shopifySync.getSyncStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting Shopify status:", error);
+      res.status(500).json({ 
+        error: "Failed to get Shopify status",
+        details: error.message 
+      });
+    }
+  });
+
+  apiRouter.post("/shopify/test-connection", async (req: Request, res: Response) => {
+    try {
+      const shopifySync = new ShopifySync(storage);
+      const connected = await shopifySync.testConnection();
+      res.json({ connected, message: connected ? "Connected successfully" : "Connection failed" });
+    } catch (error) {
+      console.error("Error testing Shopify connection:", error);
+      res.status(500).json({ 
+        connected: false,
+        error: "Failed to test connection",
+        details: error.message 
+      });
+    }
+  });
+
+  apiRouter.post("/shopify/sync", async (req: Request, res: Response) => {
+    try {
+      const shopifySync = new ShopifySync(storage);
+      const options = req.body;
+      
+      // Validate options
+      const syncOptions = {
+        dateFrom: options.dateFrom || undefined,
+        dateTo: options.dateTo || undefined,
+        syncOrders: options.syncOrders !== false,
+        syncTransactions: options.syncTransactions !== false,
+        syncProducts: options.syncProducts !== false,
+        syncTaxData: options.syncTaxData !== false
+      };
+
+      const result = await shopifySync.syncAll(syncOptions);
+      res.json(result);
+    } catch (error) {
+      console.error("Error syncing Shopify data:", error);
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to sync Shopify data",
+        details: error.message,
+        ordersProcessed: 0,
+        transactionsProcessed: 0,
+        customersProcessed: 0,
+        errors: [error.message]
+      });
+    }
+  });
+
+  apiRouter.post("/shopify/sync-orders", async (req: Request, res: Response) => {
+    try {
+      const shopifySync = new ShopifySync(storage);
+      const { dateFrom, dateTo } = req.body;
+      
+      const result = await shopifySync.syncOrders({
+        created_at_min: dateFrom,
+        created_at_max: dateTo
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error syncing Shopify orders:", error);
+      res.status(500).json({ 
+        ordersProcessed: 0,
+        customersProcessed: 0,
+        errors: [error.message]
+      });
+    }
+  });
+
+  apiRouter.post("/shopify/sync-transactions", async (req: Request, res: Response) => {
+    try {
+      const shopifySync = new ShopifySync(storage);
+      const { dateFrom, dateTo } = req.body;
+      
+      const result = await shopifySync.syncTransactions({
+        created_at_min: dateFrom,
+        created_at_max: dateTo
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error syncing Shopify transactions:", error);
+      res.status(500).json({ 
+        transactionsProcessed: 0,
+        errors: [error.message]
+      });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

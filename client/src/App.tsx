@@ -21,6 +21,7 @@ import InvoiceEdit from "@/pages/invoice-edit";
 import InvoiceView from "@/pages/invoice-view";
 import PaymentView from "@/pages/payment-view";
 import PaymentReceive from "@/pages/payment-receive";
+import ShopifyIntegration from "@/pages/shopify-integration";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/sales-taxes" component={SalesTaxes} />
       <Route path="/products" component={Products} />
       <Route path="/reports" component={Reports} />
+      <Route path="/shopify-integration" component={ShopifyIntegration} />
       <Route component={NotFound} />
     </Switch>
   );
