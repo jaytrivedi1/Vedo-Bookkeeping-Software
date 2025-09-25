@@ -10,6 +10,12 @@ import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction, LineIt
 interface TransactionWithCredit extends Transaction {
   appliedAmount?: number;
 }
+
+// Extend the Invoice type to include credit application properties
+interface ExtendedInvoice extends Invoice {
+  appliedCreditAmount?: number;
+  appliedCredits?: {id: number, amount: number}[];
+}
 import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -213,7 +219,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   }, [salesTaxes]);
 
   const updateInvoice = useMutation({
-    mutationFn: async (data: Invoice) => {
+    mutationFn: async (data: ExtendedInvoice) => {
       console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
       return await apiRequest(`/api/invoices/${invoice.id}`, 'PATCH', data);
     },
@@ -633,7 +639,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     }
     
     // Add the calculated totals and payment terms to the invoice data before submitting
-    const enrichedData = {
+    const enrichedData: ExtendedInvoice = {
       ...data,
       // Make sure we're passing Date objects and not strings
       date: data.date instanceof Date ? data.date : new Date(data.date),
