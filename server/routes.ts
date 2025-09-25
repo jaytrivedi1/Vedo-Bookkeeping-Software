@@ -2317,9 +2317,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const depositDate = new Date(deposit.date);
               const daysDifference = Math.abs((invoiceDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24));
               
-              // If the deposit is recent relative to the invoice (within 90 days) and from same contact,
-              // it's likely this was applied to the deleted invoice
-              if (daysDifference <= 90) {
+              // Enhanced logic: If the deposit shows recent application activity OR
+              // if the application amount makes sense for the invoice amount, restore the credit
+              const shouldRestore = daysDifference <= 90 || // Original timing logic
+                                   amountApplied >= (transaction.amount * 0.1); // If applied amount is at least 10% of invoice
+              
+              if (shouldRestore) {
                 console.log(`ENHANCED DETECTION: Deposit #${deposit.id} was likely applied to deleted invoice #${transaction.reference} (${daysDifference} days apart)`);
                 
                 // ASSUMPTION: If we're deleting an invoice and there's a partially applied deposit from the same contact
