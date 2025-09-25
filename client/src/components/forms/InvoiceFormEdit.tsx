@@ -1349,7 +1349,12 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
             <div>
               <div className="mb-6 text-right">
                 <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${totalAmount.toFixed(2)}</div>
+                <div className="text-2xl font-medium">${balanceDue.toFixed(2)}</div>
+                {appliedCreditAmount > 0 && (
+                  <div className="text-sm text-green-600 mt-1">
+                    Credits applied: ${appliedCreditAmount.toFixed(2)}
+                  </div>
+                )}
               </div>
               
               <div className="space-y-4">

@@ -48,6 +48,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface InvoiceFormProps {
+  invoice?: BaseInvoice;
+  lineItems?: any[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -69,25 +71,31 @@ interface InvoiceFormType extends UseFormReturn<Invoice> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
-export default function InvoiceForm({ onSuccess, onCancel }: InvoiceFormProps) {
+export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('30');
-  const [dueDate, setDueDate] = useState<Date>(addDays(new Date(), 30));
+  
+  // Initialize based on mode (create vs edit)
+  const isEditing = Boolean(invoice);
+  const initialDate = isEditing ? new Date(invoice!.date) : new Date();
+  const initialDueDate = isEditing && invoice!.dueDate ? new Date(invoice!.dueDate) : addDays(initialDate, 30);
+  
+  const [dueDate, setDueDate] = useState<Date>(initialDueDate);
   const [subTotal, setSubTotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [balanceDue, setBalanceDue] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
-  const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
+  const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice?.contactId);
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
   const [totalUnappliedCredits, setTotalUnappliedCredits] = useState(0);
   const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
   const { toast } = useToast();
 
-  // Extract next invoice number
+  // Extract next invoice number or use existing
   const today = new Date();
-  const defaultInvoiceNumber = `1001`;
+  const defaultInvoiceNumber = isEditing ? invoice!.reference : `1001`;
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
