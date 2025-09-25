@@ -2290,6 +2290,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // ENHANCED FALLBACK: Look for deposits from same contact that have been partially applied
+        // This catches cases where the description wasn't properly updated during invoice creation
+        console.log(`ENHANCED FALLBACK: Looking for partially applied deposits from contact #${transaction.contactId}`);
+        const contactDeposits = allTransactions.filter(t => 
+          t.type === 'deposit' && 
+          t.contactId === transaction.contactId && 
+          t.balance !== null &&
+          t.balance !== -t.amount // Balance is different from original amount, indicating it was applied
+        );
+        
+        if (contactDeposits.length > 0) {
+          console.log(`Found ${contactDeposits.length} deposits from contact #${transaction.contactId} that may have been applied to invoice #${transaction.reference}`);
+          
+          for (const deposit of contactDeposits) {
+            const originalAmount = deposit.amount;
+            const currentBalance = deposit.balance || 0;
+            const amountApplied = originalAmount - Math.abs(currentBalance);
+            
+            console.log(`Checking deposit #${deposit.id} (${deposit.reference}): original=${originalAmount}, current balance=${currentBalance}, applied=${amountApplied}`);
+            
+            // For credits that have been partially or fully applied, we need to determine if this invoice was the target
+            if (amountApplied > 0) {
+              // Check if the timing makes sense (was this deposit applied around when the invoice was created?)
+              const invoiceDate = new Date(transaction.date);
+              const depositDate = new Date(deposit.date);
+              const daysDifference = Math.abs((invoiceDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24));
+              
+              // If the deposit is recent relative to the invoice (within 90 days) and from same contact,
+              // it's likely this was applied to the deleted invoice
+              if (daysDifference <= 90) {
+                console.log(`ENHANCED DETECTION: Deposit #${deposit.id} was likely applied to deleted invoice #${transaction.reference} (${daysDifference} days apart)`);
+                
+                // ASSUMPTION: If we're deleting an invoice and there's a partially applied deposit from the same contact
+                // around the same time period, the safest approach is to restore the full credit amount
+                // This prevents credits from being "lost" in the system
+                await storage.updateTransaction(deposit.id, {
+                  status: 'unapplied_credit',
+                  balance: -originalAmount, // Restore full credit amount
+                  description: deposit.description + ` [Credit restored after invoice #${transaction.reference} deletion on ${format(new Date(), 'yyyy-MM-dd')}]`
+                });
+                
+                console.log(`ENHANCED FALLBACK: Restored deposit #${deposit.id} to full credit amount -${originalAmount}`);
+              }
+            }
+          }
+        }
+        
         if (autoPayment) {
           console.log(`Found auto-payment #${autoPayment.id} for credit application on invoice #${transaction.reference}`);
           
