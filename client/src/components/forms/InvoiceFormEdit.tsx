@@ -5,6 +5,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { Invoice, invoiceSchema, Contact, SalesTax, Product, Transaction, LineItem } from "@shared/schema";
+
+// Extend the Transaction type to include appliedAmount for credits
+interface TransactionWithCredit extends Transaction {
+  appliedAmount?: number;
+}
 import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, HelpCircle, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -73,7 +78,12 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   const [subTotal, setSubTotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [balanceDue, setBalanceDue] = useState(0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
+  const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice.contactId ?? undefined);
+  const [unappliedCredits, setUnappliedCredits] = useState<TransactionWithCredit[]>([]);
+  const [totalUnappliedCredits, setTotalUnappliedCredits] = useState(0);
+  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
   const { toast } = useToast();
 
   // Use the existing invoice number
@@ -91,6 +101,38 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
   });
+  
+  // Fetch customer's unapplied credits when a contact is selected
+  const { data: transactions } = useQuery<TransactionWithCredit[]>({
+    queryKey: ['/api/transactions'],
+    enabled: !!watchContactId,
+  });
+  
+  // Filter for unapplied credits for the selected customer
+  useEffect(() => {
+    if (watchContactId && transactions) {
+      const customerCredits = transactions.filter(transaction => 
+        transaction.type === 'deposit' && 
+        transaction.status === 'unapplied_credit' && 
+        transaction.contactId === Number(watchContactId) &&
+        transaction.balance !== null && 
+        transaction.balance < 0 // Balance should be negative for credits
+      );
+      
+      setUnappliedCredits(customerCredits);
+      
+      // Calculate total unapplied credits amount (absolute value of balance)
+      const totalCredits = customerCredits.reduce((sum, credit) => {
+        const availableCredit = credit.balance !== null ? Math.abs(credit.balance) : 0;
+        return sum + availableCredit;
+      }, 0);
+      
+      setTotalUnappliedCredits(totalCredits);
+    } else {
+      setUnappliedCredits([]);
+      setTotalUnappliedCredits(0);
+    }
+  }, [watchContactId, transactions]);
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -459,6 +501,7 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       subtotal, 
       totalTaxAmount, 
       total,
+      appliedCreditAmount,
       lineItems,
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
@@ -469,6 +512,35 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
     setTaxAmount(totalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);
+    
+    // Calculate balance due (total - applied credits)
+    // First, get the accurate total of all applied credits directly from the credit array
+    const accurateAppliedTotal = unappliedCredits.reduce((sum, c) => 
+      sum + (c.appliedAmount || 0), 0
+    );
+    
+    console.log("Accurate applied total from credits array:", accurateAppliedTotal);
+    
+    // Update the appliedCreditAmount state with the accurate value
+    if (Math.abs(accurateAppliedTotal - appliedCreditAmount) > 0.01) {
+      console.log("Correcting applied credit amount:", { 
+        old: appliedCreditAmount, 
+        new: accurateAppliedTotal 
+      });
+      setAppliedCreditAmount(accurateAppliedTotal);
+    }
+    
+    // Now calculate the balance with the accurate credit amount
+    const newBalanceDue = total - accurateAppliedTotal;
+    
+    console.log("Balance calculation:", {
+      total,
+      appliedCreditAmount,
+      accurateAppliedTotal,
+      newBalanceDue
+    });
+    
+    setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
   };
 
   const updateLineItemAmount = (index: number) => {
@@ -505,13 +577,25 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       setSelectedContact(contact);
     }
   };
+  
+  // Handle credit application 
+  const handleApplyCreditAmount = (amount: number) => {
+    // Make sure we don't apply more than the available credits
+    const validAmount = Math.min(amount, totalUnappliedCredits);
+    // Don't allow negative values
+    const safeAmount = Math.max(0, validAmount);
+    
+    console.log("Setting applied credit amount:", safeAmount);
+    setAppliedCreditAmount(safeAmount);
+    calculateTotals();
+  };
 
   // Update totals whenever line items change
   useEffect(() => {
     calculateTotals();
   }, [fields]);
 
-  // Update due date when invoice date changes
+  // Update due date when invoice date changes and watch for contactId changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === 'date' && value.date) {
@@ -520,7 +604,9 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       }
       
       if (name === 'contactId' && value.contactId) {
-        handleContactChange(Number(value.contactId));
+        const contactId = Number(value.contactId);
+        handleContactChange(contactId);
+        setWatchContactId(contactId);
       }
     });
     
@@ -582,6 +668,30 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
       
       return formattedItem;
     });
+    
+    // Include applied credit information if there are credits applied
+    if (appliedCreditAmount > 0) {
+      enrichedData.appliedCreditAmount = appliedCreditAmount;
+      
+      // Collect all credits that have amounts applied to them
+      const appliedCredits: {id: number, amount: number}[] = [];
+      
+      unappliedCredits.forEach(credit => {
+        if (credit.appliedAmount && credit.appliedAmount > 0) {
+          appliedCredits.push({
+            id: credit.id,
+            amount: credit.appliedAmount
+          });
+        }
+      });
+      
+      enrichedData.appliedCredits = appliedCredits;
+      
+      console.log("Including credit applications:", {
+        appliedCreditAmount,
+        appliedCredits
+      });
+    }
     
     console.log("Sending to server:", enrichedData);
     if (updateInvoice.isPending) return; // Prevent double submission
@@ -1135,9 +1245,85 @@ export default function InvoiceFormEdit({ invoice, lineItems, onSuccess, onCance
                       <span className="text-sm">Total</span>
                       <span>${totalAmount.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between font-medium">
+                    
+                    {/* Unapplied Credits section - only show if customer has credits */}
+                    {unappliedCredits.length > 0 && (
+                      <div className="mt-3 border rounded-md p-3 bg-gray-50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium">Available Credits</span>
+                          <span className="text-green-600 font-medium">${totalUnappliedCredits.toFixed(2)}</span>
+                        </div>
+                        
+                        <div className="text-sm mb-2">Apply credits to this invoice:</div>
+                        
+                        <div className="space-y-2">
+                          {unappliedCredits.map((credit) => {
+                            const availableAmount = Math.abs(credit.balance || 0);
+                            return (
+                              <div key={credit.id} className="flex items-center gap-3 border-b pb-2">
+                                <div className="flex-grow">
+                                  <div className="flex justify-between">
+                                    <span className="font-medium">Credit #{credit.id}</span>
+                                    <span className="text-green-600">${availableAmount.toFixed(2)}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {format(new Date(credit.date), 'MMM dd, yyyy')}
+                                    {credit.description && ` - ${credit.description.substring(0, 40)}${credit.description.length > 40 ? '...' : ''}`}
+                                  </div>
+                                </div>
+                                <div className="w-24">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={availableAmount}
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    className="bg-white border-gray-300 h-8"
+                                    value={credit.appliedAmount || ''}
+                                    onChange={(e) => {
+                                      console.log("Credit input raw value:", e.target.value);
+                                      // This will need to be modified to track individual credit applications
+                                      const amount = parseFloat(e.target.value);
+                                      if (!isNaN(amount)) {
+                                        // For now we'll just use the sum for the total applied credit
+                                        // but we need to track which credits were applied
+                                        const validAmount = Math.min(amount, availableAmount);
+                                        const safeAmount = Math.max(0, validAmount);
+                                        
+                                        // Store the individual credit application amount
+                                        credit.appliedAmount = safeAmount;
+                                        
+                                        // Just call calculateTotals which will compute the accurate sum from all credits
+                                        console.log("Credit input changed. Credit ID:", credit.id, "Amount:", safeAmount);
+                                        calculateTotals();
+                                      } else {
+                                        // If the input is cleared or invalid, set applied amount to 0
+                                        credit.appliedAmount = 0;
+                                        
+                                        // Just call calculateTotals which will compute the accurate sum from all credits
+                                        console.log("Credit input cleared. Credit ID:", credit.id);
+                                        calculateTotals();
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        
+                        {appliedCreditAmount > 0 && (
+                          <div className="flex justify-between items-center mt-3 text-green-600 font-medium">
+                            <span>Total Applied:</span>
+                            <span>${appliedCreditAmount.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between font-medium border-t pt-2 mt-3">
                       <span>Balance due</span>
-                      <span>${totalAmount.toFixed(2)}</span>
+                      <span>${balanceDue.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
