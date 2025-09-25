@@ -2310,32 +2310,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`Checking deposit #${deposit.id} (${deposit.reference}): original=${originalAmount}, current balance=${currentBalance}, applied=${amountApplied}`);
             
-            // For credits that have been partially or fully applied, we need to determine if this invoice was the target
+            // For credits that have been partially or fully applied, restore them when invoice is deleted
             if (amountApplied > 0) {
-              // Check if the timing makes sense (was this deposit applied around when the invoice was created?)
-              const invoiceDate = new Date(transaction.date);
-              const depositDate = new Date(deposit.date);
-              const daysDifference = Math.abs((invoiceDate.getTime() - depositDate.getTime()) / (1000 * 60 * 60 * 24));
+              console.log(`ENHANCED DETECTION: Deposit #${deposit.id} was applied to deleted invoice #${transaction.reference} - restoring credit`);
               
-              // Enhanced logic: If the deposit shows recent application activity OR
-              // if the application amount makes sense for the invoice amount, restore the credit
-              const shouldRestore = daysDifference <= 90 || // Original timing logic
-                                   amountApplied >= (transaction.amount * 0.1); // If applied amount is at least 10% of invoice
+              // If we're deleting an invoice and there's a partially applied deposit from the same contact,
+              // restore the full credit amount to prevent credits from being "lost" in the system
+              await storage.updateTransaction(deposit.id, {
+                status: 'unapplied_credit',
+                balance: -originalAmount, // Restore full credit amount
+                description: deposit.description + ` [Credit restored after invoice #${transaction.reference} deletion on ${format(new Date(), 'yyyy-MM-dd')}]`
+              });
               
-              if (shouldRestore) {
-                console.log(`ENHANCED DETECTION: Deposit #${deposit.id} was likely applied to deleted invoice #${transaction.reference} (${daysDifference} days apart)`);
-                
-                // ASSUMPTION: If we're deleting an invoice and there's a partially applied deposit from the same contact
-                // around the same time period, the safest approach is to restore the full credit amount
-                // This prevents credits from being "lost" in the system
-                await storage.updateTransaction(deposit.id, {
-                  status: 'unapplied_credit',
-                  balance: -originalAmount, // Restore full credit amount
-                  description: deposit.description + ` [Credit restored after invoice #${transaction.reference} deletion on ${format(new Date(), 'yyyy-MM-dd')}]`
-                });
-                
-                console.log(`ENHANCED FALLBACK: Restored deposit #${deposit.id} to full credit amount -${originalAmount}`);
-              }
+              console.log(`ENHANCED FALLBACK: Restored deposit #${deposit.id} to full credit amount -${originalAmount}`);
             }
           }
         }
