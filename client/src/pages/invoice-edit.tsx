@@ -1,7 +1,7 @@
 import React from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import InvoiceFormEdit from "../components/forms/InvoiceFormEdit";
+import InvoiceForm from "../components/forms/InvoiceForm";
 import { Loader2 } from "lucide-react";
 
 interface InvoiceResponse {
@@ -66,7 +66,7 @@ export default function EditInvoice() {
 
   return (
     <div className="h-screen flex flex-col">
-      <InvoiceFormEdit
+      <InvoiceForm
         invoice={data.transaction}
         lineItems={data.lineItems}
         onSuccess={() => setLocation("/invoices")}

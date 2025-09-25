@@ -150,7 +150,20 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   // Use our custom form type that includes taxComponentsInfo
   const form = useForm<Invoice>({
     resolver: zodResolver(invoiceSchema),
-    defaultValues: {
+    defaultValues: isEditing ? {
+      date: initialDate,
+      contactId: invoice!.contactId,
+      reference: invoice!.reference,
+      description: invoice!.description || '',
+      status: invoice!.status as "open" | "paid" | "overdue" | "partial",
+      lineItems: lineItems?.length ? lineItems.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        amount: item.amount,
+        salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined
+      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
+    } : {
       date: today,
       contactId: undefined,
       reference: defaultInvoiceNumber,
@@ -173,10 +186,15 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     name: "lineItems",
   });
 
-  const createInvoice = useMutation({
+  const saveInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
-      console.log("Submitting invoice with data:", JSON.stringify(data, null, 2));
-      return await apiRequest('/api/invoices', 'POST', data);
+      if (isEditing) {
+        console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
+        return await apiRequest(`/api/invoices/${invoice!.id}`, 'PATCH', data);
+      } else {
+        console.log("Creating invoice with data:", JSON.stringify(data, null, 2));
+        return await apiRequest('/api/invoices', 'POST', data);
+      }
     },
     onSuccess: () => {
       toast({
@@ -648,8 +666,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     }
     
     console.log("Sending to server:", enrichedData);
-    if (createInvoice.isPending) return; // Prevent double submission
-    createInvoice.mutate(enrichedData);
+    if (saveInvoice.isPending) return; // Prevent double submission
+    saveInvoice.mutate(enrichedData);
   };
 
   return (
@@ -1324,10 +1342,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               {/* Mobile save button */}
               <Button 
                 type="submit"
-                disabled={createInvoice.isPending}
+                disabled={saveInvoice.isPending}
                 className="w-full md:w-auto"
               >
-                {createInvoice.isPending ? 'Saving...' : 'Save and send'}
+                {saveInvoice.isPending ? 'Saving...' : 'Save and send'}
               </Button>
             </div>
             
@@ -1342,9 +1360,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               <div className="flex">
                 <Button 
                   type="submit"
-                  disabled={createInvoice.isPending}
+                  disabled={saveInvoice.isPending}
                 >
-                  {createInvoice.isPending ? 'Saving...' : 'Save'}
+                  {saveInvoice.isPending ? 'Saving...' : 'Save'}
                 </Button>
                 <div className="relative ml-px">
                   <FormItem>
