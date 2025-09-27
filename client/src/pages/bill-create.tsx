@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 
-import { Bill, Contact, billSchema, Account } from "@shared/schema";
+import { Bill, Contact, billSchema, Account, SalesTax } from "@shared/schema";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +41,7 @@ export default function BillCreate() {
   });
 
   // Fetch sales tax options
-  const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery({
+  const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery<SalesTax[]>({
     queryKey: ["/api/sales-tax"],
   });
 
@@ -489,13 +489,10 @@ export default function BillCreate() {
                               </td>
                               <td className="p-2">
                                 <Select
-                                  defaultValue="none"
-                                  value={form.getValues(`lineItems.${index}.salesTaxId`) ? 
-                                    form.getValues(`lineItems.${index}.salesTaxId`).toString() : 
-                                    "none"
-                                  }
+                                  defaultValue="0"
+                                  value={form.getValues(`lineItems.${index}.salesTaxId`)?.toString() || "0"}
                                   onValueChange={(value) => {
-                                    if (value === "none") {
+                                    if (value === "0") {
                                       form.setValue(`lineItems.${index}.salesTaxId`, null);
                                     } else {
                                       form.setValue(`lineItems.${index}.salesTaxId`, parseInt(value));
@@ -507,8 +504,8 @@ export default function BillCreate() {
                                     <SelectValue placeholder="Select tax" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="none">None</SelectItem>
-                                    {Array.isArray(salesTaxes) && salesTaxes.map((tax: any) => (
+                                    <SelectItem value="0">None</SelectItem>
+                                    {salesTaxes?.filter(tax => !tax.parentId).map((tax: any) => (
                                       <SelectItem key={tax.id} value={tax.id.toString()}>
                                         {tax.name} ({tax.rate}%)
                                       </SelectItem>
