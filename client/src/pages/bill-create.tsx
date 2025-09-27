@@ -42,7 +42,7 @@ export default function BillCreate() {
 
   // Fetch sales tax options
   const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery<SalesTax[]>({
-    queryKey: ["/api/sales-tax"],
+    queryKey: ["/api/sales-taxes"],
   });
 
   useEffect(() => {
