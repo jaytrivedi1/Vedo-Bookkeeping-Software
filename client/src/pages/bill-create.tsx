@@ -398,8 +398,8 @@ export default function BillCreate() {
                         <thead>
                           <tr className="bg-muted/50">
                             <th className="text-center p-2 w-12">#</th>
-                            <th className="text-left p-2 pl-3">Description</th>
-                            <th className="text-left p-2">Account</th>
+                            <th className="text-left p-2 pl-3">Account</th>
+                            <th className="text-left p-2">Description</th>
                             <th className="text-right p-2">Quantity</th>
                             <th className="text-right p-2">Unit Price</th>
                             <th className="text-right p-2">Amount</th>
@@ -414,21 +414,6 @@ export default function BillCreate() {
                                 {index + 1}
                               </td>
                               <td className="p-2 pl-3">
-                                <Input
-                                  {...form.register(`lineItems.${index}.description`)}
-                                  className={
-                                    form.formState.errors.lineItems?.[index]?.description
-                                      ? "border-destructive"
-                                      : ""
-                                  }
-                                />
-                                {form.formState.errors.lineItems?.[index]?.description && (
-                                  <p className="text-xs text-destructive mt-1">
-                                    {form.formState.errors.lineItems[index]?.description?.message}
-                                  </p>
-                                )}
-                              </td>
-                              <td className="p-2">
                                 <Select
                                   value={form.getValues(`lineItems.${index}.accountId`)?.toString()}
                                   onValueChange={(value) => {
@@ -446,6 +431,21 @@ export default function BillCreate() {
                                     ))}
                                   </SelectContent>
                                 </Select>
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  {...form.register(`lineItems.${index}.description`)}
+                                  className={
+                                    form.formState.errors.lineItems?.[index]?.description
+                                      ? "border-destructive"
+                                      : ""
+                                  }
+                                />
+                                {form.formState.errors.lineItems?.[index]?.description && (
+                                  <p className="text-xs text-destructive mt-1">
+                                    {form.formState.errors.lineItems[index]?.description?.message}
+                                  </p>
+                                )}
                               </td>
                               <td className="p-2">
                                 <Input
