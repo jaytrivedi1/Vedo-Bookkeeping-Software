@@ -843,9 +843,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Fetch the updated transaction after credit application to get correct balance
+      const finalTransaction = await storage.getTransaction(newTransaction.id) || newTransaction;
+      
       // Include additional invoice details in the response
       res.status(201).json({
-        transaction: newTransaction,
+        transaction: finalTransaction,
         lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
         ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
         // Additional invoice details
