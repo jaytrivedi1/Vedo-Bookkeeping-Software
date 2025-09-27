@@ -269,7 +269,7 @@ export const billSchema = z.object({
   status: z.enum(["open", "paid", "overdue", "partial"]),
   lineItems: z.array(
     z.object({
-      description: z.string().min(1, "Description is required"),
+      description: z.string(),
       quantity: z.number().min(0.01, "Quantity must be greater than 0"),
       unitPrice: z.number().min(0, "Price cannot be negative"),
       amount: z.number(),
