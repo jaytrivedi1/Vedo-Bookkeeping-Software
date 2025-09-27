@@ -186,12 +186,24 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     name: "lineItems",
   });
 
-  // Calculate totals from line items when in edit mode
+  // Initialize totals from existing invoice data when in edit mode
   useEffect(() => {
-    if (isEditing && lineItems?.length) {
-      calculateTotals();
+    if (isEditing && lineItems?.length && invoice) {
+      // Don't recalculate - use existing data
+      const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const taxTotal = (invoice.amount || 0) - subtotal;
+      
+      setSubTotal(subtotal);
+      setTaxAmount(taxTotal);
+      setTotalAmount(invoice.amount || 0);
+      // Keep the existing balance - don't recalculate it
+      setBalanceDue(invoice.balance || invoice.amount || 0);
+      
+      // Calculate applied credits from balance difference
+      const appliedAmount = (invoice.amount || 0) - (invoice.balance || invoice.amount || 0);
+      setAppliedCreditAmount(appliedAmount);
     }
-  }, [isEditing, lineItems]);
+  }, [isEditing, lineItems, invoice]);
 
   const saveInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
@@ -513,14 +525,25 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       setAppliedCreditAmount(accurateAppliedTotal);
     }
     
-    // Now calculate the balance with the accurate credit amount
-    const newBalanceDue = total - accurateAppliedTotal;
+    // Calculate balance carefully - preserve existing balance in edit mode
+    let newBalanceDue: number;
+    
+    if (isEditing && invoice?.balance !== undefined) {
+      // In edit mode, preserve the existing balance from the database
+      // Don't recalculate it from scratch
+      newBalanceDue = invoice.balance;
+    } else {
+      // In create mode, calculate balance normally
+      newBalanceDue = total - accurateAppliedTotal;
+    }
     
     console.log("Balance calculation:", {
       total,
       appliedCreditAmount,
       accurateAppliedTotal,
-      newBalanceDue
+      newBalanceDue,
+      isEditMode: isEditing,
+      existingBalance: invoice?.balance
     });
     
     setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
