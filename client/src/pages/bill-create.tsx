@@ -517,7 +517,9 @@ export default function BillCreate() {
                               <td className="p-2">
                                 <Select
                                   defaultValue="0"
-                                  value={form.getValues(`lineItems.${index}.salesTaxId`)?.toString() || "0"}
+                                  value={(form.getValues(`lineItems.${index}.salesTaxId`) !== null && 
+                                    form.getValues(`lineItems.${index}.salesTaxId`) !== undefined) ? 
+                                    form.getValues(`lineItems.${index}.salesTaxId`)!.toString() : "0"}
                                   onValueChange={(value) => {
                                     if (value === "0") {
                                       form.setValue(`lineItems.${index}.salesTaxId`, null);
