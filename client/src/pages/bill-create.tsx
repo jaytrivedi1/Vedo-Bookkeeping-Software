@@ -182,8 +182,35 @@ export default function BillCreate() {
     const lineItems = form.getValues("lineItems");
     const subTotal = lineItems.reduce((sum, item) => sum + Number(item.amount), 0);
     
+    // Calculate tax amount
+    let totalTaxAmount = 0;
+    
+    // Loop through each line item and calculate its tax
+    lineItems.forEach((item) => {
+      if (item.salesTaxId) {
+        // Find the tax rate for this line item
+        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+        if (salesTax) {
+          // Check if it's a composite tax with components
+          if (salesTax.isComposite) {
+            const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+            
+            // For composite taxes, sum up all component rates
+            const totalRate = components.reduce((sum, component) => sum + component.rate, 0);
+            const taxAmount = (item.amount * totalRate) / 100;
+            totalTaxAmount += taxAmount;
+          } else {
+            // For regular taxes, just use the rate directly
+            const taxAmount = (item.amount * salesTax.rate) / 100;
+            totalTaxAmount += taxAmount;
+          }
+        }
+      }
+    });
+    
     form.setValue("subTotal", subTotal);
-    form.setValue("totalAmount", subTotal);
+    form.setValue("taxAmount", totalTaxAmount);
+    form.setValue("totalAmount", subTotal + totalTaxAmount);
   };
 
   // Add a new line item
@@ -544,6 +571,10 @@ export default function BillCreate() {
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
                         <span>${form.getValues("subTotal")?.toFixed(2) || "0.00"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tax:</span>
+                        <span>${form.getValues("taxAmount")?.toFixed(2) || "0.00"}</span>
                       </div>
                       <div className="flex justify-between font-medium">
                         <span>Total:</span>
