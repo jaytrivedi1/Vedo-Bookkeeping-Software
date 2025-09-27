@@ -48,7 +48,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface InvoiceFormProps {
-  invoice?: BaseInvoice;
+  invoice?: any; // Transaction object from database
   lineItems?: any[];
   onSuccess?: () => void;
   onCancel?: () => void;
@@ -82,10 +82,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const initialDueDate = isEditing && invoice!.dueDate ? new Date(invoice!.dueDate) : addDays(initialDate, 30);
   
   const [dueDate, setDueDate] = useState<Date>(initialDueDate);
-  const [subTotal, setSubTotal] = useState(0);
+  const [subTotal, setSubTotal] = useState(isEditing ? (invoice?.amount || 0) : 0);
   const [taxAmount, setTaxAmount] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [balanceDue, setBalanceDue] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(isEditing ? (invoice?.amount || 0) : 0);
+  const [balanceDue, setBalanceDue] = useState(isEditing ? (invoice?.balance || invoice?.amount || 0) : 0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
   const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice?.contactId);
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
@@ -95,7 +95,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
 
   // Extract next invoice number or use existing
   const today = new Date();
-  const defaultInvoiceNumber = isEditing ? invoice!.reference : `1001`;
+  const defaultInvoiceNumber = isEditing ? invoice?.reference : `1001`;
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
@@ -152,10 +152,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     resolver: zodResolver(invoiceSchema),
     defaultValues: isEditing ? {
       date: initialDate,
-      contactId: invoice!.contactId,
-      reference: invoice!.reference,
-      description: invoice!.description || '',
-      status: invoice!.status as "open" | "paid" | "overdue" | "partial",
+      contactId: invoice?.contactId,
+      reference: invoice?.reference,
+      description: invoice?.description || '',
+      status: invoice?.status as "open" | "paid" | "overdue" | "partial",
       lineItems: lineItems?.length ? lineItems.map(item => ({
         description: item.description,
         quantity: item.quantity,
@@ -186,11 +186,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     name: "lineItems",
   });
 
+  // Calculate totals from line items when in edit mode
+  useEffect(() => {
+    if (isEditing && lineItems?.length) {
+      calculateTotals();
+    }
+  }, [isEditing, lineItems]);
+
   const saveInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
       if (isEditing) {
         console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
-        return await apiRequest(`/api/invoices/${invoice!.id}`, 'PATCH', data);
+        return await apiRequest(`/api/invoices/${invoice?.id}`, 'PATCH', data);
       } else {
         console.log("Creating invoice with data:", JSON.stringify(data, null, 2));
         return await apiRequest('/api/invoices', 'POST', data);
