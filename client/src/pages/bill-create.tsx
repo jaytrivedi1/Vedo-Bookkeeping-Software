@@ -6,7 +6,14 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 
 import { Bill, Contact, billSchema, Account, SalesTax } from "@shared/schema";
-import { Form } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -515,32 +522,41 @@ export default function BillCreate() {
                                 />
                               </td>
                               <td className="p-2">
-                                <Select
-                                  defaultValue="0"
-                                  value={(form.getValues(`lineItems.${index}.salesTaxId`) !== null && 
-                                    form.getValues(`lineItems.${index}.salesTaxId`) !== undefined) ? 
-                                    form.getValues(`lineItems.${index}.salesTaxId`)!.toString() : "0"}
-                                  onValueChange={(value) => {
-                                    if (value === "0") {
-                                      form.setValue(`lineItems.${index}.salesTaxId`, null);
-                                    } else {
-                                      form.setValue(`lineItems.${index}.salesTaxId`, parseInt(value));
-                                    }
-                                    updateTotals();
-                                  }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select tax" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="0">None</SelectItem>
-                                    {salesTaxes?.filter(tax => !tax.parentId).map((tax: any) => (
-                                      <SelectItem key={tax.id} value={tax.id.toString()}>
-                                        {tax.name} ({tax.rate}%)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <FormField
+                                  control={form.control}
+                                  name={`lineItems.${index}.salesTaxId`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Select
+                                          value={field.value?.toString() || "0"}
+                                          onValueChange={(value) => {
+                                            const numValue = parseInt(value);
+                                            if (numValue === 0) {
+                                              field.onChange(null);
+                                            } else {
+                                              field.onChange(numValue);
+                                            }
+                                            updateTotals();
+                                          }}
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select tax" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="0">None</SelectItem>
+                                            {salesTaxes?.filter(tax => !tax.parentId).map((tax: any) => (
+                                              <SelectItem key={tax.id} value={tax.id.toString()}>
+                                                {tax.name} ({tax.rate}%)
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
                               </td>
                               <td className="p-2">
                                 <Button
