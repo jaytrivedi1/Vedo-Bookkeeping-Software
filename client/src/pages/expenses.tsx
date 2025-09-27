@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { PlusIcon, UserPlus } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
-import TransactionForm from "@/components/transactions/TransactionForm";
+import { useLocation } from "wouter";
 import VendorDialog from "@/components/vendors/VendorDialog";
 import VendorList from "@/components/vendors/VendorList";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
 export default function Expenses() {
-
+  const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>("");
   
   // Fetch all transactions
@@ -91,7 +91,14 @@ export default function Expenses() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <TransactionForm onSuccess={refetch} />
+          <Button 
+            className="text-white bg-primary hover:bg-primary/90"
+            onClick={() => navigate('/bill-create')}
+            data-testid="button-new-transaction"
+          >
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Transaction
+          </Button>
         </div>
       </div>
       
