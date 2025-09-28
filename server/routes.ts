@@ -1325,6 +1325,221 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Pay bills endpoint
+  apiRouter.post("/payments/pay-bills", async (req: Request, res: Response) => {
+    const data = req.body;
+    const bills = data.bills || [];
+    
+    console.log("Bill payment request received:", {
+      vendorId: data.vendorId,
+      totalAmount: data.totalAmount,
+      bills: bills.length,
+      paymentMethod: data.paymentMethod
+    });
+    
+    try {
+      // Validate input
+      if (!data.vendorId || !data.paymentAccountId || !data.totalAmount || bills.length === 0) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          errors: [{ path: ["general"], message: "Vendor, payment account, amount, and bills are required" }] 
+        });
+      }
+      
+      // Validate each bill exists and calculate total payment amount
+      let calculatedTotal = 0;
+      const validatedBills = [];
+      
+      for (const billItem of bills) {
+        if (!billItem.billId || !billItem.amount || billItem.amount <= 0) {
+          return res.status(400).json({ 
+            message: "Invalid bill item", 
+            errors: [{ path: ["bills"], message: `Invalid bill ID or amount for bill ${billItem.billId}` }] 
+          });
+        }
+        
+        // Get the bill transaction
+        const bill = await storage.getTransaction(billItem.billId);
+        if (!bill) {
+          return res.status(400).json({ 
+            message: "Bill not found", 
+            errors: [{ path: ["bills"], message: `Bill #${billItem.billId} not found` }] 
+          });
+        }
+        
+        if (bill.type !== 'bill') {
+          return res.status(400).json({ 
+            message: "Invalid transaction type", 
+            errors: [{ path: ["bills"], message: `Transaction #${billItem.billId} is not a bill` }] 
+          });
+        }
+        
+        // Check if payment amount doesn't exceed outstanding balance
+        const outstandingBalance = bill.balance || 0;
+        if (billItem.amount > outstandingBalance) {
+          return res.status(400).json({ 
+            message: "Payment exceeds outstanding balance", 
+            errors: [{ path: ["bills"], message: `Payment amount $${billItem.amount} exceeds outstanding balance $${outstandingBalance} for bill ${bill.reference}` }] 
+          });
+        }
+        
+        calculatedTotal += Number(billItem.amount);
+        validatedBills.push({
+          bill,
+          amount: Number(billItem.amount)
+        });
+      }
+      
+      // Verify total amount matches
+      if (Math.abs(calculatedTotal - Number(data.totalAmount)) > 0.01) {
+        return res.status(400).json({ 
+          message: "Total amount mismatch", 
+          errors: [{ path: ["totalAmount"], message: `Total amount $${data.totalAmount} doesn't match sum of bill payments $${calculatedTotal}` }] 
+        });
+      }
+      
+      // Verify vendor exists
+      const vendor = await storage.getContact(data.vendorId);
+      if (!vendor) {
+        return res.status(400).json({ 
+          message: "Vendor not found", 
+          errors: [{ path: ["vendorId"], message: "Selected vendor does not exist" }] 
+        });
+      }
+      
+      if (!(vendor.type === 'vendor' || vendor.type === 'both')) {
+        return res.status(400).json({ 
+          message: "Invalid vendor type", 
+          errors: [{ path: ["vendorId"], message: "Selected contact is not a vendor" }] 
+        });
+      }
+      
+      // Verify payment account exists
+      const paymentAccount = await storage.getAccount(data.paymentAccountId);
+      if (!paymentAccount) {
+        return res.status(400).json({ 
+          message: "Payment account not found", 
+          errors: [{ path: ["paymentAccountId"], message: "Selected payment account does not exist" }] 
+        });
+      }
+      
+      // Generate unique reference number
+      const transactions = await storage.getTransactions();
+      const existingPayments = transactions.filter(t => t.type === 'payment');
+      const nextPaymentNumber = existingPayments.length + 1;
+      const paymentReference = `PAY-${String(nextPaymentNumber).padStart(4, '0')}`;
+      
+      // Create payment transaction data
+      const paymentData = {
+        reference: paymentReference,
+        type: 'payment' as const,
+        date: new Date(data.paymentDate),
+        description: `Bill payment to ${vendor.name} via ${data.paymentMethod}${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`,
+        amount: Number(data.totalAmount),
+        balance: 0, // Payments don't have a balance
+        contactId: data.vendorId,
+        status: 'open' as const
+      };
+      
+      // Create main ledger entries for the payment
+      const mainLedgerEntries = [
+        {
+          transactionId: 0, // Will be set by createTransaction
+          accountId: Number(data.paymentAccountId), // Debit payment account (decrease cash/bank)
+          debit: Number(data.totalAmount),
+          credit: 0,
+          description: `Bill payment to ${vendor.name}`,
+          date: new Date(data.paymentDate)
+        },
+        {
+          transactionId: 0, // Will be set by createTransaction
+          accountId: 3, // Credit accounts payable (decrease liability)
+          debit: 0,
+          credit: Number(data.totalAmount),
+          description: `Bill payment to ${vendor.name}`,
+          date: new Date(data.paymentDate)
+        }
+      ];
+      
+      // Create the payment transaction
+      const payment = await storage.createTransaction(
+        paymentData,
+        [], // No line items for bill payments
+        mainLedgerEntries
+      );
+      
+      console.log(`Created bill payment transaction: ${paymentReference} for $${data.totalAmount}`);
+      
+      // Apply payment to each bill with specific ledger entries
+      for (const { bill, amount } of validatedBills) {
+        // Create ledger entries to track which bills were paid
+        const billApplicationEntries = [
+          {
+            accountId: 3, // Accounts Payable
+            debit: amount, // Reduce the bill amount
+            credit: 0,
+            description: `Payment applied to bill ${bill.reference}`,
+            date: new Date(data.paymentDate),
+            transactionId: payment.id
+          },
+          {
+            accountId: 3, // Accounts Payable
+            debit: 0,
+            credit: amount, // Create offsetting entry
+            description: `Payment from ${paymentReference} for bill ${bill.reference}`,
+            date: new Date(data.paymentDate),
+            transactionId: bill.id
+          }
+        ];
+        
+        // Add the bill application entries
+        for (const entry of billApplicationEntries) {
+          await db.insert(ledgerEntries).values(entry);
+        }
+        
+        console.log(`Applied $${amount} payment to bill ${bill.reference}`);
+      }
+      
+      // Recalculate bill balances
+      console.log(`Recalculating balances for ${validatedBills.length} bills...`);
+      for (const { bill } of validatedBills) {
+        // Get all ledger entries for this bill to recalculate balance
+        const billLedgerEntries = await db
+          .select()
+          .from(ledgerEntries)
+          .where(eq(ledgerEntries.transactionId, bill.id));
+        
+        // Calculate new balance: sum of debits minus sum of credits
+        const totalDebits = billLedgerEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
+        const totalCredits = billLedgerEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
+        const newBalance = totalDebits - totalCredits;
+        
+        // Update bill status if fully paid
+        const newStatus = Math.abs(newBalance) < 0.01 ? 'closed' : 'open';
+        
+        // Update the bill transaction  
+        await storage.updateTransaction(bill.id, {
+          balance: newBalance,
+          status: newStatus
+        });
+        
+        console.log(`Updated bill ${bill.reference}: balance $${newBalance}, status ${newStatus}`);
+      }
+      
+      res.status(201).json({
+        payment,
+        paidBills: validatedBills.map(({ bill, amount }) => ({
+          billId: bill.id,
+          billReference: bill.reference,
+          amountPaid: amount
+        }))
+      });
+    } catch (error: any) {
+      console.error("Error processing bill payment:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   apiRouter.post("/deposits", async (req: Request, res: Response) => {
     try {
       // Convert string dates to Date objects before validation
