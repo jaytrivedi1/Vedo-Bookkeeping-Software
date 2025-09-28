@@ -308,6 +308,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get transactions for a specific contact
+  apiRouter.get("/contacts/:id/transactions", async (req: Request, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const contact = await storage.getContact(contactId);
+      
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      const transactions = await storage.getTransactionsByContact(contactId);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching contact transactions:", error);
+      res.status(500).json({ message: "Failed to fetch contact transactions" });
+    }
+  });
+
   // Transactions routes
   apiRouter.get("/transactions", async (req: Request, res: Response) => {
     try {
