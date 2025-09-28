@@ -4,6 +4,7 @@ import { Contact, Transaction } from "@shared/schema";
 import { format } from "date-fns";
 import { Search, Building, ChevronRight, X, Edit, Eye, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import { 
@@ -55,6 +56,7 @@ export default function VendorList({ className }: VendorListProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   
   // Fetch vendors
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -353,12 +355,26 @@ export default function VendorList({ className }: VendorListProps) {
                                     <TableCell className="text-right">
                                       <div className="flex justify-end gap-2">
                                         {transaction.type === 'bill' ? (
-                                          <Button variant="ghost" size="sm">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigate(`/bills/${transaction.id}`);
+                                            }}
+                                          >
                                             <Eye className="h-4 w-4 mr-1" />
                                             View
                                           </Button>
                                         ) : (
-                                          <Button variant="ghost" size="sm">
+                                          <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              navigate(`/transactions/${transaction.id}`);
+                                            }}
+                                          >
                                             <Eye className="h-4 w-4 mr-1" />
                                             View
                                           </Button>
@@ -454,7 +470,14 @@ export default function VendorList({ className }: VendorListProps) {
                                     </TableCell>
                                     <TableCell className="text-right">
                                       <div className="flex justify-end gap-2">
-                                        <Button variant="ghost" size="sm">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/transactions/${transaction.id}`);
+                                          }}
+                                        >
                                           <Eye className="h-4 w-4 mr-1" />
                                           View
                                         </Button>
