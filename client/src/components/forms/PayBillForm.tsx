@@ -541,10 +541,11 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                                   updateBillPayment(bill.billId, amount);
                                   if (amount > 0) {
                                     toggleBillSelection(bill.billId, true);
+                                  } else {
+                                    toggleBillSelection(bill.billId, false);
                                   }
                                 }}
                                 className="w-24 text-right"
-                                disabled={!bill.selected}
                               />
                             </TableCell>
                           </TableRow>
