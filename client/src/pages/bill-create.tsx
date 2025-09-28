@@ -147,7 +147,7 @@ export default function BillCreate() {
   // Create mutation for saving the bill
   const createBill = useMutation({
     mutationFn: async (data: Bill) => {
-      const response = await apiRequest("POST", "/api/bills", data);
+      const response = await apiRequest("/api/bills", "POST", data);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to create bill");
