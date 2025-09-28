@@ -228,7 +228,7 @@ export default function VendorList({ className }: VendorListProps) {
       
       {/* Vendor details sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent className="w-[600px] sm:max-w-[600px] p-0">
+        <SheetContent className="w-[80vw] sm:max-w-[1000px] p-0">
           <SheetHeader className="px-6 py-4 border-b">
             <div className="flex justify-between items-center">
               <SheetTitle className="text-xl">Vendor Details</SheetTitle>
