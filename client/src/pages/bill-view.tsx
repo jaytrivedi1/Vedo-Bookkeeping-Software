@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
@@ -29,11 +29,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2, Edit, Eye, Save, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-interface BillViewProps {
-  billId: string;
-}
-
-export default function BillView({ billId }: BillViewProps) {
+export default function BillView() {
+  const [match, params] = useRoute('/bills/:id');
+  const billId = params?.id;
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [isEditMode, setIsEditMode] = useState(false);
@@ -162,8 +160,8 @@ export default function BillView({ billId }: BillViewProps) {
         contactId: bill.contactId || 0,
         reference: bill.reference || "",
         description: bill.description || "",
-        status: bill.status,
-        dueDate: bill.dueDate ? new Date(bill.dueDate) : new Date(),
+        status: bill.status as "open" | "paid" | "overdue" | "partial" | undefined,
+        dueDate: new Date(), // Due date not available in Transaction schema
         paymentTerms: "30", // Default value, could be stored separately
         attachment: "",
         lineItems: lineItems.map((item: any) => ({
@@ -468,7 +466,7 @@ export default function BillView({ billId }: BillViewProps) {
                         />
                       ) : (
                         <Input
-                          value={bill.dueDate ? format(new Date(bill.dueDate), 'MMM dd, yyyy') : 'Not set'}
+                          value='Not set' // Due date not available in Transaction schema
                           readOnly
                           className="bg-muted"
                         />

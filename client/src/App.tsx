@@ -10,6 +10,7 @@ import Journals from "@/pages/journals";
 import Deposits from "@/pages/deposits";
 import DepositView from "@/pages/deposit-view";
 import BillCreate from "@/pages/bill-create";
+import BillView from "@/pages/bill-view";
 import PayBill from "@/pages/pay-bill";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/payments/:id" component={PaymentView} />
       <Route path="/payment-receive" component={PaymentReceive} />
       <Route path="/bill-create" component={BillCreate} />
+      <Route path="/bills/:id" component={BillView} />
       <Route path="/pay-bill" component={PayBill} />
       <Route path="/expenses" component={Expenses} />
       <Route path="/journals" component={Journals} />
