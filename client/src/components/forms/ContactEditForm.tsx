@@ -75,7 +75,7 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
   // Mutation for updating the contact
   const updateContact = useMutation({
     mutationFn: async (data: ContactEditFormValues) => {
-      return apiRequest('PATCH', `/api/contacts/${contact.id}`, data);
+      return apiRequest(`/api/contacts/${contact.id}`, 'PATCH', data);
     },
     onSuccess: () => {
       toast({
