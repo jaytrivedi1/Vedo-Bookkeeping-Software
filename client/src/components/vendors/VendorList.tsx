@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Contact, Transaction } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, Building, ChevronRight, X, Edit } from "lucide-react";
+import { Search, Building, ChevronRight, X, Edit, Eye, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import { 
   Card, 
@@ -50,6 +51,8 @@ export default function VendorList({ className }: VendorListProps) {
   const [selectedVendor, setSelectedVendor] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -102,11 +105,18 @@ export default function VendorList({ className }: VendorListProps) {
     : [];
     
   // Format currency
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
+    // For bill transactions, display as positive since they represent expenses owed
+    // For payment and deposit transactions, display as negative
+    let displayAmount = amount;
+    if (transactionType === 'deposit' || transactionType === 'payment') {
+      displayAmount = -Math.abs(amount); // Ensure it's negative
+    }
+    
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-    }).format(amount);
+    }).format(displayAmount);
   };
   
   // Get status badge styles
@@ -126,6 +136,37 @@ export default function VendorList({ className }: VendorListProps) {
       default:
         return <Badge>{status}</Badge>;
     }
+  };
+
+  // Delete transaction mutation
+  const deleteTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return apiRequest(`/api/transactions/${transactionId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({
+        title: "Transaction deleted",
+        description: "Transaction has been successfully deleted",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      setSelectedTransactionToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsDeleting(false);
+    }
+  });
+
+  const handleDeleteTransaction = (transaction: Transaction) => {
+    setSelectedTransactionToDelete(transaction);
+    setIsDeleting(true);
+    deleteTransactionMutation.mutate(transaction.id);
   };
   
   return (
@@ -246,28 +287,100 @@ export default function VendorList({ className }: VendorListProps) {
                           No expenses found for this vendor.
                         </div>
                       ) : (
-                        <Table>
+                        <Table className="min-w-full">
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Reference</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Status</TableHead>
+                              <TableHead className="whitespace-nowrap">Date</TableHead>
+                              <TableHead className="whitespace-nowrap">Type</TableHead>
+                              <TableHead className="whitespace-nowrap">Reference</TableHead>
+                              <TableHead className="whitespace-nowrap">Amount</TableHead>
+                              <TableHead className="whitespace-nowrap">Balance</TableHead>
+                              <TableHead className="whitespace-nowrap">Status</TableHead>
+                              <TableHead className="w-[200px]">Notes</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {vendorExpenses
                               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((expense) => (
-                                <TableRow key={expense.id}>
-                                  <TableCell>
-                                    {format(new Date(expense.date), "MMM dd, yyyy")}
-                                  </TableCell>
-                                  <TableCell>{expense.reference}</TableCell>
-                                  <TableCell>{formatCurrency(expense.amount)}</TableCell>
-                                  <TableCell>{getStatusBadge(expense.status)}</TableCell>
-                                </TableRow>
-                              ))}
+                              .map((transaction) => {
+                                const typeDisplay = transaction.type === 'bill' 
+                                  ? 'Bill'
+                                  : transaction.type === 'expense'
+                                    ? 'Expense'
+                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                
+                                const showBalance = transaction.type === 'bill';
+                                const notes = transaction.type === 'bill' ? 'Vendor bill' : 'Direct expense';
+                                
+                                const statusBadge = transaction.type === 'bill'
+                                  ? transaction.balance === 0 || transaction.status === 'completed'
+                                    ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
+                                    : transaction.balance !== null && transaction.balance > 0
+                                      ? <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>
+                                      : getStatusBadge(transaction.status)
+                                  : getStatusBadge(transaction.status);
+                                
+                                return (
+                                  <TableRow key={transaction.id}>
+                                    <TableCell>
+                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                      {typeDisplay}
+                                    </TableCell>
+                                    <TableCell>
+                                      {transaction.reference || '—'}
+                                    </TableCell>
+                                    <TableCell className="font-semibold">
+                                      {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                    </TableCell>
+                                    <TableCell className={
+                                      transaction.balance !== null && transaction.balance > 0 
+                                        ? 'font-semibold text-blue-700' 
+                                        : ''
+                                    }>
+                                      {showBalance && transaction.balance !== null 
+                                        ? formatCurrency(transaction.balance) 
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell>{statusBadge}</TableCell>
+                                    <TableCell className="text-sm text-gray-600">
+                                      <div className="max-w-[200px] overflow-hidden text-ellipsis">
+                                        {notes}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        {transaction.type === 'bill' ? (
+                                          <Button variant="ghost" size="sm">
+                                            <Eye className="h-4 w-4 mr-1" />
+                                            View
+                                          </Button>
+                                        ) : (
+                                          <Button variant="ghost" size="sm">
+                                            <Eye className="h-4 w-4 mr-1" />
+                                            View
+                                          </Button>
+                                        )}
+                                        
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteTransaction(transaction);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-1" />
+                                          Delete
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                           </TableBody>
                         </Table>
                       )}
@@ -283,28 +396,86 @@ export default function VendorList({ className }: VendorListProps) {
                           No invoices found for this vendor.
                         </div>
                       ) : (
-                        <Table>
+                        <Table className="min-w-full">
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Invoice #</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Status</TableHead>
+                              <TableHead className="whitespace-nowrap">Date</TableHead>
+                              <TableHead className="whitespace-nowrap">Type</TableHead>
+                              <TableHead className="whitespace-nowrap">Reference</TableHead>
+                              <TableHead className="whitespace-nowrap">Amount</TableHead>
+                              <TableHead className="whitespace-nowrap">Balance</TableHead>
+                              <TableHead className="whitespace-nowrap">Status</TableHead>
+                              <TableHead className="w-[200px]">Notes</TableHead>
+                              <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {vendorInvoices
                               .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((invoice) => (
-                                <TableRow key={invoice.id}>
-                                  <TableCell>
-                                    {format(new Date(invoice.date), "MMM dd, yyyy")}
-                                  </TableCell>
-                                  <TableCell>{invoice.reference}</TableCell>
-                                  <TableCell>{formatCurrency(invoice.amount)}</TableCell>
-                                  <TableCell>{getStatusBadge(invoice.status)}</TableCell>
-                                </TableRow>
-                              ))}
+                              .map((transaction) => {
+                                const typeDisplay = 'Invoice';
+                                const showBalance = true;
+                                const notes = 'Invoice from vendor';
+                                
+                                const statusBadge = transaction.balance === 0 || transaction.status === 'completed'
+                                  ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
+                                  : transaction.balance !== null && transaction.balance > 0
+                                    ? <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>
+                                    : getStatusBadge(transaction.status);
+                                
+                                return (
+                                  <TableRow key={transaction.id}>
+                                    <TableCell>
+                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                      {typeDisplay}
+                                    </TableCell>
+                                    <TableCell>
+                                      {transaction.reference || '—'}
+                                    </TableCell>
+                                    <TableCell className="font-semibold">
+                                      {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                    </TableCell>
+                                    <TableCell className={
+                                      transaction.balance !== null && transaction.balance > 0 
+                                        ? 'font-semibold text-blue-700' 
+                                        : ''
+                                    }>
+                                      {showBalance && transaction.balance !== null 
+                                        ? formatCurrency(transaction.balance) 
+                                        : '—'}
+                                    </TableCell>
+                                    <TableCell>{statusBadge}</TableCell>
+                                    <TableCell className="text-sm text-gray-600">
+                                      <div className="max-w-[200px] overflow-hidden text-ellipsis">
+                                        {notes}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        <Button variant="ghost" size="sm">
+                                          <Eye className="h-4 w-4 mr-1" />
+                                          View
+                                        </Button>
+                                        
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteTransaction(transaction);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-1" />
+                                          Delete
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
                           </TableBody>
                         </Table>
                       )}
