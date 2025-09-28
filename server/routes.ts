@@ -1515,7 +1515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const newBalance = totalDebits - totalCredits;
         
         // Update bill status if fully paid
-        const newStatus = Math.abs(newBalance) < 0.01 ? 'closed' : 'open';
+        const newStatus = Math.abs(newBalance) < 0.01 ? 'completed' : 'open';
         
         // Update the bill transaction  
         await storage.updateTransaction(bill.id, {
