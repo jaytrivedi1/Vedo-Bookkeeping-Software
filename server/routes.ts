@@ -4496,8 +4496,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate bill data
       const billData = billSchema.parse(body);
       
-      // Calculate the total amount from line items
-      const totalAmount = billData.lineItems.reduce(
+      // Use the calculated total amount from frontend (includes tax)
+      const totalAmount = billData.totalAmount || billData.lineItems.reduce(
         (sum, item) => sum + Number(item.amount), 0
       );
       

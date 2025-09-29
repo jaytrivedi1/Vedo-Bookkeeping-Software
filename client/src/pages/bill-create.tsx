@@ -144,6 +144,13 @@ export default function BillCreate() {
     }
   }, [nextBillNumber, form]);
 
+  // Initialize totals when sales taxes are loaded
+  useEffect(() => {
+    if (salesTaxes && salesTaxes.length > 0) {
+      updateTotals();
+    }
+  }, [salesTaxes]);
+
   // Create mutation for saving the bill
   const createBill = useMutation({
     mutationFn: async (data: Bill) => {
@@ -225,6 +232,7 @@ export default function BillCreate() {
       amount: 0,
     });
     form.setValue("lineItems", lineItems);
+    updateTotals();
   };
 
   // Remove a line item
@@ -246,7 +254,18 @@ export default function BillCreate() {
 
   // Handle form submission
   const onSubmit = (data: Bill) => {
-    createBill.mutate(data);
+    // Ensure totals are calculated before submission
+    updateTotals();
+    
+    // Use the latest form data with updated totals
+    const submissionData = {
+      ...data,
+      subTotal: form.getValues("subTotal") || 0,
+      taxAmount: form.getValues("taxAmount") || 0,
+      totalAmount: form.getValues("totalAmount") || 0,
+    };
+    
+    createBill.mutate(submissionData);
   };
 
   if (isLoadingContacts || isLoadingAccounts || isLoadingBillNumber) {
@@ -593,15 +612,15 @@ export default function BillCreate() {
                     <div className="w-1/3 space-y-2">
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
-                        <span>${form.getValues("subTotal")?.toFixed(2) || "0.00"}</span>
+                        <span>${form.watch("subTotal")?.toFixed(2) || "0.00"}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Tax:</span>
-                        <span>${form.getValues("taxAmount")?.toFixed(2) || "0.00"}</span>
+                        <span>${form.watch("taxAmount")?.toFixed(2) || "0.00"}</span>
                       </div>
                       <div className="flex justify-between font-medium">
                         <span>Total:</span>
-                        <span>${form.getValues("totalAmount")?.toFixed(2) || "0.00"}</span>
+                        <span>${form.watch("totalAmount")?.toFixed(2) || "0.00"}</span>
                       </div>
                     </div>
                   </div>
