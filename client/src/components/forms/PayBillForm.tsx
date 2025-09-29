@@ -632,13 +632,19 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                                 max={bill.outstandingBalance}
                                 value={bill.paymentAmount || ''}
                                 onChange={(e) => {
-                                  const amount = parseFloat(e.target.value) || 0;
-                                  updateBillPayment(bill.billId, amount);
-                                  if (amount > 0) {
-                                    toggleBillSelection(bill.billId, true);
-                                  } else {
-                                    toggleBillSelection(bill.billId, false);
-                                  }
+                                  const rawValue = e.target.value;
+                                  const amount = rawValue === '' ? 0 : parseFloat(rawValue);
+                                  
+                                  // Update bill payment amount directly without constraints during typing
+                                  setBillItems(prev => prev.map(item => 
+                                    item.billId === bill.billId 
+                                      ? { 
+                                          ...item, 
+                                          paymentAmount: isNaN(amount) ? 0 : amount,
+                                          selected: amount > 0
+                                        }
+                                      : item
+                                  ));
                                 }}
                                 className="w-24 text-right"
                               />
