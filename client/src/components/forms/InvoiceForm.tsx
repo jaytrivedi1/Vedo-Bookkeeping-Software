@@ -162,15 +162,15 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         unitPrice: item.unitPrice,
         amount: item.amount,
         salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
-        productId: item.productId !== null ? item.productId : undefined
-      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
+        productId: item.productId !== null ? item.productId : null
+      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
     } : {
       date: today,
       contactId: undefined,
       reference: defaultInvoiceNumber,
       description: '',
       status: 'open' as const,
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
     },
   }) as InvoiceFormType;
   
@@ -952,70 +952,97 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Select
-                                  value={field.value ? field.value.toString() : 'custom'}
-                                  onValueChange={(value) => {
-                                    if (value === 'custom') {
-                                      // Handle custom product
-                                      field.onChange(undefined);
-                                      form.setValue(`lineItems.${index}.description`, '');
-                                    } else {
-                                      const productId = parseInt(value);
-                                      const product = typedProducts.find(p => p.id === productId);
-                                      if (product) {
-                                        // Set the product ID
-                                        field.onChange(productId);
-                                        // Set the product name as the description
-                                        form.setValue(`lineItems.${index}.description`, product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
-                                        
-                                        // When a product with tax is selected, set the line item tax
-                                        if (product.salesTaxId) {
-                                          form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
-                                        }
-                                        
-                                        // Update the amount calculations
+                                {field.value !== undefined ? (
+                                  // Show dropdown when a product is selected or no selection yet (null)
+                                  <Select
+                                    value={field.value ? field.value.toString() : 'none'}
+                                    onValueChange={(value) => {
+                                      if (value === 'custom') {
+                                        // Handle custom product
+                                        field.onChange(undefined);
+                                        form.setValue(`lineItems.${index}.description`, '');
+                                      } else if (value === 'none') {
+                                        // Handle no selection
+                                        field.onChange(null);
+                                        form.setValue(`lineItems.${index}.description`, '');
+                                        form.setValue(`lineItems.${index}.unitPrice`, 0);
+                                        form.setValue(`lineItems.${index}.salesTaxId`, undefined);
                                         updateLineItemAmount(index);
+                                      } else {
+                                        const productId = parseInt(value);
+                                        const product = typedProducts.find(p => p.id === productId);
+                                        if (product) {
+                                          // Set the product ID
+                                          field.onChange(productId);
+                                          // Set the product name as the description
+                                          form.setValue(`lineItems.${index}.description`, product.name);
+                                          form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
+                                          
+                                          // When a product with tax is selected, set the line item tax
+                                          if (product.salesTaxId) {
+                                            form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
+                                          }
+                                          
+                                          // Update the amount calculations
+                                          updateLineItemAmount(index);
+                                        }
                                       }
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
-                                    <SelectValue placeholder="Select a product/service" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {productsLoading ? (
-                                      <SelectItem value="loading" disabled>Loading products...</SelectItem>
-                                    ) : typedProducts && typedProducts.length > 0 ? (
-                                      <>
-                                        <SelectItem value="custom">Enter custom item</SelectItem>
-                                        {typedProducts.map((product) => (
-                                          <SelectItem key={product.id} value={product.id.toString()}>
-                                            {product.name} (${product.price.toFixed(2)})
-                                          </SelectItem>
-                                        ))}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <SelectItem value="custom">Enter custom item</SelectItem>
-                                        <SelectItem value="none" disabled>No products available</SelectItem>
-                                      </>
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                                {!field.value && (
-                                  <FormField
-                                    control={form.control}
-                                    name={`lineItems.${index}.description`}
-                                    render={({ field: descField }) => (
-                                      <Input 
-                                        className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
-                                        placeholder="Enter item name" 
-                                        value={descField.value || ''}
-                                        onChange={(e) => descField.onChange(e.target.value)}
-                                      />
-                                    )}
-                                  />
+                                    }}
+                                  >
+                                    <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
+                                      <SelectValue placeholder="Select a product/service" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {productsLoading ? (
+                                        <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                                      ) : typedProducts && typedProducts.length > 0 ? (
+                                        <>
+                                          <SelectItem value="none">Select a product/service</SelectItem>
+                                          <SelectItem value="custom">Enter custom item</SelectItem>
+                                          {typedProducts.map((product) => (
+                                            <SelectItem key={product.id} value={product.id.toString()}>
+                                              {product.name} (${product.price.toFixed(2)})
+                                            </SelectItem>
+                                          ))}
+                                        </>
+                                      ) : (
+                                        <>
+                                          <SelectItem value="none">Select a product/service</SelectItem>
+                                          <SelectItem value="custom">Enter custom item</SelectItem>
+                                          <SelectItem value="loading" disabled>No products available</SelectItem>
+                                        </>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  // Show input field and switch button when custom is selected
+                                  <div className="flex items-center gap-1">
+                                    <FormField
+                                      control={form.control}
+                                      name={`lineItems.${index}.description`}
+                                      render={({ field: descField }) => (
+                                        <Input 
+                                          className="bg-transparent border-0 border-b p-1 focus:ring-0 flex-1" 
+                                          placeholder="Enter item name" 
+                                          value={descField.value || ''}
+                                          onChange={(e) => descField.onChange(e.target.value)}
+                                        />
+                                      )}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800"
+                                      onClick={() => {
+                                        // Switch back to product selection
+                                        field.onChange(null);
+                                        form.setValue(`lineItems.${index}.description`, '');
+                                      }}
+                                    >
+                                      Select Product
+                                    </Button>
+                                  </div>
                                 )}
                               </FormControl>
                               <FormMessage />
