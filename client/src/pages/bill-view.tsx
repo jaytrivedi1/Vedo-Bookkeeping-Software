@@ -420,7 +420,7 @@ export default function BillView() {
                       <Label htmlFor="vendor">Vendor</Label>
                       {isEditMode ? (
                         <Select
-                          value={form.watch("contactId") > 0 ? form.watch("contactId").toString() : ""}
+                          value={form.watch("contactId") > 0 ? form.watch("contactId").toString() : "0"}
                           onValueChange={(value) => {
                             const contactId = parseInt(value, 10);
                             if (!isNaN(contactId)) {
@@ -541,8 +541,8 @@ export default function BillView() {
                   <Separator />
 
                   <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-lg font-semibold">Line Items</h3>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-medium">Line Items</div>
                       {isEditMode && (
                         <Button type="button" variant="outline" size="sm" onClick={addLineItem}>
                           <Plus className="h-4 w-4 mr-2" />
@@ -550,141 +550,143 @@ export default function BillView() {
                         </Button>
                       )}
                     </div>
-
-                    <div className="space-y-4">
-                      {form.watch("lineItems").map((_, index) => (
-                        <div key={index} className="grid grid-cols-12 gap-2 items-end">
-                          <div className="col-span-3">
-                            <Label>Description</Label>
-                            <Input
-                              {...form.register(`lineItems.${index}.description`)}
-                              placeholder="Item description"
-                              readOnly={!isEditMode}
-                              className={!isEditMode ? "bg-muted" : ""}
-                            />
-                          </div>
-                          <div className="col-span-1">
-                            <Label>Quantity</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              {...form.register(`lineItems.${index}.quantity`, {
-                                valueAsNumber: true,
-                                onChange: () => updateLineItemAmount(index)
-                              })}
-                              readOnly={!isEditMode}
-                              className={!isEditMode ? "bg-muted" : ""}
-                            />
-                          </div>
-                          <div className="col-span-1">
-                            <Label>Unit Price</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              {...form.register(`lineItems.${index}.unitPrice`, {
-                                valueAsNumber: true,
-                                onChange: () => updateLineItemAmount(index)
-                              })}
-                              readOnly={!isEditMode}
-                              className={!isEditMode ? "bg-muted" : ""}
-                            />
-                          </div>
-                          <div className="col-span-1">
-                            <Label>Amount</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              {...form.register(`lineItems.${index}.amount`, {
-                                valueAsNumber: true
-                              })}
-                              readOnly
-                              className="bg-muted"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <Label>Account</Label>
-                            {isEditMode ? (
-                              <Select
-                                value={form.watch(`lineItems.${index}.accountId`)?.toString() || ""}
-                                onValueChange={(value) => {
-                                  const accountId = parseInt(value, 10);
-                                  if (!isNaN(accountId)) {
-                                    form.setValue(`lineItems.${index}.accountId`, accountId);
-                                  }
-                                }}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Account" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {expenseAccounts.map((account) => (
-                                    <SelectItem key={account.id} value={account.id.toString()}>
-                                      {account.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Input
-                                value={
-                                  allAccounts?.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 
-                                  expenseAccounts.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 'N/A'
-                                }
-                                readOnly
-                                className="bg-muted text-xs"
-                              />
-                            )}
-                          </div>
-                          <div className="col-span-2">
-                            <Label>Tax</Label>
-                            {isEditMode ? (
-                              <Select
-                                value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || ""}
-                                onValueChange={(value) => {
-                                  const salesTaxId = value === "" ? null : parseInt(value, 10);
-                                  form.setValue(`lineItems.${index}.salesTaxId`, salesTaxId);
-                                  updateTotals();
-                                }}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="None" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="">None</SelectItem>
-                                  {salesTaxes?.map((tax) => (
-                                    <SelectItem key={tax.id} value={tax.id.toString()}>
-                                      {tax.name} ({tax.rate}%)
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Input
-                                value={
-                                  form.watch(`lineItems.${index}.salesTaxId`) 
-                                    ? salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.name + ` (${salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.rate}%)` || 'N/A'
-                                    : 'None'
-                                }
-                                readOnly
-                                className="bg-muted text-xs"
-                              />
-                            )}
-                          </div>
-                          <div className="col-span-1">
-                            {isEditMode && form.watch("lineItems").length > 1 && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => removeLineItem(index)}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="rounded-md border">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="bg-muted/50">
+                            <th className="text-center p-2 w-12">#</th>
+                            <th className="text-left p-2 pl-3">Account</th>
+                            <th className="text-left p-2">Description</th>
+                            <th className="text-right p-2">Quantity</th>
+                            <th className="text-right p-2">Unit Price</th>
+                            <th className="text-right p-2">Amount</th>
+                            <th className="text-left p-2">Sales Tax</th>
+                            <th className="w-10 p-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {form.watch("lineItems").map((_, index) => (
+                            <tr key={index} className="border-t">
+                              <td className="p-2 text-center text-muted-foreground">
+                                {index + 1}
+                              </td>
+                              <td className="p-2 pl-3">
+                                {isEditMode ? (
+                                  <Select
+                                    value={form.watch(`lineItems.${index}.accountId`)?.toString() || "0"}
+                                    onValueChange={(value) => {
+                                      const accountId = parseInt(value, 10);
+                                      if (!isNaN(accountId)) {
+                                        form.setValue(`lineItems.${index}.accountId`, accountId);
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select account" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {expenseAccounts.map((account) => (
+                                        <SelectItem key={account.id} value={account.id.toString()}>
+                                          {account.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="py-2">
+                                    {allAccounts?.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 
+                                     expenseAccounts.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 'N/A'}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  {...form.register(`lineItems.${index}.description`)}
+                                  readOnly={!isEditMode}
+                                  className={!isEditMode ? "bg-muted border-0" : ""}
+                                />
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  {...form.register(`lineItems.${index}.quantity`, {
+                                    onChange: () => updateLineItemAmount(index),
+                                    valueAsNumber: true,
+                                  })}
+                                  readOnly={!isEditMode}
+                                  className={!isEditMode ? "bg-muted border-0 text-right" : "text-right"}
+                                />
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  {...form.register(`lineItems.${index}.unitPrice`, {
+                                    onChange: () => updateLineItemAmount(index),
+                                    valueAsNumber: true,
+                                  })}
+                                  readOnly={!isEditMode}
+                                  className={!isEditMode ? "bg-muted border-0 text-right" : "text-right"}
+                                />
+                              </td>
+                              <td className="p-2">
+                                <Input
+                                  type="number"
+                                  readOnly
+                                  {...form.register(`lineItems.${index}.amount`)}
+                                  className="bg-muted border-0 text-right"
+                                />
+                              </td>
+                              <td className="p-2">
+                                {isEditMode ? (
+                                  <Select
+                                    value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || "none"}
+                                    onValueChange={(value) => {
+                                      const salesTaxId = value === "none" ? null : parseInt(value, 10);
+                                      form.setValue(`lineItems.${index}.salesTaxId`, salesTaxId);
+                                      updateTotals();
+                                    }}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select tax" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">None</SelectItem>
+                                      {salesTaxes?.map((tax) => (
+                                        <SelectItem key={tax.id} value={tax.id.toString()}>
+                                          {tax.name} ({tax.rate}%)
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="py-2">
+                                    {form.watch(`lineItems.${index}.salesTaxId`) 
+                                      ? salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.name + ` (${salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.rate}%)` || 'N/A'
+                                      : 'None'}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2">
+                                {isEditMode && form.watch("lineItems").length > 1 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeLineItem(index)}
+                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
 
