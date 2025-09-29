@@ -176,17 +176,26 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
   // Update bill payment amount
   const updateBillPayment = (billId: number, amount: number) => {
     setBillItems(prev => {
-      const currentTotal = prev
-        .filter(item => item.billId !== billId && item.selected)
-        .reduce((sum, item) => sum + item.paymentAmount, 0);
-      
       return prev.map(item => {
         if (item.billId === billId) {
-          const maxAllowable = Math.min(
-            amount,
-            item.outstandingBalance,
-            paymentAmount - currentTotal
-          );
+          // Allow free input when no payment amount is set, otherwise constrain to remaining allocation
+          let maxAllowable = amount;
+          
+          if (paymentAmount > 0) {
+            const currentTotal = prev
+              .filter(otherItem => otherItem.billId !== billId && otherItem.selected)
+              .reduce((sum, otherItem) => sum + otherItem.paymentAmount, 0);
+            
+            maxAllowable = Math.min(
+              amount,
+              item.outstandingBalance,
+              paymentAmount - currentTotal
+            );
+          } else {
+            // When no payment amount is set, only constrain to outstanding balance
+            maxAllowable = Math.min(amount, item.outstandingBalance);
+          }
+          
           return { ...item, paymentAmount: Math.max(0, maxAllowable) };
         }
         return item;
