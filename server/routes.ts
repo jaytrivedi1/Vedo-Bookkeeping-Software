@@ -4796,6 +4796,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fix bill balances endpoint
+  apiRouter.post("/fix/bill-balances", async (req: Request, res: Response) => {
+    try {
+      const { fixBillBalances } = await import('./fix-bill-balances.ts');
+      const result = await fixBillBalances();
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fixing bill balances:", error);
+      res.status(500).json({ 
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
