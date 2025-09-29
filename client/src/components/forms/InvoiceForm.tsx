@@ -161,15 +161,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         amount: item.amount,
-        salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined
-      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
+        salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
+        productId: item.productId !== null ? item.productId : undefined
+      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
     } : {
       date: today,
       contactId: undefined,
       reference: defaultInvoiceNumber,
       description: '',
       status: 'open' as const,
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
     },
   }) as InvoiceFormType;
   
@@ -947,21 +948,25 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       <div className="col-span-4">
                         <FormField
                           control={form.control}
-                          name={`lineItems.${index}.description`}
+                          name={`lineItems.${index}.productId`}
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
                                 <Select
+                                  value={field.value ? field.value.toString() : 'custom'}
                                   onValueChange={(value) => {
                                     if (value === 'custom') {
                                       // Handle custom product
-                                      field.onChange('');
+                                      field.onChange(undefined);
+                                      form.setValue(`lineItems.${index}.description`, '');
                                     } else {
                                       const productId = parseInt(value);
                                       const product = typedProducts.find(p => p.id === productId);
                                       if (product) {
+                                        // Set the product ID
+                                        field.onChange(productId);
                                         // Set the product name as the description
-                                        field.onChange(product.name);
+                                        form.setValue(`lineItems.${index}.description`, product.name);
                                         form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
                                         
                                         // When a product with tax is selected, set the line item tax
@@ -998,12 +1003,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     )}
                                   </SelectContent>
                                 </Select>
-                                {field.value === 'custom' && (
-                                  <Input 
-                                    className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
-                                    placeholder="Enter item name" 
-                                    value={field.value === 'custom' ? '' : field.value}
-                                    onChange={(e) => field.onChange(e.target.value)}
+                                {!field.value && (
+                                  <FormField
+                                    control={form.control}
+                                    name={`lineItems.${index}.description`}
+                                    render={({ field: descField }) => (
+                                      <Input 
+                                        className="bg-transparent border-0 p-1 focus:ring-0 mt-1" 
+                                        placeholder="Enter item name" 
+                                        value={descField.value || ''}
+                                        onChange={(e) => descField.onChange(e.target.value)}
+                                      />
+                                    )}
                                   />
                                 )}
                               </FormControl>
