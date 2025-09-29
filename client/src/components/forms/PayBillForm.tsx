@@ -115,6 +115,10 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     }
   });
 
+  // Calculate remaining amount to allocate
+  const paymentAmount = form.watch('totalAmount') || 0;
+  const remainingToAllocate = paymentAmount - totalSelected;
+
   // Fetch vendors with outstanding bills
   const { data: vendors, isLoading: isLoadingVendors } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
@@ -171,11 +175,23 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
 
   // Update bill payment amount
   const updateBillPayment = (billId: number, amount: number) => {
-    setBillItems(prev => prev.map(item => 
-      item.billId === billId 
-        ? { ...item, paymentAmount: Math.min(amount, item.outstandingBalance) }
-        : item
-    ));
+    setBillItems(prev => {
+      const currentTotal = prev
+        .filter(item => item.billId !== billId && item.selected)
+        .reduce((sum, item) => sum + item.paymentAmount, 0);
+      
+      return prev.map(item => {
+        if (item.billId === billId) {
+          const maxAllowable = Math.min(
+            amount,
+            item.outstandingBalance,
+            paymentAmount - currentTotal
+          );
+          return { ...item, paymentAmount: Math.max(0, maxAllowable) };
+        }
+        return item;
+      });
+    });
   };
 
   // Toggle bill selection
@@ -185,28 +201,64 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
         ? { 
             ...item, 
             selected,
-            paymentAmount: selected ? item.outstandingBalance : 0
+            paymentAmount: 0  // User will manually set payment amounts
           }
         : item
     ));
   };
 
-  // Calculate totals
+  // Calculate totals and remaining to allocate
   useEffect(() => {
     const total = billItems
       .filter(item => item.selected)
       .reduce((sum, item) => sum + item.paymentAmount, 0);
     setTotalSelected(total);
-    form.setValue('totalAmount', total);
-  }, [billItems, form]);
+  }, [billItems]);
 
-  // Pay all selected bills
+  // Allocate remaining payment across selected bills
+  const allocateRemaining = () => {
+    if (remainingToAllocate <= 0) return;
+    
+    const selectedBills = billItems.filter(item => item.selected);
+    if (selectedBills.length === 0) return;
+    
+    setBillItems(prev => prev.map(item => {
+      if (!item.selected) return item;
+      
+      const remainingAfterOthers = paymentAmount - prev
+        .filter(other => other.billId !== item.billId && other.selected)
+        .reduce((sum, other) => sum + other.paymentAmount, 0);
+      
+      const allocatedAmount = Math.min(
+        item.outstandingBalance,
+        remainingAfterOthers / selectedBills.length
+      );
+      
+      return { ...item, paymentAmount: allocatedAmount };
+    }));
+  };
+
+  // Pay all outstanding bills (select all and allocate payment amount across them)
   const payAllSelected = () => {
-    setBillItems(prev => prev.map(item => ({
-      ...item,
-      selected: true,
-      paymentAmount: item.outstandingBalance
-    })));
+    setBillItems(prev => {
+      const allSelected = prev.map(item => ({ ...item, selected: true }));
+      const totalOutstanding = allSelected.reduce((sum, item) => sum + item.outstandingBalance, 0);
+      
+      if (paymentAmount === 0) {
+        // If no payment amount set, use total outstanding
+        form.setValue('totalAmount', totalOutstanding);
+        return allSelected.map(item => ({ ...item, paymentAmount: item.outstandingBalance }));
+      } else {
+        // Allocate payment amount proportionally
+        return allSelected.map(item => ({
+          ...item,
+          paymentAmount: Math.min(
+            item.outstandingBalance,
+            (item.outstandingBalance / totalOutstanding) * paymentAmount
+          )
+        }));
+      }
+    });
   };
 
   // Clear all selections
@@ -414,6 +466,31 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
 
               <FormField
                 control={form.control}
+                name="totalAmount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Amount</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        {...field}
+                        value={field.value || ''}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Total amount being paid to the vendor
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="notes"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2 lg:col-span-1">
@@ -443,6 +520,15 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={allocateRemaining}
+                      disabled={billItems.filter(item => item.selected).length === 0 || remainingToAllocate <= 0}
+                    >
+                      Allocate
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -556,13 +642,27 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                     <Separator className="my-4" />
                     
                     {/* Payment Summary */}
-                    <div className="bg-muted/50 rounded-lg p-4">
-                      <div className="flex justify-between items-center text-lg font-semibold">
-                        <span>Total Payment Amount:</span>
-                        <span className="text-primary">{formatCurrency(totalSelected)}</span>
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Payment Amount:</span>
+                        <span className="font-semibold">{formatCurrency(paymentAmount)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Allocated:</span>
+                        <span className="font-semibold">{formatCurrency(totalSelected)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-lg">
+                        <span className="font-semibold">Remaining to Allocate:</span>
+                        <span className={`font-bold ${
+                          remainingToAllocate > 0 ? 'text-orange-600' : 
+                          remainingToAllocate < 0 ? 'text-red-600' : 
+                          'text-green-600'
+                        }`}>
+                          {formatCurrency(remainingToAllocate)}
+                        </span>
                       </div>
                       {billItems.filter(item => item.selected).length > 0 && (
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-muted-foreground">
                           Paying {billItems.filter(item => item.selected).length} bill(s)
                         </p>
                       )}
