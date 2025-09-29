@@ -342,8 +342,18 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="date">Bill Date</Label>
                       <DatePicker
-                        date={form.getValues("date")}
-                        setDate={(date) => form.setValue("date", date)}
+                        date={form.watch("date")}
+                        setDate={(date) => {
+                          form.setValue("date", date);
+                          // Update due date based on payment terms when bill date changes
+                          const paymentTerms = form.getValues("paymentTerms");
+                          if (paymentTerms) {
+                            let dueDate = new Date(date);
+                            const days = parseInt(paymentTerms) || 30;
+                            dueDate.setDate(dueDate.getDate() + days);
+                            form.setValue("dueDate", dueDate);
+                          }
+                        }}
                       />
                     </div>
                   </div>
@@ -352,7 +362,7 @@ export default function BillCreate() {
                     <div>
                       <Label htmlFor="dueDate">Due Date</Label>
                       <DatePicker
-                        date={form.getValues("dueDate") || new Date()}
+                        date={form.watch("dueDate") || new Date()}
                         setDate={(date) => form.setValue("dueDate", date)}
                       />
                     </div>
