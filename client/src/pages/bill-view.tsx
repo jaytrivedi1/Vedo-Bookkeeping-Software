@@ -198,7 +198,7 @@ export default function BillView() {
       
       setInitialized(true);
     }
-  }, [bill, lineItems, allAccounts, salesTaxes, initialized, form, calculateDueDate]);
+  }, [bill, lineItems, allAccounts, salesTaxes, initialized, calculateDueDate]);
 
   // Update mutation for editing the bill
   const updateBill = useMutation({
@@ -270,12 +270,7 @@ export default function BillView() {
     form.setValue("totalAmount", subTotal + totalTaxAmount);
   }, [form, salesTaxes]);
 
-  // Recalculate totals when line items change (after updateTotals is defined)
-  useEffect(() => {
-    if (initialized && salesTaxes && updateTotals) {
-      updateTotals();
-    }
-  }, [form.watch("lineItems"), initialized, salesTaxes, updateTotals]);
+  // Note: Removed automatic recalculation to prevent infinite loops
 
   // Add a new line item
   const addLineItem = () => {
