@@ -39,8 +39,8 @@ export default function BillView() {
   const [vendors, setVendors] = useState<Contact[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
 
-  // Fetch the bill data
-  const { data: bill, isLoading: isLoadingBill, refetch: refetchBill } = useQuery<Transaction>({
+  // Fetch the bill data (includes transaction, lineItems, and ledgerEntries)
+  const { data: billData, isLoading: isLoadingBill, refetch: refetchBill } = useQuery({
     queryKey: ['/api/transactions', billId],
     queryFn: async () => {
       const response = await fetch(`/api/transactions/${billId}`, {
@@ -53,6 +53,9 @@ export default function BillView() {
     },
     enabled: !!billId,
   });
+
+  const bill = billData?.transaction;
+  const lineItems = billData?.lineItems || [];
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -71,20 +74,7 @@ export default function BillView() {
     queryKey: ["/api/sales-taxes"],
   });
 
-  // Fetch line items for this bill
-  const { data: lineItems, isLoading: isLoadingLineItems } = useQuery({
-    queryKey: ['/api/line-items', billId],
-    queryFn: async () => {
-      const response = await fetch(`/api/line-items?transactionId=${billId}`, {
-        credentials: 'include'
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch line items');
-      }
-      return response.json();
-    },
-    enabled: !!billId,
-  });
+  // Line items are now part of the bill data response
 
   useEffect(() => {
     if (allContacts) {
@@ -312,7 +302,7 @@ export default function BillView() {
     }).format(amount);
   };
 
-  if (isLoadingBill || isLoadingContacts || isLoadingAccounts || isLoadingLineItems) {
+  if (isLoadingBill || isLoadingContacts || isLoadingAccounts) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
