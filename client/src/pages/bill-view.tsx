@@ -131,6 +131,23 @@ export default function BillView() {
     },
   });
 
+  // Helper function to safely create date
+  const safeDate = (dateValue: any): Date => {
+    if (!dateValue) return new Date();
+    const date = new Date(dateValue);
+    return isNaN(date.getTime()) ? new Date() : date;
+  };
+
+  // Helper function to safely format date
+  const safeFormatDate = (dateValue: any, formatString: string = 'MMM dd, yyyy'): string => {
+    const date = safeDate(dateValue);
+    try {
+      return format(date, formatString);
+    } catch {
+      return 'Invalid date';
+    }
+  };
+
   // Load bill data into form when available
   useEffect(() => {
     if (bill && lineItems) {
@@ -156,7 +173,7 @@ export default function BillView() {
       });
 
       form.reset({
-        date: new Date(bill.date),
+        date: safeDate(bill.date),
         contactId: bill.contactId || 0,
         reference: bill.reference || "",
         description: bill.description || "",
@@ -450,7 +467,7 @@ export default function BillView() {
                         />
                       ) : (
                         <Input
-                          value={format(new Date(bill.date), 'MMM dd, yyyy')}
+                          value={safeFormatDate(bill.date)}
                           readOnly
                           className="bg-muted"
                         />
