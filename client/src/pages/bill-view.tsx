@@ -147,9 +147,12 @@ export default function BillView() {
     return dueDate;
   }, []);
 
-  // Load bill data into form when available
+  // Track initialization to prevent re-running
+  const [initialized, setInitialized] = useState(false);
+
+  // Load bill data into form when all data is available
   useEffect(() => {
-    if (bill && lineItems) {
+    if (bill && lineItems && allAccounts && salesTaxes && !initialized) {
       // Calculate totals from line items
       const subTotal = lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
       
@@ -181,19 +184,28 @@ export default function BillView() {
         paymentTerms: "30", // Default value, could be stored separately
         attachment: "",
         lineItems: lineItems.map((item: any) => ({
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          amount: item.amount,
-          accountId: item.accountId,
-          salesTaxId: item.salesTaxId,
+          description: item.description || "",
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          amount: Number(item.amount) || 0,
+          accountId: Number(item.accountId) || Number(item.expenseAccountId) || Number(item.account_id) || undefined,
+          salesTaxId: item.salesTaxId || item.taxId || item.sales_tax_id || null,
         })),
         subTotal,
         taxAmount: totalTaxAmount,
         totalAmount: subTotal + totalTaxAmount,
       });
+      
+      setInitialized(true);
     }
-  }, [bill, lineItems, salesTaxes, form, calculateDueDate]);
+  }, [bill, lineItems, allAccounts, salesTaxes, initialized, form, calculateDueDate]);
+
+  // Recalculate totals when line items change
+  useEffect(() => {
+    if (initialized && salesTaxes) {
+      updateTotals();
+    }
+  }, [form.watch("lineItems"), initialized, salesTaxes, updateTotals]);
 
   // Update mutation for editing the bill
   const updateBill = useMutation({
@@ -230,32 +242,40 @@ export default function BillView() {
   };
 
   // Update subtotal and total when line items change
-  const updateTotals = () => {
+  const updateTotals = useCallback(() => {
     const lineItems = form.getValues("lineItems");
-    const subTotal = lineItems.reduce((sum, item) => sum + Number(item.amount), 0);
     
+    // Calculate subtotal from quantity * unitPrice and update amounts
+    let subTotal = 0;
     let totalTaxAmount = 0;
-    lineItems.forEach((item) => {
+    
+    const updatedLineItems = lineItems.map((item) => {
+      const lineAmount = Number(item.quantity) * Number(item.unitPrice);
+      subTotal += lineAmount;
+      
+      // Calculate tax for this line item
       if (item.salesTaxId) {
         const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
         if (salesTax) {
           if (salesTax.isComposite) {
             const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
             const totalRate = components.reduce((sum, component) => sum + component.rate, 0);
-            const taxAmount = (item.amount * totalRate) / 100;
-            totalTaxAmount += taxAmount;
+            totalTaxAmount += (lineAmount * totalRate) / 100;
           } else {
-            const taxAmount = (item.amount * salesTax.rate) / 100;
-            totalTaxAmount += taxAmount;
+            totalTaxAmount += (lineAmount * salesTax.rate) / 100;
           }
         }
       }
+      
+      return { ...item, amount: lineAmount };
     });
     
+    // Update form values
+    form.setValue("lineItems", updatedLineItems);
     form.setValue("subTotal", subTotal);
     form.setValue("taxAmount", totalTaxAmount);
     form.setValue("totalAmount", subTotal + totalTaxAmount);
-  };
+  }, [form, salesTaxes]);
 
   // Add a new line item
   const addLineItem = () => {

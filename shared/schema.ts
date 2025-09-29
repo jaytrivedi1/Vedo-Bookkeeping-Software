@@ -84,6 +84,7 @@ export const lineItems = pgTable('line_items', {
   quantity: doublePrecision('quantity').notNull().default(1),
   unitPrice: doublePrecision('unit_price').notNull(),
   amount: doublePrecision('amount').notNull(),
+  accountId: integer('account_id').references(() => accounts.id), // Added for expense account tracking
   salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id),
 });
 
