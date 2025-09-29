@@ -117,10 +117,14 @@ export default function TransactionTable({ transactions, loading = false, onDele
         return 'bg-green-100 text-green-800';
       case 'expense':
         return 'bg-red-100 text-red-800';
+      case 'bill':
+        return 'bg-orange-100 text-orange-800';
       case 'journal_entry':
         return 'bg-blue-100 text-blue-800';
       case 'deposit':
         return 'bg-purple-100 text-purple-800';
+      case 'payment':
+        return 'bg-indigo-100 text-indigo-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -197,7 +201,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
-                      {(transaction.type === 'expense' || transaction.type === 'deposit' || transaction.type === 'payment') 
+                      {(transaction.type === 'expense' || transaction.type === 'deposit' || transaction.type === 'payment' || transaction.type === 'bill') 
                         ? '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount) 
                         : '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount)}
                     </TableCell>
@@ -208,7 +212,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
                       <Link 
-                        href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type + 's'}/${transaction.id}`} 
+                        href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type === 'bill' ? 'bill-view' : transaction.type + 's'}/${transaction.id}`} 
                         className="text-primary hover:text-primary/90"
                       >
                         View

@@ -45,10 +45,11 @@ export default function Expenses() {
     queryKey: ['/api/transactions'],
   });
   
-  // Filter expenses
+  // Filter all vendor-related transactions (bills, expenses, payments)
+  const vendorTransactionTypes = ["bill", "expense", "payment"];
   const expenses = transactions
     ? transactions
-        .filter((transaction) => transaction.type === "expense")
+        .filter((transaction) => vendorTransactionTypes.includes(transaction.type))
         .filter((expense) => {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
