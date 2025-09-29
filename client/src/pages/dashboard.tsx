@@ -128,10 +128,12 @@ export default function Dashboard() {
                   <span>Bill</span>
                 </DropdownMenuItem>
               </Link>
-              <DropdownMenuItem>
-                <DollarSign className="mr-2 h-4 w-4" />
-                <span>Pay Bill</span>
-              </DropdownMenuItem>
+              <Link href="/pay-bill">
+                <DropdownMenuItem>
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  <span>Pay Bill</span>
+                </DropdownMenuItem>
+              </Link>
               <DropdownMenuItem>
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Cheque</span>
