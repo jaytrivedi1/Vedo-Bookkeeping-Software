@@ -990,7 +990,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     }}
                                   >
                                     <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
-                                      <SelectValue placeholder="Select a product/service" />
+                                      <SelectValue placeholder="Select a product/service">
+                                        {field.value && field.value !== null ? (
+                                          (() => {
+                                            const selectedProduct = typedProducts.find(p => p.id === field.value);
+                                            return selectedProduct ? `${selectedProduct.name} ($${selectedProduct.price.toFixed(2)})` : "Select a product/service";
+                                          })()
+                                        ) : "Select a product/service"}
+                                      </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                       {productsLoading ? (
