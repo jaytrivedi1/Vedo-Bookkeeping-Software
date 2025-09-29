@@ -666,6 +666,26 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                           Paying {billItems.filter(item => item.selected).length} bill(s)
                         </p>
                       )}
+                      
+                      {/* Validation Messages */}
+                      {paymentAmount > 0 && Math.abs(remainingToAllocate) > 0.001 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <AlertCircle className="h-4 w-4 text-orange-600" />
+                          <span className="text-orange-600">
+                            {remainingToAllocate > 0 
+                              ? `You need to allocate ${formatCurrency(remainingToAllocate)} more`
+                              : `You have over-allocated by ${formatCurrency(Math.abs(remainingToAllocate))}`
+                            }
+                          </span>
+                        </div>
+                      )}
+                      
+                      {paymentAmount === 0 && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <AlertCircle className="h-4 w-4" />
+                          <span>Enter a payment amount to begin</span>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -680,7 +700,12 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
             </Button>
             <Button 
               type="submit" 
-              disabled={payBillMutation.isPending || totalSelected === 0}
+              disabled={
+                payBillMutation.isPending || 
+                paymentAmount === 0 || 
+                totalSelected === 0 || 
+                Math.abs(remainingToAllocate) > 0.001  // Allow for floating point precision
+              }
               className="min-w-32"
             >
               {payBillMutation.isPending ? (
