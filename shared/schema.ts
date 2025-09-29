@@ -86,6 +86,7 @@ export const lineItems = pgTable('line_items', {
   amount: doublePrecision('amount').notNull(),
   accountId: integer('account_id').references(() => accounts.id), // Added for expense account tracking
   salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id),
+  productId: integer('product_id').references(() => productsSchema.id), // Added for product tracking
 });
 
 // Ledger Entries (for double-entry accounting)
@@ -119,7 +120,8 @@ export const invoiceSchema = z.object({
       quantity: z.number().min(0.01, "Quantity must be greater than 0"),
       unitPrice: z.number().min(0, "Price cannot be negative"),
       amount: z.number(),
-      salesTaxId: z.number().optional()
+      salesTaxId: z.number().optional(),
+      productId: z.number().optional()
     })
   ).min(1, "At least one line item is required"),
   // Additional fields for enhanced invoice functionality
@@ -275,7 +277,8 @@ export const billSchema = z.object({
       unitPrice: z.number().min(0, "Price cannot be negative"),
       amount: z.number(),
       accountId: z.number().optional(), // expense account
-      salesTaxId: z.number().nullable().optional() // sales tax ID reference
+      salesTaxId: z.number().nullable().optional(), // sales tax ID reference
+      productId: z.number().optional() // product reference
     })
   ).min(1, "At least one line item is required"),
   // Additional fields for bill functionality
