@@ -272,7 +272,7 @@ export default function BillView() {
 
   // Recalculate totals when line items change (after updateTotals is defined)
   useEffect(() => {
-    if (initialized && salesTaxes) {
+    if (initialized && salesTaxes && updateTotals) {
       updateTotals();
     }
   }, [form.watch("lineItems"), initialized, salesTaxes, updateTotals]);
