@@ -442,6 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unitPrice: number;
           amount: number;
           salesTaxId?: number;
+          productId?: number;
         }) => {
           const lineItem: any = {
             description: item.description,
@@ -453,6 +454,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (item.salesTaxId) {
             lineItem.salesTaxId = item.salesTaxId;
+          }
+          
+          if (item.productId) {
+            lineItem.productId = item.productId;
           }
           
           return lineItem;
@@ -594,7 +599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: invoiceData.status
       };
       
-      // Create line items with proper handling of salesTaxId
+      // Create line items with proper handling of salesTaxId and productId
       const lineItems = invoiceData.lineItems.map(item => {
         const lineItem: any = {
           description: item.description,
@@ -608,6 +613,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (item.salesTaxId) {
           lineItem.salesTaxId = item.salesTaxId;
           console.log(`Line item has sales tax ID: ${item.salesTaxId}`);
+        }
+        
+        // Only add productId if it exists and is not undefined/null
+        if (item.productId) {
+          lineItem.productId = item.productId;
+          console.log(`Line item has product ID: ${item.productId}`);
         }
         
         return lineItem;
@@ -4513,14 +4524,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'open' as const,
       };
       
-      // Prepare line items
-      const lineItemsData = billData.lineItems.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
-        transactionId: 0 // Will be set by createTransaction
-      }));
+      // Prepare line items with proper handling of salesTaxId and productId
+      const lineItemsData = billData.lineItems.map(item => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          transactionId: 0 // Will be set by createTransaction
+        };
+        
+        // Only add accountId if it exists and is not undefined/null
+        if (item.accountId) {
+          lineItem.accountId = item.accountId;
+        }
+        
+        // Only add salesTaxId if it exists and is not undefined/null
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+        }
+        
+        // Only add productId if it exists and is not undefined/null
+        if (item.productId) {
+          lineItem.productId = item.productId;
+        }
+        
+        return lineItem;
+      });
       
       // Prepare ledger entries for double-entry accounting
       // 1. Debit expense accounts for each line item
