@@ -1520,10 +1520,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .from(ledgerEntries)
           .where(eq(ledgerEntries.transactionId, bill.id));
         
-        // Calculate new balance: sum of debits minus sum of credits
+        // Calculate new balance for bill: sum of credits minus sum of debits (remaining liability)
         const totalDebits = billLedgerEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
         const totalCredits = billLedgerEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
-        const newBalance = totalDebits - totalCredits;
+        const newBalance = totalCredits - totalDebits;
         
         // Update bill status if fully paid
         const newStatus = Math.abs(newBalance) < 0.01 ? 'completed' : 'open';
