@@ -96,9 +96,13 @@ export default function VendorList({ className }: VendorListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedVendor.id)
     : [];
     
-  // Filter expenses (including bills)
+  // Filter expenses (including bills and payments)
   const vendorExpenses = vendorTransactions
-    ? vendorTransactions.filter(transaction => transaction.type === 'expense' || transaction.type === 'bill')
+    ? vendorTransactions.filter(transaction => 
+        transaction.type === 'expense' || 
+        transaction.type === 'bill' || 
+        transaction.type === 'payment'
+      )
     : [];
     
   // Filter invoices related to this vendor (rare but possible)
@@ -310,18 +314,18 @@ export default function VendorList({ className }: VendorListProps) {
                                   ? 'Bill'
                                   : transaction.type === 'expense'
                                     ? 'Expense'
-                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                    : transaction.type === 'payment'
+                                      ? 'Payment'
+                                      : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                                 
                                 const showBalance = transaction.type === 'bill';
-                                const notes = transaction.type === 'bill' ? 'Vendor bill' : 'Direct expense';
+                                const notes = transaction.type === 'bill' 
+                                  ? 'Vendor bill' 
+                                  : transaction.type === 'payment'
+                                    ? 'Payment to vendor'
+                                    : 'Direct expense';
                                 
-                                const statusBadge = transaction.type === 'bill'
-                                  ? transaction.balance === 0 || transaction.status === 'completed'
-                                    ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
-                                    : transaction.balance !== null && transaction.balance > 0
-                                      ? <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Open</Badge>
-                                      : getStatusBadge(transaction.status)
-                                  : getStatusBadge(transaction.status);
+                                const statusBadge = getStatusBadge(transaction.status);
                                 
                                 return (
                                   <TableRow key={transaction.id}>
@@ -343,7 +347,7 @@ export default function VendorList({ className }: VendorListProps) {
                                         : ''
                                     }>
                                       {showBalance && transaction.balance !== null 
-                                        ? formatCurrency(transaction.balance) 
+                                        ? formatCurrency(Math.abs(transaction.balance)) 
                                         : '—'}
                                     </TableCell>
                                     <TableCell>{statusBadge}</TableCell>
@@ -459,7 +463,7 @@ export default function VendorList({ className }: VendorListProps) {
                                         : ''
                                     }>
                                       {showBalance && transaction.balance !== null 
-                                        ? formatCurrency(transaction.balance) 
+                                        ? formatCurrency(Math.abs(transaction.balance)) 
                                         : '—'}
                                     </TableCell>
                                     <TableCell>{statusBadge}</TableCell>
