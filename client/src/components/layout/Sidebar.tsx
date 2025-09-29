@@ -54,6 +54,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/expenses/new", label: "Expense", icon: <BanknoteIcon className="w-4 h-4 mr-2" /> },
     { path: "/journals/new", label: "Journal Entry", icon: <ScaleIcon className="w-4 h-4 mr-2" /> },
     { path: "/deposits/new", label: "Deposit", icon: <PiggyBankIcon className="w-4 h-4 mr-2" /> },
+    { path: "/pay-bill", label: "Pay Bill", icon: <DollarSignIcon className="w-4 h-4 mr-2" /> },
   ];
 
   return (
