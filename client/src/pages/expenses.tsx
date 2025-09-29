@@ -34,7 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { Transaction } from "@shared/schema";
+import { Transaction, Contact } from "@shared/schema";
 
 export default function Expenses() {
   const [, navigate] = useLocation();
@@ -45,11 +45,34 @@ export default function Expenses() {
     queryKey: ['/api/transactions'],
   });
   
-  // Filter all vendor-related transactions (bills, expenses, payments)
-  const vendorTransactionTypes = ["bill", "expense", "payment"];
-  const expenses = transactions
+  // Fetch contacts to identify vendors
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
+  });
+  
+  // Build set of vendor contact IDs
+  const vendorContactIds = contacts 
+    ? new Set(contacts
+        .filter(contact => contact.type === 'vendor' || contact.type === 'both')
+        .map(contact => contact.id))
+    : new Set();
+  
+  // Filter vendor-related transactions only
+  const expenses = transactions && contacts
     ? transactions
-        .filter((transaction) => vendorTransactionTypes.includes(transaction.type))
+        .filter((transaction) => {
+          // Include bills and expenses from vendors
+          if ((transaction.type === 'bill' || transaction.type === 'expense') && 
+              transaction.contactId && vendorContactIds.has(transaction.contactId)) {
+            return true;
+          }
+          // Include payments to vendors only
+          if (transaction.type === 'payment' && 
+              transaction.contactId && vendorContactIds.has(transaction.contactId)) {
+            return true;
+          }
+          return false;
+        })
         .filter((expense) => {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
@@ -60,14 +83,18 @@ export default function Expenses() {
         })
     : [];
   
-  // Get total amounts
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  // Get total amounts with correct signs (bills/expenses positive, payments negative)
+  const getDisplayAmount = (transaction: Transaction) => {
+    return transaction.type === 'payment' ? -transaction.amount : transaction.amount;
+  };
+  
+  const totalExpenses = expenses.reduce((sum, expense) => sum + getDisplayAmount(expense), 0);
   const completedExpenses = expenses
     .filter((expense) => expense.status === "completed")
-    .reduce((sum, expense) => sum + expense.amount, 0);
+    .reduce((sum, expense) => sum + getDisplayAmount(expense), 0);
   const openExpenses = expenses
     .filter((expense) => expense.status === "open")
-    .reduce((sum, expense) => sum + expense.amount, 0);
+    .reduce((sum, expense) => sum + getDisplayAmount(expense), 0);
   
   return (
     <div className="py-6">
