@@ -201,9 +201,21 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
-                      {(transaction.type === 'expense' || transaction.type === 'deposit' || transaction.type === 'payment' || transaction.type === 'bill') 
-                        ? '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount) 
-                        : '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount)}
+                      {(() => {
+                        const contact = contacts?.find(c => c.id === transaction.contactId);
+                        // Vendor payments are negative (money going out)
+                        if (transaction.type === 'payment' && contact?.type === 'vendor') {
+                          return '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                        }
+                        // Expenses and deposits are negative (money going out)
+                        else if (transaction.type === 'expense' || transaction.type === 'deposit') {
+                          return '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                        }
+                        // Everything else is positive (bills, invoices, customer payments)
+                        else {
+                          return '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                        }
+                      })()}
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
