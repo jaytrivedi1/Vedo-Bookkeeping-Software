@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 
 import { Bill, Contact, billSchema, Account, SalesTax, Transaction } from "@shared/schema";
@@ -138,6 +138,15 @@ export default function BillView() {
     }
   };
 
+  // Helper function to calculate due date from bill date and payment terms
+  const calculateDueDate = useCallback((billDate: Date, paymentTerms: string): Date => {
+    const date = safeDate(billDate);
+    const days = parseInt(paymentTerms) || 30;
+    const dueDate = new Date(date);
+    dueDate.setDate(dueDate.getDate() + days);
+    return dueDate;
+  }, []);
+
   // Load bill data into form when available
   useEffect(() => {
     if (bill && lineItems) {
@@ -168,7 +177,7 @@ export default function BillView() {
         reference: bill.reference || "",
         description: bill.description || "",
         status: bill.status as "open" | "paid" | "overdue" | "partial" | undefined,
-        dueDate: new Date(), // Due date not available in Transaction schema
+        dueDate: calculateDueDate(bill.date, "30"), // Calculate due date from bill date + payment terms
         paymentTerms: "30", // Default value, could be stored separately
         attachment: "",
         lineItems: lineItems.map((item: any) => ({
@@ -184,7 +193,7 @@ export default function BillView() {
         totalAmount: subTotal + totalTaxAmount,
       });
     }
-  }, [bill, lineItems, salesTaxes, form]);
+  }, [bill, lineItems, salesTaxes, form, calculateDueDate]);
 
   // Update mutation for editing the bill
   const updateBill = useMutation({
@@ -473,7 +482,7 @@ export default function BillView() {
                         />
                       ) : (
                         <Input
-                          value='Not set' // Due date not available in Transaction schema
+                          value={safeFormatDate(calculateDueDate(bill.date, "30"))}
                           readOnly
                           className="bg-muted"
                         />
@@ -529,8 +538,8 @@ export default function BillView() {
 
                     <div className="space-y-4">
                       {form.watch("lineItems").map((_, index) => (
-                        <div key={index} className="grid grid-cols-12 gap-4 items-end">
-                          <div className="col-span-4">
+                        <div key={index} className="grid grid-cols-12 gap-2 items-end">
+                          <div className="col-span-3">
                             <Label>Description</Label>
                             <Input
                               {...form.register(`lineItems.${index}.description`)}
@@ -539,7 +548,7 @@ export default function BillView() {
                               className={!isEditMode ? "bg-muted" : ""}
                             />
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <Label>Quantity</Label>
                             <Input
                               type="number"
@@ -552,7 +561,7 @@ export default function BillView() {
                               className={!isEditMode ? "bg-muted" : ""}
                             />
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <Label>Unit Price</Label>
                             <Input
                               type="number"
@@ -565,7 +574,7 @@ export default function BillView() {
                               className={!isEditMode ? "bg-muted" : ""}
                             />
                           </div>
-                          <div className="col-span-2">
+                          <div className="col-span-1">
                             <Label>Amount</Label>
                             <Input
                               type="number"
@@ -577,7 +586,7 @@ export default function BillView() {
                               className="bg-muted"
                             />
                           </div>
-                          <div className="col-span-1">
+                          <div className="col-span-2">
                             <Label>Account</Label>
                             {isEditMode ? (
                               <Select
@@ -603,7 +612,43 @@ export default function BillView() {
                             ) : (
                               <Input
                                 value={
+                                  allAccounts?.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 
                                   expenseAccounts.find(a => a.id === form.watch(`lineItems.${index}.accountId`))?.name || 'N/A'
+                                }
+                                readOnly
+                                className="bg-muted text-xs"
+                              />
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            <Label>Tax</Label>
+                            {isEditMode ? (
+                              <Select
+                                value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || ""}
+                                onValueChange={(value) => {
+                                  const salesTaxId = value === "" ? null : parseInt(value, 10);
+                                  form.setValue(`lineItems.${index}.salesTaxId`, salesTaxId);
+                                  updateTotals();
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="None" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">None</SelectItem>
+                                  {salesTaxes?.map((tax) => (
+                                    <SelectItem key={tax.id} value={tax.id.toString()}>
+                                      {tax.name} ({tax.rate}%)
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                value={
+                                  form.watch(`lineItems.${index}.salesTaxId`) 
+                                    ? salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.name + ` (${salesTaxes?.find(t => t.id === form.watch(`lineItems.${index}.salesTaxId`))?.rate}%)` || 'N/A'
+                                    : 'None'
                                 }
                                 readOnly
                                 className="bg-muted text-xs"
@@ -631,15 +676,28 @@ export default function BillView() {
                   <Separator />
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <Label htmlFor="description">Notes</Label>
-                      <Textarea
-                        id="description"
-                        {...form.register("description")}
-                        placeholder="Additional notes or comments"
-                        readOnly={!isEditMode}
-                        className={!isEditMode ? "bg-muted" : ""}
-                      />
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="description">Notes</Label>
+                        <Textarea
+                          id="description"
+                          {...form.register("description")}
+                          placeholder="Additional notes or comments"
+                          readOnly={!isEditMode}
+                          className={!isEditMode ? "bg-muted" : ""}
+                        />
+                      </div>
+                      {isEditMode && (
+                        <div>
+                          <Label htmlFor="attachment">Attachment</Label>
+                          <Input
+                            id="attachment"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx"
+                            placeholder="Choose file..."
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-4">
