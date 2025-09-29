@@ -56,10 +56,6 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Payment processing with React Stripe.js integration
 - **Payment Methods**: Credit card processing and payment intent management
 
-### E-commerce Integration
-- **Shopify**: Full API integration for order synchronization
-- **Order Processing**: Automatic invoice generation from Shopify orders
-- **Customer Sync**: Contact management with Shopify customer data
 
 ### Development Tools
 - **Build System**: Vite with hot module replacement
