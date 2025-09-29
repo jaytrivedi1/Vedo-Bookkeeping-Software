@@ -183,14 +183,28 @@ export default function BillView() {
         dueDate: calculateDueDate(bill.date, "30"), // Calculate due date from bill date + payment terms
         paymentTerms: "30", // Default value, could be stored separately
         attachment: "",
-        lineItems: lineItems.map((item: any) => ({
-          description: item.description || "",
-          quantity: Number(item.quantity) || 1,
-          unitPrice: Number(item.unitPrice) || 0,
-          amount: Number(item.amount) || 0,
-          accountId: Number(item.accountId) || Number(item.expenseAccountId) || Number(item.account_id) || undefined,
-          salesTaxId: item.salesTaxId || item.taxId || item.sales_tax_id || null,
-        })),
+        lineItems: lineItems.map((item: any) => {
+          // Normalize accountId from various possible field names
+          const rawAccountId = item.accountId ?? item.expenseAccountId ?? item.account_id;
+          const accountId = rawAccountId != null ? 
+            (typeof rawAccountId === 'number' ? rawAccountId : parseInt(rawAccountId, 10)) : 
+            undefined;
+
+          // Normalize salesTaxId from various possible field names  
+          const rawSalesTaxId = item.salesTaxId ?? item.taxId ?? item.sales_tax_id;
+          const salesTaxId = rawSalesTaxId != null ? 
+            (typeof rawSalesTaxId === 'number' ? rawSalesTaxId : parseInt(rawSalesTaxId, 10)) : 
+            null;
+
+          return {
+            description: item.description || "",
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            amount: Number(item.amount) || 0,
+            accountId: !isNaN(accountId) ? accountId : undefined,
+            salesTaxId: !isNaN(salesTaxId) ? salesTaxId : null,
+          };
+        }),
         subTotal,
         taxAmount: totalTaxAmount,
         totalAmount: subTotal + totalTaxAmount,
@@ -573,12 +587,11 @@ export default function BillView() {
                               <td className="p-2 pl-3">
                                 {isEditMode ? (
                                   <Select
-                                    value={form.watch(`lineItems.${index}.accountId`)?.toString() || "0"}
+                                    value={form.watch(`lineItems.${index}.accountId`)?.toString() || ""}
                                     onValueChange={(value) => {
-                                      const accountId = parseInt(value, 10);
-                                      if (!isNaN(accountId)) {
-                                        form.setValue(`lineItems.${index}.accountId`, accountId);
-                                      }
+                                      const accountId = value ? parseInt(value, 10) : undefined;
+                                      form.setValue(`lineItems.${index}.accountId`, accountId);
+                                      updateTotals();
                                     }}
                                   >
                                     <SelectTrigger>
@@ -649,7 +662,7 @@ export default function BillView() {
                                       <FormItem>
                                         <FormControl>
                                           <Select
-                                            value={field.value?.toString() || "0"}
+                                            value={field.value != null ? field.value.toString() : "0"}
                                             onValueChange={(value) => {
                                               const numValue = parseInt(value);
                                               if (numValue === 0) {
