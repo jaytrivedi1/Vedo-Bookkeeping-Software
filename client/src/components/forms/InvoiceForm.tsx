@@ -156,14 +156,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       reference: invoice?.reference,
       description: invoice?.description || '',
       status: invoice?.status as "open" | "paid" | "overdue" | "partial",
-      lineItems: lineItems?.length ? lineItems.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
-        salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
-        productId: item.productId !== null ? item.productId : null
-      })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
+      lineItems: lineItems?.length ? lineItems.map(item => {
+        // Map line item for editing, ensuring productId is preserved
+        return {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
+          // Ensure productId is properly preserved - keep as number or null, not undefined
+          productId: item.productId !== null && item.productId !== undefined ? item.productId : null
+        };
+      }) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
     } : {
       date: today,
       contactId: undefined,
@@ -952,11 +956,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                {field.value !== undefined ? (
+                                {field.value === undefined ? (
                                   // Show dropdown when a product is selected or no selection yet (null)
                                   <Select
                                     value={field.value ? field.value.toString() : 'none'}
                                     onValueChange={(value) => {
+                                      // Handle product selection change
                                       if (value === 'custom') {
                                         // Handle custom product
                                         field.onChange(undefined);
@@ -993,7 +998,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                       <SelectValue placeholder="Select a product/service">
                                         {field.value && field.value !== null ? (
                                           (() => {
-                                            const selectedProduct = typedProducts.find(p => p.id === field.value);
+                                            // Convert field.value to number for comparison since product IDs are numbers
+                                            const productId = typeof field.value === 'string' ? parseInt(field.value) : field.value;
+                                            const selectedProduct = typedProducts?.find(p => p.id === productId);
                                             return selectedProduct ? `${selectedProduct.name} ($${selectedProduct.price.toFixed(2)})` : "Select a product/service";
                                           })()
                                         ) : "Select a product/service"}
