@@ -1,10 +1,9 @@
-import { db } from './storage.ts';
-import { transactions, ledgerEntries } from '../shared/schema.ts';
-import { eq, and } from 'drizzle-orm';
+import { db } from "./db";
+import { transactions, ledgerEntries } from "@shared/schema";
+import { eq, and, like } from 'drizzle-orm';
 
 /**
- * Fix bill balances by recalculating them using the correct formula.
- * For bills (Accounts Payable), balance = total credits - total debits
+ * Fix bill balances by calculating: Original Amount - Payments Made = Remaining Balance
  */
 export async function fixBillBalances() {
   console.log("Starting bill balance fix...");
@@ -21,23 +20,29 @@ export async function fixBillBalances() {
     for (const bill of allBills) {
       console.log(`Checking bill ${bill.reference} (ID: ${bill.id})`);
       
-      // Get all ledger entries for this bill
-      const billLedgerEntries = await db
+      // Find all payment ledger entries that reference this bill
+      const paymentEntries = await db
         .select()
         .from(ledgerEntries)
-        .where(eq(ledgerEntries.transactionId, bill.id));
+        .where(
+          like(ledgerEntries.description, `%bill ${bill.reference}%`)
+        );
       
-      // Calculate correct balance: sum of credits minus sum of debits (remaining liability)
-      const totalDebits = billLedgerEntries.reduce((sum, entry) => sum + (entry.debit || 0), 0);
-      const totalCredits = billLedgerEntries.reduce((sum, entry) => sum + (entry.credit || 0), 0);
-      const correctBalance = totalCredits - totalDebits;
+      // Calculate total payments made to this bill
+      const totalPayments = paymentEntries.reduce((sum, entry) => {
+        // Payment entries that reduce the bill should be credits in accounts payable
+        return sum + (entry.credit || 0);
+      }, 0);
+      
+      // Calculate correct remaining balance: Original Amount - Payments Made
+      const correctBalance = Number(bill.amount) - totalPayments;
       
       // Determine correct status
       const correctStatus = Math.abs(correctBalance) < 0.01 ? 'completed' : 'open';
       
       console.log(`Bill ${bill.reference} analysis:`);
-      console.log(`  - Total credits (bill amounts): ${totalCredits}`);
-      console.log(`  - Total debits (payments): ${totalDebits}`);
+      console.log(`  - Original amount: ${bill.amount}`);
+      console.log(`  - Total payments made: ${totalPayments}`);
       console.log(`  - Current balance: ${bill.balance}`);
       console.log(`  - Correct balance: ${correctBalance}`);
       console.log(`  - Current status: ${bill.status}`);
