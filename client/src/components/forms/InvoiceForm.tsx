@@ -205,6 +205,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     }
   }, [isEditing, lineItems, invoice]);
 
+  // Set selected contact when editing an invoice
+  useEffect(() => {
+    if (isEditing && invoice?.contactId && contacts && !selectedContact) {
+      const contact = contacts.find(c => c.id === invoice.contactId);
+      if (contact) {
+        setSelectedContact(contact);
+      }
+    }
+  }, [isEditing, invoice?.contactId, contacts, selectedContact]);
+
   const saveInvoice = useMutation({
     mutationFn: async (data: Invoice) => {
       if (isEditing) {
