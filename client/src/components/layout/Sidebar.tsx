@@ -40,7 +40,6 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-5 h-5 mr-3" /> },
     { path: "/expenses", label: "Expenses", icon: <BanknoteIcon className="w-5 h-5 mr-3" /> },
-    { path: "/pay-bill", label: "Pay Bills", icon: <DollarSignIcon className="w-5 h-5 mr-3" /> },
     { path: "/account-books", label: "Account Books", icon: <BookOpenIcon className="w-5 h-5 mr-3" /> },
     { path: "/chart-of-accounts", label: "Chart of Accounts", icon: <DatabaseIcon className="w-5 h-5 mr-3" /> },
     { path: "/sales-taxes", label: "Sales Taxes", icon: <PercentIcon className="w-5 h-5 mr-3" /> },
