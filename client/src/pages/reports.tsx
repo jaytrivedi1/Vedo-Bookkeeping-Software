@@ -107,6 +107,58 @@ export default function Reports() {
     ? ledgerEntries.filter(entry => entry.accountId === selectedAccountId)
     : ledgerEntries;
   
+  // Helper function to determine if an account is debit-normal
+  const isDebitNormal = (accountType: string) => {
+    const debitNormalTypes = [
+      'bank', 'current_assets', 'accounts_receivable', 'inventory', 
+      'property_plant_equipment', 'long_term_assets',
+      'expense', 'cost_of_sales', 'other_expense'
+    ];
+    return debitNormalTypes.includes(accountType);
+  };
+  
+  // Sort and prepare ledger entries with running balance
+  const sortedLedgerEntries = filteredLedgerEntries
+    ? [...filteredLedgerEntries].sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return a.id - b.id;
+      })
+    : [];
+  
+  // Calculate running balance for the selected account
+  const ledgerEntriesWithBalance = sortedLedgerEntries.reduce((acc: any[], entry) => {
+    const account = accounts?.find(acc => acc.id === entry.accountId);
+    const accountType = account?.type || '';
+    const isDebitNormalAccount = isDebitNormal(accountType);
+    
+    // Get previous balance (0 if first entry)
+    const prevBalance = acc.length === 0 ? 0 : acc[acc.length - 1].runningBalance;
+    
+    // Calculate delta based on account normal side
+    const debit = Math.max(0, Number(entry.debit || 0));
+    const credit = Math.max(0, Number(entry.credit || 0));
+    
+    let runningBalance;
+    if (isDebitNormalAccount) {
+      // For debit-normal accounts: increase on debit, decrease on credit
+      runningBalance = prevBalance + debit - credit;
+    } else {
+      // For credit-normal accounts: decrease on debit, increase on credit
+      runningBalance = prevBalance - debit + credit;
+    }
+    
+    acc.push({
+      ...entry,
+      runningBalance,
+      debitAmount: debit,
+      creditAmount: credit
+    });
+    
+    return acc;
+  }, []);
+  
   // Prepare data for charts
   const incomeData = incomeStatement 
     ? [
@@ -879,20 +931,21 @@ export default function Reports() {
                               <TableHead>Account</TableHead>
                               <TableHead className="text-right">Debit</TableHead>
                               <TableHead className="text-right">Credit</TableHead>
+                              <TableHead className="text-right">Running Balance</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredLedgerEntries && filteredLedgerEntries.length === 0 ? (
+                            {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={5} className="text-center py-6 text-gray-500">
+                                <TableCell colSpan={6} className="text-center py-6 text-gray-500">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              filteredLedgerEntries && filteredLedgerEntries.map((entry: any) => {
-                                const accountName = accountBalances?.find(
-                                  ({ account }) => account.id === entry.accountId
-                                )?.account.name || 'Unknown Account';
+                              ledgerEntriesWithBalance && ledgerEntriesWithBalance.map((entry: any) => {
+                                const accountName = accounts?.find(
+                                  (account) => account.id === entry.accountId
+                                )?.name || 'Unknown Account';
                                 
                                 return (
                                   <TableRow key={entry.id}>
@@ -900,10 +953,13 @@ export default function Reports() {
                                     <TableCell>{entry.description}</TableCell>
                                     <TableCell>{accountName}</TableCell>
                                     <TableCell className="text-right">
-                                      {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
+                                      {entry.debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debitAmount) : ''}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
+                                      {entry.creditAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.creditAmount) : ''}
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(entry.runningBalance))}
                                     </TableCell>
                                   </TableRow>
                                 );
