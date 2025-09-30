@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, ArrowLeft, FileDown } from "lucide-react";
+import Papa from "papaparse";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 import ExportMenu from "@/components/ExportMenu";
 import { 
   exportIncomeStatementToCSV, 
@@ -911,12 +914,85 @@ export default function Reports() {
                         <div className="mt-2 sm:mt-0">
                           <ExportMenu
                             onExportCSV={() => {
+                              if (!trialBalanceData || trialBalanceLoading) return;
+                              
                               const filename = generateFilename('trial_balance');
-                              exportAccountBalancesToCSV(accountBalances || [], `${filename}.csv`);
+                              // Export trial balance to CSV
+                              const csvData = trialBalanceData.map((item: any) => ({
+                                'Account Code': item.account.code,
+                                'Account Name': item.account.name,
+                                'Debit': item.debitBalance > 0 ? item.debitBalance.toFixed(2) : '',
+                                'Credit': item.creditBalance > 0 ? item.creditBalance.toFixed(2) : '',
+                              }));
+                              
+                              // Add totals row using integer arithmetic for precision
+                              const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
+                              const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
+                              csvData.push({
+                                'Account Code': '',
+                                'Account Name': 'Total',
+                                'Debit': (totalDebitCents / 100).toFixed(2),
+                                'Credit': (totalCreditCents / 100).toFixed(2),
+                              });
+                              
+                              const csv = Papa.unparse(csvData);
+                              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.setAttribute('href', url);
+                              link.setAttribute('download', `${filename}.csv`);
+                              link.style.visibility = 'hidden';
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
                             }}
                             onExportPDF={() => {
+                              if (!trialBalanceData || trialBalanceLoading) return;
+                              
                               const filename = generateFilename('trial_balance');
-                              exportAccountBalancesToPDF(accountBalances || [], `${filename}.pdf`);
+                              // Export trial balance to PDF
+                              const doc = new jsPDF();
+                              
+                              // Add title
+                              doc.setFontSize(18);
+                              doc.text('Trial Balance', 14, 22);
+                              
+                              // Add date
+                              doc.setFontSize(11);
+                              doc.text(`As of: ${new Date().toLocaleDateString()}`, 14, 30);
+                              
+                              // Prepare table data
+                              const tableData = trialBalanceData.map((item: any) => [
+                                item.account.code,
+                                item.account.name,
+                                item.debitBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.debitBalance) : '',
+                                item.creditBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.creditBalance) : '',
+                              ]);
+                              
+                              // Add totals row using integer arithmetic for precision
+                              const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
+                              const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
+                              tableData.push([
+                                '',
+                                'Total',
+                                new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebitCents / 100),
+                                new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCreditCents / 100),
+                              ]);
+                              
+                              (doc as any).autoTable({
+                                head: [['Account Code', 'Account Name', 'Debit', 'Credit']],
+                                body: tableData,
+                                startY: 40,
+                                theme: 'grid',
+                                styles: { halign: 'right' },
+                                columnStyles: {
+                                  0: { halign: 'left' },
+                                  1: { halign: 'left' },
+                                },
+                                footStyles: { fontStyle: 'bold' },
+                              });
+                              
+                              doc.save(`${filename}.pdf`);
                             }}
                             label="Export"
                           />

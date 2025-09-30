@@ -3182,33 +3182,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accounts = await storage.getAccounts();
       const ledgerEntries = await storage.getAllLedgerEntries();
       
-      // Group ledger entries by account and calculate totals
-      const accountTotals = new Map<number, { totalDebits: number; totalCredits: number }>();
+      // Group ledger entries by account and calculate totals using integer arithmetic (cents)
+      const accountTotals = new Map<number, { totalDebitsCents: number; totalCreditsCents: number }>();
       
       ledgerEntries.forEach(entry => {
         if (!accountTotals.has(entry.accountId)) {
-          accountTotals.set(entry.accountId, { totalDebits: 0, totalCredits: 0 });
+          accountTotals.set(entry.accountId, { totalDebitsCents: 0, totalCreditsCents: 0 });
         }
         const totals = accountTotals.get(entry.accountId)!;
-        totals.totalDebits += Number(entry.debit);
-        totals.totalCredits += Number(entry.credit);
+        // Convert to cents (multiply by 100 and round to avoid floating point errors)
+        totals.totalDebitsCents += Math.round(Number(entry.debit) * 100);
+        totals.totalCreditsCents += Math.round(Number(entry.credit) * 100);
       });
       
       // Build trial balance data
       const trialBalanceData = accounts.map(account => {
-        const totals = accountTotals.get(account.id) || { totalDebits: 0, totalCredits: 0 };
-        const netBalance = totals.totalDebits - totals.totalCredits;
+        const totals = accountTotals.get(account.id) || { totalDebitsCents: 0, totalCreditsCents: 0 };
+        const netBalanceCents = totals.totalDebitsCents - totals.totalCreditsCents;
         
-        // Determine if this is a debit or credit balance account
-        const isDebitAccount = 
-          account.type === 'accounts_receivable' || 
-          account.type === 'current_assets' || 
-          account.type === 'bank' || 
-          account.type === 'property_plant_equipment' || 
-          account.type === 'long_term_assets' ||
-          account.type === 'expenses' || 
-          account.type === 'cost_of_goods_sold' ||
-          account.type === 'other_expense';
+        // Convert back to dollars for display
+        const totalDebits = totals.totalDebitsCents / 100;
+        const totalCredits = totals.totalCreditsCents / 100;
         
         // For trial balance display:
         // If net is positive (debits > credits), show in debit column
@@ -3216,10 +3210,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let debitBalance = 0;
         let creditBalance = 0;
         
-        if (netBalance > 0) {
-          debitBalance = netBalance;
-        } else if (netBalance < 0) {
-          creditBalance = Math.abs(netBalance);
+        if (netBalanceCents > 0) {
+          debitBalance = netBalanceCents / 100;
+        } else if (netBalanceCents < 0) {
+          creditBalance = Math.abs(netBalanceCents) / 100;
         }
         
         return {
@@ -3231,8 +3225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
           debitBalance,
           creditBalance,
-          totalDebits: totals.totalDebits,
-          totalCredits: totals.totalCredits,
+          totalDebits,
+          totalCredits,
         };
       }).filter(item => item.debitBalance !== 0 || item.creditBalance !== 0); // Only show accounts with balances
       
