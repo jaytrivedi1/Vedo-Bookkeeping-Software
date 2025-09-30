@@ -306,6 +306,7 @@ export const companiesSchema = pgTable('companies', {
   website: text('website'),
   taxId: text('tax_id'),
   logoUrl: text('logo_url'),
+  fiscalYearStartMonth: integer('fiscal_year_start_month').default(1), // 1=January, 12=December
   isActive: boolean('is_active').default(true),
   isDefault: boolean('is_default').default(false),
   createdAt: timestamp('created_at').defaultNow(),
@@ -322,6 +323,7 @@ export const companySchema = pgTable('company_settings', {
   website: text('website'),
   taxId: text('tax_id'),
   logoUrl: text('logo_url'),
+  fiscalYearStartMonth: integer('fiscal_year_start_month').default(1), // 1=January, 12=December
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 

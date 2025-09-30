@@ -20,6 +20,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tabs,
   TabsContent,
   TabsList,
@@ -40,6 +47,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, Info, Languages, Moon, Sun, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { MONTH_OPTIONS } from "@shared/fiscalYear";
 
 // Define schema for company details
 const companyFormSchema = z.object({
@@ -55,6 +63,7 @@ const companyFormSchema = z.object({
     message: "Please enter a valid URL.",
   }).optional(),
   taxId: z.string().optional(),
+  fiscalYearStartMonth: z.number().min(1).max(12).optional(),
 });
 
 // Define settings for preferences
@@ -118,7 +127,8 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       phone: "+1 (555) 123-4567",
       email: "info@yourcompany.com",
       website: "https://yourcompany.com",
-      taxId: "12-3456789"
+      taxId: "12-3456789",
+      fiscalYearStartMonth: 1,
     },
   });
   
@@ -133,6 +143,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         email: data.email || "",
         website: data.website || "",
         taxId: data.taxId || "",
+        fiscalYearStartMonth: data.fiscalYearStartMonth || 1,
       });
     }
   }, [companyQuery.data, form]);
@@ -369,6 +380,38 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                       )}
                     />
                   </div>
+                  
+                  {/* Fiscal Year Settings */}
+                  <FormField
+                    control={form.control}
+                    name="fiscalYearStartMonth"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Fiscal Year Start Month</FormLabel>
+                        <Select 
+                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                          value={field.value?.toString()}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-fiscal-year-month">
+                              <SelectValue placeholder="Select first month of fiscal year" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {MONTH_OPTIONS.map((month) => (
+                              <SelectItem key={month.value} value={month.value.toString()}>
+                                {month.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-muted-foreground">
+                          This setting affects all financial reports and determines how fiscal periods are calculated
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
                 
                 <Button 
