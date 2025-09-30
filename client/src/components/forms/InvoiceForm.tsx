@@ -956,7 +956,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                {field.value === undefined ? (
+                                {field.value !== undefined ? (
                                   // Show dropdown when a product is selected or no selection yet (null)
                                   <Select
                                     value={field.value ? field.value.toString() : 'none'}
