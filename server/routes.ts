@@ -1455,17 +1455,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mainLedgerEntries = [
         {
           transactionId: 0, // Will be set by createTransaction
-          accountId: Number(data.paymentAccountId), // Debit payment account (decrease cash/bank)
-          debit: Number(data.totalAmount),
-          credit: 0,
+          accountId: Number(data.paymentAccountId), // Credit payment account (decrease cash/bank)
+          debit: 0,
+          credit: Number(data.totalAmount),
           description: `Bill payment to ${vendor.name}`,
           date: new Date(data.paymentDate)
         },
         {
           transactionId: 0, // Will be set by createTransaction
-          accountId: 4, // Credit accounts payable (FIXED: was 3 which is Inventory)
-          debit: 0,
-          credit: Number(data.totalAmount),
+          accountId: 4, // Debit accounts payable (decrease liability)
+          debit: Number(data.totalAmount),
+          credit: 0,
           description: `Bill payment to ${vendor.name}`,
           date: new Date(data.paymentDate)
         }
