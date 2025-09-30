@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft, FileDown } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -65,6 +65,8 @@ export default function Reports() {
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 1));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [sortColumn, setSortColumn] = useState<string>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Fetch income statement data
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
@@ -112,13 +114,35 @@ export default function Reports() {
     const debitNormalTypes = [
       'bank', 'current_assets', 'accounts_receivable', 'inventory', 
       'property_plant_equipment', 'long_term_assets',
-      'expense', 'cost_of_sales', 'other_expense'
+      'expenses', 'cost_of_goods_sold', 'other_expense'
     ];
     return debitNormalTypes.includes(accountType);
   };
   
-  // Sort and prepare ledger entries with running balance
-  const sortedLedgerEntries = filteredLedgerEntries
+  // Handle column sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if same column
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Render sort icon
+  const renderSortIcon = (column: string) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="ml-2 h-4 w-4" />;
+    }
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="ml-2 h-4 w-4" />
+      : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+  
+  // First sort by date for running balance calculation
+  const dateSortedLedgerEntries = filteredLedgerEntries
     ? [...filteredLedgerEntries].sort((a, b) => {
         const dateA = new Date(a.date).getTime();
         const dateB = new Date(b.date).getTime();
@@ -128,7 +152,7 @@ export default function Reports() {
     : [];
   
   // Calculate running balance for the selected account
-  const ledgerEntriesWithBalance = sortedLedgerEntries.reduce((acc: any[], entry) => {
+  const ledgerEntriesWithBalanceUnsorted = dateSortedLedgerEntries.reduce((acc: any[], entry) => {
     const account = accounts?.find(acc => acc.id === entry.accountId);
     const accountType = account?.type || '';
     const isDebitNormalAccount = isDebitNormal(accountType);
@@ -158,6 +182,45 @@ export default function Reports() {
     
     return acc;
   }, []);
+  
+  // Apply user-selected sorting
+  const ledgerEntriesWithBalance = [...ledgerEntriesWithBalanceUnsorted].sort((a, b) => {
+    let compareValue = 0;
+    
+    switch (sortColumn) {
+      case 'date':
+        compareValue = new Date(a.date).getTime() - new Date(b.date).getTime();
+        break;
+      case 'name':
+        const nameA = (a.contactName || '').toLowerCase();
+        const nameB = (b.contactName || '').toLowerCase();
+        compareValue = nameA.localeCompare(nameB);
+        break;
+      case 'description':
+        const descA = (a.description || '').toLowerCase();
+        const descB = (b.description || '').toLowerCase();
+        compareValue = descA.localeCompare(descB);
+        break;
+      case 'account':
+        const accountA = accounts?.find(acc => acc.id === a.accountId)?.name || '';
+        const accountB = accounts?.find(acc => acc.id === b.accountId)?.name || '';
+        compareValue = accountA.localeCompare(accountB);
+        break;
+      case 'debit':
+        compareValue = a.debitAmount - b.debitAmount;
+        break;
+      case 'credit':
+        compareValue = a.creditAmount - b.creditAmount;
+        break;
+      case 'balance':
+        compareValue = a.runningBalance - b.runningBalance;
+        break;
+      default:
+        compareValue = 0;
+    }
+    
+    return sortDirection === 'asc' ? compareValue : -compareValue;
+  });
   
   // Prepare data for charts
   const incomeData = incomeStatement 
@@ -926,13 +989,76 @@ export default function Reports() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Description</TableHead>
-                              <TableHead>Account</TableHead>
-                              <TableHead className="text-right">Debit</TableHead>
-                              <TableHead className="text-right">Credit</TableHead>
-                              <TableHead className="text-right">Balance</TableHead>
+                              <TableHead 
+                                className="cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('date')}
+                                data-testid="header-date"
+                              >
+                                <div className="flex items-center">
+                                  Date
+                                  {renderSortIcon('date')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('name')}
+                                data-testid="header-name"
+                              >
+                                <div className="flex items-center">
+                                  Name
+                                  {renderSortIcon('name')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('description')}
+                                data-testid="header-description"
+                              >
+                                <div className="flex items-center">
+                                  Description
+                                  {renderSortIcon('description')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('account')}
+                                data-testid="header-account"
+                              >
+                                <div className="flex items-center">
+                                  Account
+                                  {renderSortIcon('account')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('debit')}
+                                data-testid="header-debit"
+                              >
+                                <div className="flex items-center justify-end">
+                                  Debit
+                                  {renderSortIcon('debit')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('credit')}
+                                data-testid="header-credit"
+                              >
+                                <div className="flex items-center justify-end">
+                                  Credit
+                                  {renderSortIcon('credit')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('balance')}
+                                data-testid="header-balance"
+                              >
+                                <div className="flex items-center justify-end">
+                                  Balance
+                                  {renderSortIcon('balance')}
+                                </div>
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
