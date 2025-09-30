@@ -3176,6 +3176,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Trial Balance report - calculates from ledger entries
+  apiRouter.get("/reports/trial-balance", async (req: Request, res: Response) => {
+    try {
+      const accounts = await storage.getAccounts();
+      const ledgerEntries = await storage.getAllLedgerEntries();
+      
+      // Group ledger entries by account and calculate totals
+      const accountTotals = new Map<number, { totalDebits: number; totalCredits: number }>();
+      
+      ledgerEntries.forEach(entry => {
+        if (!accountTotals.has(entry.accountId)) {
+          accountTotals.set(entry.accountId, { totalDebits: 0, totalCredits: 0 });
+        }
+        const totals = accountTotals.get(entry.accountId)!;
+        totals.totalDebits += Number(entry.debit);
+        totals.totalCredits += Number(entry.credit);
+      });
+      
+      // Build trial balance data
+      const trialBalanceData = accounts.map(account => {
+        const totals = accountTotals.get(account.id) || { totalDebits: 0, totalCredits: 0 };
+        const netBalance = totals.totalDebits - totals.totalCredits;
+        
+        // Determine if this is a debit or credit balance account
+        const isDebitAccount = 
+          account.type === 'accounts_receivable' || 
+          account.type === 'current_assets' || 
+          account.type === 'bank' || 
+          account.type === 'property_plant_equipment' || 
+          account.type === 'long_term_assets' ||
+          account.type === 'expenses' || 
+          account.type === 'cost_of_goods_sold' ||
+          account.type === 'other_expense';
+        
+        // For trial balance display:
+        // If net is positive (debits > credits), show in debit column
+        // If net is negative (credits > debits), show in credit column
+        let debitBalance = 0;
+        let creditBalance = 0;
+        
+        if (netBalance > 0) {
+          debitBalance = netBalance;
+        } else if (netBalance < 0) {
+          creditBalance = Math.abs(netBalance);
+        }
+        
+        return {
+          account: {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type,
+          },
+          debitBalance,
+          creditBalance,
+          totalDebits: totals.totalDebits,
+          totalCredits: totals.totalCredits,
+        };
+      }).filter(item => item.debitBalance !== 0 || item.creditBalance !== 0); // Only show accounts with balances
+      
+      res.json(trialBalanceData);
+    } catch (error) {
+      console.error("Error generating trial balance:", error);
+      res.status(500).json({ message: "Failed to generate trial balance" });
+    }
+  });
+  
   // Ledger entries route - needed for Account Books
   apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {
     try {

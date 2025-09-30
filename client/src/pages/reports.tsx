@@ -74,10 +74,16 @@ export default function Reports() {
     enabled: activeTab === 'balance-sheet' || activeTab === '',
   });
   
-  // Fetch account balances (for trial balance and detailed breakdowns)
+  // Fetch account balances (for detailed breakdowns)
   const { data: accountBalances, isLoading: accountsLoading } = useQuery({
     queryKey: ['/api/reports/account-balances'],
-    enabled: activeTab !== 'general-ledger',
+    enabled: activeTab !== 'general-ledger' && activeTab !== 'trial-balance',
+  });
+  
+  // Fetch trial balance (calculated from ledger entries)
+  const { data: trialBalanceData, isLoading: trialBalanceLoading } = useQuery({
+    queryKey: ['/api/reports/trial-balance'],
+    enabled: activeTab === 'trial-balance',
   });
   
   // Fetch ledger entries (for general ledger)
@@ -901,16 +907,16 @@ export default function Reports() {
                           </Button>
                         </div>
                       </div>
-                      {accountBalances && !accountsLoading && (
+                      {trialBalanceData && !trialBalanceLoading && (
                         <div className="mt-2 sm:mt-0">
                           <ExportMenu
                             onExportCSV={() => {
                               const filename = generateFilename('trial_balance');
-                              exportAccountBalancesToCSV(accountBalances, `${filename}.csv`);
+                              exportAccountBalancesToCSV(accountBalances || [], `${filename}.csv`);
                             }}
                             onExportPDF={() => {
                               const filename = generateFilename('trial_balance');
-                              exportAccountBalancesToPDF(accountBalances, `${filename}.pdf`);
+                              exportAccountBalancesToPDF(accountBalances || [], `${filename}.pdf`);
                             }}
                             label="Export"
                           />
@@ -919,9 +925,9 @@ export default function Reports() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {accountsLoading ? (
+                    {trialBalanceLoading ? (
                       <div className="text-center py-6">Loading trial balance data...</div>
-                    ) : accountBalances && accountBalances.length > 0 ? (
+                    ) : trialBalanceData && trialBalanceData.length > 0 ? (
                       <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
@@ -933,62 +939,23 @@ export default function Reports() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {accountBalances.map(({ account, balance }, index) => {
-                              // For trial balance:
-                              // - Assets and Expenses have debit balances (positive in our system)
-                              // - Liabilities, Equity, and Income have credit balances (negative in our system)
-                              const isDebitAccount = 
-                                account.type === 'accounts_receivable' || 
-                                account.type === 'current_assets' || 
-                                account.type === 'bank' || 
-                                account.type === 'property_plant_equipment' || 
-                                account.type === 'long_term_assets' ||
-                                account.type === 'expenses' || 
-                                account.type === 'cost_of_goods_sold' ||
-                                account.type === 'other_expense';
-                              
-                              // Display absolute values in the appropriate columns
-                              const debitAmount = isDebitAccount ? Math.abs(balance) : 0;
-                              const creditAmount = !isDebitAccount ? Math.abs(balance) : 0;
-                              
-                              return (
-                                <TableRow key={index}>
-                                  <TableCell>{account.code}</TableCell>
-                                  <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">
-                                    {debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(debitAmount) : ''}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    {creditAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(creditAmount) : ''}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
+                            {trialBalanceData.map((item: any, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>{item.account.code}</TableCell>
+                                <TableCell>{item.account.name}</TableCell>
+                                <TableCell className="text-right">
+                                  {item.debitBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.debitBalance) : ''}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {item.creditBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.creditBalance) : ''}
+                                </TableCell>
+                              </TableRow>
+                            ))}
                             
                             {/* Calculate totals */}
                             {(() => {
-                              let totalDebit = 0;
-                              let totalCredit = 0;
-                              
-                              if (accountBalances) {
-                                accountBalances.forEach(({ account, balance }) => {
-                                  const isDebitAccount = 
-                                    account.type === 'accounts_receivable' || 
-                                    account.type === 'current_assets' || 
-                                    account.type === 'bank' || 
-                                    account.type === 'property_plant_equipment' || 
-                                    account.type === 'long_term_assets' ||
-                                    account.type === 'expenses' || 
-                                    account.type === 'cost_of_goods_sold' ||
-                                    account.type === 'other_expense';
-                                  
-                                  if (isDebitAccount) {
-                                    totalDebit += Math.abs(balance);
-                                  } else {
-                                    totalCredit += Math.abs(balance);
-                                  }
-                                });
-                              }
+                              const totalDebit = trialBalanceData.reduce((sum: number, item: any) => sum + item.debitBalance, 0);
+                              const totalCredit = trialBalanceData.reduce((sum: number, item: any) => sum + item.creditBalance, 0);
                               
                               return (
                                 <TableRow className="font-bold">
