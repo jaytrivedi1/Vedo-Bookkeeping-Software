@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useLocation } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -67,6 +68,7 @@ export default function Reports() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [sortColumn, setSortColumn] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [, setLocation] = useLocation();
   
   // Fetch income statement data
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
@@ -139,6 +141,39 @@ export default function Reports() {
     return sortDirection === 'asc' 
       ? <ArrowUp className="ml-2 h-4 w-4" />
       : <ArrowDown className="ml-2 h-4 w-4" />;
+  };
+  
+  // Handle transaction row click
+  const handleTransactionClick = (transactionId: number, transactionType: string) => {
+    if (!transactionId || !transactionType) {
+      console.warn('Cannot navigate: missing transaction ID or type');
+      return;
+    }
+    
+    switch (transactionType) {
+      case 'invoice':
+        setLocation(`/invoices/${transactionId}`);
+        break;
+      case 'payment':
+        setLocation(`/payments/${transactionId}`);
+        break;
+      case 'bill':
+        setLocation(`/bills/${transactionId}`);
+        break;
+      case 'deposit':
+        setLocation(`/deposits/${transactionId}`);
+        break;
+      case 'expense':
+        // Expenses don't have individual view pages, navigate to expenses page
+        setLocation('/expenses');
+        break;
+      case 'journal_entry':
+        // Journal entries don't have individual view pages, navigate to journals page
+        setLocation('/journals');
+        break;
+      default:
+        console.warn(`Unknown transaction type: ${transactionType}`);
+    }
   };
   
   // First sort by date for running balance calculation
@@ -1075,7 +1110,12 @@ export default function Reports() {
                                 )?.name || 'Unknown Account';
                                 
                                 return (
-                                  <TableRow key={entry.id}>
+                                  <TableRow 
+                                    key={entry.id}
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
+                                    data-testid={`transaction-row-${entry.transactionId}`}
+                                  >
                                     <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
                                     <TableCell>{entry.contactName || '-'}</TableCell>
                                     <TableCell>{entry.description}</TableCell>
