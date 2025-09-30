@@ -1242,7 +1242,7 @@ export class DatabaseStorage implements IStorage {
         date: ledgerEntries.date,
         contactName: contacts.name,
         transactionType: transactions.type,
-        referenceNumber: transactions.referenceNumber,
+        referenceNumber: transactions.reference,
       })
       .from(ledgerEntries)
       .leftJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
