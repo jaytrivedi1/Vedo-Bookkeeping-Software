@@ -336,7 +336,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     calculateTotals();
   };
 
-  const calculateTotals = () => {
+  const calculateTotals = (creditsArray?: Transaction[]) => {
     const lineItems = form.getValues('lineItems');
     const subtotal = roundTo2Decimals(lineItems.reduce((sum, item) => sum + (item.amount || 0), 0));
     
@@ -508,8 +508,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     
     const total = roundTo2Decimals(subtotal + totalTaxAmount);
     
-    // Credit application functionality has been removed
-    
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     
@@ -536,8 +534,11 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     setTaxNames(taxNameList);
     
     // Calculate balance due (total - applied credits)
-    // First, get the accurate total of all applied credits directly from the credit array
-    const accurateAppliedTotal = unappliedCredits.reduce((sum, c) => 
+    // Use the provided credits array if available, otherwise use state
+    const creditsToUse = creditsArray || unappliedCredits;
+    
+    // Get the accurate total of all applied credits directly from the credit array
+    const accurateAppliedTotal = creditsToUse.reduce((sum, c) => 
       sum + (c.appliedAmount || 0), 0
     );
     
@@ -743,9 +744,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="h-screen flex flex-col">
         {/* Header */}
-        <div className="bg-white border-b px-4 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-medium">Invoice no.{form.watch('reference')}</h1>
+            <h1 className="text-xl font-semibold">Invoice #{form.watch('reference')}</h1>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="icon">
@@ -760,191 +761,197 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-grow">
-          {/* Main content area */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Left column */}
-            <div className="md:col-span-2 space-y-6">
-              {/* Customer section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <FormField
-                    control={form.control}
-                    name="contactId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <div className="flex items-center mb-1">
-                          <FormLabel className="text-sm font-medium">Customer</FormLabel>
-                          <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
-                        </div>
-                        <FormControl>
-                          <Select 
-                            onValueChange={(value) => {
-                              field.onChange(parseInt(value));
-                              handleContactChange(parseInt(value));
-                            }} 
-                            defaultValue={field.value?.toString()}
-                          >
-                            <SelectTrigger className="bg-white border-gray-300">
-                              <SelectValue placeholder="Select a customer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {contactsLoading ? (
-                                <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                              ) : contacts && contacts.length > 0 ? (
-                                contacts
-                                  .filter(contact => contact.type === 'customer' || contact.type === 'both')
-                                  .map((contact) => (
-                                    <SelectItem key={contact.id} value={contact.id.toString()}>
-                                      {contact.name}
-                                    </SelectItem>
-                                  ))
-                              ) : (
-                                <SelectItem value="none" disabled>No customers available</SelectItem>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div>
-                  <div className="flex items-center mb-1">
-                    <FormLabel className="text-sm font-medium">Customer email</FormLabel>
-                    <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
-                  </div>
-                  <Input 
-                    className="bg-white border-gray-300" 
-                    placeholder="Separate emails with a comma"
-                    value={selectedContact?.email || ''}
-                    readOnly
-                  />
-                  
-                  <div className="flex items-center mt-2 space-x-2">
-                    <Checkbox 
-                      id="send-invoice" 
-                      checked={sendInvoiceEmail}
-                      onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
-                    />
-                    <label
-                      htmlFor="send-invoice"
-                      className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                    >
-                      Send later
-                    </label>
-                    <HelpCircle className="h-4 w-4 text-gray-400" />
-                  </div>
-                </div>
-              </div>
-              
-              {/* Billing section */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <FormLabel className="text-sm font-medium block mb-1">Billing address</FormLabel>
-                  <Textarea 
-                    className="h-24 bg-white border-gray-300" 
-                    value={selectedContact?.address || ''}
-                    readOnly
-                  />
-                </div>
-                
-                <div>
-                  <div className="flex items-center mb-1">
-                    <FormLabel className="text-sm font-medium">Terms</FormLabel>
-                    <HelpCircle className="h-4 w-4 ml-1 text-gray-400" />
-                  </div>
-                  <FormItem>
-                    <FormControl>
-                      <Select 
-                        value={paymentTerms} 
-                        onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                      >
-                        <SelectTrigger className="bg-white border-gray-300">
-                          <SelectValue placeholder="Select payment terms" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="7">Net 7</SelectItem>
-                          <SelectItem value="14">Net 14</SelectItem>
-                          <SelectItem value="30">Net 30</SelectItem>
-                          <SelectItem value="60">Net 60</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                  
-                  {/* Recurring invoice option removed as requested */}
-                </div>
-                
-                <div className="space-y-4">
+        <div className="p-6 overflow-y-auto flex-grow bg-gray-50">
+          {/* Main content area with improved 2-column layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
+            {/* Left column - Main content */}
+            <div className="lg:col-span-8 space-y-6">
+              {/* Customer section - with better alignment */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <FormLabel className="text-sm font-medium block mb-1">Invoice date</FormLabel>
                     <FormField
                       control={form.control}
-                      name="date"
+                      name="contactId"
                       render={({ field }) => (
                         <FormItem>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Input
-                                  className="bg-white border-gray-300"
-                                  value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
-                                  readOnly
-                                />
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
+                          <div className="flex items-center gap-1 mb-2">
+                            <FormLabel className="text-sm font-medium">Customer</FormLabel>
+                            <HelpCircle className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <FormControl>
+                            <Select 
+                              onValueChange={(value) => {
+                                field.onChange(parseInt(value));
+                                handleContactChange(parseInt(value));
+                              }} 
+                              defaultValue={field.value?.toString()}
+                            >
+                              <SelectTrigger className="bg-white border-gray-300 h-10">
+                                <SelectValue placeholder="Select a customer" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {contactsLoading ? (
+                                  <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
+                                ) : contacts && contacts.length > 0 ? (
+                                  contacts
+                                    .filter(contact => contact.type === 'customer' || contact.type === 'both')
+                                    .map((contact) => (
+                                      <SelectItem key={contact.id} value={contact.id.toString()}>
+                                        {contact.name}
+                                      </SelectItem>
+                                    ))
+                                ) : (
+                                  <SelectItem value="none" disabled>No customers available</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
                   
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center gap-1 mb-2">
+                        <FormLabel className="text-sm font-medium">Customer email</FormLabel>
+                        <HelpCircle className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <Input 
+                        className="bg-white border-gray-300 h-10" 
+                        placeholder="Separate emails with a comma"
+                        value={selectedContact?.email || ''}
+                        readOnly
+                      />
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="send-invoice" 
+                        checked={sendInvoiceEmail}
+                        onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
+                      />
+                      <label
+                        htmlFor="send-invoice"
+                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        Send later
+                      </label>
+                      <HelpCircle className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Billing section - improved alignment */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <FormLabel className="text-sm font-medium block mb-1">Due date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Input
-                          className="bg-white border-gray-300"
-                          value={format(dueDate, "dd/MM/yyyy")}
-                          readOnly
-                        />
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={dueDate}
-                          onSelect={(date) => date && setDueDate(date)}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <FormLabel className="text-sm font-medium block mb-2">Billing address</FormLabel>
+                    <Textarea 
+                      className="min-h-[120px] bg-white border-gray-300 resize-none" 
+                      value={selectedContact?.address || ''}
+                      readOnly
+                    />
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-1 mb-2">
+                        <FormLabel className="text-sm font-medium">Terms</FormLabel>
+                        <HelpCircle className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <FormItem>
+                        <FormControl>
+                          <Select 
+                            value={paymentTerms} 
+                            onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                          >
+                            <SelectTrigger className="bg-white border-gray-300 h-10">
+                              <SelectValue placeholder="Select payment terms" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="7">Net 7</SelectItem>
+                              <SelectItem value="14">Net 14</SelectItem>
+                              <SelectItem value="30">Net 30</SelectItem>
+                              <SelectItem value="60">Net 60</SelectItem>
+                              <SelectItem value="custom">Custom</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                      </FormItem>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <FormLabel className="text-sm font-medium block mb-2">Invoice date</FormLabel>
+                      <FormField
+                        control={form.control}
+                        name="date"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Input
+                                    className="bg-white border-gray-300 h-10"
+                                    value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
+                                    readOnly
+                                  />
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={field.onChange}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <div>
+                      <FormLabel className="text-sm font-medium block mb-2">Due date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Input
+                            className="bg-white border-gray-300 h-10"
+                            value={format(dueDate, "dd/MM/yyyy")}
+                            readOnly
+                          />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={dueDate}
+                            onSelect={(date) => date && setDueDate(date)}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
                 </div>
               </div>
               
               {/* Tags section removed as requested */}
               
-              {/* Line Items */}
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <div className="text-sm">Amounts are</div>
+              {/* Line Items - improved table */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="text-sm font-medium">Line Items</div>
                   <FormItem>
                     <FormControl>
                       <Select defaultValue="exclusive">
-                        <SelectTrigger className="w-40 bg-white border-gray-300">
+                        <SelectTrigger className="w-44 bg-white border-gray-300 h-10">
                           <SelectValue placeholder="Tax setting" />
                         </SelectTrigger>
                         <SelectContent>
@@ -957,23 +964,24 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   </FormItem>
                 </div>
                 
-                <div className="border rounded-sm overflow-hidden">
+                <div className="border rounded-lg overflow-hidden">
                   {/* Header */}
-                  <div className="bg-gray-50 grid grid-cols-12 text-xs font-medium p-2 border-b">
+                  <div className="bg-gray-50 grid grid-cols-12 gap-2 text-xs font-semibold p-3 border-b uppercase text-gray-600">
                     <div className="col-span-1 text-center">#</div>
-                    <div className="col-span-4">PRODUCT/SERVICE</div>
-                    <div className="col-span-2">DESCRIPTION</div>
-                    <div className="col-span-1 text-center">QTY</div>
-                    <div className="col-span-1 text-center">RATE (CAD)</div>
-                    <div className="col-span-1 text-center">AMOUNT (CAD)</div>
-                    <div className="col-span-2 text-center">SALES TAX</div>
+                    <div className="col-span-3">Product/Service</div>
+                    <div className="col-span-2">Description</div>
+                    <div className="col-span-1 text-center">Qty</div>
+                    <div className="col-span-1 text-center">Rate</div>
+                    <div className="col-span-1 text-center">Amount</div>
+                    <div className="col-span-2 text-center">Sales Tax</div>
+                    <div className="col-span-1"></div>
                   </div>
                   
                   {/* Line Items */}
                   {fields.map((field, index) => (
-                    <div key={field.id} className="grid grid-cols-12 p-2 border-b items-center hover:bg-gray-50">
-                      <div className="col-span-1 text-center">{index + 1}</div>
-                      <div className="col-span-4">
+                    <div key={field.id} className="grid grid-cols-12 gap-2 p-3 border-b items-center hover:bg-gray-50 transition-colors">
+                      <div className="col-span-1 text-center text-sm text-gray-500">{index + 1}</div>
+                      <div className="col-span-3">
                         <FormField
                           control={form.control}
                           name={`lineItems.${index}.productId`}
@@ -1018,7 +1026,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                       }
                                     }}
                                   >
-                                    <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
+                                    <SelectTrigger className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50">
                                       <SelectValue placeholder="Select a product/service">
                                         {field.value && field.value !== null ? (
                                           (() => {
@@ -1060,7 +1068,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                       name={`lineItems.${index}.description`}
                                       render={({ field: descField }) => (
                                         <Input 
-                                          className="bg-transparent border-0 border-b p-1 focus:ring-0 flex-1" 
+                                          className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 flex-1 hover:bg-gray-50" 
                                           placeholder="Enter item name" 
                                           value={descField.value || ''}
                                           onChange={(e) => descField.onChange(e.target.value)}
@@ -1090,7 +1098,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       </div>
                       <div className="col-span-2">
                         <Input 
-                          className="bg-transparent border-0 p-1 focus:ring-0" 
+                          className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 hover:bg-gray-50" 
                           placeholder="Enter description" 
                         />
                       </div>
@@ -1102,7 +1110,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             <FormItem>
                               <FormControl>
                                 <Input 
-                                  className="bg-transparent border-0 p-1 text-center focus:ring-0" 
+                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 hover:bg-gray-50" 
                                   type="number" 
                                   min="0"
                                   step="1"
@@ -1126,7 +1134,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             <FormItem>
                               <FormControl>
                                 <Input 
-                                  className="bg-transparent border-0 p-1 text-center focus:ring-0" 
+                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 hover:bg-gray-50" 
                                   type="number" 
                                   min="0"
                                   step="0.01"
@@ -1150,7 +1158,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             <FormItem>
                               <FormControl>
                                 <Input 
-                                  className="bg-transparent border-0 p-1 text-center focus:ring-0" 
+                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 font-medium" 
                                   readOnly
                                   value={field.value.toFixed(2)}
                                 />
@@ -1182,7 +1190,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     calculateTotals();
                                   }}
                                 >
-                                  <SelectTrigger className="bg-transparent border-0 border-b p-1 focus:ring-0 rounded-none h-10">
+                                  <SelectTrigger className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50">
                                     <SelectValue placeholder="Select Tax" />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -1206,7 +1214,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0"
+                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
                           onClick={() => {
                             if (fields.length > 1) {
                               remove(index);
@@ -1220,13 +1228,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   ))}
                 </div>
                 
-                <div className="flex space-x-2 mt-2">
+                <div className="flex flex-wrap gap-2 mt-4">
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
                   >
+                    <Plus className="h-4 w-4 mr-1" />
                     Add lines
                   </Button>
                   <Button
@@ -1251,39 +1260,39 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 </div>
                 
                 {/* Totals */}
-                <div className="flex justify-end mt-4">
-                  <div className="w-64 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm">Subtotal</span>
-                      <span>${subTotal.toFixed(2)}</span>
+                <div className="flex justify-end mt-6">
+                  <div className="w-72 space-y-3 bg-gray-50 p-4 rounded-lg border">
+                    <div className="flex justify-between items-center text-gray-700">
+                      <span className="text-sm font-medium">Subtotal</span>
+                      <span className="font-medium">${subTotal.toFixed(2)}</span>
                     </div>
                     
                     {/* Tax Summary */}
                     {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
                       // Display each tax component separately for composite taxes
                       form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                        <div key={taxComponent.id} className="flex justify-between items-center">
+                        <div key={taxComponent.id} className="flex justify-between items-center text-gray-700">
                           <span className="text-sm">
                             {taxComponent.name} ({taxComponent.rate}%)
                           </span>
-                          <span>${taxComponent.amount.toFixed(2)}</span>
+                          <span className="font-medium">${taxComponent.amount.toFixed(2)}</span>
                         </div>
                       ))
                     ) : (
                       // Fallback to the original tax display if no components
-                      <div className="flex justify-between items-center">
+                      <div className="flex justify-between items-center text-gray-700">
                         <span className="text-sm">
                           {taxNames.length > 0 
                             ? taxNames.join(', ')  
                             : 'Tax'}
                         </span>
-                        <span>${taxAmount.toFixed(2)}</span>
+                        <span className="font-medium">${taxAmount.toFixed(2)}</span>
                       </div>
                     )}
                     
-                    <div className="flex justify-between border-t pt-2">
-                      <span className="text-sm">Total</span>
-                      <span>${totalAmount.toFixed(2)}</span>
+                    <div className="flex justify-between border-t border-gray-300 pt-3">
+                      <span className="text-sm font-semibold text-gray-900">Total</span>
+                      <span className="font-semibold text-gray-900">${totalAmount.toFixed(2)}</span>
                     </div>
                     
                     {/* Unapplied Credits section - only show if customer has credits */}
@@ -1322,28 +1331,29 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     value={credit.appliedAmount || ''}
                                     onChange={(e) => {
                                       console.log("Credit input raw value:", e.target.value);
-                                      // This will need to be modified to track individual credit applications
                                       const amount = parseFloat(e.target.value);
-                                      if (!isNaN(amount)) {
-                                        // For now we'll just use the sum for the total applied credit
-                                        // but we need to track which credits were applied
-                                        const validAmount = Math.min(amount, availableAmount);
-                                        const safeAmount = Math.max(0, validAmount);
-                                        
-                                        // Store the individual credit application amount
-                                        credit.appliedAmount = safeAmount;
-                                        
-                                        // Just call calculateTotals which will compute the accurate sum from all credits
-                                        console.log("Credit input changed. Credit ID:", credit.id, "Amount:", safeAmount);
-                                        calculateTotals();
-                                      } else {
-                                        // If the input is cleared or invalid, set applied amount to 0
-                                        credit.appliedAmount = 0;
-                                        
-                                        // Just call calculateTotals which will compute the accurate sum from all credits
-                                        console.log("Credit input cleared. Credit ID:", credit.id);
-                                        calculateTotals();
-                                      }
+                                      
+                                      // Create a new array with updated credit to trigger React re-render
+                                      const updatedCredits = unappliedCredits.map(c => {
+                                        if (c.id === credit.id) {
+                                          if (!isNaN(amount)) {
+                                            const validAmount = Math.min(amount, availableAmount);
+                                            const safeAmount = Math.max(0, validAmount);
+                                            console.log("Credit input changed. Credit ID:", c.id, "Amount:", safeAmount);
+                                            return { ...c, appliedAmount: safeAmount };
+                                          } else {
+                                            console.log("Credit input cleared. Credit ID:", c.id);
+                                            return { ...c, appliedAmount: 0 };
+                                          }
+                                        }
+                                        return c;
+                                      });
+                                      
+                                      // Update state with new array to ensure React tracks changes
+                                      setUnappliedCredits(updatedCredits);
+                                      
+                                      // Recalculate totals with updated credits array (pass immediately since state hasn't updated yet)
+                                      calculateTotals(updatedCredits);
                                     }}
                                   />
                                 </div>
@@ -1361,7 +1371,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       </div>
                     )}
                     
-                    <div className="flex justify-between font-medium border-t pt-2 mt-3">
+                    <div className="flex justify-between font-bold border-t-2 border-gray-400 pt-3 mt-4 text-lg">
                       <span>Balance due</span>
                       <span>${balanceDue.toFixed(2)}</span>
                     </div>
@@ -1369,87 +1379,87 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 </div>
               </div>
               
-              {/* Credit application functionality has been removed */}
-              
               {/* Invoice message */}
-              <div>
-                <FormLabel className="text-sm font-medium block mb-1">Message on invoice</FormLabel>
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <FormLabel className="text-sm font-medium block mb-2">Message on invoice</FormLabel>
                 <Textarea 
-                  className="h-24 bg-white border-gray-300" 
-                  placeholder="Personal notes on this invoice."
+                  className="min-h-[100px] bg-white border-gray-300 resize-none" 
+                  placeholder="Add a personal note or message for this invoice"
                 />
               </div>
             </div>
             
             {/* Right column - Invoice details */}
-            <div>
-              <div className="mb-6 text-right">
-                <div className="text-gray-500 mb-1">BALANCE DUE</div>
-                <div className="text-2xl font-medium">${balanceDue.toFixed(2)}</div>
-                {appliedCreditAmount > 0 && (
-                  <div className="text-sm text-green-600 mt-1">
-                    Credits applied: ${appliedCreditAmount.toFixed(2)}
-                  </div>
-                )}
+            <div className="lg:col-span-4 space-y-6">
+              {/* Balance Due Card */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <div className="text-center">
+                  <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Balance Due</div>
+                  <div className="text-3xl font-bold text-gray-900">${balanceDue.toFixed(2)}</div>
+                  {appliedCreditAmount > 0 && (
+                    <div className="text-sm text-green-600 mt-2 font-medium">
+                      Credits applied: ${appliedCreditAmount.toFixed(2)}
+                    </div>
+                  )}
+                </div>
               </div>
               
-              <div className="space-y-4">
-                <div>
-                  <FormLabel className="text-sm font-medium block mb-1">Invoice no.</FormLabel>
-                  <FormField
-                    control={form.control}
-                    name="reference"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            className="bg-white border-gray-300" 
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                {/* File upload section */}
-                <div className="mt-4">
-                  <FormLabel className="text-sm font-medium block mb-1">Attach documents</FormLabel>
-                  <div className="border border-dashed border-gray-300 rounded p-4 text-center">
-                    <div className="relative inline-block">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm" 
-                        className="mb-2"
-                        onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                      >
-                        Select files
-                      </Button>
-                      <input
-                        type="file"
-                        id="file-upload-invoice"
-                        className="hidden"
-                        multiple
-                        onChange={(e) => {
-                          // Handle file selection here
-                          console.log("Files selected:", e.target.files);
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">Drag and drop files here</p>
-                    <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
+              {/* Invoice Number Card */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <FormLabel className="text-sm font-medium block mb-2">Invoice no.</FormLabel>
+                <FormField
+                  control={form.control}
+                  name="reference"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input 
+                          className="bg-white border-gray-300 h-10" 
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              {/* Attach Documents Card */}
+              <div className="bg-white rounded-lg border shadow-sm p-6">
+                <FormLabel className="text-sm font-medium block mb-3">Attach documents</FormLabel>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                  <div className="relative inline-block">
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="sm" 
+                      className="mb-2"
+                      onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                    >
+                      Select files
+                    </Button>
+                    <input
+                      type="file"
+                      id="file-upload-invoice"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        // Handle file selection here
+                        console.log("Files selected:", e.target.files);
+                      }}
+                    />
                   </div>
+                  <p className="text-xs text-gray-500 mt-2">Drag and drop files here</p>
+                  <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
         
-        {/* Fixed footer - now a flex item in our flex column layout */}
-        <div className="border-t bg-gray-100 py-4 px-4 md:px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-md sticky bottom-0 mt-auto">
-          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full">
+        {/* Fixed footer - modernized */}
+        <div className="border-t bg-white py-4 px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-lg sticky bottom-0 mt-auto">
+          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full h-10">
             Cancel
           </Button>
           
