@@ -927,12 +927,12 @@ export default function Reports() {
                           <TableHeader>
                             <TableRow>
                               <TableHead>Date</TableHead>
-                              <TableHead>Description</TableHead>
                               <TableHead>Name</TableHead>
+                              <TableHead>Description</TableHead>
                               <TableHead>Account</TableHead>
                               <TableHead className="text-right">Debit</TableHead>
                               <TableHead className="text-right">Credit</TableHead>
-                              <TableHead className="text-right">Running Balance</TableHead>
+                              <TableHead className="text-right">Balance</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -951,8 +951,8 @@ export default function Reports() {
                                 return (
                                   <TableRow key={entry.id}>
                                     <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
-                                    <TableCell>{entry.description}</TableCell>
                                     <TableCell>{entry.contactName || '-'}</TableCell>
+                                    <TableCell>{entry.description}</TableCell>
                                     <TableCell>{accountName}</TableCell>
                                     <TableCell className="text-right">
                                       {entry.debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debitAmount) : ''}
