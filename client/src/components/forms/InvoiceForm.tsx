@@ -11,8 +11,19 @@ interface Transaction extends BaseTransaction {
   appliedAmount?: number;
 }
 
-// Extend the Invoice type to include credit application properties
-interface Invoice extends BaseInvoice {
+// Custom line item type for form with string productId for Select component compatibility
+interface FormLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  salesTaxId?: number;
+  productId?: string; // String for Select component value matching
+}
+
+// Extend the Invoice type to include credit application properties and custom line items
+interface Invoice extends Omit<BaseInvoice, 'lineItems'> {
+  lineItems: FormLineItem[];
   appliedCreditAmount?: number;
   appliedCredits?: {id: number, amount: number}[];
 }
@@ -157,15 +168,15 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       description: invoice?.description || '',
       status: invoice?.status as "open" | "paid" | "overdue" | "partial",
       lineItems: lineItems?.length ? lineItems.map(item => {
-        // Map line item for editing, ensuring productId is preserved as number (Select handles string conversion)
+        // Map line item for editing, converting productId to string for Select component
         return {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           amount: item.amount,
           salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
-          // Keep productId as number or undefined (not null) - Select component converts to string internally
-          productId: item.productId !== null && item.productId !== undefined ? item.productId : undefined
+          // Convert productId to string for Select component value matching
+          productId: item.productId !== null && item.productId !== undefined ? String(item.productId) : undefined
         };
       }) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
     } : {
@@ -221,7 +232,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   }, [isEditing, invoice?.contactId, contacts, selectedContact]);
 
   const saveInvoice = useMutation({
-    mutationFn: async (data: Invoice) => {
+    mutationFn: async (data: BaseInvoice) => {
       if (isEditing) {
         console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
         return await apiRequest(`/api/invoices/${invoice?.id}`, 'PATCH', data);
@@ -669,8 +680,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       paymentTerms
     };
     
-    // Calculate the line item amounts and ensure salesTaxId is properly handled
-    enrichedData.lineItems = filteredLineItems.map(item => {
+    // Calculate the line item amounts and ensure salesTaxId and productId are properly handled
+    // Convert line items to backend format with numeric productId
+    const backendLineItems = filteredLineItems.map(item => {
       // Calculate the correct amount for this line item
       const amount = calculateLineItemAmount(item.quantity, item.unitPrice);
       
@@ -687,12 +699,23 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         formattedItem.salesTaxId = item.salesTaxId;
       }
       
+      // Convert productId from string to number if it exists (explicit null/undefined check)
+      if (item.productId !== null && item.productId !== undefined) {
+        formattedItem.productId = parseInt(item.productId);
+      }
+      
       return formattedItem;
     });
     
+    // Create properly typed payload for backend with numeric productIds
+    const backendPayload: BaseInvoice & { appliedCreditAmount?: number; appliedCredits?: {id: number, amount: number}[] } = {
+      ...enrichedData,
+      lineItems: backendLineItems
+    };
+    
     // Include applied credit information if there are credits applied
     if (appliedCreditAmount > 0) {
-      enrichedData.appliedCreditAmount = appliedCreditAmount;
+      backendPayload.appliedCreditAmount = appliedCreditAmount;
       
       // Collect all credits that have amounts applied to them
       const appliedCredits: {id: number, amount: number}[] = [];
@@ -707,12 +730,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         }
       }
       
-      enrichedData.appliedCredits = appliedCredits;
+      backendPayload.appliedCredits = appliedCredits;
     }
     
-    console.log("Sending to server:", enrichedData);
+    console.log("Sending to server:", backendPayload);
     if (saveInvoice.isPending) return; // Prevent double submission
-    saveInvoice.mutate(enrichedData);
+    saveInvoice.mutate(backendPayload);
   };
 
   return (
@@ -968,7 +991,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                         form.setValue(`lineItems.${index}.description`, '');
                                       } else if (value === 'none') {
                                         // Handle no selection
-                                        field.onChange(null);
+                                        field.onChange(undefined);
                                         form.setValue(`lineItems.${index}.description`, '');
                                         form.setValue(`lineItems.${index}.unitPrice`, 0);
                                         form.setValue(`lineItems.${index}.salesTaxId`, undefined);
@@ -977,8 +1000,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                         const productId = parseInt(value);
                                         const product = typedProducts.find(p => p.id === productId);
                                         if (product) {
-                                          // Set the product ID
-                                          field.onChange(productId);
+                                          // Set the product ID as string for form state
+                                          field.onChange(value);
                                           // Set the product name as the description
                                           form.setValue(`lineItems.${index}.description`, product.name);
                                           form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
