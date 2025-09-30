@@ -121,7 +121,10 @@ export const invoiceSchema = z.object({
       unitPrice: z.number().min(0, "Price cannot be negative"),
       amount: z.number(),
       salesTaxId: z.number().optional(),
-      productId: z.number().optional()
+      productId: z.preprocess(
+        (val) => (val === '' || val === undefined || val === null ? undefined : val),
+        z.coerce.number().optional()
+      )
     })
   ).min(1, "At least one line item is required"),
   // Additional fields for enhanced invoice functionality
