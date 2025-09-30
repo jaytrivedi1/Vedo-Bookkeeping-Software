@@ -157,24 +157,24 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       description: invoice?.description || '',
       status: invoice?.status as "open" | "paid" | "overdue" | "partial",
       lineItems: lineItems?.length ? lineItems.map(item => {
-        // Map line item for editing, ensuring productId is preserved
+        // Map line item for editing, ensuring productId is preserved as number (Select handles string conversion)
         return {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           amount: item.amount,
           salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
-          // Ensure productId is properly preserved - keep as number or null, not undefined
-          productId: item.productId !== null && item.productId !== undefined ? item.productId : null
+          // Keep productId as number or undefined (not null) - Select component converts to string internally
+          productId: item.productId !== null && item.productId !== undefined ? item.productId : undefined
         };
-      }) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
+      }) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
     } : {
       date: today,
       contactId: undefined,
       reference: defaultInvoiceNumber,
       description: '',
       status: 'open' as const,
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: null }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
     },
   }) as InvoiceFormType;
   
