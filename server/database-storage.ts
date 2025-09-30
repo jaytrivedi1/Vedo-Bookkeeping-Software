@@ -1252,6 +1252,15 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getLedgerEntriesUpToDate(asOfDate: Date): Promise<LedgerEntry[]> {
+    const result = await db
+      .select()
+      .from(ledgerEntries)
+      .where(lte(ledgerEntries.date, asOfDate))
+      .orderBy(ledgerEntries.date);
+    return result as LedgerEntry[];
+  }
+
   async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
     let conditions = [];
     

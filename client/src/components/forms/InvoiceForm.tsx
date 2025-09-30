@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { Invoice as BaseInvoice, invoiceSchema, Contact, SalesTax, Product, Transaction as BaseTransaction } from "@shared/schema";
+import { roundTo2Decimals } from "@shared/utils";
 
 // Extend the Transaction type to include appliedAmount for credits
 interface Transaction extends BaseTransaction {
@@ -321,7 +322,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   });
 
   const calculateLineItemAmount = (quantity: number, unitPrice: number) => {
-    return parseFloat((quantity * unitPrice).toFixed(2));
+    return roundTo2Decimals(quantity * unitPrice);
   };
 
   const recalculateLineItemAmounts = () => {
@@ -337,7 +338,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
 
   const calculateTotals = () => {
     const lineItems = form.getValues('lineItems');
-    const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const subtotal = roundTo2Decimals(lineItems.reduce((sum, item) => sum + (item.amount || 0), 0));
     
     // Calculate tax amount based on the per-line item tax rates
     let totalTaxAmount = 0;
@@ -375,13 +376,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 
                 if (gstComponent && qstComponent) {
                   // Calculate GST (5%) on original amount
-                  const gstAmount = (item.amount || 0) * (gstComponent.rate / 100);
+                  const gstAmount = roundTo2Decimals((item.amount || 0) * (gstComponent.rate / 100));
                   
                   // Calculate QST (9.975%) on the original amount (not compounded for invoice display)
-                  const qstAmount = (item.amount || 0) * (qstComponent.rate / 100);
+                  const qstAmount = roundTo2Decimals((item.amount || 0) * (qstComponent.rate / 100));
                   
                   // Add both tax amounts to the total
-                  totalTaxAmount += (gstAmount + qstAmount);
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + gstAmount + qstAmount);
                   
                   // Update/create GST component entry
                   const existingGstComponent = taxComponents.get(gstComponent.id);
@@ -419,8 +420,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 } else {
                   // Fallback if the components aren't found
                   components.forEach(component => {
-                    const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
-                    totalTaxAmount += componentTaxAmount;
+                    const componentTaxAmount = roundTo2Decimals((item.amount || 0) * (component.rate / 100));
+                    totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
                     taxComponents.set(component.id, {
                       id: component.id,
                       name: component.name,
@@ -434,13 +435,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               } else {
                 // For other composite taxes, calculate each component separately
                 components.forEach(component => {
-                  const componentTaxAmount = (item.amount || 0) * (component.rate / 100);
-                  totalTaxAmount += componentTaxAmount;
+                  const componentTaxAmount = roundTo2Decimals((item.amount || 0) * (component.rate / 100));
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
                   
                   // Add/update component in the tax components map
                   const existingComponent = taxComponents.get(component.id);
                   if (existingComponent) {
-                    existingComponent.amount += componentTaxAmount;
+                    existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
                     taxComponents.set(component.id, existingComponent);
                   } else {
                     taxComponents.set(component.id, {
@@ -459,14 +460,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               usedTaxes.set(salesTax.id, salesTax);
             } else {
               // If no components found, use the composite tax itself
-              const itemTaxAmount = (item.amount || 0) * (salesTax.rate / 100);
-              totalTaxAmount += itemTaxAmount;
+              const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+              totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
               usedTaxes.set(salesTax.id, salesTax);
               
               // Add to components map for display
               const existingTax = taxComponents.get(salesTax.id);
               if (existingTax) {
-                existingTax.amount += itemTaxAmount;
+                existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
                 taxComponents.set(salesTax.id, existingTax);
               } else {
                 taxComponents.set(salesTax.id, {
@@ -480,8 +481,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
             }
           } else {
             // Regular non-composite tax
-            const itemTaxAmount = (item.amount || 0) * (salesTax.rate / 100);
-            totalTaxAmount += itemTaxAmount;
+            const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+            totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
             
             // Track which taxes are being used
             usedTaxes.set(salesTax.id, salesTax);
@@ -489,7 +490,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
             // Add to components map for display
             const existingTax = taxComponents.get(salesTax.id);
             if (existingTax) {
-              existingTax.amount += itemTaxAmount;
+              existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
               taxComponents.set(salesTax.id, existingTax);
             } else {
               taxComponents.set(salesTax.id, {
@@ -505,7 +506,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       }
     });
     
-    const total = subtotal + totalTaxAmount;
+    const total = roundTo2Decimals(subtotal + totalTaxAmount);
     
     // Credit application functionality has been removed
     
@@ -560,7 +561,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       newBalanceDue = invoice.balance;
     } else {
       // In create mode, calculate balance normally
-      newBalanceDue = total - accurateAppliedTotal;
+      newBalanceDue = roundTo2Decimals(total - accurateAppliedTotal);
     }
     
     console.log("Balance calculation:", {

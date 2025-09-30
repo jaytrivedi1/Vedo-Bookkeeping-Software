@@ -9,6 +9,7 @@ import { fixCreditTracking } from "./fix-credit-tracking";
 import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { deletePaymentAndRelatedTransactions } from "./payment-delete-handler";
 import { format } from "date-fns";
+import { roundTo2Decimals } from "@shared/utils";
 import { 
   insertAccountSchema, 
   insertContactSchema, 
@@ -420,12 +421,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Delete existing line items - we'll recreate them
         // This is a simple approach, a more sophisticated one would update existing items
         
-        // Calculate the new subtotal from line items
-        const subTotal = body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0);
-        const taxAmount = body.taxAmount || 0;
+        // Calculate the new subtotal from line items with rounding
+        const subTotal = roundTo2Decimals(body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0));
+        const taxAmount = roundTo2Decimals(body.taxAmount || 0);
         
-        // Update transaction amount
-        transactionUpdate.amount = subTotal + taxAmount;
+        // Update transaction amount with rounding
+        transactionUpdate.amount = roundTo2Decimals(subTotal + taxAmount);
         
         // Update the transaction
         const updatedTransaction = await storage.updateTransaction(invoiceId, transactionUpdate);
@@ -434,7 +435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Failed to update invoice" });
         }
         
-        // Create new line items
+        // Create new line items with rounding
         const lineItems = body.lineItems.map((item: {
           description: string;
           quantity: number;
@@ -447,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            amount: item.amount,
+            amount: roundTo2Decimals(item.amount),
             transactionId: invoiceId
           };
           
@@ -582,9 +583,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // More detailed logging for debugging
       console.log("Invoice data passed validation:", JSON.stringify(invoiceData));
       
-      // Calculate amount from line items or use provided total amount
-      const totalAmount = invoiceData.totalAmount || 
-        invoiceData.lineItems.reduce((sum, item) => sum + item.amount, 0);
+      // Calculate amount from line items or use provided total amount with rounding
+      const totalAmount = roundTo2Decimals(invoiceData.totalAmount || 
+        invoiceData.lineItems.reduce((sum, item) => sum + item.amount, 0));
       
       // Create transaction
       const transaction = {
@@ -593,7 +594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: invoiceData.date,
         description: invoiceData.description,
         amount: totalAmount,
-        balance: totalAmount, // Set the initial balance to match the total amount
+        balance: totalAmount, // Set the initial balance to match the total amount (already rounded)
         contactId: invoiceData.contactId,
         status: invoiceData.status
       };
@@ -604,7 +605,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          amount: item.amount,
+          amount: roundTo2Decimals(item.amount),
           transactionId: 0 // Will be set by createTransaction
         };
         
@@ -635,9 +636,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
       
-      // Use the provided subtotal and tax amount from the client
-      const subTotal = invoiceData.subTotal || totalAmount;
-      const taxAmount = invoiceData.taxAmount || 0;
+      // Use the provided subtotal and tax amount from the client with rounding
+      const subTotal = roundTo2Decimals(invoiceData.subTotal || totalAmount);
+      const taxAmount = roundTo2Decimals(invoiceData.taxAmount || 0);
       
       // Create base ledger entries (will add tax entries after)
       const ledgerEntries = [
@@ -684,8 +685,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               if (componentTaxes.length > 0) {
                 // Process each component tax separately
                 for (const component of componentTaxes) {
-                  // Calculate tax amount for this component
-                  const componentTaxAmount = (item.amount * (component.rate / 100));
+                  // Calculate tax amount for this component with rounding
+                  const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
                   
                   // Get the proper account ID for this component
                   const accountId = component.accountId || taxPayableAccount.id;
@@ -694,7 +695,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if (taxLedgerMap.has(accountId)) {
                     // Add to existing amount for this account
                     const entry = taxLedgerMap.get(accountId)!;
-                    entry.amount += componentTaxAmount;
+                    entry.amount = roundTo2Decimals(entry.amount + componentTaxAmount);
                     taxLedgerMap.set(accountId, entry);
                   } else {
                     // Create new entry for this account
@@ -703,12 +704,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               } else {
                 // No components found, use the main tax account
-                const taxAmount = (item.amount * (salesTax.rate / 100));
+                const taxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
                 const accountId = salesTax.accountId || taxPayableAccount.id;
                 
                 if (taxLedgerMap.has(accountId)) {
                   const entry = taxLedgerMap.get(accountId)!;
-                  entry.amount += taxAmount;
+                  entry.amount = roundTo2Decimals(entry.amount + taxAmount);
                   taxLedgerMap.set(accountId, entry);
                 } else {
                   taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
@@ -716,12 +717,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             } else {
               // Regular non-composite tax
-              const taxAmount = (item.amount * (salesTax.rate / 100));
+              const taxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
               const accountId = salesTax.accountId || taxPayableAccount.id;
               
               if (taxLedgerMap.has(accountId)) {
                 const entry = taxLedgerMap.get(accountId)!;
-                entry.amount += taxAmount;
+                entry.amount = roundTo2Decimals(entry.amount + taxAmount);
                 taxLedgerMap.set(accountId, entry);
               } else {
                 taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
@@ -801,10 +802,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const item of invoiceItems) {
           console.log(`Processing credit application of ${item.amount} for invoice #${item.transactionId}`);
           
-          // Update invoice balance and status
+          // Update invoice balance and status with rounding
           const invoice = await storage.getTransaction(item.transactionId);
           if (invoice) {
-            const newBalance = invoice.balance !== null ? invoice.balance - item.amount : invoice.amount - item.amount;
+            const newBalance = roundTo2Decimals(invoice.balance !== null ? invoice.balance - item.amount : invoice.amount - item.amount);
             const newStatus = newBalance <= 0 ? 'paid' : 'open';
             
             await storage.updateTransaction(invoice.id, {
@@ -3172,8 +3173,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const retainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
       const currentYearNetIncome = await storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
       
-      // Get account balances
-      const accountBalances = await storage.getAccountBalances();
+      // Get accounts and ledger entries up to the as-of date
+      const allAccounts = await storage.getAccounts();
+      const filteredLedgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
+      
+      // Recalculate account balances from filtered ledger entries
+      const balanceMap = new Map<number, number>();
+      
+      // Initialize all account balances to 0
+      allAccounts.forEach(account => {
+        balanceMap.set(account.id, 0);
+      });
+      
+      // Calculate balances from filtered ledger entries
+      filteredLedgerEntries.forEach(entry => {
+        const account = allAccounts.find(a => a.id === entry.accountId);
+        if (!account) return;
+        
+        const currentBalance = balanceMap.get(entry.accountId) || 0;
+        let newBalance = currentBalance;
+        
+        // Apply debits and credits according to account type's normal balance
+        if (['asset', 'expense', 'cost_of_goods_sold'].includes(account.type)) {
+          newBalance += Number(entry.debit) - Number(entry.credit);
+        } else {
+          newBalance += Number(entry.credit) - Number(entry.debit);
+        }
+        
+        balanceMap.set(entry.accountId, newBalance);
+      });
+      
+      // Create account balances array
+      const accountBalances = allAccounts.map(account => ({
+        account,
+        balance: balanceMap.get(account.id) || 0
+      }));
       
       // Asset accounts
       const assetAccounts = accountBalances.filter(item => 
@@ -3269,7 +3303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
       
       const accounts = await storage.getAccounts();
-      const ledgerEntries = await storage.getAllLedgerEntries();
+      const ledgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
       
       // Calculate prior years' retained earnings (profit/loss from before current fiscal year)
       const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
@@ -4529,8 +4563,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Applying credit #${credit.reference || credit.id} for amount $${amount} to invoice #${invoice.reference}`);
       
-      // Update the invoice balance and status
-      const newInvoiceBalance = Math.max(0, Number(invoice.amount) - amount);
+      // Update the invoice balance and status with rounding
+      const newInvoiceBalance = roundTo2Decimals(Math.max(0, Number(invoice.amount) - amount));
       const newInvoiceStatus = newInvoiceBalance === 0 ? 'completed' : 'open';
       
       await db
@@ -4541,9 +4575,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(transactions.id, invoiceId));
       
-      // Update the credit description and balance
-      const appliedAmount = Math.min(amount, Math.abs(credit.amount));
-      const newCreditBalance = -(Math.abs(credit.amount) - appliedAmount);
+      // Update the credit description and balance with rounding
+      const appliedAmount = roundTo2Decimals(Math.min(amount, Math.abs(credit.amount)));
+      const newCreditBalance = roundTo2Decimals(-(Math.abs(credit.amount) - appliedAmount));
       const newCreditStatus = newCreditBalance === 0 ? 'completed' : 'unapplied_credit';
       
       await db
