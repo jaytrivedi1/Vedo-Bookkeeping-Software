@@ -4782,6 +4782,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Repair Trial Balance - Fix incorrect ledger entries for bills and payments
+  apiRouter.post("/fix/trial-balance", async (req: Request, res: Response) => {
+    try {
+      console.log("Starting Trial Balance repair...");
+      let fixedEntries = 0;
+      let fixedTransactions = 0;
+      let addedTaxEntries = 0;
+      
+      // Step 1: Fix ledger entries that use account ID 3 (Inventory) when they should use ID 4 (Accounts Payable)
+      // Only fix entries related to bills and payments
+      console.log("\nStep 1: Fixing account IDs for bills and payments (3 → 4)...");
+      
+      // Get all ledger entries for bills and payments that use account ID 3
+      const billTransactions = await db
+        .select()
+        .from(transactions)
+        .where(sql`type IN ('bill', 'payment')`);
+      
+      const billTxIds = billTransactions.map(t => t.id);
+      
+      if (billTxIds.length > 0) {
+        // Find all ledger entries for these transactions using account ID 3
+        const incorrectEntries = await db
+          .select()
+          .from(ledgerEntries)
+          .where(and(
+            eq(ledgerEntries.accountId, 3),
+            sql`transaction_id IN (${sql.raw(billTxIds.join(','))})`
+          ));
+        
+        console.log(`Found ${incorrectEntries.length} ledger entries using Inventory (ID 3) that should be Accounts Payable (ID 4)`);
+        
+        // Update each entry to use account ID 4
+        for (const entry of incorrectEntries) {
+          await db
+            .update(ledgerEntries)
+            .set({ accountId: 4 })
+            .where(eq(ledgerEntries.id, entry.id));
+          fixedEntries++;
+        }
+      }
+      
+      console.log(`Fixed ${fixedEntries} ledger entries to use Accounts Payable`);
+      
+      // Step 2: Add missing tax debit entries for bills where debits < credits
+      console.log("\nStep 2: Adding missing tax debit entries for bills...");
+      
+      const bills = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.type, 'bill'));
+      
+      for (const bill of bills) {
+        // Get all ledger entries for this bill
+        const entries = await db
+          .select()
+          .from(ledgerEntries)
+          .where(eq(ledgerEntries.transactionId, bill.id));
+        
+        const totalDebits = entries.reduce((sum, e) => sum + (e.debit || 0), 0);
+        const totalCredits = entries.reduce((sum, e) => sum + (e.credit || 0), 0);
+        const difference = totalCredits - totalDebits;
+        
+        // If credits exceed debits by more than 1 cent, add a tax debit entry
+        if (difference > 0.01) {
+          console.log(`Bill ${bill.reference}: Debits ${totalDebits}, Credits ${totalCredits}, Missing ${difference}`);
+          
+          // Add a debit entry for the tax difference
+          await db.insert(ledgerEntries).values({
+            transactionId: bill.id,
+            accountId: 5, // Sales Tax Payable
+            description: `Bill ${bill.reference} - Tax (repair)`,
+            debit: difference,
+            credit: 0,
+            date: bill.date
+          });
+          
+          addedTaxEntries++;
+          fixedTransactions++;
+        }
+      }
+      
+      console.log(`Added ${addedTaxEntries} missing tax debit entries`);
+      
+      // Step 3: Verify all transactions are now balanced
+      console.log("\nStep 3: Verifying transaction balance...");
+      
+      const allTransactions = await db.select().from(transactions);
+      let unbalanced = 0;
+      
+      for (const tx of allTransactions) {
+        const entries = await db
+          .select()
+          .from(ledgerEntries)
+          .where(eq(ledgerEntries.transactionId, tx.id));
+        
+        const totalDebits = entries.reduce((sum, e) => sum + (e.debit || 0), 0);
+        const totalCredits = entries.reduce((sum, e) => sum + (e.credit || 0), 0);
+        
+        if (Math.abs(totalDebits - totalCredits) > 0.01) {
+          console.log(`UNBALANCED: Transaction ${tx.reference} (${tx.type}): Debits ${totalDebits}, Credits ${totalCredits}`);
+          unbalanced++;
+        }
+      }
+      
+      console.log(`Verification complete: ${unbalanced} transactions still unbalanced`);
+      console.log("\nTrial Balance repair completed!");
+      
+      res.json({
+        success: true,
+        fixedLedgerEntries: fixedEntries,
+        addedTaxEntries: addedTaxEntries,
+        fixedTransactions: fixedTransactions,
+        remainingUnbalanced: unbalanced,
+        message: unbalanced === 0 ? "Trial Balance is now in balance!" : `${unbalanced} transactions still need attention`
+      });
+    } catch (error: any) {
+      console.error("Error repairing Trial Balance:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
