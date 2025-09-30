@@ -226,6 +226,11 @@ export default function Reports() {
       case 'date':
         compareValue = new Date(a.date).getTime() - new Date(b.date).getTime();
         break;
+      case 'referenceNumber':
+        const refA = (a.referenceNumber || '').toLowerCase();
+        const refB = (b.referenceNumber || '').toLowerCase();
+        compareValue = refA.localeCompare(refB);
+        break;
       case 'name':
         const nameA = (a.contactName || '').toLowerCase();
         const nameB = (b.contactName || '').toLowerCase();
@@ -1036,6 +1041,16 @@ export default function Reports() {
                               </TableHead>
                               <TableHead 
                                 className="cursor-pointer select-none hover:bg-gray-100"
+                                onClick={() => handleSort('referenceNumber')}
+                                data-testid="header-reference-number"
+                              >
+                                <div className="flex items-center">
+                                  #
+                                  {renderSortIcon('referenceNumber')}
+                                </div>
+                              </TableHead>
+                              <TableHead 
+                                className="cursor-pointer select-none hover:bg-gray-100"
                                 onClick={() => handleSort('name')}
                                 data-testid="header-name"
                               >
@@ -1099,7 +1114,7 @@ export default function Reports() {
                           <TableBody>
                             {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={7} className="text-center py-6 text-gray-500">
+                                <TableCell colSpan={8} className="text-center py-6 text-gray-500">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
@@ -1117,6 +1132,7 @@ export default function Reports() {
                                     data-testid={`transaction-row-${entry.transactionId}`}
                                   >
                                     <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                    <TableCell>{entry.referenceNumber || ''}</TableCell>
                                     <TableCell>{entry.contactName || '-'}</TableCell>
                                     <TableCell>{entry.description}</TableCell>
                                     <TableCell>{accountName}</TableCell>
