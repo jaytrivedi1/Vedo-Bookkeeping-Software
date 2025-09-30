@@ -64,6 +64,7 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState<string>('');
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 1));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   
   // Fetch income statement data
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
@@ -94,6 +95,11 @@ export default function Reports() {
     queryKey: ['/api/ledger-entries'],
     enabled: activeTab === 'general-ledger',
   });
+  
+  // Filter ledger entries by selected account if one is selected
+  const filteredLedgerEntries = selectedAccountId && ledgerEntries
+    ? ledgerEntries.filter(entry => entry.accountId === selectedAccountId)
+    : ledgerEntries;
   
   // Prepare data for charts
   const incomeData = incomeStatement 
@@ -781,7 +787,21 @@ export default function Reports() {
                     <div>
                       <CardTitle>General Ledger</CardTitle>
                       <CardDescription>
-                        View all ledger entries for the selected period
+                        {selectedAccountId ? (
+                          <div className="flex items-center gap-2">
+                            <span>Filtered by account</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedAccountId(null)}
+                              data-testid="button-clear-filter"
+                            >
+                              Clear Filter
+                            </Button>
+                          </div>
+                        ) : (
+                          'View all ledger entries for the selected period'
+                        )}
                       </CardDescription>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -856,14 +876,14 @@ export default function Reports() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {ledgerEntries && ledgerEntries.length === 0 ? (
+                            {filteredLedgerEntries && filteredLedgerEntries.length === 0 ? (
                               <TableRow>
                                 <TableCell colSpan={5} className="text-center py-6 text-gray-500">
-                                  No entries found in the general ledger
+                                  {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              ledgerEntries && ledgerEntries.map((entry: any) => {
+                              filteredLedgerEntries && filteredLedgerEntries.map((entry: any) => {
                                 const accountName = accountBalances?.find(
                                   ({ account }) => account.id === entry.accountId
                                 )?.account.name || 'Unknown Account';
@@ -1016,7 +1036,15 @@ export default function Reports() {
                           </TableHeader>
                           <TableBody>
                             {trialBalanceData.map((item: any, index: number) => (
-                              <TableRow key={index}>
+                              <TableRow 
+                                key={index}
+                                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                onClick={() => {
+                                  setSelectedAccountId(item.account.id);
+                                  setActiveTab('general-ledger');
+                                }}
+                                data-testid={`row-account-${item.account.id}`}
+                              >
                                 <TableCell>{item.account.code}</TableCell>
                                 <TableCell>{item.account.name}</TableCell>
                                 <TableCell className="text-right">
