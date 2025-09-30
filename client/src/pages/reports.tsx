@@ -928,6 +928,7 @@ export default function Reports() {
                             <TableRow>
                               <TableHead>Date</TableHead>
                               <TableHead>Description</TableHead>
+                              <TableHead>Name</TableHead>
                               <TableHead>Account</TableHead>
                               <TableHead className="text-right">Debit</TableHead>
                               <TableHead className="text-right">Credit</TableHead>
@@ -937,7 +938,7 @@ export default function Reports() {
                           <TableBody>
                             {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length === 0 ? (
                               <TableRow>
-                                <TableCell colSpan={6} className="text-center py-6 text-gray-500">
+                                <TableCell colSpan={7} className="text-center py-6 text-gray-500">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
@@ -951,6 +952,7 @@ export default function Reports() {
                                   <TableRow key={entry.id}>
                                     <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
                                     <TableCell>{entry.description}</TableCell>
+                                    <TableCell>{entry.contactName || '-'}</TableCell>
                                     <TableCell>{accountName}</TableCell>
                                     <TableCell className="text-right">
                                       {entry.debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debitAmount) : ''}

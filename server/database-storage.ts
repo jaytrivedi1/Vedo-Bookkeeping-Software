@@ -1230,9 +1230,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ledgerEntries.transactionId, transactionId));
   }
 
-  async getAllLedgerEntries(): Promise<LedgerEntry[]> {
-    const result = await db.select().from(ledgerEntries).orderBy(desc(ledgerEntries.date));
-    return result as LedgerEntry[];
+  async getAllLedgerEntries(): Promise<any[]> {
+    const result = await db
+      .select({
+        id: ledgerEntries.id,
+        transactionId: ledgerEntries.transactionId,
+        accountId: ledgerEntries.accountId,
+        description: ledgerEntries.description,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+        date: ledgerEntries.date,
+        contactName: contacts.name,
+      })
+      .from(ledgerEntries)
+      .leftJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+      .leftJoin(contacts, eq(transactions.contactId, contacts.id))
+      .orderBy(desc(ledgerEntries.date));
+    return result;
   }
 
   async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
