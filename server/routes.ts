@@ -1463,7 +1463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         {
           transactionId: 0, // Will be set by createTransaction
-          accountId: 3, // Credit accounts payable (decrease liability)
+          accountId: 4, // Credit accounts payable (FIXED: was 3 which is Inventory)
           debit: 0,
           credit: Number(data.totalAmount),
           description: `Bill payment to ${vendor.name}`,
@@ -1485,7 +1485,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create ledger entries to track which bills were paid
         const billApplicationEntries = [
           {
-            accountId: 3, // Accounts Payable
+            accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
             debit: amount, // Reduce the bill amount
             credit: 0,
             description: `Payment applied to bill ${bill.reference}`,
@@ -1493,7 +1493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionId: payment.id
           },
           {
-            accountId: 3, // Accounts Payable
+            accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
             debit: 0,
             credit: amount, // Create offsetting entry
             description: `Payment from ${paymentReference} for bill ${bill.reference}`,
@@ -4566,9 +4566,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionId: 0 // Will be set by createTransaction
       }));
       
+      // Calculate tax difference and add as separate debit entry if needed
+      const lineItemsTotal = billData.lineItems.reduce((sum, item) => sum + Number(item.amount), 0);
+      const taxDifference = totalAmount - lineItemsTotal;
+      
+      if (taxDifference > 0.01) {
+        // Add tax amount as a separate debit entry
+        // Try to find a Sales Tax Payable account or use the first line item's expense account
+        const taxAccountId = 5; // Sales Tax Payable account ID
+        ledgerEntriesData.push({
+          accountId: taxAccountId,
+          description: `Bill ${billData.reference} - Tax`,
+          debit: taxDifference,
+          credit: 0,
+          date: billData.date,
+          transactionId: 0
+        });
+      }
+      
       // 2. Credit Accounts Payable for the total amount
       ledgerEntriesData.push({
-        accountId: 3, // Accounts Payable account
+        accountId: 4, // Accounts Payable account (FIXED: was 3 which is Inventory)
         description: `Bill ${billData.reference}`,
         debit: 0,
         credit: totalAmount,
