@@ -96,6 +96,12 @@ export default function Reports() {
     enabled: activeTab === 'general-ledger',
   });
   
+  // Fetch accounts (for general ledger to determine account types)
+  const { data: accounts } = useQuery<Account[]>({
+    queryKey: ['/api/accounts'],
+    enabled: activeTab === 'general-ledger',
+  });
+  
   // Filter ledger entries by selected account if one is selected
   const filteredLedgerEntries = selectedAccountId && ledgerEntries
     ? ledgerEntries.filter(entry => entry.accountId === selectedAccountId)
