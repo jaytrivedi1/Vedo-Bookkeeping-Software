@@ -262,6 +262,10 @@ export default function Reports() {
     return sortDirection === 'asc' ? compareValue : -compareValue;
   });
   
+  // Calculate totals for General Ledger
+  const totalDebits = ledgerEntriesWithBalance.reduce((sum, entry) => sum + (entry.debitAmount || 0), 0);
+  const totalCredits = ledgerEntriesWithBalance.reduce((sum, entry) => sum + (entry.creditAmount || 0), 0);
+  
   // Prepare data for charts
   const incomeData = incomeStatement 
     ? [
@@ -1119,35 +1123,49 @@ export default function Reports() {
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              ledgerEntriesWithBalance && ledgerEntriesWithBalance.map((entry: any) => {
-                                const accountName = accounts?.find(
-                                  (account) => account.id === entry.accountId
-                                )?.name || 'Unknown Account';
-                                
-                                return (
-                                  <TableRow 
-                                    key={entry.id}
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
-                                    onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
-                                    data-testid={`transaction-row-${entry.transactionId}`}
-                                  >
-                                    <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
-                                    <TableCell>{entry.referenceNumber || ''}</TableCell>
-                                    <TableCell>{entry.contactName || '-'}</TableCell>
-                                    <TableCell>{entry.description}</TableCell>
-                                    <TableCell>{accountName}</TableCell>
-                                    <TableCell className="text-right">
-                                      {entry.debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debitAmount) : ''}
+                              <>
+                                {ledgerEntriesWithBalance && ledgerEntriesWithBalance.map((entry: any) => {
+                                  const accountName = accounts?.find(
+                                    (account) => account.id === entry.accountId
+                                  )?.name || 'Unknown Account';
+                                  
+                                  return (
+                                    <TableRow 
+                                      key={entry.id}
+                                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                      onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
+                                      data-testid={`transaction-row-${entry.transactionId}`}
+                                    >
+                                      <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                      <TableCell>{entry.referenceNumber || ''}</TableCell>
+                                      <TableCell>{entry.contactName || '-'}</TableCell>
+                                      <TableCell>{entry.description}</TableCell>
+                                      <TableCell>{accountName}</TableCell>
+                                      <TableCell className="text-right">
+                                        {entry.debitAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debitAmount) : ''}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        {entry.creditAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.creditAmount) : ''}
+                                      </TableCell>
+                                      <TableCell className="text-right font-medium">
+                                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(entry.runningBalance))}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                                {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length > 0 && (
+                                  <TableRow className="border-t-2 border-gray-300 font-bold bg-gray-50">
+                                    <TableCell colSpan={5} className="text-right">Total</TableCell>
+                                    <TableCell className="text-right" data-testid="total-debits">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
                                     </TableCell>
-                                    <TableCell className="text-right">
-                                      {entry.creditAmount > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.creditAmount) : ''}
+                                    <TableCell className="text-right" data-testid="total-credits">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCredits)}
                                     </TableCell>
-                                    <TableCell className="text-right font-medium">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(entry.runningBalance))}
-                                    </TableCell>
+                                    <TableCell></TableCell>
                                   </TableRow>
-                                );
-                              })
+                                )}
+                              </>
                             )}
                           </TableBody>
                         </Table>
