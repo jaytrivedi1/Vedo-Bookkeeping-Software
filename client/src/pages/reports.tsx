@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -46,6 +46,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   BarChart, 
   Bar, 
@@ -60,6 +67,8 @@ import {
   Cell
 } from "recharts";
 import { Account, LedgerEntry } from "@shared/schema";
+import { getFiscalYearBounds, getFiscalYearLabel, getFiscalYear } from "@shared/fiscalYear";
+import { queryClient } from "@/lib/queryClient";
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<string>('');
@@ -68,35 +77,145 @@ export default function Reports() {
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [sortColumn, setSortColumn] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | 'current'>(new Date().getFullYear());
   const [, setLocation] = useLocation();
   
-  // Fetch income statement data
+  // Store stable current date ISO string that won't change on re-renders
+  const currentDateISORef = useRef(new Date().toISOString());
+  
+  // Fetch company settings to get fiscal year start month
+  const { data: company } = useQuery({
+    queryKey: ['/api/companies/default'],
+  });
+  
+  const fiscalYearStartMonth = useMemo(() => company?.fiscalYearStartMonth || 1, [company?.fiscalYearStartMonth]);
+  
+  // Calculate fiscal year bounds for the selected fiscal year
+  const fiscalYearBounds = useMemo(() => {
+    const today = new Date();
+    const todayISO = currentDateISORef.current;
+    
+    if (selectedFiscalYear === 'current') {
+      const bounds = getFiscalYearBounds(today, fiscalYearStartMonth);
+      return {
+        fiscalYearStart: bounds.fiscalYearStart,
+        fiscalYearEnd: bounds.fiscalYearEnd,
+        fiscalYearStartISO: bounds.fiscalYearStart.toISOString(),
+        fiscalYearEndISO: bounds.fiscalYearEnd.toISOString(),
+        currentDateISO: todayISO,
+        asOfDate: today,
+        asOfDateISO: todayISO,
+      };
+    }
+    
+    // For a specific fiscal year, create a date within that fiscal year
+    const yearDate = new Date(selectedFiscalYear, fiscalYearStartMonth - 1, 15);
+    const bounds = getFiscalYearBounds(yearDate, fiscalYearStartMonth);
+    return {
+      fiscalYearStart: bounds.fiscalYearStart,
+      fiscalYearEnd: bounds.fiscalYearEnd,
+      fiscalYearStartISO: bounds.fiscalYearStart.toISOString(),
+      fiscalYearEndISO: bounds.fiscalYearEnd.toISOString(),
+      currentDateISO: todayISO,
+      asOfDate: bounds.fiscalYearEnd,
+      asOfDateISO: bounds.fiscalYearEnd.toISOString(),
+    };
+  }, [selectedFiscalYear, fiscalYearStartMonth]);
+  
+  // Generate fiscal year options (current + past 3 years)
+  const fiscalYearOptions = useMemo(() => {
+    const today = new Date();
+    const currentFY = getFiscalYear(today, fiscalYearStartMonth);
+    const options = [];
+    
+    // Add current fiscal year option
+    options.push({
+      value: 'current' as const,
+      label: `Current Fiscal Year (${getFiscalYearLabel(today, fiscalYearStartMonth)})`,
+    });
+    
+    // Add past 3 fiscal years
+    for (let i = 1; i <= 3; i++) {
+      const yearNum = currentFY - i;
+      const yearDate = new Date(yearNum, fiscalYearStartMonth - 1, 15);
+      options.push({
+        value: yearNum,
+        label: getFiscalYearLabel(yearDate, fiscalYearStartMonth),
+      });
+    }
+    
+    return options;
+  }, [fiscalYearStartMonth]);
+  
+  // Initialize selected fiscal year to current on mount
+  useEffect(() => {
+    setSelectedFiscalYear('current');
+  }, []);
+  
+  // Handler for fiscal year change
+  const handleFiscalYearChange = (value: string) => {
+    const newValue = value === 'current' ? 'current' : parseInt(value);
+    setSelectedFiscalYear(newValue);
+    
+    // Invalidate and refetch reports
+    queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/reports/balance-sheet'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/reports/trial-balance'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+  };
+  
+  // Fetch income statement data with fiscal year dates
   const { data: incomeStatement, isLoading: incomeLoading } = useQuery({
-    queryKey: ['/api/reports/income-statement', startDate?.toISOString(), endDate?.toISOString()],
+    queryKey: ['/api/reports/income-statement', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/reports/income-statement?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}`);
+      if (!response.ok) throw new Error('Failed to fetch income statement');
+      return response.json();
+    },
     enabled: activeTab === 'income-statement' || activeTab === '',
   });
   
-  // Fetch balance sheet data
+  // Fetch balance sheet data with asOfDate
   const { data: balanceSheet, isLoading: balanceLoading } = useQuery({
-    queryKey: ['/api/reports/balance-sheet'],
+    queryKey: ['/api/reports/balance-sheet', fiscalYearBounds.asOfDateISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/reports/balance-sheet?asOfDate=${fiscalYearBounds.asOfDateISO}`);
+      if (!response.ok) throw new Error('Failed to fetch balance sheet');
+      return response.json();
+    },
     enabled: activeTab === 'balance-sheet' || activeTab === '',
   });
   
-  // Fetch account balances (for detailed breakdowns)
+  // Fetch account balances (for detailed breakdowns) with fiscal year dates
   const { data: accountBalances, isLoading: accountsLoading } = useQuery({
-    queryKey: ['/api/reports/account-balances'],
+    queryKey: ['/api/reports/account-balances', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/reports/account-balances?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}`);
+      if (!response.ok) throw new Error('Failed to fetch account balances');
+      return response.json();
+    },
     enabled: activeTab !== 'general-ledger' && activeTab !== 'trial-balance',
   });
   
-  // Fetch trial balance (calculated from ledger entries)
+  // Fetch trial balance with asOfDate
   const { data: trialBalanceData, isLoading: trialBalanceLoading } = useQuery({
-    queryKey: ['/api/reports/trial-balance'],
+    queryKey: ['/api/reports/trial-balance', fiscalYearBounds.asOfDateISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/reports/trial-balance?asOfDate=${fiscalYearBounds.asOfDateISO}`);
+      if (!response.ok) throw new Error('Failed to fetch trial balance');
+      return response.json();
+    },
     enabled: activeTab === 'trial-balance',
   });
   
-  // Fetch ledger entries (for general ledger)
+  // Fetch ledger entries (for general ledger) with fiscal year dates
   const { data: ledgerEntries, isLoading: ledgerLoading } = useQuery<LedgerEntry[]>({
-    queryKey: ['/api/ledger-entries'],
+    queryKey: ['/api/ledger-entries', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/ledger-entries?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}`);
+      if (!response.ok) throw new Error('Failed to fetch ledger entries');
+      return response.json();
+    },
     enabled: activeTab === 'general-ledger',
   });
   
@@ -279,7 +398,7 @@ export default function Reports() {
     ? [
         { name: 'Assets', value: balanceSheet.assets },
         { name: 'Liabilities', value: balanceSheet.liabilities },
-        { name: 'Equity', value: balanceSheet.equity }
+        { name: 'Equity', value: typeof balanceSheet.equity === 'number' ? balanceSheet.equity : balanceSheet.equity?.total || 0 }
       ]
     : [];
   
@@ -531,24 +650,52 @@ export default function Reports() {
           <Tabs value={activeTab} defaultValue="income-statement">
             {/* Income Statement */}
             <TabsContent value="income-statement">
+              <div className="mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <Select 
+                      value={selectedFiscalYear.toString()} 
+                      onValueChange={handleFiscalYearChange}
+                      data-testid="fiscal-year-select-income-statement"
+                    >
+                      <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalYearOptions.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value.toString()}
+                            data-testid={`fiscal-year-option-${option.value}`}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
                   <CardHeader className="flex flex-col sm:flex-row justify-between">
                     <div>
                       <CardTitle>Income Statement</CardTitle>
                       <CardDescription>
-                        For the period ending {format(new Date(), 'MMMM d, yyyy')}
+                        For the period {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}
                       </CardDescription>
                     </div>
                     {incomeStatement && !incomeLoading && (
                       <div className="mt-2 sm:mt-0">
                         <ExportMenu
                           onExportCSV={() => {
-                            const filename = generateFilename('income_statement', startDate, endDate);
+                            const filename = generateFilename('income_statement', fiscalYearBounds.fiscalYearStart, fiscalYearBounds.fiscalYearEnd);
                             exportIncomeStatementToCSV(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.csv`);
                           }}
                           onExportPDF={() => {
-                            const filename = generateFilename('income_statement', startDate, endDate);
+                            const filename = generateFilename('income_statement', fiscalYearBounds.fiscalYearStart, fiscalYearBounds.fiscalYearEnd);
                             exportIncomeStatementToPDF(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.pdf`);
                           }}
                           label="Export"
@@ -696,13 +843,41 @@ export default function Reports() {
             
             {/* Balance Sheet */}
             <TabsContent value="balance-sheet">
+              <div className="mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <Select 
+                      value={selectedFiscalYear.toString()} 
+                      onValueChange={handleFiscalYearChange}
+                      data-testid="fiscal-year-select-balance-sheet"
+                    >
+                      <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalYearOptions.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value.toString()}
+                            data-testid={`fiscal-year-option-${option.value}`}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="lg:col-span-2">
                   <CardHeader className="flex flex-col sm:flex-row justify-between">
                     <div>
                       <CardTitle>Balance Sheet</CardTitle>
                       <CardDescription>
-                        As of {format(new Date(), 'MMMM d, yyyy')}
+                        As of {format(selectedFiscalYear === 'current' ? new Date() : fiscalYearBounds.fiscalYearEnd, 'MMMM d, yyyy')}
                       </CardDescription>
                     </div>
                     {balanceSheet && !balanceLoading && (
@@ -760,15 +935,20 @@ export default function Reports() {
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-medium">Equity</TableCell>
-                              <TableCell className="text-right">
-                                {balanceSheet?.equity ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity) : '0.00'}
+                              <TableCell className="text-right" data-testid="balance-sheet-equity-total">
+                                {balanceSheet?.equity ? 
+                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+                                    typeof balanceSheet.equity === 'number' ? balanceSheet.equity : balanceSheet.equity?.total || 0
+                                  ) : '0.00'}
                               </TableCell>
                             </TableRow>
                             <TableRow>
                               <TableCell className="font-bold">Liabilities + Equity</TableCell>
-                              <TableCell className="text-right font-bold">
+                              <TableCell className="text-right font-bold" data-testid="balance-sheet-liabilities-equity-total">
                                 {balanceSheet?.liabilities && balanceSheet?.equity ? 
-                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.liabilities + balanceSheet.equity) : '0.00'}
+                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+                                    balanceSheet.liabilities + (typeof balanceSheet.equity === 'number' ? balanceSheet.equity : balanceSheet.equity?.total || 0)
+                                  ) : '0.00'}
                               </TableCell>
                             </TableRow>
                           </TableBody>
@@ -892,47 +1072,63 @@ export default function Reports() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {accountsLoading ? (
+                            {accountsLoading || balanceLoading ? (
                               <TableRow>
                                 <TableCell colSpan={2} className="text-center">Loading...</TableCell>
                               </TableRow>
+                            ) : balanceSheet?.equity && typeof balanceSheet.equity === 'object' && balanceSheet.equity.accounts ? (
+                              <>
+                                {/* Display equity accounts from the new structure */}
+                                {balanceSheet.equity.accounts.map((account: any) => (
+                                  <TableRow key={account.id} data-testid={`equity-account-${account.id}`}>
+                                    <TableCell>{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(account.balance))}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                
+                                {/* Retained Earnings (prior years) */}
+                                <TableRow data-testid="equity-retained-earnings-row">
+                                  <TableCell className="font-medium">Retained Earnings</TableCell>
+                                  <TableCell className="text-right" data-testid="equity-retained-earnings">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.retainedEarnings || 0)}
+                                  </TableCell>
+                                </TableRow>
+                                
+                                {/* Current Year Net Income */}
+                                <TableRow data-testid="equity-current-year-net-income-row">
+                                  <TableCell className="font-medium">Net Income (Current Year)</TableCell>
+                                  <TableCell className="text-right" data-testid="equity-current-year-net-income">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.currentYearNetIncome || 0)}
+                                  </TableCell>
+                                </TableRow>
+                                
+                                {/* Total Equity */}
+                                <TableRow className="border-t-2" data-testid="equity-total-row">
+                                  <TableCell className="font-bold">Total Equity</TableCell>
+                                  <TableCell className="text-right font-bold" data-testid="equity-total">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.total || 0)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
                             ) : (
                               <>
-                                {/* Show all equity accounts */}
-                                {(() => {
-                                  // Find Retained Earnings account if it exists
-                                  const retainedEarningsAccount = accountsByType['equity'] && 
-                                    accountsByType['equity'].find((account: any) => 
-                                      account.name.toLowerCase().includes('retained earnings'));
-                                  
-                                  // Map and show all equity accounts except Retained Earnings
-                                  return (
-                                    <>
-                                      {accountsByType['equity'] && accountsByType['equity']
-                                        .filter((account: any) => 
-                                          !account.name.toLowerCase().includes('retained earnings'))
-                                        .map((account: any) => (
-                                          <TableRow key={account.id}>
-                                            <TableCell>{account.name}</TableCell>
-                                            <TableCell className="text-right">
-                                              {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
-                                            </TableCell>
-                                          </TableRow>
-                                        ))
-                                      }
-                                      
-                                      {/* Add Retained Earnings with correct balance (original + net income) */}
-                                      <TableRow>
-                                        <TableCell>
-                                          {retainedEarningsAccount ? retainedEarningsAccount.name : 'Retained Earnings'}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          {incomeStatement?.netIncome ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome) : '0.00'}
-                                        </TableCell>
-                                      </TableRow>
-                                    </>
-                                  );
-                                })()}
+                                {/* Fallback: Show equity accounts from accountsByType for backward compatibility */}
+                                {accountsByType['equity'] && accountsByType['equity'].length > 0 ? (
+                                  accountsByType['equity'].map((account: any) => (
+                                    <TableRow key={account.id} data-testid={`equity-account-${account.id}`}>
+                                      <TableCell>{account.name}</TableCell>
+                                      <TableCell className="text-right">
+                                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                ) : (
+                                  <TableRow>
+                                    <TableCell colSpan={2} className="text-center">No equity accounts found</TableCell>
+                                  </TableRow>
+                                )}
                               </>
                             )}
                           </TableBody>
@@ -946,6 +1142,34 @@ export default function Reports() {
             
             {/* General Ledger */}
             <TabsContent value="general-ledger">
+              <div className="mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <Select 
+                      value={selectedFiscalYear.toString()} 
+                      onValueChange={handleFiscalYearChange}
+                      data-testid="fiscal-year-select-general-ledger"
+                    >
+                      <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalYearOptions.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value.toString()}
+                            data-testid={`fiscal-year-option-${option.value}`}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 gap-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
@@ -954,7 +1178,7 @@ export default function Reports() {
                       <CardDescription>
                         {selectedAccountId ? (
                           <div className="flex items-center gap-2">
-                            <span>Filtered by account</span>
+                            <span>Filtered by account for {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}</span>
                             <Button
                               variant="outline"
                               size="sm"
@@ -965,64 +1189,9 @@ export default function Reports() {
                             </Button>
                           </div>
                         ) : (
-                          'View all ledger entries for the selected period'
+                          `View all ledger entries for ${format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - ${format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}`
                         )}
                       </CardDescription>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {/* Start Date Selector */}
-                      <div className="flex flex-col space-y-1">
-                        <span className="text-sm font-medium">Start Date</span>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-[200px] justify-start text-left font-normal",
-                                !startDate && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {startDate ? format(startDate, "PPP") : <span>Pick a date</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={startDate}
-                              onSelect={setStartDate}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      
-                      {/* End Date Selector */}
-                      <div className="flex flex-col space-y-1">
-                        <span className="text-sm font-medium">End Date</span>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-[200px] justify-start text-left font-normal",
-                                !endDate && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {endDate ? format(endDate, "PPP") : <span>Pick a date</span>}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar
-                              mode="single"
-                              selected={endDate}
-                              onSelect={setEndDate}
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -1178,6 +1347,34 @@ export default function Reports() {
             
             {/* Trial Balance */}
             <TabsContent value="trial-balance">
+              <div className="mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <Select 
+                      value={selectedFiscalYear.toString()} 
+                      onValueChange={handleFiscalYearChange}
+                      data-testid="fiscal-year-select-trial-balance"
+                    >
+                      <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalYearOptions.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value.toString()}
+                            data-testid={`fiscal-year-option-${option.value}`}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 gap-6">
                 <Card>
                   <CardHeader>
@@ -1185,14 +1382,8 @@ export default function Reports() {
                       <div>
                         <CardTitle>Trial Balance</CardTitle>
                         <CardDescription>
-                          As of {format(new Date(), "MMMM d, yyyy")}
+                          As of {format(fiscalYearBounds.asOfDate, "MMMM d, yyyy")}
                         </CardDescription>
-                        <div>
-                          <Button variant="outline" className="mt-2">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            Select Date
-                          </Button>
-                        </div>
                       </div>
                       {trialBalanceData && !trialBalanceLoading && (
                         <div className="mt-2 sm:mt-0">

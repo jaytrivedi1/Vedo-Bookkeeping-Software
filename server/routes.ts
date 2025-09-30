@@ -3160,9 +3160,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   apiRouter.get("/reports/balance-sheet", async (req: Request, res: Response) => {
     try {
-      const balanceSheet = await storage.getBalanceSheet();
-      res.json(balanceSheet);
+      // Get company settings for fiscal year start month
+      const companySettings = await storage.getCompanySettings();
+      const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+      
+      // Get as-of date from query params or use today
+      const asOfDateStr = req.query.asOfDate as string | undefined;
+      const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
+      
+      // Calculate prior years' retained earnings and current year net income
+      const retainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
+      const currentYearNetIncome = await storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
+      
+      // Get account balances
+      const accountBalances = await storage.getAccountBalances();
+      
+      // Asset accounts
+      const assetAccounts = accountBalances.filter(item => 
+        item.account.type === 'current_assets' || 
+        item.account.type === 'bank' || 
+        item.account.type === 'accounts_receivable' ||
+        item.account.type === 'property_plant_equipment' || 
+        item.account.type === 'long_term_assets'
+      );
+      const totalAssets = assetAccounts.reduce((sum, item) => sum + item.balance, 0);
+      
+      // Liability accounts
+      const liabilityAccounts = accountBalances.filter(item => 
+        item.account.type === 'accounts_payable' || 
+        item.account.type === 'credit_card' || 
+        item.account.type === 'other_current_liabilities' ||
+        item.account.type === 'long_term_liabilities'
+      );
+      const totalLiabilities = liabilityAccounts.reduce((sum, item) => sum + item.balance, 0);
+      
+      // Equity accounts (excluding Retained Earnings which we calculate separately)
+      const equityAccounts = accountBalances.filter(item => 
+        item.account.type === 'equity' && 
+        item.account.code !== '3100' && 
+        item.account.code !== '3900' && 
+        item.account.name !== 'Retained Earnings'
+      );
+      const otherEquity = equityAccounts.reduce((sum, item) => sum + item.balance, 0);
+      
+      // Total Equity = Other Equity Accounts + Retained Earnings + Current Year Net Income
+      const totalEquity = otherEquity + retainedEarnings + currentYearNetIncome;
+      
+      // Return detailed balance sheet structure
+      res.json({
+        assets: {
+          accounts: assetAccounts.map(item => ({
+            id: item.account.id,
+            code: item.account.code,
+            name: item.account.name,
+            balance: item.balance,
+          })),
+          total: totalAssets,
+        },
+        liabilities: {
+          accounts: liabilityAccounts.map(item => ({
+            id: item.account.id,
+            code: item.account.code,
+            name: item.account.name,
+            balance: item.balance,
+          })),
+          total: totalLiabilities,
+        },
+        equity: {
+          accounts: equityAccounts.map(item => ({
+            id: item.account.id,
+            code: item.account.code,
+            name: item.account.name,
+            balance: item.balance,
+          })),
+          retainedEarnings,
+          currentYearNetIncome,
+          total: totalEquity,
+        },
+        // Summary totals
+        totalAssets,
+        totalLiabilities,
+        totalEquity,
+      });
     } catch (error) {
+      console.error("Error generating balance sheet:", error);
       res.status(500).json({ message: "Failed to generate balance sheet" });
     }
   });
@@ -3179,8 +3260,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trial Balance report - calculates from ledger entries
   apiRouter.get("/reports/trial-balance", async (req: Request, res: Response) => {
     try {
+      // Get company settings for fiscal year start month
+      const companySettings = await storage.getCompanySettings();
+      const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+      
+      // Get as-of date from query params or use today
+      const asOfDateStr = req.query.asOfDate as string | undefined;
+      const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
+      
       const accounts = await storage.getAccounts();
       const ledgerEntries = await storage.getAllLedgerEntries();
+      
+      // Calculate prior years' retained earnings (profit/loss from before current fiscal year)
+      const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
       
       // Group ledger entries by account and calculate totals using integer arithmetic (cents)
       const accountTotals = new Map<number, { totalDebitsCents: number; totalCreditsCents: number }>();
@@ -3195,10 +3287,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totals.totalCreditsCents += Math.round(Number(entry.credit) * 100);
       });
       
+      // Find the Retained Earnings account (code 3100 or 3900, or by name)
+      const retainedEarningsAccount = accounts.find(acc => 
+        acc.code === '3100' || acc.code === '3900' || acc.name === 'Retained Earnings'
+      );
+      
       // Build trial balance data
       const trialBalanceData = accounts.map(account => {
         const totals = accountTotals.get(account.id) || { totalDebitsCents: 0, totalCreditsCents: 0 };
-        const netBalanceCents = totals.totalDebitsCents - totals.totalCreditsCents;
+        let netBalanceCents = totals.totalDebitsCents - totals.totalCreditsCents;
+        
+        // Special handling for Retained Earnings account
+        // Replace its current balance with ONLY prior years' cumulative profit/loss
+        if (retainedEarningsAccount && account.id === retainedEarningsAccount.id) {
+          // Retained Earnings is a credit balance (equity account)
+          // Positive retained earnings means credits > debits
+          netBalanceCents = Math.round(-priorYearsRetainedEarnings * 100);
+        }
         
         // Convert back to dollars for display
         const totalDebits = totals.totalDebitsCents / 100;

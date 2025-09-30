@@ -98,6 +98,10 @@ export interface IStorage {
   getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
   getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
   
+  // Accounting helpers for Retained Earnings and Net Income
+  calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;
+  calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;
+  
   // Companies
   getCompanies(): Promise<Company[]>;
   getCompany(id: number): Promise<Company | undefined>;
@@ -571,6 +575,14 @@ export class MemStorage implements IStorage {
     const equity = equityAccounts.reduce((sum, account) => sum + account.balance, 0);
     
     return { assets, liabilities, equity };
+  }
+
+  async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    return 0;
+  }
+
+  async calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    return 0;
   }
 
   // Product Methods

@@ -8,10 +8,11 @@ import {
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne, or, isNull, like } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import { getFiscalYearBounds } from "@shared/fiscalYear";
 
 // Promisify the scrypt function
 const scryptAsync = promisify(scrypt);
@@ -1402,6 +1403,99 @@ export class DatabaseStorage implements IStorage {
       liabilities, 
       equity: equity + netIncome 
     };
+  }
+
+  async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
+    
+    const result = await db
+      .select({
+        accountType: accounts.type,
+        totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+        totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+      .where(
+        and(
+          lt(ledgerEntries.date, fiscalYearStart),
+          or(
+            eq(accounts.type, 'income'),
+            eq(accounts.type, 'other_income'),
+            eq(accounts.type, 'expenses'),
+            eq(accounts.type, 'cost_of_goods_sold'),
+            eq(accounts.type, 'other_expense')
+          )
+        )
+      )
+      .groupBy(accounts.type);
+
+    let revenues = 0;
+    let expenses = 0;
+
+    for (const row of result) {
+      const debit = Number(row.totalDebit) || 0;
+      const credit = Number(row.totalCredit) || 0;
+
+      if (row.accountType === 'income' || row.accountType === 'other_income') {
+        revenues += credit - debit;
+      } else if (
+        row.accountType === 'expenses' || 
+        row.accountType === 'cost_of_goods_sold' || 
+        row.accountType === 'other_expense'
+      ) {
+        expenses += debit - credit;
+      }
+    }
+
+    return revenues - expenses;
+  }
+
+  async calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
+    
+    const result = await db
+      .select({
+        accountType: accounts.type,
+        totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+        totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+      })
+      .from(ledgerEntries)
+      .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+      .where(
+        and(
+          gte(ledgerEntries.date, fiscalYearStart),
+          lte(ledgerEntries.date, asOfDate),
+          or(
+            eq(accounts.type, 'income'),
+            eq(accounts.type, 'other_income'),
+            eq(accounts.type, 'expenses'),
+            eq(accounts.type, 'cost_of_goods_sold'),
+            eq(accounts.type, 'other_expense')
+          )
+        )
+      )
+      .groupBy(accounts.type);
+
+    let revenues = 0;
+    let expenses = 0;
+
+    for (const row of result) {
+      const debit = Number(row.totalDebit) || 0;
+      const credit = Number(row.totalCredit) || 0;
+
+      if (row.accountType === 'income' || row.accountType === 'other_income') {
+        revenues += credit - debit;
+      } else if (
+        row.accountType === 'expenses' || 
+        row.accountType === 'cost_of_goods_sold' || 
+        row.accountType === 'other_expense'
+      ) {
+        expenses += debit - credit;
+      }
+    }
+
+    return revenues - expenses;
   }
 
   // Sales Taxes
