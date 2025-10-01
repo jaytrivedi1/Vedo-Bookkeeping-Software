@@ -9,7 +9,7 @@ export default function PayBill() {
   };
 
   const handleCancel = () => {
-    navigate("/transactions");
+    window.history.back();
   };
 
   return (

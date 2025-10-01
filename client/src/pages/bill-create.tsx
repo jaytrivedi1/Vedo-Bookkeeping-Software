@@ -281,7 +281,7 @@ export default function BillCreate() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Create Bill</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate("/transactions")}>
+          <Button variant="outline" onClick={() => window.history.back()}>
             Cancel
           </Button>
           <Button 

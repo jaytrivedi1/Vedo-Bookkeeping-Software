@@ -42,9 +42,9 @@ export default function EditInvoice() {
         <p className="text-lg">Error loading invoice: {String(error)}</p>
         <button
           className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
-          onClick={() => setLocation("/invoices")}
+          onClick={() => window.history.back()}
         >
-          Back to Invoices
+          Go Back
         </button>
       </div>
     );
@@ -56,9 +56,9 @@ export default function EditInvoice() {
         <p className="text-lg">Invoice not found</p>
         <button
           className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md"
-          onClick={() => setLocation("/invoices")}
+          onClick={() => window.history.back()}
         >
-          Back to Invoices
+          Go Back
         </button>
       </div>
     );
@@ -70,7 +70,7 @@ export default function EditInvoice() {
         invoice={data.transaction}
         lineItems={data.lineItems}
         onSuccess={() => setLocation("/invoices")}
-        onCancel={() => setLocation("/invoices")}
+        onCancel={() => window.history.back()}
       />
     </div>
   );

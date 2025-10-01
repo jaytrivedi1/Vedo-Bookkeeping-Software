@@ -4,8 +4,6 @@ import { Button } from "@/components/ui/button";
 import DepositForm from "@/components/forms/DepositForm";
 
 export default function DepositsPage() {
-  const [_, setLocation] = useLocation();
-
   return (
     <div className="py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -14,7 +12,7 @@ export default function DepositsPage() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => setLocation("/dashboard")}
+              onClick={() => window.history.back()}
               className="mr-4"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
