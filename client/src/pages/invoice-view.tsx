@@ -144,18 +144,15 @@ export default function InvoiceView() {
   // Find customer
   const customer = contacts?.find(c => c.id === invoice?.contactId);
   
-  // Calculate totals
-  const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-  
-  // Calculate tax by line item
-  const calculateTaxAmount = (lineItem: LineItem): number => {
-    if (!lineItem.salesTaxId || !salesTaxes) return 0;
-    const tax = salesTaxes.find(tax => tax.id === lineItem.salesTaxId);
-    return tax ? (lineItem.amount * tax.rate / 100) : 0;
-  };
-  
-  const totalTaxAmount = lineItems.reduce((sum, item) => sum + calculateTaxAmount(item), 0);
-  const total = subtotal + totalTaxAmount;
+  // Use saved totals from the transaction (respects manual tax overrides)
+  // Fallback to calculating from line items if not saved
+  const subtotal = invoice?.subTotal ?? lineItems.reduce((sum, item) => sum + item.amount, 0);
+  const totalTaxAmount = invoice?.taxAmount ?? lineItems.reduce((sum, item) => {
+    if (!item.salesTaxId || !salesTaxes) return sum;
+    const tax = salesTaxes.find(tax => tax.id === item.salesTaxId);
+    return sum + (tax ? (item.amount * tax.rate / 100) : 0);
+  }, 0);
+  const total = invoice?.amount ?? (subtotal + totalTaxAmount);
   
   // Get tax names used in this invoice
   const getTaxNames = (): string[] => {

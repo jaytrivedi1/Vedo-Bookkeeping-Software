@@ -71,6 +71,8 @@ export const transactions = pgTable('transactions', {
   date: timestamp('date').notNull().defaultNow(),
   description: text('description'),
   amount: doublePrecision('amount').notNull(),
+  subTotal: doublePrecision('sub_total'),
+  taxAmount: doublePrecision('tax_amount'),
   balance: doublePrecision('balance'),
   contactId: integer('contact_id').references(() => contacts.id),
   status: statusEnum('status').notNull().default('open'),

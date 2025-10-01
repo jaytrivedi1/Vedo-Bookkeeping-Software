@@ -587,6 +587,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalAmount = roundTo2Decimals(invoiceData.totalAmount || 
         invoiceData.lineItems.reduce((sum, item) => sum + item.amount, 0));
       
+      // Use the provided subtotal and tax amount from the client with rounding
+      const subTotal = roundTo2Decimals(invoiceData.subTotal || totalAmount);
+      const taxAmount = roundTo2Decimals(invoiceData.taxAmount || 0);
+      
       // Create transaction
       const transaction = {
         reference: invoiceData.reference,
@@ -594,6 +598,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: invoiceData.date,
         description: invoiceData.description,
         amount: totalAmount,
+        subTotal: subTotal,
+        taxAmount: taxAmount,
         balance: totalAmount, // Set the initial balance to match the total amount (already rounded)
         contactId: invoiceData.contactId,
         status: invoiceData.status
@@ -635,10 +641,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
-      
-      // Use the provided subtotal and tax amount from the client with rounding
-      const subTotal = roundTo2Decimals(invoiceData.subTotal || totalAmount);
-      const taxAmount = roundTo2Decimals(invoiceData.taxAmount || 0);
       
       // Create base ledger entries (will add tax entries after)
       const ledgerEntries = [

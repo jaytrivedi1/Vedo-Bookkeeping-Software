@@ -94,9 +94,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const initialDueDate = isEditing && invoice!.dueDate ? new Date(invoice!.dueDate) : addDays(initialDate, 30);
   
   const [dueDate, setDueDate] = useState<Date>(initialDueDate);
-  const [subTotal, setSubTotal] = useState(isEditing ? (invoice?.amount || 0) : 0);
-  const [taxAmount, setTaxAmount] = useState(0);
-  const [manualTaxAmount, setManualTaxAmount] = useState<number | null>(null); // null means use calculated tax
+  const [subTotal, setSubTotal] = useState(isEditing ? (invoice?.subTotal || invoice?.amount || 0) : 0);
+  const [taxAmount, setTaxAmount] = useState(isEditing ? (invoice?.taxAmount || 0) : 0);
+  const [manualTaxAmount, setManualTaxAmount] = useState<number | null>(isEditing && invoice?.taxAmount !== undefined ? invoice.taxAmount : null); // null means use calculated tax, use saved tax when editing
   const [totalAmount, setTotalAmount] = useState(isEditing ? (invoice?.amount || 0) : 0);
   const [balanceDue, setBalanceDue] = useState(isEditing ? (invoice?.balance || invoice?.amount || 0) : 0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
