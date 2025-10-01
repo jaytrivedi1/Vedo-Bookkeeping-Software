@@ -660,102 +660,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       ];
       
-      // Handle tax allocation with proper accounts for composite taxes
-      // Initialize tax ledger entries map to combine entries for same account
-      const taxLedgerMap = new Map<number, { accountId: number, amount: number }>();
-      
-      // Process each line item to determine tax allocation
-      for (const item of invoiceData.lineItems) {
-        if (item.salesTaxId) {
-          // Get the tax information for the line item
-          const salesTax = await storage.getSalesTax(item.salesTaxId);
-          
-          if (salesTax) {
-            // Check if it's a composite tax (has components)
-            if (salesTax.isComposite) {
-              // Get all component taxes for this composite tax
-              const componentTaxes = await db
-                .select()
-                .from(salesTaxSchema)
-                .where(eq(salesTaxSchema.parentId, salesTax.id))
-                .execute();
-                
-              console.log(`Fetched ${componentTaxes.length} component taxes for parent ID ${salesTax.id}:`, componentTaxes);
-              
-              if (componentTaxes.length > 0) {
-                // Process each component tax separately
-                for (const component of componentTaxes) {
-                  // Calculate tax amount for this component with rounding
-                  const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
+      // Handle tax allocation - use provided taxAmount from frontend (respects manual overrides)
+      // but distribute it proportionally across correct tax liability accounts
+      if (taxAmount > 0) {
+        console.log(`Using provided tax amount from frontend: ${taxAmount}`);
+        
+        // Calculate what the tax components WOULD be to get proportions
+        const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
+        let totalCalculatedTax = 0;
+        
+        // Process each line item to determine tax account allocation and proportions
+        for (const item of invoiceData.lineItems) {
+          if (item.salesTaxId) {
+            const salesTax = await storage.getSalesTax(item.salesTaxId);
+            
+            if (salesTax) {
+              if (salesTax.isComposite) {
+                // Get all component taxes for this composite tax
+                const componentTaxes = await db
+                  .select()
+                  .from(salesTaxSchema)
+                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .execute();
                   
-                  // Get the proper account ID for this component
-                  const accountId = component.accountId || taxPayableAccount.id;
+                if (componentTaxes.length > 0) {
+                  // Process each component tax separately
+                  for (const component of componentTaxes) {
+                    const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
+                    totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + componentTaxAmount);
+                    
+                    const accountId = component.accountId || taxPayableAccount.id;
+                    
+                    if (taxComponents.has(accountId)) {
+                      const entry = taxComponents.get(accountId)!;
+                      entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + componentTaxAmount);
+                    } else {
+                      taxComponents.set(accountId, { accountId, calculatedAmount: componentTaxAmount });
+                    }
+                  }
+                } else {
+                  // No components found, use the main tax account
+                  const itemTaxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                  totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + itemTaxAmount);
                   
-                  // Add to the tax ledger map for this account
-                  if (taxLedgerMap.has(accountId)) {
-                    // Add to existing amount for this account
-                    const entry = taxLedgerMap.get(accountId)!;
-                    entry.amount = roundTo2Decimals(entry.amount + componentTaxAmount);
-                    taxLedgerMap.set(accountId, entry);
+                  const accountId = salesTax.accountId || taxPayableAccount.id;
+                  
+                  if (taxComponents.has(accountId)) {
+                    const entry = taxComponents.get(accountId)!;
+                    entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + itemTaxAmount);
                   } else {
-                    // Create new entry for this account
-                    taxLedgerMap.set(accountId, { accountId, amount: componentTaxAmount });
+                    taxComponents.set(accountId, { accountId, calculatedAmount: itemTaxAmount });
                   }
                 }
               } else {
-                // No components found, use the main tax account
-                const taxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                // Regular non-composite tax
+                const itemTaxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + itemTaxAmount);
+                
                 const accountId = salesTax.accountId || taxPayableAccount.id;
                 
-                if (taxLedgerMap.has(accountId)) {
-                  const entry = taxLedgerMap.get(accountId)!;
-                  entry.amount = roundTo2Decimals(entry.amount + taxAmount);
-                  taxLedgerMap.set(accountId, entry);
+                if (taxComponents.has(accountId)) {
+                  const entry = taxComponents.get(accountId)!;
+                  entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + itemTaxAmount);
                 } else {
-                  taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
+                  taxComponents.set(accountId, { accountId, calculatedAmount: itemTaxAmount });
                 }
-              }
-            } else {
-              // Regular non-composite tax
-              const taxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
-              const accountId = salesTax.accountId || taxPayableAccount.id;
-              
-              if (taxLedgerMap.has(accountId)) {
-                const entry = taxLedgerMap.get(accountId)!;
-                entry.amount = roundTo2Decimals(entry.amount + taxAmount);
-                taxLedgerMap.set(accountId, entry);
-              } else {
-                taxLedgerMap.set(accountId, { accountId, amount: taxAmount });
               }
             }
           }
         }
-      }
-      
-      // Add tax ledger entries from the map
-      console.log('Creating tax ledger entries:', Array.from(taxLedgerMap.values()));
-      
-      // If no tax entries were created (or calculation issue), use the total tax amount
-      if (taxLedgerMap.size === 0 && taxAmount > 0) {
-        ledgerEntries.push({
-          accountId: taxPayableAccount.id,
-          description: `Invoice ${transaction.reference} - Sales Tax`,
-          debit: 0,
-          credit: taxAmount,
-          date: transaction.date,
-          transactionId: 0 // Will be set by createTransaction
-        });
-      } else {
-        // Add the tax entries from our map - convert to array first to avoid iterator issues
-        const taxEntries = Array.from(taxLedgerMap.values());
-        for (const entry of taxEntries) {
+        
+        // Now distribute the manual taxAmount proportionally across the accounts
+        if (taxComponents.size > 0 && totalCalculatedTax > 0) {
+          // Distribute the manual tax amount proportionally
+          let remainingTax = taxAmount;
+          const componentArray = Array.from(taxComponents.values());
+          
+          componentArray.forEach((component, index) => {
+            let proportionalAmount: number;
+            
+            if (index === componentArray.length - 1) {
+              // Last component gets the remainder to avoid rounding errors
+              proportionalAmount = remainingTax;
+            } else {
+              // Calculate proportional amount based on original calculation
+              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
+              remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
+            }
+            
+            ledgerEntries.push({
+              accountId: component.accountId,
+              description: `Invoice ${transaction.reference} - Sales Tax`,
+              debit: 0,
+              credit: proportionalAmount,
+              date: transaction.date,
+              transactionId: 0
+            });
+          });
+        } else {
+          // Fallback: no tax components found, use default account
           ledgerEntries.push({
-            accountId: entry.accountId,
+            accountId: taxPayableAccount.id,
             description: `Invoice ${transaction.reference} - Sales Tax`,
             debit: 0,
-            credit: parseFloat(entry.amount.toFixed(2)), // Round to 2 decimal places
+            credit: taxAmount,
             date: transaction.date,
-            transactionId: 0 // Will be set by createTransaction
+            transactionId: 0
           });
         }
       }
