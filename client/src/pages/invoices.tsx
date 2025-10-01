@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon, UserPlus } from "lucide-react";
+import { PlusIcon, FileText, CreditCard, PiggyBank } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
-import TransactionForm from "@/components/transactions/TransactionForm";
 import CustomerDialog from "@/components/customers/CustomerDialog";
 import CustomerList from "@/components/customers/CustomerList";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
 import {
   Card,
   CardContent,
@@ -111,7 +117,39 @@ export default function Invoices() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <TransactionForm onSuccess={refetch} />
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="text-white bg-primary hover:bg-primary/90">
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Create
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem asChild>
+                <Link href="/invoice-new">
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Invoice</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/payment-receive">
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  <span>Receive Payment</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/deposits">
+                  <PiggyBank className="mr-2 h-4 w-4" />
+                  <span>Deposit</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <FileText className="mr-2 h-4 w-4" />
+                <span>Customer Credit</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       
