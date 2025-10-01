@@ -337,7 +337,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     calculateTotals();
   };
 
-  const calculateTotals = (creditsArray?: Transaction[]) => {
+  const calculateTotals = (creditsArray?: Transaction[], manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
     const subtotal = roundTo2Decimals(lineItems.reduce((sum, item) => sum + (item.amount || 0), 0));
     
@@ -508,7 +508,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     });
     
     // Use manual tax amount if set, otherwise use calculated tax
-    const finalTaxAmount = manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount;
+    // Priority: 1) manualTaxOverride parameter (null = use calculated), 2) manualTaxAmount state, 3) calculated tax
+    const finalTaxAmount = manualTaxOverride !== undefined 
+      ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
+      : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
     const total = roundTo2Decimals(subtotal + finalTaxAmount);
     
     // Get all unique tax names used in this invoice
@@ -1250,16 +1253,28 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
                           onChange={(e) => {
                             const value = parseFloat(e.target.value);
-                            if (!isNaN(value)) {
-                              setManualTaxAmount(roundTo2Decimals(value));
-                              // Recalculate totals with manual tax
-                              setTimeout(() => calculateTotals(), 0);
+                            if (!isNaN(value) && e.target.value.trim() !== '') {
+                              const roundedValue = roundTo2Decimals(value);
+                              setManualTaxAmount(roundedValue);
+                              // Pass the value directly to avoid state timing issues
+                              calculateTotals(undefined, roundedValue);
+                            } else {
+                              // If empty or invalid, clear the manual override
+                              setManualTaxAmount(null);
+                              // Pass null to explicitly use calculated tax
+                              calculateTotals(undefined, null);
                             }
                           }}
-                          onBlur={() => {
-                            // Ensure value is rounded on blur
-                            if (manualTaxAmount !== null) {
-                              setManualTaxAmount(roundTo2Decimals(manualTaxAmount));
+                          onBlur={(e) => {
+                            // Ensure value is rounded on blur, or cleared if empty
+                            if (e.target.value.trim() === '') {
+                              setManualTaxAmount(null);
+                              // Pass null to explicitly use calculated tax
+                              calculateTotals(undefined, null);
+                            } else if (manualTaxAmount !== null) {
+                              const roundedValue = roundTo2Decimals(manualTaxAmount);
+                              setManualTaxAmount(roundedValue);
+                              calculateTotals(undefined, roundedValue);
                             }
                           }}
                           className="w-24 h-8 text-right px-2 font-medium border-gray-300"
