@@ -23,6 +23,9 @@ import InvoiceEdit from "@/pages/invoice-edit";
 import InvoiceView from "@/pages/invoice-view";
 import PaymentView from "@/pages/payment-view";
 import PaymentReceive from "@/pages/payment-receive";
+import ExpenseNew from "@/pages/expense-new";
+import ExpenseView from "@/pages/expense-view";
+import ExpenseEdit from "@/pages/expense-edit";
 import MainLayout from "@/components/layout/MainLayout";
 
 function Router() {
@@ -40,6 +43,9 @@ function Router() {
       <Route path="/bills/:id" component={BillView} />
       <Route path="/pay-bill" component={PayBill} />
       <Route path="/expenses" component={Expenses} />
+      <Route path="/expenses/new" component={ExpenseNew} />
+      <Route path="/expenses/:id/edit" component={ExpenseEdit} />
+      <Route path="/expenses/:id" component={ExpenseView} />
       <Route path="/journals" component={Journals} />
       <Route path="/deposits" component={Deposits} />
       <Route path="/deposits/:id" component={DepositView} />
