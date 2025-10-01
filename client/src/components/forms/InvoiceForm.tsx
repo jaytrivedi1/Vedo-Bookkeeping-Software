@@ -96,6 +96,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [dueDate, setDueDate] = useState<Date>(initialDueDate);
   const [subTotal, setSubTotal] = useState(isEditing ? (invoice?.amount || 0) : 0);
   const [taxAmount, setTaxAmount] = useState(0);
+  const [manualTaxAmount, setManualTaxAmount] = useState<number | null>(null); // null means use calculated tax
   const [totalAmount, setTotalAmount] = useState(isEditing ? (invoice?.amount || 0) : 0);
   const [balanceDue, setBalanceDue] = useState(isEditing ? (invoice?.balance || invoice?.amount || 0) : 0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
@@ -506,7 +507,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       }
     });
     
-    const total = roundTo2Decimals(subtotal + totalTaxAmount);
+    // Use manual tax amount if set, otherwise use calculated tax
+    const finalTaxAmount = manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount;
+    const total = roundTo2Decimals(subtotal + finalTaxAmount);
     
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
@@ -520,6 +523,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     console.log("Calculating totals:", { 
       subtotal, 
       totalTaxAmount, 
+      manualTaxAmount,
+      finalTaxAmount,
       total,
       appliedCreditAmount,
       lineItems,
@@ -529,7 +534,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     
     // Make sure to persist these values
     setSubTotal(subtotal);
-    setTaxAmount(totalTaxAmount);
+    setTaxAmount(finalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);
     
@@ -1229,26 +1234,50 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       <span className="font-medium">${formatCurrency(subTotal)}</span>
                     </div>
                     
-                    {/* Tax Summary */}
-                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
-                      // Display each tax component separately for composite taxes
-                      form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                        <div key={taxComponent.id} className="flex justify-between items-center text-gray-700">
-                          <span className="text-sm">
-                            {taxComponent.name} ({taxComponent.rate}%)
-                          </span>
-                          <span className="font-medium">${formatCurrency(taxComponent.amount)}</span>
-                        </div>
-                      ))
-                    ) : (
-                      // Fallback to the original tax display if no components
-                      <div className="flex justify-between items-center text-gray-700">
-                        <span className="text-sm">
-                          {taxNames.length > 0 
-                            ? taxNames.join(', ')  
-                            : 'Tax'}
-                        </span>
-                        <span className="font-medium">${formatCurrency(taxAmount)}</span>
+                    {/* Tax Summary - Editable */}
+                    <div className="flex justify-between items-center text-gray-700">
+                      <span className="text-sm">
+                        {taxNames.length > 0 
+                          ? taxNames.join(', ')  
+                          : 'Tax'}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value)) {
+                              setManualTaxAmount(roundTo2Decimals(value));
+                              // Recalculate totals with manual tax
+                              setTimeout(() => calculateTotals(), 0);
+                            }
+                          }}
+                          onBlur={() => {
+                            // Ensure value is rounded on blur
+                            if (manualTaxAmount !== null) {
+                              setManualTaxAmount(roundTo2Decimals(manualTaxAmount));
+                            }
+                          }}
+                          className="w-24 h-8 text-right px-2 font-medium border-gray-300"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Show tax components breakdown if available (read-only, for info) */}
+                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
+                      <div className="pl-4 space-y-1">
+                        {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                          <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
+                            <span>
+                              {taxComponent.name} ({taxComponent.rate}%)
+                            </span>
+                            <span>${formatCurrency(taxComponent.amount)}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                     
