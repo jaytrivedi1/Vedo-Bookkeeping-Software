@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { Invoice as BaseInvoice, invoiceSchema, Contact, SalesTax, Product, Transaction as BaseTransaction } from "@shared/schema";
-import { roundTo2Decimals } from "@shared/utils";
+import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 
 // Extend the Transaction type to include appliedAmount for credits
 interface Transaction extends BaseTransaction {
@@ -1027,7 +1027,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                           // Convert field.value to number for comparison since product IDs are numbers
                                           const productId = typeof field.value === 'string' ? parseInt(field.value) : field.value;
                                           const selectedProduct = typedProducts?.find(p => p.id === productId);
-                                          return selectedProduct ? `${selectedProduct.name} ($${selectedProduct.price.toFixed(2)})` : "Select a product/service";
+                                          return selectedProduct ? `${selectedProduct.name} ($${formatCurrency(selectedProduct.price)})` : "Select a product/service";
                                         })()
                                       ) : "Select a product/service"}
                                     </SelectValue>
@@ -1040,7 +1040,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                         <SelectItem value="none">Select a product/service</SelectItem>
                                         {typedProducts.map((product) => (
                                           <SelectItem key={product.id} value={product.id.toString()}>
-                                            {product.name} (${product.price.toFixed(2)})
+                                            {product.name} (${formatCurrency(product.price)})
                                           </SelectItem>
                                         ))}
                                       </>
@@ -1122,7 +1122,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                 <Input 
                                   className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 font-medium" 
                                   readOnly
-                                  value={field.value.toFixed(2)}
+                                  value={formatCurrency(field.value)}
                                 />
                               </FormControl>
                               <FormMessage />
@@ -1226,7 +1226,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   <div className="w-72 space-y-3 bg-gray-50 p-4 rounded-lg border">
                     <div className="flex justify-between items-center text-gray-700">
                       <span className="text-sm font-medium">Subtotal</span>
-                      <span className="font-medium">${subTotal.toFixed(2)}</span>
+                      <span className="font-medium">${formatCurrency(subTotal)}</span>
                     </div>
                     
                     {/* Tax Summary */}
@@ -1237,7 +1237,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           <span className="text-sm">
                             {taxComponent.name} ({taxComponent.rate}%)
                           </span>
-                          <span className="font-medium">${taxComponent.amount.toFixed(2)}</span>
+                          <span className="font-medium">${formatCurrency(taxComponent.amount)}</span>
                         </div>
                       ))
                     ) : (
@@ -1248,13 +1248,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             ? taxNames.join(', ')  
                             : 'Tax'}
                         </span>
-                        <span className="font-medium">${taxAmount.toFixed(2)}</span>
+                        <span className="font-medium">${formatCurrency(taxAmount)}</span>
                       </div>
                     )}
                     
                     <div className="flex justify-between border-t border-gray-300 pt-3">
                       <span className="text-sm font-semibold text-gray-900">Total</span>
-                      <span className="font-semibold text-gray-900">${totalAmount.toFixed(2)}</span>
+                      <span className="font-semibold text-gray-900">${formatCurrency(totalAmount)}</span>
                     </div>
                     
                     {/* Unapplied Credits section - only show if customer has credits */}
@@ -1262,7 +1262,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       <div className="mt-3 border rounded-md p-3 bg-gray-50">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-sm font-medium">Available Credits</span>
-                          <span className="text-green-600 font-medium">${totalUnappliedCredits.toFixed(2)}</span>
+                          <span className="text-green-600 font-medium">${formatCurrency(totalUnappliedCredits)}</span>
                         </div>
                         
                         <div className="text-sm mb-2">Apply credits to this invoice:</div>
@@ -1275,7 +1275,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                 <div className="flex-grow">
                                   <div className="flex justify-between">
                                     <span className="font-medium">Credit #{credit.id}</span>
-                                    <span className="text-green-600">${availableAmount.toFixed(2)}</span>
+                                    <span className="text-green-600">${formatCurrency(availableAmount)}</span>
                                   </div>
                                   <div className="text-xs text-gray-500">
                                     {format(new Date(credit.date), 'MMM dd, yyyy')}
@@ -1327,7 +1327,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                         {appliedCreditAmount > 0 && (
                           <div className="flex justify-between items-center mt-3 text-green-600 font-medium">
                             <span>Total Applied:</span>
-                            <span>${appliedCreditAmount.toFixed(2)}</span>
+                            <span>${formatCurrency(appliedCreditAmount)}</span>
                           </div>
                         )}
                       </div>
@@ -1335,7 +1335,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                     
                     <div className="flex justify-between font-bold border-t-2 border-gray-400 pt-3 mt-4 text-lg">
                       <span>Balance due</span>
-                      <span>${balanceDue.toFixed(2)}</span>
+                      <span>${formatCurrency(balanceDue)}</span>
                     </div>
                   </div>
                 </div>
@@ -1357,10 +1357,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               <div className="bg-white rounded-lg border shadow-sm p-6">
                 <div className="text-center">
                   <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Balance Due</div>
-                  <div className="text-3xl font-bold text-gray-900">${balanceDue.toFixed(2)}</div>
+                  <div className="text-3xl font-bold text-gray-900">${formatCurrency(balanceDue)}</div>
                   {appliedCreditAmount > 0 && (
                     <div className="text-sm text-green-600 mt-2 font-medium">
-                      Credits applied: ${appliedCreditAmount.toFixed(2)}
+                      Credits applied: ${formatCurrency(appliedCreditAmount)}
                     </div>
                   )}
                 </div>
