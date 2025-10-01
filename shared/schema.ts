@@ -35,6 +35,10 @@ export const statusEnum = pgEnum('status', [
   'completed', 'cancelled', 'paid', 'overdue', 'partial', 'unapplied_credit', 'open'
 ]);
 
+export const paymentMethodEnum = pgEnum('payment_method', [
+  'cash', 'check', 'credit_card', 'bank_transfer', 'other'
+]);
+
 // Chart of Accounts
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
@@ -76,6 +80,11 @@ export const transactions = pgTable('transactions', {
   balance: doublePrecision('balance'),
   contactId: integer('contact_id').references(() => contacts.id),
   status: statusEnum('status').notNull().default('open'),
+  paymentMethod: paymentMethodEnum('payment_method'),
+  paymentAccountId: integer('payment_account_id').references(() => accounts.id),
+  paymentDate: timestamp('payment_date'),
+  memo: text('memo'),
+  attachments: text('attachments').array(),
 });
 
 // Line Items
@@ -141,16 +150,23 @@ export const expenseSchema = z.object({
   date: z.date(),
   contactId: z.number(),
   reference: z.string().min(1, "Reference is required"),
-  description: z.string(),
+  description: z.string().optional(),
   status: z.enum(["open", "completed", "cancelled"]),
+  paymentMethod: z.enum(["cash", "check", "credit_card", "bank_transfer", "other"]),
+  paymentAccountId: z.number({required_error: "Payment account is required"}),
+  paymentDate: z.date().optional(),
+  memo: z.string().optional(),
   lineItems: z.array(
     z.object({
+      accountId: z.number({required_error: "Account is required"}),
       description: z.string().min(1, "Description is required"),
-      quantity: z.number().min(0.01, "Quantity must be greater than 0"),
-      unitPrice: z.number().min(0, "Price cannot be negative"),
-      amount: z.number()
+      amount: z.number().min(0, "Amount cannot be negative"),
+      salesTaxId: z.number().optional(),
     })
   ).min(1, "At least one line item is required"),
+  subTotal: z.number().optional(),
+  taxAmount: z.number().optional(),
+  totalAmount: z.number().optional(),
 });
 
 export const journalEntrySchema = z.object({

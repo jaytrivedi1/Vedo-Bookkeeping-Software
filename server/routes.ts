@@ -910,14 +910,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Expense routes
   apiRouter.post("/expenses", async (req: Request, res: Response) => {
     try {
+      console.log("Expense payload:", JSON.stringify(req.body));
+      
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
-        date: new Date(req.body.date)
+        date: new Date(req.body.date),
+        paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : undefined,
+        status: req.body.status || 'completed',
+        description: req.body.description || ''
       };
       
-      // Check if expense reference already exists
+      // Get all transactions for reference check
       const transactions = await storage.getTransactions();
+      
+      // Check if expense reference already exists
       const existingExpense = transactions.find(t => 
         t.reference === body.reference && 
         t.type === 'expense'
@@ -933,69 +940,221 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      const expenseData = expenseSchema.parse(body);
+      // Validate expense data
+      console.log("Validating expense data:", JSON.stringify(body));
+      const result = expenseSchema.safeParse(body);
+      if (!result.success) {
+        console.log("Expense validation errors:", JSON.stringify(result.error));
+        return res.status(400).json({ 
+          message: "Invalid expense data", 
+          errors: result.error.errors 
+        });
+      }
+      
+      const expenseData = result.data;
+      console.log("Expense data passed validation:", JSON.stringify(expenseData));
+      
+      // Calculate subtotal from line items (pre-tax amounts)
+      const calculatedSubTotal = roundTo2Decimals(expenseData.lineItems.reduce((sum, item) => sum + item.amount, 0));
+      
+      // Use provided values or calculated values with rounding
+      const subTotal = roundTo2Decimals(expenseData.subTotal || calculatedSubTotal);
+      const taxAmount = roundTo2Decimals(expenseData.taxAmount || 0);
+      const totalAmount = roundTo2Decimals(expenseData.totalAmount || (subTotal + taxAmount));
+      
+      // Get the payment account
+      const paymentAccount = await storage.getAccount(expenseData.paymentAccountId);
+      if (!paymentAccount) {
+        return res.status(400).json({ message: "Invalid payment account" });
+      }
       
       // Create transaction
       const transaction = {
         reference: expenseData.reference,
         type: 'expense' as const,
         date: expenseData.date,
-        description: expenseData.description,
-        amount: expenseData.lineItems.reduce((sum, item) => sum + item.amount, 0),
+        description: expenseData.description || '',
+        amount: totalAmount,
+        subTotal: subTotal,
+        taxAmount: taxAmount,
         contactId: expenseData.contactId,
-        status: expenseData.status
+        status: expenseData.status,
+        paymentMethod: expenseData.paymentMethod,
+        paymentAccountId: expenseData.paymentAccountId,
+        paymentDate: expenseData.paymentDate || expenseData.date,
+        memo: expenseData.memo || null,
+        attachments: null
       };
       
-      // Create line items
-      const lineItems = expenseData.lineItems.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
-        transactionId: 0 // Will be set by createTransaction
-      }));
+      // Create line items with accountId and salesTaxId
+      const lineItems = expenseData.lineItems.map(item => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: 1, // Default to 1 for expenses
+          unitPrice: roundTo2Decimals(item.amount), // Unit price equals amount for expenses
+          amount: roundTo2Decimals(item.amount),
+          accountId: item.accountId,
+          transactionId: 0 // Will be set by createTransaction
+        };
+        
+        // Only add salesTaxId if it exists
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+          console.log(`Line item has sales tax ID: ${item.salesTaxId}`);
+        }
+        
+        return lineItem;
+      });
       
       // Create ledger entries - Double Entry Accounting
-      // Debit Expense, Credit Accounts Payable or Cash
-      const expenseAccount = await storage.getAccountByCode('6900'); // Other Expenses
-      const payableAccount = await storage.getAccountByCode('2000'); // Accounts Payable
+      // For expenses: DEBIT expense accounts (from line items) + tax, CREDIT payment account
+      const ledgerEntries: any[] = [];
       
-      if (!expenseAccount || !payableAccount) {
-        return res.status(500).json({ message: "Required accounts do not exist" });
-      }
-      
-      const totalAmount = transaction.amount;
-      const ledgerEntries = [
-        {
-          accountId: expenseAccount.id,
-          description: `Expense ${transaction.reference}`,
-          debit: totalAmount,
+      // Add debit entries for each expense line item
+      for (const item of expenseData.lineItems) {
+        const expenseAccount = await storage.getAccount(item.accountId);
+        if (!expenseAccount) {
+          return res.status(400).json({ message: `Invalid expense account for line item` });
+        }
+        
+        ledgerEntries.push({
+          accountId: item.accountId,
+          description: `${item.description}`,
+          debit: roundTo2Decimals(item.amount),
           credit: 0,
           date: transaction.date,
-          transactionId: 0 // Will be set by createTransaction
-        },
-        {
-          accountId: payableAccount.id,
-          description: `Expense ${transaction.reference}`,
-          debit: 0,
-          credit: totalAmount,
-          date: transaction.date,
-          transactionId: 0 // Will be set by createTransaction
+          transactionId: 0
+        });
+      }
+      
+      // Handle tax entries if there's tax
+      // For expenses, tax paid is DEBITED to tax accounts (prepaid tax/input tax)
+      if (taxAmount > 0) {
+        console.log(`Processing expense tax amount: ${taxAmount}`);
+        
+        // Get the default tax receivable account (or use sales tax payable with opposite entry)
+        const taxAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+        
+        if (!taxAccount) {
+          return res.status(500).json({ message: "Tax account not found" });
         }
-      ];
+        
+        // Calculate tax components for proper allocation
+        const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
+        let totalCalculatedTax = 0;
+        
+        // Process each line item to determine tax account allocation
+        for (const item of expenseData.lineItems) {
+          if (item.salesTaxId) {
+            const salesTax = await storage.getSalesTax(item.salesTaxId);
+            
+            if (salesTax) {
+              if (salesTax.isComposite) {
+                // Get component taxes
+                const componentTaxes = await db
+                  .select()
+                  .from(salesTaxSchema)
+                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .execute();
+                  
+                if (componentTaxes.length > 0) {
+                  for (const component of componentTaxes) {
+                    const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
+                    totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + componentTaxAmount);
+                    
+                    const accountId = component.accountId || taxAccount.id;
+                    
+                    if (taxComponents.has(accountId)) {
+                      const entry = taxComponents.get(accountId)!;
+                      entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + componentTaxAmount);
+                    } else {
+                      taxComponents.set(accountId, { accountId, calculatedAmount: componentTaxAmount });
+                    }
+                  }
+                }
+              } else {
+                // Regular non-composite tax
+                const itemTaxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + itemTaxAmount);
+                
+                const accountId = salesTax.accountId || taxAccount.id;
+                
+                if (taxComponents.has(accountId)) {
+                  const entry = taxComponents.get(accountId)!;
+                  entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + itemTaxAmount);
+                } else {
+                  taxComponents.set(accountId, { accountId, calculatedAmount: itemTaxAmount });
+                }
+              }
+            }
+          }
+        }
+        
+        // Distribute the tax amount proportionally across the tax accounts
+        if (taxComponents.size > 0 && totalCalculatedTax > 0) {
+          let remainingTax = taxAmount;
+          const componentArray = Array.from(taxComponents.values());
+          
+          componentArray.forEach((component, index) => {
+            let proportionalAmount: number;
+            
+            if (index === componentArray.length - 1) {
+              // Last component gets the remainder
+              proportionalAmount = remainingTax;
+            } else {
+              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
+              remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
+            }
+            
+            // For expenses, we DEBIT tax (reduces tax liability or creates tax receivable)
+            ledgerEntries.push({
+              accountId: component.accountId,
+              description: `Expense ${transaction.reference} - Sales Tax`,
+              debit: proportionalAmount,
+              credit: 0,
+              date: transaction.date,
+              transactionId: 0
+            });
+          });
+        } else {
+          // Fallback: use default tax account
+          ledgerEntries.push({
+            accountId: taxAccount.id,
+            description: `Expense ${transaction.reference} - Sales Tax`,
+            debit: taxAmount,
+            credit: 0,
+            date: transaction.date,
+            transactionId: 0
+          });
+        }
+      }
+      
+      // Add credit entry for payment account (total amount including tax)
+      ledgerEntries.push({
+        accountId: paymentAccount.id,
+        description: `Expense ${transaction.reference} - Payment`,
+        debit: 0,
+        credit: totalAmount,
+        date: transaction.date,
+        transactionId: 0
+      });
       
       const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
       
       res.status(201).json({
         transaction: newTransaction,
         lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
-        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id)
+        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        subTotal: expenseData.subTotal,
+        taxAmount: expenseData.taxAmount,
+        totalAmount: expenseData.totalAmount || totalAmount
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid expense data", errors: error.errors });
       }
-      res.status(500).json({ message: "Failed to create expense" });
+      console.error("Error creating expense:", error);
+      res.status(500).json({ message: "Failed to create expense", error: error });
     }
   });
 
