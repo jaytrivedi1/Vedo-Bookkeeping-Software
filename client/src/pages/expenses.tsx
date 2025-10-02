@@ -567,7 +567,7 @@ export default function Expenses() {
                                     </Button>
                                   </Link>
                                   
-                                  <Link href={`/bills/edit/${bill.id}`}>
+                                  <Link href={`/bills/${bill.id}/edit`}>
                                     <Button
                                       variant="ghost"
                                       size="sm"
