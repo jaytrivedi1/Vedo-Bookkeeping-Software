@@ -499,6 +499,133 @@ export default function Expenses() {
               </div>
             </TabsContent>
             
+            <TabsContent value="bills" className="mt-4">
+              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  {isLoading ? (
+                    <div className="flex justify-center items-center py-8">
+                      <p data-testid="text-loading-bills">Loading bills...</p>
+                    </div>
+                  ) : error ? (
+                    <div className="flex justify-center items-center py-8">
+                      <p className="text-red-500" data-testid="text-error-bills">Error loading bills. Please try again.</p>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead data-testid="header-bill-reference">Reference</TableHead>
+                          <TableHead data-testid="header-bill-date">Date</TableHead>
+                          <TableHead data-testid="header-bill-vendor">Vendor</TableHead>
+                          <TableHead data-testid="header-bill-payment-method">Payment Method</TableHead>
+                          <TableHead data-testid="header-bill-amount">Amount</TableHead>
+                          <TableHead data-testid="header-bill-status">Status</TableHead>
+                          <TableHead className="text-right" data-testid="header-bill-actions">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {bills.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={7} className="text-center py-6" data-testid="text-no-bills">
+                              No bills found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          bills.map((bill) => (
+                            <TableRow key={bill.id} className="hover:bg-gray-50" data-testid={`row-bill-${bill.id}`}>
+                              <TableCell className="text-sm text-gray-900" data-testid={`text-bill-reference-${bill.id}`}>
+                                {bill.reference}
+                              </TableCell>
+                              <TableCell className="text-sm text-gray-500" data-testid={`text-bill-date-${bill.id}`}>
+                                {format(new Date(bill.date), 'MMM dd, yyyy')}
+                              </TableCell>
+                              <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-bill-vendor-${bill.id}`}>
+                                {getContactName(bill.contactId)}
+                              </TableCell>
+                              <TableCell className="text-sm text-gray-500" data-testid={`text-bill-payment-method-${bill.id}`}>
+                                {getPaymentMethodLabel(bill.paymentMethod)}
+                              </TableCell>
+                              <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-bill-amount-${bill.id}`}>
+                                ${formatCurrency(bill.amount)}
+                              </TableCell>
+                              <TableCell data-testid={`badge-bill-status-${bill.id}`}>
+                                <Badge className={getStatusBadgeColor(bill.status)}>
+                                  {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-2 justify-end">
+                                  <Link href={`/bills/${bill.id}`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 px-2"
+                                      data-testid={`button-view-bill-${bill.id}`}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                      <span className="sr-only">View</span>
+                                    </Button>
+                                  </Link>
+                                  
+                                  <Link href={`/bills/edit/${bill.id}`}>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                                      data-testid={`button-edit-bill-${bill.id}`}
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                      <span className="sr-only">Edit</span>
+                                    </Button>
+                                  </Link>
+                                  
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                                        onClick={() => setTransactionToDelete(bill)}
+                                        data-testid={`button-delete-bill-${bill.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        <span className="sr-only">Delete</span>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will permanently delete this bill and all associated records.
+                                          This action cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
+                                          Cancel
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={handleDelete}
+                                          className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                                          disabled={isDeleteLoading}
+                                        >
+                                          {isDeleteLoading ? 'Deleting...' : 'Delete'}
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+            
             <TabsContent value="vendors" className="mt-4">
               <VendorList />
             </TabsContent>
