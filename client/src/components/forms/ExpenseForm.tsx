@@ -90,6 +90,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [totalAmount, setTotalAmount] = useState(isEditing ? (expense?.amount || 0) : 0);
   const [taxNames, setTaxNames] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [manualComponentAmounts, setManualComponentAmounts] = useState<Record<number, number>>({});
   const { toast } = useToast();
 
   const defaultExpenseNumber = isEditing ? expense?.reference : `EXP-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
@@ -286,6 +287,26 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
 
   const updateLineItemAmount = (index: number) => {
     calculateTotals();
+  };
+
+  const handleComponentChange = (componentId: number, value: number) => {
+    if (isNaN(value)) return;
+    
+    const roundedValue = roundTo2Decimals(value);
+    setManualComponentAmounts(prev => ({
+      ...prev,
+      [componentId]: roundedValue
+    }));
+    
+    // Sum all components to get new total
+    const allComponents = form.taxComponentsInfo || [];
+    const newTotal = allComponents.reduce((sum, comp) => {
+      const amount = comp.id === componentId ? roundedValue : (manualComponentAmounts[comp.id] ?? comp.amount);
+      return sum + amount;
+    }, 0);
+    
+    setManualTaxAmount(roundTo2Decimals(newTotal));
+    calculateTotals(roundTo2Decimals(newTotal));
   };
 
   useEffect(() => {
@@ -688,6 +709,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   step="0.01"
                   value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
                   onChange={(e) => {
+                    setManualComponentAmounts({});
                     const value = parseFloat(e.target.value);
                     if (!isNaN(value) && e.target.value.trim() !== '') {
                       const roundedValue = roundTo2Decimals(value);
@@ -713,14 +735,24 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               </div>
             </div>
             
-            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
+            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && Object.keys(manualComponentAmounts).length === 0 && (
               <div className="pl-4 space-y-1">
                 {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
                   <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
                     <span>
                       {taxComponent.name} ({taxComponent.rate}%)
                     </span>
-                    <span className="text-right">${formatCurrency(taxComponent.amount)}</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">$</span>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={manualComponentAmounts[taxComponent.id] !== undefined ? manualComponentAmounts[taxComponent.id].toFixed(2) : taxComponent.amount.toFixed(2)}
+                        onChange={(e) => handleComponentChange(taxComponent.id, parseFloat(e.target.value))}
+                        className="w-20 h-7 text-right text-xs"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
