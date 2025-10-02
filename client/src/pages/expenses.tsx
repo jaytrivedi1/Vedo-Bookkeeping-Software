@@ -368,6 +368,7 @@ export default function Expenses() {
           <Tabs defaultValue="expenses" className="mb-6">
             <TabsList>
               <TabsTrigger value="expenses" data-testid="tab-expenses">Expenses</TabsTrigger>
+              <TabsTrigger value="bills" data-testid="tab-bills">Bills</TabsTrigger>
               <TabsTrigger value="vendors" data-testid="tab-vendors">Vendors</TabsTrigger>
             </TabsList>
             
