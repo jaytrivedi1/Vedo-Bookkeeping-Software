@@ -146,6 +146,38 @@ export default function Expenses() {
         })
     : [];
   
+  const bills = transactions
+    ? transactions
+        .filter((transaction) => transaction.type === "bill")
+        .filter((bill) => {
+          if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            const contactName = getContactName(bill.contactId).toLowerCase();
+            if (
+              !bill.reference.toLowerCase().includes(query) &&
+              !bill.description?.toLowerCase().includes(query) &&
+              !contactName.includes(query)
+            ) {
+              return false;
+            }
+          }
+          
+          if (statusFilter !== "all" && bill.status !== statusFilter) {
+            return false;
+          }
+          
+          if (dateFrom && new Date(bill.date) < dateFrom) {
+            return false;
+          }
+          
+          if (dateTo && new Date(bill.date) > dateTo) {
+            return false;
+          }
+          
+          return true;
+        })
+    : [];
+  
   const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const completedExpenses = expenses
     .filter((expense) => expense.status === "completed")
