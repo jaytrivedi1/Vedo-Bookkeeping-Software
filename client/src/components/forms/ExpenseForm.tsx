@@ -106,7 +106,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     queryKey: ['/api/accounts'],
   });
 
-  const vendors = contacts?.filter(contact => contact.type === 'vendor' || contact.type === 'both') || [];
+  const payees = contacts || [];
   const allAccounts = accounts?.filter(account => account.code !== '3999') || [];
   const paymentAccounts = accounts?.filter(account => 
     account.type === 'bank' || account.type === 'credit_card'
@@ -333,30 +333,48 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Payee</FormLabel>
-                <Select 
-                  onValueChange={(value) => field.onChange(parseInt(value))} 
-                  defaultValue={field.value?.toString()}
-                  data-testid="select-payee"
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="trigger-payee">
-                      <SelectValue placeholder="Select a vendor" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {contactsLoading ? (
-                      <SelectItem value="loading" disabled>Loading vendors...</SelectItem>
-                    ) : vendors.length > 0 ? (
-                      vendors.map((vendor) => (
-                        <SelectItem key={vendor.id} value={vendor.id.toString()} data-testid={`vendor-${vendor.id}`}>
-                          {vendor.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="none" disabled>No vendors available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select 
+                    onValueChange={(value) => {
+                      if (value === "none") {
+                        field.onChange(undefined);
+                      } else {
+                        field.onChange(parseInt(value));
+                      }
+                    }}
+                    value={field.value?.toString()}
+                    data-testid="select-payee"
+                  >
+                    <FormControl>
+                      <SelectTrigger data-testid="trigger-payee">
+                        <SelectValue placeholder="Select a payee" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {contactsLoading ? (
+                        <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
+                      ) : payees.length > 0 ? (
+                        payees.map((payee) => (
+                          <SelectItem key={payee.id} value={payee.id.toString()} data-testid={`payee-${payee.id}`}>
+                            {payee.name}
+                          </SelectItem>
+                        ))
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  {field.value !== undefined && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => field.onChange(undefined)}
+                      data-testid="button-clear-payee"
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
                 <FormMessage />
               </FormItem>
             )}
