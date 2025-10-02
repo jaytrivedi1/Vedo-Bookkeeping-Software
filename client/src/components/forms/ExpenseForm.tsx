@@ -165,7 +165,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     mutationFn: async (data: any) => {
       if (isEditing) {
         console.log("Updating expense with data:", JSON.stringify(data, null, 2));
-        return await apiRequest(`/api/expenses/${expense?.id}`, 'PATCH', data);
+        return await apiRequest(`/api/transactions/${expense?.id}`, 'PATCH', data);
       } else {
         console.log("Creating expense with data:", JSON.stringify(data, null, 2));
         return await apiRequest('/api/expenses', 'POST', data);
