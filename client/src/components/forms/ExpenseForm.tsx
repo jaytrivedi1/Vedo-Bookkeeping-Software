@@ -333,7 +333,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Payee</FormLabel>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   <Select 
                     onValueChange={(value) => {
                       if (value === "none") {
