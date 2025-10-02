@@ -33,6 +33,7 @@ import {
   salesTaxSchema,
   transactions,
   ledgerEntries,
+  lineItems,
   User,
   Permission,
   LineItem,
@@ -2189,6 +2190,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transaction: updatedTransaction,
           lineItems: await storage.getLineItemsByTransaction(transactionId), // Get fresh line items
           ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId), // Get fresh ledger entries
+        });
+      } else if (existingTransaction.type === 'expense') {
+        // Handle expense updates
+        console.log("Updating expense:", JSON.stringify(body));
+        
+        // Calculate totals from line items
+        const calculatedSubTotal = body.lineItems 
+          ? roundTo2Decimals(body.lineItems.reduce((sum: number, item: any) => sum + (item.amount || 0), 0))
+          : existingTransaction.subTotal || 0;
+        
+        const subTotal = roundTo2Decimals(body.subTotal || calculatedSubTotal);
+        const taxAmount = roundTo2Decimals(body.taxAmount || 0);
+        const totalAmount = roundTo2Decimals(body.amount || (subTotal + taxAmount));
+        
+        // Update transaction
+        const transactionUpdate: Partial<Transaction> = {
+          reference: body.reference,
+          date: body.date,
+          description: body.description,
+          status: body.status || 'completed',
+          contactId: body.contactId,
+          paymentMethod: body.paymentMethod,
+          paymentAccountId: body.paymentAccountId,
+          paymentDate: body.paymentDate ? new Date(body.paymentDate) : undefined,
+          memo: body.memo,
+          amount: totalAmount,
+          subTotal: subTotal,
+          taxAmount: taxAmount,
+        };
+        
+        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
+        
+        if (!updatedTransaction) {
+          return res.status(404).json({ message: "Failed to update expense" });
+        }
+        
+        // Update line items if provided
+        if (body.lineItems && Array.isArray(body.lineItems)) {
+          // Delete existing line items and ledger entries using direct database queries
+          await db.delete(ledgerEntries).where(eq(ledgerEntries.transactionId, transactionId));
+          await db.delete(lineItems).where(eq(lineItems.transactionId, transactionId));
+          
+          // Create new line items
+          const newLineItems = body.lineItems.map((item: any) => ({
+            description: item.description || '',
+            quantity: 1,
+            unitPrice: roundTo2Decimals(item.amount),
+            amount: roundTo2Decimals(item.amount),
+            accountId: item.accountId,
+            salesTaxId: item.salesTaxId || null,
+            transactionId: transactionId
+          }));
+          
+          for (const item of newLineItems) {
+            await storage.createLineItem(item);
+          }
+          
+          // Recreate ledger entries based on new line items
+          const ledgerEntriesData: any[] = [];
+          
+          // Debit expense accounts
+          for (const item of body.lineItems) {
+            ledgerEntriesData.push({
+              accountId: item.accountId,
+              description: item.description || '',
+              debit: roundTo2Decimals(item.amount),
+              credit: 0,
+              date: updatedTransaction.date,
+              transactionId: transactionId
+            });
+          }
+          
+          // Debit sales tax if any
+          if (taxAmount > 0) {
+            // Find tax components from line items
+            const taxComponents = new Map();
+            for (const item of body.lineItems) {
+              if (item.salesTaxId) {
+                const salesTaxes = await storage.getSalesTaxes();
+                const salesTax = salesTaxes.find(t => t.id === item.salesTaxId);
+                if (salesTax) {
+                  if (salesTax.isComposite) {
+                    const components = salesTaxes.filter(t => t.parentId === salesTax.id);
+                    for (const comp of components) {
+                      const compAmount = roundTo2Decimals(item.amount * (comp.rate / 100));
+                      const accountId = comp.accountId || 5;
+                      if (taxComponents.has(accountId)) {
+                        taxComponents.set(accountId, taxComponents.get(accountId) + compAmount);
+                      } else {
+                        taxComponents.set(accountId, compAmount);
+                      }
+                    }
+                  } else {
+                    const taxAccountId = salesTax.accountId || 5;
+                    const itemTax = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                    if (taxComponents.has(taxAccountId)) {
+                      taxComponents.set(taxAccountId, taxComponents.get(taxAccountId) + itemTax);
+                    } else {
+                      taxComponents.set(taxAccountId, itemTax);
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Create ledger entries for tax components
+            for (const [accountId, amount] of Array.from(taxComponents.entries())) {
+              ledgerEntriesData.push({
+                accountId: accountId,
+                description: `Expense ${updatedTransaction.reference} - Sales Tax`,
+                debit: roundTo2Decimals(amount),
+                credit: 0,
+                date: updatedTransaction.date,
+                transactionId: transactionId
+              });
+            }
+          }
+          
+          // Credit payment account
+          ledgerEntriesData.push({
+            accountId: updatedTransaction.paymentAccountId,
+            description: `Expense ${updatedTransaction.reference} - Payment`,
+            debit: 0,
+            credit: totalAmount,
+            date: updatedTransaction.date,
+            transactionId: transactionId
+          });
+          
+          // Create all ledger entries
+          for (const entry of ledgerEntriesData) {
+            await storage.createLedgerEntry(entry);
+          }
+        }
+        
+        // Return updated expense data
+        res.status(200).json({
+          transaction: updatedTransaction,
+          lineItems: await storage.getLineItemsByTransaction(transactionId),
+          ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId),
         });
       } else {
         // Generic update for other transaction types
