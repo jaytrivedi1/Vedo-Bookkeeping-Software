@@ -138,7 +138,7 @@ export default function Dashboard() {
                 <CreditCard className="mr-2 h-4 w-4" />
                 <span>Cheque</span>
               </DropdownMenuItem>
-              <Link href="/expenses">
+              <Link href="/expenses/new">
                 <DropdownMenuItem>
                   <ShoppingCart className="mr-2 h-4 w-4" />
                   <span>Expense</span>
