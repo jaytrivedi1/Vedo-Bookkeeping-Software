@@ -335,7 +335,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                 <FormLabel>Payee</FormLabel>
                 <Select 
                   onValueChange={(value) => field.onChange(parseInt(value))} 
-                  value={field.value ? field.value.toString() : ""}
+                  defaultValue={field.value?.toString()}
                   data-testid="select-payee"
                 >
                   <FormControl>
