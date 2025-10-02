@@ -148,11 +148,11 @@ export const invoiceSchema = z.object({
 
 export const expenseSchema = z.object({
   date: z.date(),
-  contactId: z.number(),
-  reference: z.string().min(1, "Reference is required"),
+  contactId: z.number().optional(),
+  reference: z.string().optional(),
   description: z.string().optional(),
   status: z.enum(["open", "completed", "cancelled"]),
-  paymentMethod: z.enum(["cash", "check", "credit_card", "bank_transfer", "other"]),
+  paymentMethod: z.enum(["cash", "check", "credit_card", "bank_transfer", "other"]).optional(),
   paymentAccountId: z.number({required_error: "Payment account is required"}),
   paymentDate: z.date().optional(),
   memo: z.string().optional(),

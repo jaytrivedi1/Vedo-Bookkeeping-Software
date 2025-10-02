@@ -6,7 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
 import { roundTo2Decimals } from "@shared/utils";
-import { CalendarIcon, Plus, Trash2, XIcon } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +45,11 @@ interface FormLineItem {
 
 interface Expense {
   date: Date;
-  contactId: number;
-  reference: string;
+  contactId?: number;
+  reference?: string;
   description?: string;
   status: "open" | "completed" | "cancelled";
-  paymentMethod: "cash" | "check" | "credit_card" | "bank_transfer" | "other";
+  paymentMethod?: "cash" | "check" | "credit_card" | "bank_transfer" | "other";
   paymentAccountId: number;
   paymentDate?: Date;
   memo?: string;
@@ -88,6 +88,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [taxAmount, setTaxAmount] = useState(isEditing ? (expense?.taxAmount || 0) : 0);
   const [manualTaxAmount, setManualTaxAmount] = useState<number | null>(isEditing && expense?.taxAmount !== undefined ? expense.taxAmount : null);
   const [totalAmount, setTotalAmount] = useState(isEditing ? (expense?.amount || 0) : 0);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
   const defaultExpenseNumber = isEditing ? expense?.reference : `EXP-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
@@ -105,9 +106,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   });
 
   const vendors = contacts?.filter(contact => contact.type === 'vendor' || contact.type === 'both') || [];
-  const expenseAccounts = accounts?.filter(account => 
-    account.type === 'expenses' || account.type === 'cost_of_goods_sold'
-  ) || [];
+  const allAccounts = accounts?.filter(account => account.code !== '3999') || [];
   const paymentAccounts = accounts?.filter(account => 
     account.type === 'bank' || account.type === 'credit_card'
   ) || [];
@@ -136,7 +135,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
       reference: defaultExpenseNumber,
       description: '',
       status: 'open' as const,
-      paymentMethod: 'cash' as const,
+      paymentMethod: undefined,
       paymentAccountId: undefined,
       paymentDate: initialPaymentDate,
       memo: '',
@@ -285,6 +284,17 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     calculateTotals();
   }, [fields.length]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setSelectedFiles(prev => [...prev, ...newFiles]);
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const onSubmit = (data: Expense) => {
     const enrichedData = {
       ...data,
@@ -297,7 +307,8 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
         ...item,
         accountId: item.accountId || null,
         salesTaxId: item.salesTaxId || null,
-      }))
+      })),
+      attachments: selectedFiles.length > 0 ? selectedFiles.map(f => f.name) : undefined
     };
     
     console.log("Submitting expense data:", enrichedData);
@@ -384,7 +395,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
             render={({ field }) => (
               <FormItem className="flex flex-col">
                 <FormLabel>Payment Date</FormLabel>
-                <Popover>
+                <Popover modal={true}>
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
@@ -496,14 +507,14 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                           <SelectContent>
                             {accountsLoading ? (
                               <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : expenseAccounts.length > 0 ? (
-                              expenseAccounts.map((account) => (
+                            ) : allAccounts.length > 0 ? (
+                              allAccounts.map((account) => (
                                 <SelectItem key={account.id} value={account.id.toString()} data-testid={`account-${account.id}-${index}`}>
                                   {account.name}
                                 </SelectItem>
                               ))
                             ) : (
-                              <SelectItem value="none" disabled>No expense accounts</SelectItem>
+                              <SelectItem value="none" disabled>No accounts available</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -562,10 +573,15 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                       <FormItem>
                         <Select 
                           onValueChange={(value) => {
-                            field.onChange(value === "none" ? undefined : parseInt(value));
+                            const numValue = parseInt(value);
+                            if (numValue === 0) {
+                              field.onChange(undefined);
+                            } else {
+                              field.onChange(numValue);
+                            }
                             updateLineItemAmount(index);
                           }}
-                          value={field.value?.toString() || "none"}
+                          value={field.value?.toString() || "0"}
                           data-testid={`select-tax-${index}`}
                         >
                           <FormControl>
@@ -574,12 +590,12 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
+                            <SelectItem value="0">None</SelectItem>
                             {salesTaxesLoading ? (
                               <SelectItem value="loading" disabled>Loading...</SelectItem>
                             ) : salesTaxes && salesTaxes.length > 0 ? (
                               salesTaxes
-                                .filter(tax => tax.isActive)
+                                .filter(tax => !tax.parentId)
                                 .map((tax) => (
                                   <SelectItem key={tax.id} value={tax.id.toString()} data-testid={`tax-${tax.id}-${index}`}>
                                     {tax.name} ({tax.rate}%)
@@ -704,9 +720,56 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           )}
         />
 
-        <div className="border rounded-lg p-4 bg-muted/30">
-          <FormLabel className="text-sm text-muted-foreground">Attachments</FormLabel>
-          <p className="text-sm text-muted-foreground mt-1">Attachment functionality coming soon</p>
+        <div className="border rounded-lg p-4">
+          <FormLabel className="text-sm font-medium mb-3 block">Attachments</FormLabel>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input
+                id="file-upload"
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-file"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('file-upload')?.click()}
+                data-testid="button-upload"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Files
+              </Button>
+              {selectedFiles.length > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+                </span>
+              )}
+            </div>
+            
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2">
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                    <span className="text-sm truncate flex-1" data-testid={`file-name-${index}`}>
+                      {file.name}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveFile(index)}
+                      data-testid={`button-remove-file-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-between pt-4 border-t">
