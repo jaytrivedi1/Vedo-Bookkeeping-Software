@@ -735,7 +735,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               </div>
             </div>
             
-            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && Object.keys(manualComponentAmounts).length === 0 && (
+            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && Object.keys(manualComponentAmounts).length === 0 && (
               <div className="pl-4 space-y-1">
                 {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
                   <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
