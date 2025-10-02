@@ -326,8 +326,14 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               <FormItem>
                 <FormLabel>Payee</FormLabel>
                 <Select 
-                  onValueChange={(value) => field.onChange(parseInt(value))} 
-                  value={field.value?.toString()}
+                  onValueChange={(value) => {
+                    if (value === "0") {
+                      field.onChange(undefined);
+                    } else {
+                      field.onChange(parseInt(value));
+                    }
+                  }} 
+                  value={field.value?.toString() || "0"}
                   data-testid="select-payee"
                 >
                   <FormControl>
@@ -336,6 +342,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
+                    <SelectItem value="0">None</SelectItem>
                     {contactsLoading ? (
                       <SelectItem value="loading" disabled>Loading vendors...</SelectItem>
                     ) : vendors.length > 0 ? (
@@ -467,7 +474,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               <FormItem>
                 <FormLabel>Ref No.</FormLabel>
                 <FormControl>
-                  <Input placeholder="EXP-YYYY-MMDD" {...field} data-testid="input-reference" />
+                  <Input {...field} data-testid="input-reference" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -533,7 +540,6 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                         <FormControl>
                           <Input placeholder="Description" {...field} data-testid={`input-description-${index}`} />
                         </FormControl>
-                        <FormMessage />
                       </FormItem>
                     )}
                   />

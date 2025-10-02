@@ -159,7 +159,7 @@ export const expenseSchema = z.object({
   lineItems: z.array(
     z.object({
       accountId: z.number({required_error: "Account is required"}),
-      description: z.string().min(1, "Description is required"),
+      description: z.string().optional(),
       amount: z.number().min(0, "Amount cannot be negative"),
       salesTaxId: z.number().optional(),
     })
