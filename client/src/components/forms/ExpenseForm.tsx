@@ -327,6 +327,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const onSubmit = (data: Expense) => {
     const enrichedData = {
       ...data,
+      date: data.paymentDate || data.date,
       type: 'expense' as const,
       status: 'completed' as const,
       amount: totalAmount,
