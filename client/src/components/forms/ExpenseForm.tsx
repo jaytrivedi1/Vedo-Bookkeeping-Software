@@ -504,17 +504,17 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
         <div>
           <h3 className="text-lg font-semibold mb-3">Line Items</h3>
           <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted/50 grid grid-cols-12 gap-2 p-3 font-medium text-sm">
-              <div className="col-span-3">Account</div>
-              <div className="col-span-4">Description</div>
-              <div className="col-span-2">Amount</div>
-              <div className="col-span-2">Sales Tax</div>
-              <div className="col-span-1"></div>
+            <div className="bg-muted/50 grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 font-medium text-sm">
+              <div>Account</div>
+              <div>Description</div>
+              <div>Amount</div>
+              <div>Sales Tax</div>
+              <div></div>
             </div>
             
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-12 gap-2 p-3 border-t items-start">
-                <div className="col-span-3">
+              <div key={field.id} className="grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 border-t items-start">
+                <div>
                   <FormField
                     control={form.control}
                     name={`lineItems.${index}.accountId`}
@@ -550,7 +550,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   />
                 </div>
                 
-                <div className="col-span-4">
+                <div>
                   <FormField
                     control={form.control}
                     name={`lineItems.${index}.description`}
@@ -564,7 +564,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   />
                 </div>
                 
-                <div className="col-span-2">
+                <div>
                   <FormField
                     control={form.control}
                     name={`lineItems.${index}.amount`}
@@ -576,6 +576,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                             min="0" 
                             step="0.01" 
                             placeholder="0.00"
+                            className="text-right"
                             {...field} 
                             onChange={(e) => {
                               field.onChange(parseFloat(e.target.value) || 0);
@@ -590,7 +591,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   />
                 </div>
                 
-                <div className="col-span-2">
+                <div>
                   <FormField
                     control={form.control}
                     name={`lineItems.${index}.salesTaxId`}
@@ -635,7 +636,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   />
                 </div>
                 
-                <div className="col-span-1 flex items-center justify-end">
+                <div className="flex items-center justify-end">
                   {fields.length > 1 && (
                     <Button
                       type="button"
@@ -670,7 +671,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           <div className="space-y-3 max-w-md ml-auto">
             <div className="flex justify-between items-center text-gray-700">
               <span className="text-sm font-medium">Subtotal</span>
-              <span className="font-medium">${formatCurrency(subTotal)}</span>
+              <span className="font-medium text-right">${formatCurrency(subTotal)}</span>
             </div>
             
             <div className="flex justify-between items-center text-gray-700">
@@ -719,7 +720,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                     <span>
                       {taxComponent.name} ({taxComponent.rate}%)
                     </span>
-                    <span>${formatCurrency(taxComponent.amount)}</span>
+                    <span className="text-right">${formatCurrency(taxComponent.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -727,7 +728,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
             
             <div className="flex justify-between border-t border-gray-300 pt-3">
               <span className="text-sm font-semibold text-gray-900">Total</span>
-              <span className="font-semibold text-gray-900">${formatCurrency(totalAmount)}</span>
+              <span className="font-semibold text-gray-900 text-right">${formatCurrency(totalAmount)}</span>
             </div>
           </div>
         </div>
