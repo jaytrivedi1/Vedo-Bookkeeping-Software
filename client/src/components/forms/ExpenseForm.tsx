@@ -342,7 +342,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                         field.onChange(parseInt(value));
                       }
                     }}
-                    value={field.value?.toString()}
+                    value={field.value?.toString() || ""}
                     data-testid="select-payee"
                   >
                     <FormControl>
