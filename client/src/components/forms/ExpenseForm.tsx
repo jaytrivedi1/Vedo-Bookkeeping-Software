@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
-import { roundTo2Decimals } from "@shared/utils";
+import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [taxAmount, setTaxAmount] = useState(isEditing ? (expense?.taxAmount || 0) : 0);
   const [manualTaxAmount, setManualTaxAmount] = useState<number | null>(isEditing && expense?.taxAmount !== undefined ? expense.taxAmount : null);
   const [totalAmount, setTotalAmount] = useState(isEditing ? (expense?.amount || 0) : 0);
+  const [taxNames, setTaxNames] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
@@ -195,6 +196,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     
     let totalTaxAmount = 0;
     const taxComponents = new Map<number, TaxComponentInfo>();
+    const usedTaxes = new Map<number, SalesTax>();
     
     lineItems.forEach((item) => {
       if (item.salesTaxId) {
@@ -223,9 +225,12 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   });
                 }
               });
+              
+              usedTaxes.set(salesTax.id, salesTax);
             } else {
               const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
               totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+              usedTaxes.set(salesTax.id, salesTax);
               
               const existingTax = taxComponents.get(salesTax.id);
               if (existingTax) {
@@ -244,6 +249,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           } else {
             const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
             totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+            usedTaxes.set(salesTax.id, salesTax);
             
             const existingTax = taxComponents.get(salesTax.id);
             if (existingTax) {
@@ -268,12 +274,14 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
       : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
     const total = roundTo2Decimals(subtotal + finalTaxAmount);
     
+    const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     const taxComponentsArray = Array.from(taxComponents.values());
     form.taxComponentsInfo = taxComponentsArray;
     
     setSubTotal(subtotal);
     setTaxAmount(finalTaxAmount);
     setTotalAmount(total);
+    setTaxNames(taxNameList);
   };
 
   const updateLineItemAmount = (index: number) => {
@@ -326,14 +334,8 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               <FormItem>
                 <FormLabel>Payee</FormLabel>
                 <Select 
-                  onValueChange={(value) => {
-                    if (value === "0") {
-                      field.onChange(undefined);
-                    } else {
-                      field.onChange(parseInt(value));
-                    }
-                  }} 
-                  value={field.value?.toString() || "0"}
+                  onValueChange={(value) => field.onChange(parseInt(value))} 
+                  value={field.value ? field.value.toString() : ""}
                   data-testid="select-payee"
                 >
                   <FormControl>
@@ -342,7 +344,6 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="0">None</SelectItem>
                     {contactsLoading ? (
                       <SelectItem value="loading" disabled>Loading vendors...</SelectItem>
                     ) : vendors.length > 0 ? (
@@ -649,60 +650,66 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
         <div className="border rounded-lg p-4">
           <h3 className="text-lg font-semibold mb-4">Totals</h3>
           <div className="space-y-3 max-w-md ml-auto">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal:</span>
-              <span className="font-medium" data-testid="text-subtotal">${subTotal.toFixed(2)}</span>
+            <div className="flex justify-between items-center text-gray-700">
+              <span className="text-sm font-medium">Subtotal</span>
+              <span className="font-medium">${formatCurrency(subTotal)}</span>
             </div>
             
-            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && (
-              <div className="space-y-2">
-                {form.taxComponentsInfo.map((taxInfo) => (
-                  <div key={taxInfo.id} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {taxInfo.name} ({taxInfo.rate}%):
+            <div className="flex justify-between items-center text-gray-700">
+              <span className="text-sm">
+                {taxNames.length > 0 
+                  ? taxNames.join(', ')  
+                  : 'Tax'}
+              </span>
+              <div className="flex items-center gap-1">
+                <span className="font-medium">$</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value);
+                    if (!isNaN(value) && e.target.value.trim() !== '') {
+                      const roundedValue = roundTo2Decimals(value);
+                      setManualTaxAmount(roundedValue);
+                      calculateTotals(roundedValue);
+                    } else {
+                      setManualTaxAmount(null);
+                      calculateTotals(null);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value.trim() === '') {
+                      setManualTaxAmount(null);
+                      calculateTotals(null);
+                    } else if (manualTaxAmount !== null) {
+                      const roundedValue = roundTo2Decimals(manualTaxAmount);
+                      setManualTaxAmount(roundedValue);
+                      calculateTotals(roundedValue);
+                    }
+                  }}
+                  className="w-24 h-8 text-right px-2 font-medium border-gray-300"
+                />
+              </div>
+            </div>
+            
+            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
+              <div className="pl-4 space-y-1">
+                {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                  <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
+                    <span>
+                      {taxComponent.name} ({taxComponent.rate}%)
                     </span>
-                    <span data-testid={`text-tax-${taxInfo.id}`}>${taxInfo.amount.toFixed(2)}</span>
+                    <span>${formatCurrency(taxComponent.amount)}</span>
                   </div>
                 ))}
               </div>
             )}
             
-            <div className="flex justify-between items-center text-sm">
-              <span>Tax Amount:</span>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={manualTaxAmount !== null ? manualTaxAmount : taxAmount}
-                  onChange={(e) => {
-                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
-                    setManualTaxAmount(value);
-                    calculateTotals(value);
-                  }}
-                  className="w-24 h-8 text-right"
-                  data-testid="input-manual-tax"
-                />
-                {manualTaxAmount !== null && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setManualTaxAmount(null);
-                      calculateTotals(null);
-                    }}
-                    data-testid="button-reset-tax"
-                  >
-                    <XIcon className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </div>
-            
-            <div className="border-t pt-3 flex justify-between font-bold text-base">
-              <span>Total:</span>
-              <span data-testid="text-total">${totalAmount.toFixed(2)}</span>
+            <div className="flex justify-between border-t border-gray-300 pt-3">
+              <span className="text-sm font-semibold text-gray-900">Total</span>
+              <span className="font-semibold text-gray-900">${formatCurrency(totalAmount)}</span>
             </div>
           </div>
         </div>
