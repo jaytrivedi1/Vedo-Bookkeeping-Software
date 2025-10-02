@@ -695,66 +695,82 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               <span className="font-medium text-right">${formatCurrency(subTotal)}</span>
             </div>
             
-            <div className="flex justify-between items-center text-gray-700">
-              <span className="text-sm">
-                {taxNames.length > 0 
-                  ? taxNames.join(', ')  
-                  : 'Tax'}
-              </span>
-              <div className="flex items-center gap-1">
-                <span className="font-medium">$</span>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
-                  onChange={(e) => {
-                    setManualComponentAmounts({});
-                    const value = parseFloat(e.target.value);
-                    if (!isNaN(value) && e.target.value.trim() !== '') {
-                      const roundedValue = roundTo2Decimals(value);
-                      setManualTaxAmount(roundedValue);
-                      calculateTotals(roundedValue);
-                    } else {
-                      setManualTaxAmount(null);
-                      calculateTotals(null);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (e.target.value.trim() === '') {
-                      setManualTaxAmount(null);
-                      calculateTotals(null);
-                    } else if (manualTaxAmount !== null) {
-                      const roundedValue = roundTo2Decimals(manualTaxAmount);
-                      setManualTaxAmount(roundedValue);
-                      calculateTotals(roundedValue);
-                    }
-                  }}
-                  className="w-24 h-8 text-right px-2 font-medium border-gray-300"
-                />
-              </div>
-            </div>
-            
-            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && Object.keys(manualComponentAmounts).length === 0 && (
-              <div className="pl-4 space-y-1">
-                {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                  <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
-                    <span>
-                      {taxComponent.name} ({taxComponent.rate}%)
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">$</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={manualComponentAmounts[taxComponent.id] !== undefined ? manualComponentAmounts[taxComponent.id].toFixed(2) : taxComponent.amount.toFixed(2)}
-                        onChange={(e) => handleComponentChange(taxComponent.id, parseFloat(e.target.value))}
-                        className="w-20 h-7 text-right text-xs"
-                      />
+            {/* Tax Section - show EITHER main input OR components */}
+            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+              // COMPOSITE TAX: Show only editable components (hide main tax input)
+              <>
+                <div className="flex justify-between items-center text-gray-700">
+                  <span className="text-sm">Tax</span>
+                  <span className="font-medium text-right">${formatCurrency(taxAmount)}</span>
+                </div>
+                
+                {/* Editable tax components */}
+                <div className="pl-4 space-y-1">
+                  {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                    <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
+                      <span>
+                        {taxComponent.name} ({taxComponent.rate}%)
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <span>$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualComponentAmounts[taxComponent.id] !== undefined ? manualComponentAmounts[taxComponent.id].toFixed(2) : taxComponent.amount.toFixed(2)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value)) {
+                              handleComponentChange(taxComponent.id, value);
+                            }
+                          }}
+                          className="w-20 h-7 text-right text-xs"
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </>
+            ) : (
+              // SIMPLE TAX: Show only main tax input (no components)
+              <div className="flex justify-between items-center text-gray-700">
+                <span className="text-sm">
+                  {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
+                </span>
+                <div className="flex items-center gap-1">
+                  <span className="font-medium">$</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      if (!isNaN(value) && e.target.value.trim() !== '') {
+                        const roundedValue = roundTo2Decimals(value);
+                        setManualTaxAmount(roundedValue);
+                        setManualComponentAmounts({});
+                        calculateTotals(roundedValue);
+                      } else {
+                        setManualTaxAmount(null);
+                        setManualComponentAmounts({});
+                        calculateTotals(null);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() === '') {
+                        setManualTaxAmount(null);
+                        setManualComponentAmounts({});
+                        calculateTotals(null);
+                      } else if (manualTaxAmount !== null) {
+                        const roundedValue = roundTo2Decimals(manualTaxAmount);
+                        setManualTaxAmount(roundedValue);
+                        calculateTotals(roundedValue);
+                      }
+                    }}
+                    className="w-24 h-8 text-right px-2 font-medium border-gray-300"
+                  />
+                </div>
               </div>
             )}
             
