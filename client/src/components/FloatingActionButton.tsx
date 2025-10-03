@@ -30,7 +30,7 @@ export function FloatingActionButton() {
   };
 
   return (
-    <div className="fixed bottom-8 right-8 z-50">
+    <div className="fixed top-1/2 right-8 z-50 transform -translate-y-1/2">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           <Button
