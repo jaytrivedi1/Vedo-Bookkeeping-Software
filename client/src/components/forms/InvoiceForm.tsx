@@ -66,7 +66,7 @@ interface InvoiceFormProps {
   onCancel?: () => void;
 }
 
-type PaymentTerms = '7' | '14' | '30' | '60' | 'custom';
+type PaymentTerms = '0' | '7' | '14' | '30' | '60' | 'custom';
 
 // Define the tax component info type
 interface TaxComponentInfo {
@@ -86,12 +86,12 @@ interface InvoiceFormType extends UseFormReturn<Invoice> {
 export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('30');
+  const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
   
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
   const initialDate = isEditing ? new Date(invoice!.date) : new Date();
-  const initialDueDate = isEditing && invoice!.dueDate ? new Date(invoice!.dueDate) : addDays(initialDate, 30);
+  const initialDueDate = isEditing && invoice!.dueDate ? new Date(invoice!.dueDate) : addDays(initialDate, 0);
   
   const [dueDate, setDueDate] = useState<Date>(initialDueDate);
   const [subTotal, setSubTotal] = useState(isEditing ? (invoice?.subTotal || invoice?.amount || 0) : 0);
@@ -881,6 +881,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                               <SelectValue placeholder="Select payment terms" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="0">Due upon receipt</SelectItem>
                               <SelectItem value="7">Net 7</SelectItem>
                               <SelectItem value="14">Net 14</SelectItem>
                               <SelectItem value="30">Net 30</SelectItem>
