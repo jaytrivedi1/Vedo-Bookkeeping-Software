@@ -3690,8 +3690,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Ledger entries route - needed for Account Books
   apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {
     try {
-      const ledgerEntries = await storage.getAllLedgerEntries();
-      res.json(ledgerEntries);
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      
+      // If date range is provided, filter by date range
+      if (startDateStr && endDateStr) {
+        const startDate = new Date(startDateStr);
+        const endDate = new Date(endDateStr);
+        const ledgerEntries = await storage.getLedgerEntriesByDateRange(startDate, endDate);
+        res.json(ledgerEntries);
+      } else {
+        // No date range, return all entries
+        const ledgerEntries = await storage.getAllLedgerEntries();
+        res.json(ledgerEntries);
+      }
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch ledger entries" });
     }
@@ -3719,6 +3731,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating ledger entry:", error);
       res.status(500).json({ message: "Failed to update ledger entry", error: String(error) });
+    }
+  });
+  
+  // Get opening balance for an account before a specific date
+  apiRouter.get("/ledger-entries/opening-balance", async (req: Request, res: Response) => {
+    try {
+      const accountId = parseInt(req.query.accountId as string);
+      const beforeDateStr = req.query.beforeDate as string;
+      
+      if (!accountId || !beforeDateStr) {
+        return res.status(400).json({ message: "accountId and beforeDate are required" });
+      }
+      
+      const beforeDate = new Date(beforeDateStr);
+      
+      // Get all ledger entries for this account before the date
+      const allEntries = await storage.getAllLedgerEntries();
+      const accountEntries = allEntries.filter(entry => 
+        entry.accountId === accountId && new Date(entry.date) < beforeDate
+      );
+      
+      // Calculate opening balance: sum(debits) - sum(credits)
+      let openingBalance = 0;
+      accountEntries.forEach(entry => {
+        openingBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+      });
+      
+      res.json({ openingBalance });
+    } catch (error) {
+      console.error("Error calculating opening balance:", error);
+      res.status(500).json({ message: "Failed to calculate opening balance" });
     }
   });
   

@@ -225,6 +225,38 @@ export default function Reports() {
     enabled: activeTab === 'general-ledger',
   });
   
+  // Helper function to determine if an account is a balance sheet account
+  const isBalanceSheetAccount = (accountType: string) => {
+    const balanceSheetTypes = [
+      'bank', 'current_assets', 'accounts_receivable', 'inventory',
+      'property_plant_equipment', 'long_term_assets',
+      'accounts_payable', 'credit_card', 'current_liabilities', 'long_term_liabilities',
+      'equity', 'retained_earnings'
+    ];
+    return balanceSheetTypes.includes(accountType);
+  };
+  
+  // Get selected account details
+  const selectedAccount = selectedAccountId 
+    ? accounts?.find(acc => acc.id === selectedAccountId)
+    : undefined;
+  
+  // Fetch opening balance for balance sheet accounts
+  const { data: openingBalanceData } = useQuery<{ openingBalance: number }>({
+    queryKey: ['/api/ledger-entries/opening-balance', selectedAccountId, fiscalYearBounds.fiscalYearStartISO],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/ledger-entries/opening-balance?accountId=${selectedAccountId}&beforeDate=${fiscalYearBounds.fiscalYearStartISO}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch opening balance');
+      return response.json();
+    },
+    enabled: activeTab === 'general-ledger' && 
+             !!selectedAccountId && 
+             !!selectedAccount &&
+             isBalanceSheetAccount(selectedAccount.type),
+  });
+  
   // Filter ledger entries by selected account if one is selected
   const filteredLedgerEntries = selectedAccountId && ledgerEntries
     ? ledgerEntries.filter(entry => entry.accountId === selectedAccountId)
@@ -306,13 +338,18 @@ export default function Reports() {
     : [];
   
   // Calculate running balance for the selected account
+  // For balance sheet accounts, start from opening balance; for income statement accounts, start from 0
+  const startingBalance = (selectedAccount && isBalanceSheetAccount(selectedAccount.type) && openingBalanceData)
+    ? openingBalanceData.openingBalance
+    : 0;
+  
   const ledgerEntriesWithBalanceUnsorted = dateSortedLedgerEntries.reduce((acc: any[], entry) => {
     const account = accounts?.find(acc => acc.id === entry.accountId);
     const accountType = account?.type || '';
     const isDebitNormalAccount = isDebitNormal(accountType);
     
-    // Get previous balance (0 if first entry)
-    const prevBalance = acc.length === 0 ? 0 : acc[acc.length - 1].runningBalance;
+    // Get previous balance (starting balance if first entry, otherwise last entry's balance)
+    const prevBalance = acc.length === 0 ? startingBalance : acc[acc.length - 1].runningBalance;
     
     // Calculate delta based on account normal side
     const debit = Math.max(0, Number(entry.debit || 0));
@@ -1293,6 +1330,18 @@ export default function Reports() {
                               </TableRow>
                             ) : (
                               <>
+                                {/* Opening Balance row for balance sheet accounts */}
+                                {selectedAccount && isBalanceSheetAccount(selectedAccount.type) && startingBalance !== 0 && (
+                                  <TableRow className="bg-blue-50 font-semibold">
+                                    <TableCell colSpan={4}>Opening Balance</TableCell>
+                                    <TableCell>{selectedAccount.name}</TableCell>
+                                    <TableCell className="text-right"></TableCell>
+                                    <TableCell className="text-right"></TableCell>
+                                    <TableCell className="text-right font-medium" data-testid="opening-balance">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(startingBalance))}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
                                 {ledgerEntriesWithBalance && ledgerEntriesWithBalance.map((entry: any) => {
                                   const accountName = accounts?.find(
                                     (account) => account.id === entry.accountId
