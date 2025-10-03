@@ -8,6 +8,7 @@ import { fixCreditIssues } from "./credit-fix";
 import { fixCreditTracking } from "./fix-credit-tracking";
 import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { deletePaymentAndRelatedTransactions } from "./payment-delete-handler";
+import { deleteDepositAndReverseApplications } from "./deposit-delete-handler";
 import { format } from "date-fns";
 import { roundTo2Decimals } from "@shared/utils";
 import { 
@@ -2455,85 +2456,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For non-payment transactions, continue with regular deletion process
       
-      // PROTECTION: Perform comprehensive check for deposit usage
+      // Handle deposit deletion with automatic credit application reversal
       if (transaction.type === 'deposit') {
         try {
-          console.log(`Performing comprehensive check for deposit usage: ${transaction.reference} (ID: ${transaction.id})`);
-          // Check for ledger entries that link this deposit to invoice payments
-          const depositLedgerEntries = await storage.getLedgerEntriesByTransaction(id);
-          
-          // First basic check: Look for ledger entries linking to invoices
-          const invoiceLinks = depositLedgerEntries.filter(entry => 
-            entry.description && 
-            entry.description.toLowerCase().includes('invoice') &&
-            entry.description.toLowerCase().includes('applied')
-          );
-          
-          // Second check: Is balance different from original amount?
-          const isPartiallyApplied = transaction.balance && 
-                                    Math.abs(Math.abs(transaction.balance) - transaction.amount) > 0.001;
-          
-          // Third check: Find any ledger entries linking this deposit to other transactions
-          const allLedgerEntries = await storage.getAllLedgerEntries();
-          const relatedEntries = allLedgerEntries.filter(entry => 
-            entry.description && 
-            entry.description.toLowerCase().includes(transaction.reference?.toLowerCase() || '') &&
-            entry.description.toLowerCase().includes('credit') && 
-            entry.transactionId !== transaction.id
-          );
-          
-          // Special cases we know are safe to delete despite the checks below
-          if ((transaction.reference === 'CREDIT-22648' && transaction.id === 188) ||
-              (transaction.reference === 'CREDIT-53289' && transaction.id === 198)) {
-            console.log(`Allowing deletion of special case credit: ${transaction.reference} (ID: ${transaction.id})`);
-            // These are specific credits that need to be deletable, continue with deletion
-          }
-          // Enhanced detection logic with all checks combined - skip for special case credit
-          else if (invoiceLinks.length > 0 || isPartiallyApplied || relatedEntries.length > 0) {
-            // Generate a detailed explanation based on what we found
-            let details = "";
-            
-            if (isPartiallyApplied) {
-              details = `This deposit (${transaction.reference}) has been partially applied to invoices. The original amount was $${transaction.amount} and the remaining balance is $${Math.abs(transaction.balance || 0)}.`;
-            } else if (invoiceLinks.length > 0) {
-              details = `This deposit has already been applied to invoices: ${invoiceLinks.map(e => e.description).join('; ')}`;
-            } else if (relatedEntries.length > 0) {
-              // Find distinct transaction IDs where this deposit was referenced
-              // Create an array of unique transaction IDs to avoid Set spread issues
-              const transactionIdsSet = new Set();
-              relatedEntries.forEach(e => {
-                if (e.transactionId) {
-                  transactionIdsSet.add(e.transactionId);
-                }
-              });
-              const relatedTransactionIds = Array.from(transactionIdsSet);
-              
-              details = `This deposit (${transaction.reference}) has been applied to ${relatedTransactionIds.length} transaction(s). Applied credit cannot be deleted directly. You must delete the transactions where this credit was applied first.`;
-            }
-            
-            console.log(`Cannot delete deposit #${transaction.id} (${transaction.reference}): ${details}`);
-            
-            return res.status(403).json({ 
-              message: `Cannot delete this deposit: ${details}`,
-              type: "credit_in_use",
-              transactionId: id,
-              details: details
-            });
-          }
-          
           // Special check for system-generated credits (from payments)
-          // Skip for special cases we want to allow deletion for
-          if (transaction.reference !== 'CREDIT-53289' && 
-              transaction.status === 'unapplied_credit' && 
+          if (transaction.status === 'unapplied_credit' && 
               transaction.description?.includes("Unapplied credit from payment")) {
             return res.status(403).json({ 
               message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead.",
               type: "system_credit"
             });
           }
-        } catch (checkError) {
-          console.error("Error checking deposit usage:", checkError);
-          // Continue with deletion attempt even if the check fails
+          
+          // Use the specialized deposit deletion handler that reverses credit applications
+          console.log(`Using comprehensive deposit deletion handler for ${transaction.reference} (ID: ${transaction.id})`);
+          const result = await deleteDepositAndReverseApplications(id);
+          return res.status(200).json(result);
+        } catch (error) {
+          console.error("Error deleting deposit transaction:", error);
+          return res.status(500).json({ 
+            message: "Failed to delete deposit and restore related invoices", 
+            error: String(error) 
+          });
         }
       }
       

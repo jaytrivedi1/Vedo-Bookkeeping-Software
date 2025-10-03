@@ -95,7 +95,7 @@ export async function deletePaymentAndRelatedTransactions(paymentId: number) {
       
       // Step 5: Restore invoice balances and statuses
       const restoredInvoices = [];
-      for (const [invoiceRef, info] of invoicesToRestore.entries()) {
+      for (const [invoiceRef, info] of Array.from(invoicesToRestore.entries())) {
         // Get current invoice data
         const [invoice] = await tx.select().from(transactions)
           .where(eq(transactions.id, info.id));
