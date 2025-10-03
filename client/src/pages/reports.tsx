@@ -1322,7 +1322,10 @@ export default function Reports() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length === 0 ? (
+                            {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length === 0 && 
+                             (!selectedAccount || 
+                              !isBalanceSheetAccount(selectedAccount.type) || 
+                              (openingBalanceData !== undefined && startingBalance === 0)) ? (
                               <TableRow>
                                 <TableCell colSpan={8} className="text-center py-6 text-gray-500">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
