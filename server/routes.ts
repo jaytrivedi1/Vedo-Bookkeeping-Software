@@ -3613,16 +3613,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const asOfDateStr = req.query.asOfDate as string | undefined;
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
       
+      // Calculate fiscal year start date
+      const fiscalYearStartDate = new Date(asOfDate);
+      fiscalYearStartDate.setMonth(fiscalYearStartMonth - 1); // Months are 0-indexed
+      fiscalYearStartDate.setDate(1);
+      fiscalYearStartDate.setHours(0, 0, 0, 0);
+      
+      // If we're before the fiscal year start month in the current year, go back to previous year
+      if (asOfDate.getMonth() + 1 < fiscalYearStartMonth) {
+        fiscalYearStartDate.setFullYear(fiscalYearStartDate.getFullYear() - 1);
+      }
+      
       const accounts = await storage.getAccounts();
       const ledgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
       
       // Calculate prior years' retained earnings (profit/loss from before current fiscal year)
       const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
       
+      // Helper function to determine if an account is an income statement account
+      const isIncomeStatementAccount = (accountType: string) => {
+        const incomeStatementTypes = [
+          'revenue', 'other_income',
+          'expenses', 'cost_of_goods_sold', 'other_expense'
+        ];
+        return incomeStatementTypes.includes(accountType);
+      };
+      
       // Group ledger entries by account and calculate totals using integer arithmetic (cents)
       const accountTotals = new Map<number, { totalDebitsCents: number; totalCreditsCents: number }>();
       
       ledgerEntries.forEach(entry => {
+        const account = accounts.find(acc => acc.id === entry.accountId);
+        if (!account) return;
+        
+        // For income statement accounts, only include entries from current fiscal year
+        // For balance sheet accounts, include all entries up to as-of date
+        const entryDate = new Date(entry.date);
+        if (isIncomeStatementAccount(account.type) && entryDate < fiscalYearStartDate) {
+          return; // Skip this entry - it's from a prior fiscal year
+        }
+        
         if (!accountTotals.has(entry.accountId)) {
           accountTotals.set(entry.accountId, { totalDebitsCents: 0, totalCreditsCents: 0 });
         }
