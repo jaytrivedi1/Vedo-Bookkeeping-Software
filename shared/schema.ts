@@ -85,6 +85,8 @@ export const transactions = pgTable('transactions', {
   paymentDate: timestamp('payment_date'),
   memo: text('memo'),
   attachments: text('attachments').array(),
+  dueDate: timestamp('due_date'),
+  paymentTerms: text('payment_terms'),
 });
 
 // Line Items

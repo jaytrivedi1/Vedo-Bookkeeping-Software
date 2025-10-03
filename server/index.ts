@@ -9,6 +9,7 @@ import migrateTransactions from "./migrate-transactions";
 import migrateStatusEnum from "./migrate-status-enum";
 import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 import migrateInvoiceBalance from "./migrate-invoice-balance";
+import migrateDueDates from "./migrate-due-dates";
 import migrateDepositCredits from "./migrate-deposit-credits";
 import batchUpdateInvoiceStatuses from "./batch-update-invoice-statuses";
 import { fixAllBalances } from "./fix-all-balances";
@@ -75,6 +76,9 @@ app.use((req, res, next) => {
     
     // Run migration to fix invoice balance issues
     await migrateInvoiceBalance();
+    
+    // Run migration to populate missing due dates for invoices
+    await migrateDueDates();
     
     // Run migration to fix deposit credit balances
     await migrateDepositCredits();
