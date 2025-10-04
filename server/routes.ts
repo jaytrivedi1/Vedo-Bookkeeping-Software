@@ -604,7 +604,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         taxAmount: taxAmount,
         balance: totalAmount, // Set the initial balance to match the total amount (already rounded)
         contactId: invoiceData.contactId,
-        status: invoiceData.status
+        status: invoiceData.status,
+        dueDate: invoiceData.dueDate,
+        paymentTerms: invoiceData.paymentTerms
       };
       
       // Create line items with proper handling of salesTaxId and productId
