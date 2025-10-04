@@ -586,6 +586,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // More detailed logging for debugging
       console.log("Invoice data passed validation:", JSON.stringify(invoiceData));
+      console.log("DueDate and paymentTerms from validation:", {
+        dueDate: invoiceData.dueDate,
+        paymentTerms: invoiceData.paymentTerms,
+        dueDateType: typeof invoiceData.dueDate,
+        paymentTermsType: typeof invoiceData.paymentTerms
+      });
       
       // Calculate amount from line items or use provided total amount with rounding
       const totalAmount = roundTo2Decimals(invoiceData.totalAmount || 
@@ -610,6 +616,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: invoiceData.dueDate,
         paymentTerms: invoiceData.paymentTerms
       };
+      
+      console.log('Transaction object to be saved:', JSON.stringify({
+        dueDate: transaction.dueDate,
+        paymentTerms: transaction.paymentTerms
+      }));
       
       // Create line items with proper handling of salesTaxId and productId
       const lineItems = invoiceData.lineItems.map(item => {
