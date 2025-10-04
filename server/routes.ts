@@ -415,6 +415,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: body.description,
         status: body.status,
         contactId: body.contactId,
+        dueDate: body.dueDate,
+        paymentTerms: body.paymentTerms,
         // Amount will be recalculated if line items are updated
       };
       
