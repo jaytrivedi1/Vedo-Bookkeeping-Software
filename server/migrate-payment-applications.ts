@@ -7,14 +7,14 @@ export async function migratePaymentApplications() {
   
   try {
     // Find all ledger entries that represent payment applications
-    // Pattern: "Payment applied to invoice #XXXX"
+    // Patterns: "Payment applied to invoice #XXXX" or "Payment for invoice #XXXX"
     const paymentLedgerEntries = await db
       .select()
       .from(ledgerEntries)
       .where(
         and(
           eq(ledgerEntries.accountId, 2), // Accounts Receivable
-          sql`${ledgerEntries.description} LIKE '%Payment applied to invoice #%'`,
+          sql`(${ledgerEntries.description} LIKE '%Payment applied to invoice #%' OR ${ledgerEntries.description} LIKE '%Payment for invoice #%')`,
           sql`${ledgerEntries.credit} > 0` // Credit entries (payments reduce AR)
         )
       );
@@ -27,8 +27,8 @@ export async function migratePaymentApplications() {
     for (const entry of paymentLedgerEntries) {
       try {
         // Extract invoice reference from description
-        // Pattern: "Payment applied to invoice #INV-001"
-        const match = entry.description?.match(/invoice #([^\s]+)/i);
+        // Patterns: "Payment applied to invoice #INV-001" or "Payment for invoice #INV-001"
+        const match = entry.description?.match(/(?:applied to|for) invoice #([^\s,]+)/i);
         if (!match) {
           console.log(`Skipping entry ${entry.id}: Could not parse invoice reference from "${entry.description}"`);
           skippedCount++;
