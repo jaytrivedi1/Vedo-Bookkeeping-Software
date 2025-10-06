@@ -51,49 +51,52 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Seed the database with initial data and run migrations
-  try {
-    log("Seeding database...");
-    await seed();
-    log("Database seeding completed");
-    
-    // Run the line items migration to add sales_tax_id column
-    await migrateLineItems();
-    
-    // Run company table migration to create companies and set up default company
-    await migrateCompanyTable();
-    
-    // Run sales tax components migration for multi-component taxes (GST+QST)
-    await migrateSalesTaxComponents();
-    
-    // Run transactions migration to add balance field
-    await migrateTransactions();
-    
-    // Run status enum migration to add unapplied_credit status
-    await migrateStatusEnum();
-    
-    // Run migration to add 'open' status to enum and update old 'pending' invoices
-    await migrateOpenStatus();
-    
-    // Run migration to fix invoice balance issues
-    await migrateInvoiceBalance();
-    
-    // Run migration to populate missing due dates for invoices
-    await migrateDueDates();
-    
-    // Run migration to fix deposit credit balances
-    await migrateDepositCredits();
-    
-    // Run batch update to fix invoice statuses
-    await batchUpdateInvoiceStatuses();
-    
-    // Run comprehensive balance fixer to ensure all invoice and credit balances are correct
-    await fixAllBalances();
-    
-    // Run migration to populate payment_applications table from existing ledger entries
-    await migratePaymentApplications();
-  } catch (error) {
-    log(`Error in database initialization: ${error}`);
+  // Only run seeding and migrations in development mode
+  // In production, these should be run once during build/deployment setup
+  if (process.env.NODE_ENV === "development") {
+    try {
+      log("Seeding database...");
+      await seed();
+      log("Database seeding completed");
+      
+      // Run the line items migration to add sales_tax_id column
+      await migrateLineItems();
+      
+      // Run company table migration to create companies and set up default company
+      await migrateCompanyTable();
+      
+      // Run sales tax components migration for multi-component taxes (GST+QST)
+      await migrateSalesTaxComponents();
+      
+      // Run transactions migration to add balance field
+      await migrateTransactions();
+      
+      // Run status enum migration to add unapplied_credit status
+      await migrateStatusEnum();
+      
+      // Run migration to add 'open' status to enum and update old 'pending' invoices
+      await migrateOpenStatus();
+      
+      // Run migration to fix invoice balance issues
+      await migrateInvoiceBalance();
+      
+      // Run migration to populate missing due dates for invoices
+      await migrateDueDates();
+      
+      // Run migration to fix deposit credit balances
+      await migrateDepositCredits();
+      
+      // Run batch update to fix invoice statuses
+      await batchUpdateInvoiceStatuses();
+      
+      // Run comprehensive balance fixer to ensure all invoice and credit balances are correct
+      await fixAllBalances();
+      
+      // Run migration to populate payment_applications table from existing ledger entries
+      await migratePaymentApplications();
+    } catch (error) {
+      log(`Error in database initialization: ${error}`);
+    }
   }
   
   const server = await registerRoutes(app);

@@ -45,6 +45,11 @@ import { companyRouter } from "./company-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint - responds immediately for deployment health checks
+  app.get("/health", (req: Request, res: Response) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+  
   // Configure authentication
   setupAuth(app);
   // API routes
