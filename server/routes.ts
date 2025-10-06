@@ -3667,20 +3667,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const companySettings = await storage.getCompanySettings();
       const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
       
-      // Get as-of date from query params or use today
+      // Get date parameters from query params
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
       const asOfDateStr = req.query.asOfDate as string | undefined;
+      
+      // Use provided dates or fallback to today
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
-      
-      // Calculate fiscal year start date
-      const fiscalYearStartDate = new Date(asOfDate);
-      fiscalYearStartDate.setMonth(fiscalYearStartMonth - 1); // Months are 0-indexed
-      fiscalYearStartDate.setDate(1);
-      fiscalYearStartDate.setHours(0, 0, 0, 0);
-      
-      // If we're before the fiscal year start month in the current year, go back to previous year
-      if (asOfDate.getMonth() + 1 < fiscalYearStartMonth) {
-        fiscalYearStartDate.setFullYear(fiscalYearStartDate.getFullYear() - 1);
-      }
+      const fiscalYearStartDate = startDateStr ? new Date(startDateStr) : new Date(asOfDate.getFullYear(), fiscalYearStartMonth - 1, 1);
+      const fiscalYearEndDate = endDateStr ? new Date(endDateStr) : asOfDate;
       
       const accounts = await storage.getAccounts();
       const ledgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
@@ -3707,8 +3702,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For income statement accounts, only include entries from current fiscal year
         // For balance sheet accounts, include all entries up to as-of date
         const entryDate = new Date(entry.date);
-        if (isIncomeStatementAccount(account.type) && entryDate < fiscalYearStartDate) {
-          return; // Skip this entry - it's from a prior fiscal year
+        if (isIncomeStatementAccount(account.type)) {
+          // Only include entries within the fiscal year period
+          if (entryDate < fiscalYearStartDate || entryDate > fiscalYearEndDate) {
+            return; // Skip this entry - it's outside the fiscal year
+          }
         }
         
         if (!accountTotals.has(entry.accountId)) {

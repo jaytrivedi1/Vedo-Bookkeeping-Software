@@ -197,11 +197,11 @@ export default function Reports() {
     enabled: activeTab !== 'general-ledger' && activeTab !== 'trial-balance',
   });
   
-  // Fetch trial balance with asOfDate
+  // Fetch trial balance with fiscal year dates
   const { data: trialBalanceData, isLoading: trialBalanceLoading } = useQuery({
-    queryKey: ['/api/reports/trial-balance', fiscalYearBounds.asOfDateISO],
+    queryKey: ['/api/reports/trial-balance', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO, fiscalYearBounds.asOfDateISO],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/trial-balance?asOfDate=${fiscalYearBounds.asOfDateISO}`);
+      const response = await fetch(`/api/reports/trial-balance?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}&asOfDate=${fiscalYearBounds.asOfDateISO}`);
       if (!response.ok) throw new Error('Failed to fetch trial balance');
       return response.json();
     },
