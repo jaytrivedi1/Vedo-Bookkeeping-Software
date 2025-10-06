@@ -1397,6 +1397,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               date: new Date(data.date),
               transactionId: 0 // Will be set by createTransaction
             });
+            
+            // Store invoice ID and amount to create payment_applications records after payment is created
+            if (!lineItems.invoiceApplications) {
+              (lineItems as any).invoiceApplications = [];
+            }
+            (lineItems as any).invoiceApplications.push({
+              invoiceId: invoice.id,
+              amount: item.amount
+            });
           } 
           // Handle deposits (unapplied credits being applied)
           else if (item.type === 'deposit') {
@@ -1459,6 +1468,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         [], // No line items for the payment itself
         paymentLedgerEntries
       );
+      
+      // Record payment applications in payment_applications table
+      const invoiceApplications = (lineItems as any).invoiceApplications || [];
+      if (invoiceApplications.length > 0) {
+        const { paymentApplications } = await import('@shared/schema');
+        for (const app of invoiceApplications) {
+          await db.insert(paymentApplications).values({
+            paymentId: payment.id,
+            invoiceId: app.invoiceId,
+            amountApplied: app.amount
+          });
+          console.log(`Recorded payment application: Payment ${payment.id} -> Invoice ${app.invoiceId}, amount: ${app.amount}`);
+        }
+      }
       
       // Now create unapplied credit entry if there's any amount not applied to invoices
       if (unappliedAmount > 0) {
