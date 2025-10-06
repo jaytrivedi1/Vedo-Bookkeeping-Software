@@ -255,19 +255,5 @@ async function seed() {
 // Export for use in main application
 export { seed };
 
-// Run directly if this file is executed directly
-if (process.argv[1] === import.meta.url) {
-  console.log("Starting seed script...");
-  console.log("Import meta URL:", import.meta.url);
-  console.log("Process argv[1]:", process.argv[1]);
-  
-  seed()
-    .then(() => {
-      console.log("Seed script completed.");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("Error during seeding:", error);
-      process.exit(1);
-    });
-}
+// NOTE: Standalone execution block removed to prevent process.exit() in bundled production code
+// To run this script standalone, use: npx tsx server/seed.ts

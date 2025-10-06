@@ -63,14 +63,5 @@ async function batchUpdateInvoiceStatuses() {
 
 export default batchUpdateInvoiceStatuses;
 
-// Run immediately if executed directly using NodeJS CLI
-// This check is compatible with ESM modules
-if (import.meta.url === `file://${process.argv[1]}`) {
-  batchUpdateInvoiceStatuses().then(() => {
-    console.log('Batch update completed, exiting.');
-    process.exit(0);
-  }).catch((error) => {
-    console.error('Error in batch update:', error);
-    process.exit(1);
-  });
-}
+// NOTE: Standalone execution block removed to prevent process.exit() in bundled production code
+// To run this script standalone, use: npx tsx server/batch-update-invoice-statuses.ts
