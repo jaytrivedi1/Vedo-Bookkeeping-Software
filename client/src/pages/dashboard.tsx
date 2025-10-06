@@ -86,16 +86,16 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="py-6">
+    <div className="py-6 min-h-screen">
       {/* Page header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center mb-2">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Dashboard</h1>
         <div className="flex items-center space-x-3">
-          <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
+          <span className="text-sm text-muted-foreground font-medium">{format(new Date(), 'MMMM d, yyyy')}</span>
           
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="text-white bg-primary hover:bg-primary/90">
+              <Button className="text-white bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl smooth-transition hover-lift glow-hover" data-testid="button-new-transaction">
                 <Plus className="h-4 w-4 mr-2" />
                 New Transaction
               </Button>
@@ -227,33 +227,37 @@ export default function Dashboard() {
           
           {/* Recent transactions section */}
           <div className="mt-8">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Transactions</h2>
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            <h2 className="text-xl font-bold text-foreground mb-4">Recent Transactions</h2>
+            <div className="glass-card rounded-xl overflow-hidden smooth-transition hover:border-primary/30" data-testid="card-recent-transactions">
               {/* Tab navigation */}
               <Tabs defaultValue="all" onValueChange={setActiveTab}>
-                <div className="border-b border-gray-200">
+                <div className="border-b border-border/50">
                   <TabsList className="h-auto p-0 bg-transparent">
                     <TabsTrigger 
                       value="all" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-gray-500 rounded-none"
+                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
+                      data-testid="tab-all-transactions"
                     >
                       All Transactions
                     </TabsTrigger>
                     <TabsTrigger 
                       value="invoices" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-gray-500 rounded-none"
+                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
+                      data-testid="tab-invoices"
                     >
                       Invoices
                     </TabsTrigger>
                     <TabsTrigger 
                       value="expenses" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-gray-500 rounded-none"
+                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
+                      data-testid="tab-expenses"
                     >
                       Expenses
                     </TabsTrigger>
                     <TabsTrigger 
                       value="journal_entries" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=inactive]:border-transparent data-[state=inactive]:text-gray-500 rounded-none"
+                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
+                      data-testid="tab-journal-entries"
                     >
                       Journal Entries
                     </TabsTrigger>
@@ -274,8 +278,8 @@ export default function Dashboard() {
           {/* Chart and account balances */}
           <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chart */}
-            <div className="lg:col-span-2 bg-white shadow-sm rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Financial Overview</h3>
+            <div className="lg:col-span-2 glass-card rounded-xl p-6 smooth-transition hover:border-primary/30 hover-lift" data-testid="card-financial-overview">
+              <h3 className="text-xl font-bold text-foreground mb-6">Financial Overview</h3>
               <RevenueChart data={chartData} />
             </div>
             
