@@ -113,12 +113,22 @@ export const ledgerEntries = pgTable('ledger_entries', {
   date: timestamp('date').notNull().defaultNow(),
 });
 
+// Payment Applications (tracks which payments are applied to which invoices)
+export const paymentApplications = pgTable('payment_applications', {
+  id: serial('id').primaryKey(),
+  paymentId: integer('payment_id').notNull().references(() => transactions.id),
+  invoiceId: integer('invoice_id').notNull().references(() => transactions.id),
+  amountApplied: doublePrecision('amount_applied').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, balance: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true });
 export const insertLineItemSchema = createInsertSchema(lineItems).omit({ id: true });
 export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({ id: true });
+export const insertPaymentApplicationSchema = createInsertSchema(paymentApplications).omit({ id: true, createdAt: true });
 
 // Custom schemas for form validation
 export const invoiceSchema = z.object({
@@ -218,6 +228,9 @@ export type InsertLineItem = z.infer<typeof insertLineItemSchema>;
 
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
+
+export type PaymentApplication = typeof paymentApplications.$inferSelect;
+export type InsertPaymentApplication = z.infer<typeof insertPaymentApplicationSchema>;
 
 // Forward declare salesTaxSchema to fix circular reference
 export const salesTaxesTable = 'sales_taxes';
