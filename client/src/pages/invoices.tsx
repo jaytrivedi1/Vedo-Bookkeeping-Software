@@ -95,12 +95,12 @@ export default function Invoices() {
   }, 0);
   
   return (
-    <div className="py-6">
+    <div className="py-6 min-h-screen">
       {/* Page header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Invoices</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center mb-2">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Invoices</h1>
         <div className="flex items-center space-x-3">
-          <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
+          <span className="text-sm text-muted-foreground font-medium">{format(new Date(), 'MMMM d, yyyy')}</span>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
