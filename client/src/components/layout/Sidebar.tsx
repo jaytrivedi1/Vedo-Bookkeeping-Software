@@ -58,19 +58,24 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
   return (
     <div
       className={cn(
-        "fixed inset-y-0 left-0 w-64 transition duration-300 transform bg-white border-r border-gray-200 md:relative md:translate-x-0 z-30",
+        "fixed inset-y-0 left-0 w-64 transition-all duration-300 transform glass border-r border-border/50 md:relative md:translate-x-0 z-30 flex flex-col",
         open ? "translate-x-0" : "-translate-x-full"
       )}
     >
       {/* Logo section */}
-      <div className="flex items-center justify-between px-4 py-5">
+      <div className="flex items-center justify-between px-4 py-5 border-b border-border/30">
         <div className="flex items-center space-x-2">
-          <BarChart4Icon className="w-8 h-8 text-primary" />
-          <span className="text-lg font-semibold text-gray-800">FinLedger</span>
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg glow">
+            <BarChart4Icon className="w-5 h-5 text-white" />
+          </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+            FinLedger
+          </span>
         </div>
         <button
           onClick={() => setOpen(false)}
-          className="p-1 rounded-md text-gray-400 hover:text-gray-500 focus:outline-none md:hidden"
+          className="p-1 rounded-md text-muted-foreground hover:text-foreground smooth-transition focus:outline-none md:hidden"
+          data-testid="button-close-sidebar"
         >
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -79,41 +84,48 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       </div>
       
       {/* Company selector */}
-      <div className="px-4 py-2">
+      <div className="px-4 py-3">
         <CompanySelector />
       </div>
 
       {/* Navigation links */}
-      <nav className="px-2 py-2 space-y-1">
+      <nav className="px-3 py-2 space-y-1 flex-1 overflow-y-auto">
         {menuItems.map((item) => (
           <Link
             key={item.path}
             href={item.path}
             className={cn(
-              "flex items-center px-3 py-2 text-sm font-medium rounded-md",
+              "flex items-center px-3 py-2.5 text-sm font-medium rounded-lg smooth-transition group",
               location === item.path
-                ? "text-white bg-primary"
-                : "text-gray-700 hover:text-gray-900 hover:bg-gray-100"
+                ? "text-white bg-gradient-to-r from-primary to-accent shadow-md glow"
+                : "text-foreground hover:text-primary hover:bg-muted/50"
             )}
+            data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
           >
             {item.icon}
-            {item.label}
+            <span className={cn(location === item.path && "font-semibold")}>
+              {item.label}
+            </span>
           </Link>
         ))}
         
         {/* New Transaction Dropdown */}
-        <div className="mt-3 px-3">
+        <div className="mt-4 px-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="w-full justify-start" variant="outline">
+              <Button 
+                className="w-full justify-start bg-gradient-to-r from-primary/10 to-accent/10 hover:from-primary/20 hover:to-accent/20 border-primary/20 hover:border-primary/40 smooth-transition" 
+                variant="outline"
+                data-testid="button-new-transaction-sidebar"
+              >
                 <PlusIcon className="w-5 h-5 mr-3" />
                 New Transaction
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-56 glass-card border-border/50">
               {transactionTypes.map((type) => (
                 <Link key={type.path} href={type.path}>
-                  <DropdownMenuItem className="cursor-pointer">
+                  <DropdownMenuItem className="cursor-pointer smooth-transition hover:bg-primary/10" data-testid={`menu-item-${type.label.toLowerCase().replace(/\s/g, '-')}`}>
                     {type.icon}
                     {type.label}
                   </DropdownMenuItem>
@@ -125,19 +137,19 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
       </nav>
 
       {/* Settings and Account section */}
-      <div className="absolute bottom-0 w-full border-t border-gray-200">
-        <div className="px-2 py-3">
+      <div className="border-t border-border/30 mt-auto">
+        <div className="px-3 py-3">
           <SettingsButton />
         </div>
-        <div className="flex items-center px-4 py-3 hover:bg-gray-50 border-t border-gray-200">
+        <div className="flex items-center px-4 py-3 hover:bg-muted/30 border-t border-border/30 smooth-transition group" data-testid="user-profile-section">
           <div className="flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-medium">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold shadow-md glow-hover smooth-transition group-hover:scale-110">
               JD
             </div>
           </div>
           <div className="ml-3">
-            <p className="text-sm font-medium text-gray-700">John Doe</p>
-            <p className="text-xs text-gray-500">Administrator</p>
+            <p className="text-sm font-semibold text-foreground">John Doe</p>
+            <p className="text-xs text-muted-foreground">Administrator</p>
           </div>
         </div>
       </div>
