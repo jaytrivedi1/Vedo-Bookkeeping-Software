@@ -2567,7 +2567,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Perform any necessary cleanup before deletion
       if (transaction.type === 'invoice') {
-        // Handle invoice-specific cleanup
+        // Handle invoice-specific cleanup using payment_applications table
+        console.log(`Using payment_applications table to handle payments for deleted invoice #${transaction.reference}`);
+        
+        const { paymentApplications } = await import('@shared/schema');
+        
+        // Find all payments applied to this invoice via payment_applications table
+        const applications = await db
+          .select()
+          .from(paymentApplications)
+          .where(eq(paymentApplications.invoiceId, id));
+        
+        console.log(`Found ${applications.length} payment applications for invoice #${transaction.reference}`);
+        
+        // Process each payment that was applied to this invoice
+        for (const app of applications) {
+          const payment = await storage.getTransaction(app.paymentId);
+          
+          if (!payment) {
+            console.log(`Warning: Payment ${app.paymentId} not found for application`);
+            continue;
+          }
+          
+          console.log(`Processing payment #${payment.id} (${payment.reference}): ${app.amountApplied} was applied to deleted invoice`);
+          
+          // Get all applications for this payment to determine total applied
+          const allPaymentApps = await db
+            .select()
+            .from(paymentApplications)
+            .where(eq(paymentApplications.paymentId, app.paymentId));
+          
+          // Calculate total applied amount (excluding the deleted invoice)
+          const totalAppliedToOtherInvoices = allPaymentApps
+            .filter(a => a.invoiceId !== id)
+            .reduce((sum, a) => sum + a.amountApplied, 0);
+          
+          console.log(`Payment #${payment.id}: total=${payment.amount}, applied to other invoices=${totalAppliedToOtherInvoices}, freeing up=${app.amountApplied}`);
+          
+          // Calculate new balance for the payment
+          const newBalance = payment.amount - totalAppliedToOtherInvoices;
+          const roundedBalance = Math.round(newBalance * 100) / 100;
+          
+          // Determine new status
+          let newStatus: 'completed' | 'unapplied_credit';
+          if (roundedBalance >= payment.amount) {
+            // Fully unapplied
+            newStatus = 'unapplied_credit';
+            console.log(`Payment #${payment.id} will become fully unapplied credit`);
+          } else if (roundedBalance > 0) {
+            // Partially applied
+            newStatus = 'unapplied_credit';
+            console.log(`Payment #${payment.id} will have ${roundedBalance} unapplied`);
+          } else {
+            // Fully applied to other invoices
+            newStatus = 'completed';
+            console.log(`Payment #${payment.id} still fully applied to other invoices`);
+          }
+          
+          // Update the payment
+          await storage.updateTransaction(app.paymentId, {
+            balance: -roundedBalance, // Negative for credit
+            status: newStatus
+          });
+          
+          console.log(`Updated payment #${payment.id}: balance=${-roundedBalance}, status=${newStatus}`);
+          
+          // Delete the payment application record for the deleted invoice
+          await db
+            .delete(paymentApplications)
+            .where(eq(paymentApplications.id, app.id));
+          
+          console.log(`Deleted payment application record for payment ${app.paymentId} -> invoice ${id}`);
+        }
         
         // First approach: Find any auto-payment that was created to apply credits to this invoice
         console.log(`Looking for auto-payments related to invoice #${transaction.reference}`);
