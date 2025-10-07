@@ -41,7 +41,10 @@ Preferred communication style: Simple, everyday language.
 ### Key Business Logic
 - **Double-Entry Accounting**: Automatic ledger entry generation for all transactions
 - **Invoice Management**: Complete invoice lifecycle with balance tracking and payment application
-- **Payment Processing**: Support for multiple payment methods with credit tracking
+- **Payment Processing**: Support for multiple payment methods with unified credit tracking
+  - Unapplied credits stored in payment transaction's balance field (not separate transactions)
+  - Payment status changes to 'unapplied_credit' when balance > 0
+  - Invoice deletion automatically restores payment balances via payment_applications table
 - **Financial Reporting**: Real-time balance calculations and account books
 - **Tax Management**: Configurable sales tax rates with component support
 
