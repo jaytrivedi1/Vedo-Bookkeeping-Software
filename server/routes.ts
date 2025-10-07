@@ -3846,27 +3846,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                                    account.name === 'Retained Earnings' ||
                                    account.type === 'retained_earnings');
       
-      console.log('[Opening Balance Debug]', {
-        accountId,
-        accountCode: account.code,
-        accountName: account.name,
-        accountType: account.type,
-        beforeDate: beforeDateStr,
-        isRetainedEarnings
-      });
-      
       if (isRetainedEarnings) {
-        // Get company settings for fiscal year start month
-        const companySettings = await storage.getCompanySettings();
-        const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+        // Get company fiscal year start month from the default company
+        const defaultCompany = await storage.getDefaultCompany();
+        const fiscalYearStartMonth = defaultCompany?.fiscalYearStartMonth || 1;
         
         // Calculate prior years' retained earnings (profit/loss from before the fiscal year start)
         const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(beforeDate, fiscalYearStartMonth);
-        
-        console.log('[Opening Balance - Retained Earnings]', {
-          priorYearsRetainedEarnings,
-          openingBalance: -priorYearsRetainedEarnings
-        });
         
         // Return as negative because Retained Earnings is a credit balance (equity)
         // Positive retained earnings = credits > debits, so we return negative of the profit

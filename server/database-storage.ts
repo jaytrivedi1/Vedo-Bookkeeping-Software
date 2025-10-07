@@ -1417,13 +1417,6 @@ export class DatabaseStorage implements IStorage {
   async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
     const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
     
-    console.log('[calculatePriorYearsRetainedEarnings Debug]', {
-      asOfDate,
-      fiscalYearStartMonth,
-      fiscalYearStart,
-      comparison: `Looking for transactions < ${fiscalYearStart.toISOString()}`
-    });
-    
     const result = await db
       .select({
         accountType: accounts.type,
