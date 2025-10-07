@@ -3521,9 +3521,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reports routes
   apiRouter.get("/reports/income-statement", async (req: Request, res: Response) => {
     try {
-      const incomeStatement = await storage.getIncomeStatement();
-      res.json(incomeStatement);
+      // Get date range from query params
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      
+      const startDate = startDateStr ? new Date(startDateStr) : undefined;
+      const endDate = endDateStr ? new Date(endDateStr) : undefined;
+      
+      // Get all accounts and ledger entries
+      const allAccounts = await storage.getAccounts();
+      const ledgerEntries = startDate && endDate 
+        ? await storage.getLedgerEntriesByDateRange(startDate, endDate)
+        : await storage.getAllLedgerEntries();
+      
+      // Calculate balance for each account from filtered ledger entries
+      const balanceMap = new Map<number, number>();
+      
+      ledgerEntries.forEach(entry => {
+        const account = allAccounts.find(a => a.id === entry.accountId);
+        if (!account) return;
+        
+        // Only process income statement accounts
+        if (!['income', 'other_income', 'cost_of_goods_sold', 'expenses', 'other_expense'].includes(account.type)) {
+          return;
+        }
+        
+        const currentBalance = balanceMap.get(entry.accountId) || 0;
+        const debit = Number(entry.debit) || 0;
+        const credit = Number(entry.credit) || 0;
+        
+        // For income accounts: credits increase, debits decrease
+        // For expense/COGS accounts: debits increase, credits decrease
+        if (account.type === 'income' || account.type === 'other_income') {
+          balanceMap.set(entry.accountId, currentBalance + credit - debit);
+        } else {
+          balanceMap.set(entry.accountId, currentBalance + debit - credit);
+        }
+      });
+      
+      // Group accounts by category with their balances
+      const incomeAccounts = allAccounts
+        .filter(a => a.type === 'income')
+        .map(account => ({
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          balance: Math.round((balanceMap.get(account.id) || 0) * 100) / 100
+        }))
+        .filter(a => a.balance !== 0); // Only show accounts with activity
+      
+      const otherIncomeAccounts = allAccounts
+        .filter(a => a.type === 'other_income')
+        .map(account => ({
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          balance: Math.round((balanceMap.get(account.id) || 0) * 100) / 100
+        }))
+        .filter(a => a.balance !== 0);
+      
+      const cogsAccounts = allAccounts
+        .filter(a => a.type === 'cost_of_goods_sold')
+        .map(account => ({
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          balance: Math.round((balanceMap.get(account.id) || 0) * 100) / 100
+        }))
+        .filter(a => a.balance !== 0);
+      
+      const expenseAccounts = allAccounts
+        .filter(a => a.type === 'expenses')
+        .map(account => ({
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          balance: Math.round((balanceMap.get(account.id) || 0) * 100) / 100
+        }))
+        .filter(a => a.balance !== 0);
+      
+      const otherExpenseAccounts = allAccounts
+        .filter(a => a.type === 'other_expense')
+        .map(account => ({
+          id: account.id,
+          code: account.code,
+          name: account.name,
+          balance: Math.round((balanceMap.get(account.id) || 0) * 100) / 100
+        }))
+        .filter(a => a.balance !== 0);
+      
+      // Calculate totals
+      const totalRevenue = incomeAccounts.reduce((sum, a) => sum + a.balance, 0);
+      const totalOtherIncome = otherIncomeAccounts.reduce((sum, a) => sum + a.balance, 0);
+      const totalCOGS = cogsAccounts.reduce((sum, a) => sum + a.balance, 0);
+      const totalExpenses = expenseAccounts.reduce((sum, a) => sum + a.balance, 0);
+      const totalOtherExpense = otherExpenseAccounts.reduce((sum, a) => sum + a.balance, 0);
+      
+      const grossProfit = totalRevenue - totalCOGS;
+      const operatingIncome = grossProfit - totalExpenses;
+      const netIncome = operatingIncome + totalOtherIncome - totalOtherExpense;
+      
+      res.json({
+        revenue: {
+          accounts: incomeAccounts,
+          total: Math.round(totalRevenue * 100) / 100
+        },
+        costOfGoodsSold: {
+          accounts: cogsAccounts,
+          total: Math.round(totalCOGS * 100) / 100
+        },
+        grossProfit: Math.round(grossProfit * 100) / 100,
+        operatingExpenses: {
+          accounts: expenseAccounts,
+          total: Math.round(totalExpenses * 100) / 100
+        },
+        operatingIncome: Math.round(operatingIncome * 100) / 100,
+        otherIncome: {
+          accounts: otherIncomeAccounts,
+          total: Math.round(totalOtherIncome * 100) / 100
+        },
+        otherExpense: {
+          accounts: otherExpenseAccounts,
+          total: Math.round(totalOtherExpense * 100) / 100
+        },
+        netIncome: Math.round(netIncome * 100) / 100
+      });
     } catch (error) {
+      console.error("Error generating income statement:", error);
       res.status(500).json({ message: "Failed to generate income statement" });
     }
   });
