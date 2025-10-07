@@ -1104,6 +1104,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               description: updatedDescription
             });
           }
+          
+          // Create payment_applications record for this credit application
+          const { paymentApplications } = await import('@shared/schema');
+          await db.insert(paymentApplications).values({
+            paymentId: item.transactionId, // The deposit/credit being applied
+            invoiceId: newTransaction.id, // The invoice receiving the credit
+            amountApplied: item.amount
+          });
+          console.log(`Created payment_application record: payment ${item.transactionId} -> invoice ${newTransaction.id}, amount ${item.amount}`);
         }
       }
       
