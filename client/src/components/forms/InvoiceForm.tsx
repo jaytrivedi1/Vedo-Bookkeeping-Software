@@ -128,6 +128,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     enabled: !!watchContactId,
   });
   
+  // Fetch payment applications for this invoice when editing
+  const { data: paymentApplications } = useQuery<any[]>({
+    queryKey: ['/api/invoices', invoice?.id, 'payment-applications'],
+    enabled: isEditing && !!invoice?.id,
+  });
+  
   // Filter for unapplied credits for the selected customer
   useEffect(() => {
     if (watchContactId && transactions) {
@@ -149,6 +155,28 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         return isDepositCredit || isPaymentCredit;
       });
       
+      // If editing, also include payments/deposits that were already applied (status='completed')
+      // but are referenced in payment_applications for this invoice
+      if (isEditing && paymentApplications && paymentApplications.length > 0) {
+        for (const app of paymentApplications) {
+          if (app.payment) {
+            // Check if this payment is already in the list
+            const existingCredit = customerCredits.find(c => c.id === app.payment.id);
+            
+            if (!existingCredit) {
+              // Add the payment with the applied amount pre-filled
+              customerCredits.push({
+                ...app.payment,
+                appliedAmount: app.amountApplied
+              });
+            } else {
+              // Update the existing credit with the applied amount
+              existingCredit.appliedAmount = app.amountApplied;
+            }
+          }
+        }
+      }
+      
       setUnappliedCredits(customerCredits);
       
       // Calculate total unapplied credits amount
@@ -160,11 +188,17 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       }, 0);
       
       setTotalUnappliedCredits(totalCredits);
+      
+      // Calculate initial applied credit amount from payment applications
+      if (isEditing && paymentApplications) {
+        const initialApplied = paymentApplications.reduce((sum, app) => sum + app.amountApplied, 0);
+        setAppliedCreditAmount(initialApplied);
+      }
     } else {
       setUnappliedCredits([]);
       setTotalUnappliedCredits(0);
     }
-  }, [watchContactId, transactions]);
+  }, [watchContactId, transactions, paymentApplications, isEditing]);
   
   // Ensure products are properly typed
   const typedProducts = products?.map(product => ({
@@ -1318,7 +1352,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                         
                         <div className="space-y-2">
                           {unappliedCredits.map((credit) => {
-                            const availableAmount = Math.abs(credit.balance || 0);
+                            // For credits that were already applied (from payment_applications), 
+                            // use the applied amount + remaining balance as total available
+                            const alreadyApplied = credit.appliedAmount || 0;
+                            const remainingBalance = Math.abs(credit.balance || 0);
+                            const availableAmount = alreadyApplied + remainingBalance;
+                            
                             return (
                               <div key={credit.id} className="flex items-center gap-3 border-b pb-2">
                                 <div className="flex-grow">

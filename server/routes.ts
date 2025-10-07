@@ -366,6 +366,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get payment applications for an invoice
+  apiRouter.get("/invoices/:id/payment-applications", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+      const { paymentApplications } = await import('@shared/schema');
+      
+      const applications = await db
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.invoiceId, invoiceId));
+      
+      // For each application, fetch the payment/credit transaction details
+      const applicationsWithDetails = await Promise.all(
+        applications.map(async (app) => {
+          const [payment] = await db
+            .select()
+            .from(transactions)
+            .where(eq(transactions.id, app.paymentId));
+          
+          return {
+            ...app,
+            payment
+          };
+        })
+      );
+      
+      res.json(applicationsWithDetails);
+    } catch (error) {
+      console.error("Error fetching payment applications:", error);
+      res.status(500).json({ message: "Failed to fetch payment applications" });
+    }
+  });
+
   // Invoice routes
   // Update an existing invoice
   apiRouter.patch("/invoices/:id", async (req: Request, res: Response) => {
