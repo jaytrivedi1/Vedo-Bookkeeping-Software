@@ -15,6 +15,7 @@ import batchUpdateInvoiceStatuses from "./batch-update-invoice-statuses";
 import { fixAllBalances } from "./fix-all-balances";
 import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { migratePaymentApplications } from "./migrate-payment-applications";
+import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
 
 const app = express();
 app.use(express.json());
@@ -89,6 +90,9 @@ app.use((req, res, next) => {
     
     // Run migration to populate payment_applications table from existing ledger entries
     await migratePaymentApplications();
+    
+    // Run migration to clean up orphaned credit deposits and consolidate into parent payments
+    await cleanupOrphanedCredits();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
