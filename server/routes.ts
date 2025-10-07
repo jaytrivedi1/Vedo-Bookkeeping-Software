@@ -3832,19 +3832,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const beforeDate = new Date(beforeDateStr);
       
-      // Get all ledger entries for this account before the date
-      const allEntries = await storage.getAllLedgerEntries();
-      const accountEntries = allEntries.filter(entry => 
-        entry.accountId === accountId && new Date(entry.date) < beforeDate
-      );
+      // Get the account to check if it's Retained Earnings
+      const accounts = await storage.getAccounts();
+      const account = accounts.find(acc => acc.id === accountId);
       
-      // Calculate opening balance: sum(debits) - sum(credits)
-      let openingBalance = 0;
-      accountEntries.forEach(entry => {
-        openingBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
-      });
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
       
-      res.json({ openingBalance });
+      // Special handling for Retained Earnings
+      // Its opening balance is the cumulative profit/loss from all prior years
+      const isRetainedEarnings = (account.code === '3100' || account.code === '3900' || 
+                                   account.name === 'Retained Earnings' ||
+                                   account.type === 'retained_earnings');
+      
+      if (isRetainedEarnings) {
+        // Get company settings for fiscal year start month
+        const companySettings = await storage.getCompanySettings();
+        const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+        
+        // Calculate prior years' retained earnings (profit/loss from before the fiscal year start)
+        const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(beforeDate, fiscalYearStartMonth);
+        
+        // Return as negative because Retained Earnings is a credit balance (equity)
+        // Positive retained earnings = credits > debits, so we return negative of the profit
+        res.json({ openingBalance: -priorYearsRetainedEarnings });
+      } else {
+        // For other accounts, get all ledger entries before the date
+        const allEntries = await storage.getAllLedgerEntries();
+        const accountEntries = allEntries.filter(entry => 
+          entry.accountId === accountId && new Date(entry.date) < beforeDate
+        );
+        
+        // Calculate opening balance: sum(debits) - sum(credits)
+        let openingBalance = 0;
+        accountEntries.forEach(entry => {
+          openingBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+        });
+        
+        res.json({ openingBalance });
+      }
     } catch (error) {
       console.error("Error calculating opening balance:", error);
       res.status(500).json({ message: "Failed to calculate opening balance" });
