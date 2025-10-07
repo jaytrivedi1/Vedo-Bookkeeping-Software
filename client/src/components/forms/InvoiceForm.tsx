@@ -1296,6 +1296,30 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                       <span className="font-semibold text-gray-900">${formatCurrency(totalAmount)}</span>
                     </div>
                     
+                    {/* Applied credits with editable amounts */}
+                    {appliedCredits.length > 0 && (
+                      <div className="space-y-2 mt-3 pt-3 border-t border-gray-300">
+                        {appliedCredits.map(ac => (
+                          <div key={ac.creditId} className="flex justify-between items-center text-gray-700">
+                            <span className="text-sm">Credit #{ac.creditId}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm text-green-600">-$</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                max={Math.abs(ac.credit.balance || 0) + ac.amount}
+                                step="0.01"
+                                value={ac.amount}
+                                onChange={(e) => updateCreditAmount(ac.creditId, parseFloat(e.target.value) || 0)}
+                                className="w-20 h-7 text-right px-2 text-sm text-green-600 font-medium border-gray-300"
+                                data-testid={`input-credit-amount-totals-${ac.creditId}`}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between font-bold border-t-2 border-gray-400 pt-3 mt-4 text-lg">
                       <span>Balance due</span>
                       <span>${formatCurrency(balanceDue)}</span>
@@ -1323,84 +1347,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   <div className="text-3xl font-bold text-gray-900">${formatCurrency(balanceDue)}</div>
                 </div>
               </div>
-              
-              {/* Available Credits Panel */}
-              {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
-                <div className="bg-white rounded-lg border shadow-sm p-6">
-                  <div className="mb-4">
-                    <div className="text-sm font-medium mb-2">Available Credits</div>
-                    {unappliedCredits.length === 0 && appliedCredits.length > 0 ? (
-                      <div className="text-xs text-gray-500">No additional credits available</div>
-                    ) : (
-                      <div className="text-sm text-green-600 font-medium">
-                        ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* List of unapplied credits with add button */}
-                  {unappliedCredits.filter(c => !appliedCredits.some(ac => ac.creditId === c.id)).map(credit => (
-                    <div key={credit.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div className="flex-grow">
-                        <div className="text-sm font-medium">Credit #{credit.id}</div>
-                        <div className="text-xs text-gray-500">
-                          {format(new Date(credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(credit.balance || 0))}
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => addCredit(credit)}
-                        className="ml-2"
-                        data-testid={`button-add-credit-${credit.id}`}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  
-                  {/* Applied credits with editable amount and remove button */}
-                  {appliedCredits.length > 0 && (
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="text-sm font-medium mb-2">Applied to this invoice</div>
-                      {appliedCredits.map(ac => (
-                        <div key={ac.creditId} className="flex items-center gap-2 py-2">
-                          <div className="flex-grow">
-                            <div className="text-sm">Credit #{ac.creditId}</div>
-                            <div className="text-xs text-gray-500">
-                              {format(new Date(ac.credit.date), 'MMM dd, yyyy')}
-                            </div>
-                          </div>
-                          <Input
-                            type="number"
-                            min="0"
-                            max={Math.abs(ac.credit.balance || 0) + ac.amount}
-                            step="0.01"
-                            value={ac.amount}
-                            onChange={(e) => updateCreditAmount(ac.creditId, parseFloat(e.target.value) || 0)}
-                            className="w-24 h-8"
-                            data-testid={`input-credit-amount-${ac.creditId}`}
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeCredit(ac.creditId)}
-                            data-testid={`button-remove-credit-${ac.creditId}`}
-                          >
-                            <X className="h-4 w-4 text-gray-500" />
-                          </Button>
-                        </div>
-                      ))}
-                      <div className="flex justify-between items-center mt-3 pt-3 border-t font-medium text-green-600">
-                        <span>Total Applied:</span>
-                        <span>${formatCurrency(appliedCredits.reduce((sum, ac) => sum + ac.amount, 0))}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
               
               {/* Invoice Number Card */}
               <div className="bg-white rounded-lg border shadow-sm p-6">
@@ -1451,6 +1397,78 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
                 </div>
               </div>
+              
+              {/* Available Credits Panel */}
+              {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
+                <div className="bg-white rounded-lg border shadow-sm p-6">
+                  <div className="mb-4">
+                    <div className="text-sm font-medium mb-2">Available Credits</div>
+                    {unappliedCredits.length === 0 && appliedCredits.length > 0 ? (
+                      <div className="text-xs text-gray-500">No additional credits available</div>
+                    ) : (
+                      <div className="text-sm text-green-600 font-medium">
+                        ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* List of unapplied credits with add button - with scrolling */}
+                  <div className="max-h-48 overflow-y-auto">
+                    {unappliedCredits.filter(c => !appliedCredits.some(ac => ac.creditId === c.id)).map(credit => (
+                      <div key={credit.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                        <div className="flex-grow">
+                          <div className="text-sm font-medium">Credit #{credit.id}</div>
+                          <div className="text-xs text-gray-500">
+                            {format(new Date(credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(credit.balance || 0))}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => addCredit(credit)}
+                          className="ml-2"
+                          data-testid={`button-add-credit-${credit.id}`}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Applied credits with remove button - with scrolling */}
+                  {appliedCredits.length > 0 && (
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="text-sm font-medium mb-2">Applied to this invoice</div>
+                      <div className="max-h-48 overflow-y-auto space-y-2">
+                        {appliedCredits.map(ac => (
+                          <div key={ac.creditId} className="flex items-center gap-2 py-2">
+                            <div className="flex-grow">
+                              <div className="text-sm">Credit #{ac.creditId}</div>
+                              <div className="text-xs text-gray-500">
+                                {format(new Date(ac.credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(ac.credit.balance || 0))} available
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeCredit(ac.creditId)}
+                              data-testid={`button-remove-credit-${ac.creditId}`}
+                            >
+                              <X className="h-4 w-4 text-gray-500" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center mt-3 pt-3 border-t font-medium text-green-600">
+                        <span>Total Applied:</span>
+                        <span>${formatCurrency(appliedCredits.reduce((sum, ac) => sum + ac.amount, 0))}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
