@@ -492,7 +492,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                                     : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                               
                               // Determine balance display approach
-                              const showBalance = transaction.type === 'invoice';
+                              const showBalance = transaction.type === 'invoice' || transaction.type === 'payment';
                               
                               // Determine status badge
                               const statusBadge = transaction.type === 'deposit'
