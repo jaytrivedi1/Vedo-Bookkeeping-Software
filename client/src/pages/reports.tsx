@@ -425,10 +425,11 @@ export default function Reports() {
   // Prepare data for charts
   const incomeData = incomeStatement 
     ? [
-        { name: 'Revenues', value: incomeStatement.revenues },
-        { name: 'Expenses', value: incomeStatement.expenses },
-        { name: 'Net Income', value: incomeStatement.netIncome }
-      ]
+        { name: 'Revenue', value: incomeStatement.revenue?.total || 0 },
+        { name: 'Cost of Goods Sold', value: incomeStatement.costOfGoodsSold?.total || 0 },
+        { name: 'Operating Expenses', value: incomeStatement.operatingExpenses?.total || 0 },
+        { name: 'Net Income', value: Math.abs(incomeStatement.netIncome || 0) }
+      ].filter(item => item.value > 0) // Only show categories with values
     : [];
   
   const balanceData = balanceSheet
