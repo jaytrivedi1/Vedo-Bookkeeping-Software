@@ -3686,7 +3686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Helper function to determine if an account is an income statement account
       const isIncomeStatementAccount = (accountType: string) => {
         const incomeStatementTypes = [
-          'revenue', 'other_income',
+          'income', 'other_income',
           'expenses', 'cost_of_goods_sold', 'other_expense'
         ];
         return incomeStatementTypes.includes(accountType);
