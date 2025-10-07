@@ -748,29 +748,190 @@ export default function Reports() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead className="w-[50%]">Item</TableHead>
+                              <TableHead className="w-[60%]">Account</TableHead>
                               <TableHead className="text-right">Amount</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            <TableRow>
-                              <TableCell className="font-medium">Revenues</TableCell>
-                              <TableCell className="text-right">
-                                {incomeStatement?.revenues ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenues) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                            <TableRow>
-                              <TableCell className="font-medium">Expenses</TableCell>
-                              <TableCell className="text-right">
-                                {incomeStatement?.expenses ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.expenses) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                            <TableRow>
-                              <TableCell className="font-bold">Net Income</TableCell>
-                              <TableCell className="text-right font-bold">
-                                {incomeStatement?.netIncome ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome) : '0.00'}
-                              </TableCell>
-                            </TableRow>
+                            {/* Revenue Section */}
+                            {incomeStatement?.revenue && incomeStatement.revenue.accounts.length > 0 && (
+                              <>
+                                <TableRow className="bg-gray-50">
+                                  <TableCell colSpan={2} className="font-semibold text-sm">REVENUE</TableCell>
+                                </TableRow>
+                                {incomeStatement.revenue.accounts.map((account: any) => (
+                                  <TableRow 
+                                    key={account.id} 
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      setSelectedAccountId(account.id);
+                                      setActiveTab('general-ledger');
+                                    }}
+                                  >
+                                    <TableCell className="pl-6">{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="border-t-2">
+                                  <TableCell className="font-semibold">Total Revenue</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenue.total)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                            
+                            {/* Cost of Goods Sold Section */}
+                            {incomeStatement?.costOfGoodsSold && incomeStatement.costOfGoodsSold.accounts.length > 0 && (
+                              <>
+                                <TableRow className="bg-gray-50">
+                                  <TableCell colSpan={2} className="font-semibold text-sm">COST OF GOODS SOLD</TableCell>
+                                </TableRow>
+                                {incomeStatement.costOfGoodsSold.accounts.map((account: any) => (
+                                  <TableRow 
+                                    key={account.id} 
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      setSelectedAccountId(account.id);
+                                      setActiveTab('general-ledger');
+                                    }}
+                                  >
+                                    <TableCell className="pl-6">{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="border-t-2">
+                                  <TableCell className="font-semibold">Total Cost of Goods Sold</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.costOfGoodsSold.total)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                            
+                            {/* Gross Profit */}
+                            {incomeStatement?.grossProfit !== undefined && (
+                              <TableRow className="border-t-2 bg-blue-50">
+                                <TableCell className="font-bold">Gross Profit</TableCell>
+                                <TableCell className="text-right font-bold">
+                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.grossProfit)}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            
+                            {/* Operating Expenses Section */}
+                            {incomeStatement?.operatingExpenses && incomeStatement.operatingExpenses.accounts.length > 0 && (
+                              <>
+                                <TableRow className="bg-gray-50">
+                                  <TableCell colSpan={2} className="font-semibold text-sm">OPERATING EXPENSES</TableCell>
+                                </TableRow>
+                                {incomeStatement.operatingExpenses.accounts.map((account: any) => (
+                                  <TableRow 
+                                    key={account.id} 
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      setSelectedAccountId(account.id);
+                                      setActiveTab('general-ledger');
+                                    }}
+                                  >
+                                    <TableCell className="pl-6">{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="border-t-2">
+                                  <TableCell className="font-semibold">Total Operating Expenses</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingExpenses.total)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                            
+                            {/* Operating Income */}
+                            {incomeStatement?.operatingIncome !== undefined && (
+                              <TableRow className="border-t-2 bg-blue-50">
+                                <TableCell className="font-bold">Operating Income</TableCell>
+                                <TableCell className="text-right font-bold">
+                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingIncome)}
+                                </TableCell>
+                              </TableRow>
+                            )}
+                            
+                            {/* Other Income */}
+                            {incomeStatement?.otherIncome && incomeStatement.otherIncome.accounts.length > 0 && (
+                              <>
+                                <TableRow className="bg-gray-50">
+                                  <TableCell colSpan={2} className="font-semibold text-sm">OTHER INCOME</TableCell>
+                                </TableRow>
+                                {incomeStatement.otherIncome.accounts.map((account: any) => (
+                                  <TableRow 
+                                    key={account.id} 
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      setSelectedAccountId(account.id);
+                                      setActiveTab('general-ledger');
+                                    }}
+                                  >
+                                    <TableCell className="pl-6">{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="border-t-2">
+                                  <TableCell className="font-semibold">Total Other Income</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.otherIncome.total)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                            
+                            {/* Other Expense */}
+                            {incomeStatement?.otherExpense && incomeStatement.otherExpense.accounts.length > 0 && (
+                              <>
+                                <TableRow className="bg-gray-50">
+                                  <TableCell colSpan={2} className="font-semibold text-sm">OTHER EXPENSE</TableCell>
+                                </TableRow>
+                                {incomeStatement.otherExpense.accounts.map((account: any) => (
+                                  <TableRow 
+                                    key={account.id} 
+                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    onClick={() => {
+                                      setSelectedAccountId(account.id);
+                                      setActiveTab('general-ledger');
+                                    }}
+                                  >
+                                    <TableCell className="pl-6">{account.name}</TableCell>
+                                    <TableCell className="text-right">
+                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                <TableRow className="border-t-2">
+                                  <TableCell className="font-semibold">Total Other Expense</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.otherExpense.total)}
+                                  </TableCell>
+                                </TableRow>
+                              </>
+                            )}
+                            
+                            {/* Net Income */}
+                            {incomeStatement?.netIncome !== undefined && (
+                              <TableRow className="border-t-4 border-double bg-green-50">
+                                <TableCell className="font-bold text-lg">NET INCOME</TableCell>
+                                <TableCell className="text-right font-bold text-lg">
+                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)}
+                                </TableCell>
+                              </TableRow>
+                            )}
                           </TableBody>
                         </Table>
                       </div>
