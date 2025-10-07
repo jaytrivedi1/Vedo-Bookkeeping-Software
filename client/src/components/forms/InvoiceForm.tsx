@@ -573,17 +573,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       setAppliedCreditAmount(accurateAppliedTotal);
     }
     
-    // Calculate balance carefully - preserve existing balance in edit mode
-    let newBalanceDue: number;
-    
-    if (isEditing && invoice?.balance !== undefined) {
-      // In edit mode, preserve the existing balance from the database
-      // Don't recalculate it from scratch
-      newBalanceDue = invoice.balance;
-    } else {
-      // In create mode, calculate balance normally
-      newBalanceDue = roundTo2Decimals(total - accurateAppliedTotal);
-    }
+    // Calculate balance due: total - applied credits
+    // Always recalculate to reflect credit changes in both create and edit modes
+    const newBalanceDue = roundTo2Decimals(total - accurateAppliedTotal);
     
     console.log("Balance calculation:", {
       total,
