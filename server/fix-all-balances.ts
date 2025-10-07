@@ -385,6 +385,53 @@ export async function fixAllBalances() {
       }
     }
     
+    // Step 3: Fix payment transactions with unapplied credits  
+    // These should have POSITIVE balance (new convention), not negative like deposits
+    const unappliedPayments = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.type, 'payment'),
+          eq(transactions.status, 'unapplied_credit')
+        )
+      );
+    
+    console.log(`Found ${unappliedPayments.length} unapplied credit payments to process`);
+    
+    for (const payment of unappliedPayments) {
+      console.log(`Checking payment #${payment.id} (${payment.reference})`);
+      
+      // Payment unapplied credits should have POSITIVE balance
+      // If balance is negative, convert to positive
+      if (payment.balance !== null && payment.balance < 0) {
+        const correctBalance = Math.abs(payment.balance);
+        
+        await db
+          .update(transactions)
+          .set({
+            balance: correctBalance,
+            status: 'unapplied_credit'
+          })
+          .where(eq(transactions.id, payment.id));
+        
+        console.log(`Fixed payment #${payment.id}: converted balance from ${payment.balance} to ${correctBalance}`);
+      } else if (payment.balance !== null && payment.balance > 0) {
+        console.log(`Payment #${payment.id} already has correct positive balance: ${payment.balance}`);
+      } else if (payment.balance === null || payment.balance === 0) {
+        // If balance is null or 0 but status is unapplied_credit, use the payment amount
+        console.log(`Payment #${payment.id} has no balance but status is unapplied_credit, setting to amount: ${payment.amount}`);
+        
+        await db
+          .update(transactions)
+          .set({
+            balance: payment.amount,
+            status: 'unapplied_credit'
+          })
+          .where(eq(transactions.id, payment.id));
+      }
+    }
+    
     console.log("Comprehensive balance fix completed successfully!");
     return true;
   } catch (error) {
