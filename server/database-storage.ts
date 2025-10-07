@@ -756,10 +756,58 @@ export class DatabaseStorage implements IStorage {
   }
   
   private async handleInvoiceDeletion(tx: any, invoice: any) {
-    console.log(`Processing invoice deletion for invoice #${invoice.reference}`);
+    console.log(`Processing invoice deletion for invoice #${invoice.reference} (ID: ${invoice.id})`);
     
     try {
-      // APPROACH 1: Find all deposits directly in the transactions table
+      // NEW APPROACH: Use payment_applications table to find all payments linked to this invoice
+      const { paymentApplications } = await import('@shared/schema');
+      
+      const applications = await tx
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.invoiceId, invoice.id));
+      
+      console.log(`Found ${applications.length} payment applications for invoice #${invoice.reference}`);
+      
+      // Process each payment that had money applied to this invoice
+      for (const app of applications) {
+        const [payment] = await tx
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, app.paymentId));
+        
+        if (!payment) {
+          console.log(`Payment ${app.paymentId} not found, skipping`);
+          continue;
+        }
+        
+        console.log(`Processing payment #${payment.id} (${payment.reference}): current balance=${payment.balance}, applied amount=${app.amountApplied}`);
+        
+        // Calculate new balance for this payment (restore the amount that was applied to this invoice)
+        const currentBalance = Number(payment.balance) || 0;
+        const restoredAmount = Number(app.amountApplied);
+        const newBalance = currentBalance + restoredAmount;
+        
+        // Update payment with new balance and set status to unapplied_credit
+        await tx
+          .update(transactions)
+          .set({
+            balance: newBalance,
+            status: 'unapplied_credit'
+          })
+          .where(eq(transactions.id, payment.id));
+        
+        console.log(`Updated payment #${payment.id}: new balance=${newBalance}, status=unapplied_credit`);
+        
+        // Delete the payment application record
+        await tx
+          .delete(paymentApplications)
+          .where(eq(paymentApplications.id, app.id));
+        
+        console.log(`Deleted payment application record for payment ${app.paymentId} -> invoice ${app.invoiceId}`);
+      }
+      
+      // LEGACY APPROACH: Also handle old-style deposits that might have been applied
       // Look for deposits that explicitly mention applying credits to this invoice in their description
       const depositsWithCredits = await tx
         .select()
@@ -791,126 +839,6 @@ export class DatabaseStorage implements IStorage {
               status: 'unapplied_credit'
             })
             .where(eq(transactions.id, deposit.id));
-        }
-      }
-      
-      // APPROACH 2: Find all ledger entries that refer to this invoice
-      const relatedEntries = await tx
-        .select()
-        .from(ledgerEntries)
-        .where(
-          sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`
-        );
-        
-      // Find all payments that applied credits to this invoice
-      const paymentIds = new Set();
-      const processedDepositIds = new Set(depositsWithCredits.map(d => d.id));
-      
-      for (const entry of relatedEntries) {
-        if (entry.description && 
-            entry.description.includes('Applied credit from deposit') && 
-            entry.transactionId !== invoice.id) {
-          paymentIds.add(entry.transactionId);
-        }
-      }
-      
-      console.log(`Found ${paymentIds.size} payments with credits applied to invoice #${invoice.reference}`);
-      
-      // Process each payment that applied credits to this invoice
-      for (const paymentId of paymentIds) {
-        const [payment] = await tx
-          .select()
-          .from(transactions)
-          .where(eq(transactions.id, paymentId));
-        
-        if (!payment) continue;
-        
-        // Find deposit applications in this payment for this invoice
-        const depositApplications = relatedEntries.filter(e => 
-          e.transactionId === paymentId && 
-          e.description && 
-          e.description.includes('Applied credit from deposit') &&
-          e.description.includes(`invoice #${invoice.reference}`)
-        );
-        
-        // For each deposit application, restore the deposit balance
-        for (const application of depositApplications) {
-          if (!application.description) continue;
-          
-          // Extract deposit reference
-          const depositMatch = application.description.match(/deposit #?([^,\s]+)/i);
-          if (depositMatch && depositMatch[1]) {
-            const depositRef = depositMatch[1];
-            
-            // Try to parse as ID first
-            let depositId = 0;
-            try {
-              depositId = parseInt(depositRef, 10);
-            } catch (e) {
-              depositId = 0;
-            }
-            
-            // Skip if we already processed this deposit
-            if (depositId > 0 && processedDepositIds.has(depositId)) {
-              console.log(`Skipping already processed deposit #${depositRef}`);
-              continue;
-            }
-            
-            // Find the deposit
-            const depositQuery = depositId > 0
-              ? sql`
-                SELECT * FROM transactions 
-                WHERE type = 'deposit' 
-                AND (reference = ${depositRef} OR id = ${depositId})
-                LIMIT 1
-              `
-              : sql`
-                SELECT * FROM transactions 
-                WHERE type = 'deposit' 
-                AND reference = ${depositRef}
-                LIMIT 1
-              `;
-              
-            const depositResult = await tx.execute(depositQuery);
-            
-            if (depositResult.rows && depositResult.rows.length > 0) {
-              const deposit = depositResult.rows[0];
-              processedDepositIds.add(deposit.id);
-              
-              // Always restore the full credit amount
-              const originalAmount = Number(deposit.amount);
-              const fullCreditBalance = -Math.abs(originalAmount);
-              
-              if (!isNaN(originalAmount) && originalAmount > 0) {
-                console.log(`Restoring full credit balance for deposit #${deposit.reference}: ${fullCreditBalance}`);
-                
-                // Update the deposit to have its full credit balance
-                await tx.execute(
-                  sql`
-                    UPDATE transactions 
-                    SET balance = ${fullCreditBalance}, 
-                        status = 'unapplied_credit'
-                    WHERE id = ${deposit.id}
-                  `
-                );
-              }
-              
-              // Update description
-              if (deposit.description && deposit.description.includes(`invoice #${invoice.reference}`)) {
-                const newDescription = deposit.description.replace(
-                  new RegExp(`Applied \\$?([0-9,]+(?:\\.[0-9]+)?)\\s+to\\s+invoice #?${invoice.reference}[^,]*`, 'i'),
-                  ''
-                ).trim();
-                
-                await tx
-                  .update(transactions)
-                  .set({
-                    description: newDescription
-                  })
-                  .where(eq(transactions.id, deposit.id));
-              }
-            }
-          }
         }
       }
     } catch (error) {
