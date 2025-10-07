@@ -131,17 +131,29 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   // Filter for unapplied credits for the selected customer
   useEffect(() => {
     if (watchContactId && transactions) {
-      const customerCredits = transactions.filter(transaction => 
-        transaction.type === 'deposit' && 
-        transaction.status === 'unapplied_credit' && 
-        transaction.contactId === Number(watchContactId) &&
-        transaction.balance !== null && 
-        transaction.balance < 0 // Balance should be negative for credits
-      );
+      const customerCredits = transactions.filter(transaction => {
+        // Include deposits with negative balance (old format)
+        const isDepositCredit = transaction.type === 'deposit' && 
+          transaction.status === 'unapplied_credit' && 
+          transaction.contactId === Number(watchContactId) &&
+          transaction.balance !== null && 
+          transaction.balance < 0;
+        
+        // Include payments with positive balance (new format)
+        const isPaymentCredit = transaction.type === 'payment' && 
+          transaction.status === 'unapplied_credit' && 
+          transaction.contactId === Number(watchContactId) &&
+          transaction.balance !== null && 
+          transaction.balance > 0;
+        
+        return isDepositCredit || isPaymentCredit;
+      });
       
       setUnappliedCredits(customerCredits);
       
-      // Calculate total unapplied credits amount (absolute value of balance)
+      // Calculate total unapplied credits amount
+      // For deposits: use absolute value of negative balance
+      // For payments: use positive balance directly
       const totalCredits = customerCredits.reduce((sum, credit) => {
         const availableCredit = credit.balance !== null ? Math.abs(credit.balance) : 0;
         return sum + availableCredit;
