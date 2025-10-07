@@ -44,7 +44,10 @@ Preferred communication style: Simple, everyday language.
 - **Payment Processing**: Support for multiple payment methods with unified credit tracking
   - Unapplied credits stored in payment transaction's balance field (not separate transactions)
   - Payment status changes to 'unapplied_credit' when balance > 0
-  - Invoice deletion automatically restores payment balances via payment_applications table
+  - Payment/deposit deletion automatically restores invoice balances via payment_applications table
+  - payment_applications table is the single source of truth for tracking credit applications
+  - When credits are applied during invoice creation or editing, records are created in payment_applications
+  - Deletion handlers query payment_applications to find and restore affected invoices
 - **Financial Reporting**: Real-time balance calculations and account books
 - **Tax Management**: Configurable sales tax rates with component support
 
