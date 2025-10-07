@@ -476,8 +476,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // This would be handled by storage.updateInvoice in a real implementation
         
         // Return updated invoice data
+        // Process applied credits if any were included
+        if (req.body.appliedCredits && Array.isArray(req.body.appliedCredits) && req.body.appliedCredits.length > 0) {
+          // Get the total amount of credits being applied
+          const totalAppliedCredits = req.body.appliedCredits.reduce((sum: number, credit: any) => sum + credit.amount, 0);
+          
+          // Process credit application logic
+          console.log(`Processing credit application of ${totalAppliedCredits} for invoice #${invoiceId}`);
+          
+          // Update invoice balance and status with rounding
+          const currentInvoice = await storage.getTransaction(invoiceId);
+          if (currentInvoice) {
+            const newBalance = roundTo2Decimals(currentInvoice.amount - totalAppliedCredits);
+            const newStatus = newBalance <= 0 ? 'paid' : 'open';
+            
+            await storage.updateTransaction(invoiceId, {
+              balance: newBalance,
+              status: newStatus
+            });
+            
+            // Apply each credit
+            for (const credit of req.body.appliedCredits) {
+              // Get the current credit transaction (deposit or payment)
+              const creditTransaction = await storage.getTransaction(credit.id);
+              
+              if (!creditTransaction) {
+                console.log(`Credit #${credit.id} not found, skipping`);
+                continue;
+              }
+              
+              // Get the available credit amount
+              const availableCreditAmount = creditTransaction.balance !== null 
+                ? Math.abs(creditTransaction.balance) 
+                : Math.abs(creditTransaction.amount);
+              
+              // Check if we're applying the full amount or partial
+              const isFullApplication = credit.amount >= availableCreditAmount || 
+                                       Math.abs(availableCreditAmount - credit.amount) < 0.01;
+              
+              // Update credit description
+              let updatedDescription = creditTransaction.description || '';
+              if (!updatedDescription.includes(`Applied to invoice #${updatedTransaction.reference}`)) {
+                updatedDescription += (updatedDescription ? ' ' : '') + 
+                                    `Applied to invoice #${updatedTransaction.reference} on ${format(new Date(), 'yyyy-MM-dd')}`;
+              }
+              
+              if (isFullApplication) {
+                // Fully applied - mark as completed with zero balance
+                console.log(`Credit #${credit.id} fully applied and changed to 'completed'`);
+                await storage.updateTransaction(credit.id, {
+                  status: 'completed',
+                  balance: 0,
+                  description: updatedDescription
+                });
+              } else {
+                // Partial application - keep as unapplied_credit with reduced balance
+                // For deposits: negative balance, for payments: positive balance
+                const isDeposit = creditTransaction.type === 'deposit';
+                const remainingCredit = isDeposit 
+                  ? -(availableCreditAmount - credit.amount)
+                  : (availableCreditAmount - credit.amount);
+                  
+                console.log(`Credit #${credit.id} partially applied (${credit.amount} of ${availableCreditAmount}), remaining: ${remainingCredit}`);
+                await storage.updateTransaction(credit.id, {
+                  status: 'unapplied_credit',
+                  balance: remainingCredit,
+                  description: updatedDescription
+                });
+              }
+              
+              // Create payment application record
+              const { paymentApplications } = await import('@shared/schema');
+              await db.insert(paymentApplications).values({
+                paymentId: credit.id,
+                invoiceId: invoiceId,
+                amountApplied: credit.amount
+              });
+              console.log(`Recorded payment application: Payment ${credit.id} -> Invoice ${invoiceId}, amount: ${credit.amount}`);
+            }
+          }
+        }
+        
+        // Fetch the updated transaction after credit application
+        const finalTransaction = await storage.getTransaction(invoiceId) || updatedTransaction;
+        
         res.status(200).json({
-          transaction: updatedTransaction,
+          transaction: finalTransaction,
           lineItems: body.lineItems, // Return the new line items from the request
           // Additional invoice details
           subTotal: body.subTotal,
@@ -494,8 +578,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Failed to update invoice" });
         }
         
+        // Process applied credits if any were included (even without line item changes)
+        if (req.body.appliedCredits && Array.isArray(req.body.appliedCredits) && req.body.appliedCredits.length > 0) {
+          // Get the total amount of credits being applied
+          const totalAppliedCredits = req.body.appliedCredits.reduce((sum: number, credit: any) => sum + credit.amount, 0);
+          
+          // Process credit application logic
+          console.log(`Processing credit application of ${totalAppliedCredits} for invoice #${invoiceId}`);
+          
+          // Update invoice balance and status with rounding
+          const currentInvoice = await storage.getTransaction(invoiceId);
+          if (currentInvoice) {
+            const newBalance = roundTo2Decimals(currentInvoice.amount - totalAppliedCredits);
+            const newStatus = newBalance <= 0 ? 'paid' : 'open';
+            
+            await storage.updateTransaction(invoiceId, {
+              balance: newBalance,
+              status: newStatus
+            });
+            
+            // Apply each credit
+            for (const credit of req.body.appliedCredits) {
+              // Get the current credit transaction (deposit or payment)
+              const creditTransaction = await storage.getTransaction(credit.id);
+              
+              if (!creditTransaction) {
+                console.log(`Credit #${credit.id} not found, skipping`);
+                continue;
+              }
+              
+              // Get the available credit amount
+              const availableCreditAmount = creditTransaction.balance !== null 
+                ? Math.abs(creditTransaction.balance) 
+                : Math.abs(creditTransaction.amount);
+              
+              // Check if we're applying the full amount or partial
+              const isFullApplication = credit.amount >= availableCreditAmount || 
+                                       Math.abs(availableCreditAmount - credit.amount) < 0.01;
+              
+              // Update credit description
+              let updatedDescription = creditTransaction.description || '';
+              if (!updatedDescription.includes(`Applied to invoice #${updatedTransaction.reference}`)) {
+                updatedDescription += (updatedDescription ? ' ' : '') + 
+                                    `Applied to invoice #${updatedTransaction.reference} on ${format(new Date(), 'yyyy-MM-dd')}`;
+              }
+              
+              if (isFullApplication) {
+                // Fully applied - mark as completed with zero balance
+                console.log(`Credit #${credit.id} fully applied and changed to 'completed'`);
+                await storage.updateTransaction(credit.id, {
+                  status: 'completed',
+                  balance: 0,
+                  description: updatedDescription
+                });
+              } else {
+                // Partial application - keep as unapplied_credit with reduced balance
+                // For deposits: negative balance, for payments: positive balance
+                const isDeposit = creditTransaction.type === 'deposit';
+                const remainingCredit = isDeposit 
+                  ? -(availableCreditAmount - credit.amount)
+                  : (availableCreditAmount - credit.amount);
+                  
+                console.log(`Credit #${credit.id} partially applied (${credit.amount} of ${availableCreditAmount}), remaining: ${remainingCredit}`);
+                await storage.updateTransaction(credit.id, {
+                  status: 'unapplied_credit',
+                  balance: remainingCredit,
+                  description: updatedDescription
+                });
+              }
+              
+              // Create payment application record
+              const { paymentApplications } = await import('@shared/schema');
+              await db.insert(paymentApplications).values({
+                paymentId: credit.id,
+                invoiceId: invoiceId,
+                amountApplied: credit.amount
+              });
+              console.log(`Recorded payment application: Payment ${credit.id} -> Invoice ${invoiceId}, amount: ${credit.amount}`);
+            }
+          }
+        }
+        
+        // Fetch the updated transaction after credit application
+        const finalTransaction = await storage.getTransaction(invoiceId) || updatedTransaction;
+        
         res.status(200).json({
-          transaction: updatedTransaction,
+          transaction: finalTransaction,
           lineItems: existingLineItems,
           ledgerEntries: existingLedgerEntries,
           // Keep the original values if not provided
