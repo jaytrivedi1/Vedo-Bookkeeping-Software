@@ -716,11 +716,10 @@ export default function Reports() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2">
-                  <CardHeader className="flex flex-col sm:flex-row justify-between">
-                    <div>
-                      <CardTitle>Income Statement</CardTitle>
+              <Card>
+                <CardHeader className="flex flex-col sm:flex-row justify-between">
+                  <div>
+                    <CardTitle>Income Statement</CardTitle>
                       <CardDescription>
                         For the period {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}
                       </CardDescription>
@@ -939,29 +938,6 @@ export default function Reports() {
                     )}
                   </CardContent>
                 </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Income Visualization</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-60">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={incomeData}
-                          margin={{ top: 10, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" />
-                          <YAxis />
-                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
-                          <Bar dataKey="value" fill="#3b82f6" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
             </TabsContent>
             
             {/* Balance Sheet */}
