@@ -102,8 +102,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [taxNames, setTaxNames] = useState<string[]>([]);
   const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice?.contactId);
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
-  const [totalUnappliedCredits, setTotalUnappliedCredits] = useState(0);
-  const [appliedCreditAmount, setAppliedCreditAmount] = useState(0);
+  const [appliedCredits, setAppliedCredits] = useState<Array<{creditId: number, amount: number, credit: Transaction}>>([]);
   const { toast } = useToast();
 
   // Extract next invoice number or use existing
@@ -146,48 +145,20 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
           transaction.balance !== 0;
       });
       
-      // If editing, also include payments/deposits that were already applied (status='completed')
-      // but are referenced in payment_applications for this invoice
-      if (isEditing && paymentApplications && paymentApplications.length > 0) {
-        for (const app of paymentApplications) {
-          if (app.payment) {
-            // Check if this payment is already in the list
-            const existingCredit = customerCredits.find(c => c.id === app.payment.id);
-            
-            if (!existingCredit) {
-              // Add the payment with the applied amount pre-filled
-              customerCredits.push({
-                ...app.payment,
-                appliedAmount: app.amountApplied
-              });
-            } else {
-              // Update the existing credit with the applied amount
-              existingCredit.appliedAmount = app.amountApplied;
-            }
-          }
-        }
-      }
-      
       setUnappliedCredits(customerCredits);
       
-      // Calculate total unapplied credits amount
-      // For deposits: use absolute value of negative balance
-      // For payments: use positive balance directly
-      const totalCredits = customerCredits.reduce((sum, credit) => {
-        const availableCredit = credit.balance !== null ? Math.abs(credit.balance) : 0;
-        return sum + availableCredit;
-      }, 0);
-      
-      setTotalUnappliedCredits(totalCredits);
-      
-      // Calculate initial applied credit amount from payment applications
-      if (isEditing && paymentApplications) {
-        const initialApplied = paymentApplications.reduce((sum, app) => sum + app.amountApplied, 0);
-        setAppliedCreditAmount(initialApplied);
+      // If editing, pre-populate applied credits from payment_applications
+      if (isEditing && paymentApplications && paymentApplications.length > 0) {
+        const initialApplied = paymentApplications.map(app => ({
+          creditId: app.paymentId,
+          amount: app.amountApplied,
+          credit: app.payment
+        }));
+        setAppliedCredits(initialApplied);
       }
     } else {
       setUnappliedCredits([]);
-      setTotalUnappliedCredits(0);
+      setAppliedCredits([]);
     }
   }, [watchContactId, transactions, paymentApplications, isEditing]);
   
