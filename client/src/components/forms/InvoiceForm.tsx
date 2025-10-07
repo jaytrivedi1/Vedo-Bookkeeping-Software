@@ -138,21 +138,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   useEffect(() => {
     if (watchContactId && transactions) {
       const customerCredits = transactions.filter(transaction => {
-        // Include deposits with negative balance (old format)
-        const isDepositCredit = transaction.type === 'deposit' && 
-          transaction.status === 'unapplied_credit' && 
+        // Show any transaction with unapplied_credit status for this customer
+        // regardless of balance sign (we use Math.abs() for display anyway)
+        return transaction.status === 'unapplied_credit' && 
           transaction.contactId === Number(watchContactId) &&
           transaction.balance !== null && 
-          transaction.balance < 0;
-        
-        // Include payments with positive balance (new format)
-        const isPaymentCredit = transaction.type === 'payment' && 
-          transaction.status === 'unapplied_credit' && 
-          transaction.contactId === Number(watchContactId) &&
-          transaction.balance !== null && 
-          transaction.balance > 0;
-        
-        return isDepositCredit || isPaymentCredit;
+          transaction.balance !== 0;
       });
       
       // If editing, also include payments/deposits that were already applied (status='completed')
