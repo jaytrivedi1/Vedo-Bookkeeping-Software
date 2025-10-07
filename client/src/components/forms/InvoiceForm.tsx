@@ -224,10 +224,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       setTotalAmount(invoice.amount || 0);
       // Keep the existing balance - don't recalculate it
       setBalanceDue(invoice.balance || invoice.amount || 0);
-      
-      // Calculate applied credits from balance difference
-      const appliedAmount = (invoice.amount || 0) - (invoice.balance || invoice.amount || 0);
-      setAppliedCreditAmount(appliedAmount);
     }
   }, [isEditing, lineItems, invoice]);
 
@@ -240,6 +236,41 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       }
     }
   }, [isEditing, invoice?.contactId, contacts, selectedContact]);
+
+  // Credit management functions
+  const addCredit = (credit: Transaction) => {
+    // Don't add if already applied
+    if (appliedCredits.some(ac => ac.creditId === credit.id)) {
+      return;
+    }
+    
+    // Add credit with maximum available amount
+    const maxAmount = Math.abs(credit.balance || 0);
+    setAppliedCredits(prev => [...prev, {
+      creditId: credit.id,
+      amount: maxAmount,
+      credit
+    }]);
+    
+    // Recalculate balance
+    calculateTotals();
+  };
+  
+  const removeCredit = (creditId: number) => {
+    setAppliedCredits(prev => prev.filter(ac => ac.creditId !== creditId));
+    // Recalculate balance
+    calculateTotals();
+  };
+  
+  const updateCreditAmount = (creditId: number, newAmount: number) => {
+    setAppliedCredits(prev => prev.map(ac => 
+      ac.creditId === creditId 
+        ? { ...ac, amount: Math.max(0, Math.min(newAmount, Math.abs(ac.credit.balance || 0))) }
+        : ac
+    ));
+    // Recalculate balance
+    calculateTotals();
+  };
 
   const saveInvoice = useMutation({
     mutationFn: async (data: BaseInvoice) => {
@@ -345,7 +376,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     calculateTotals();
   };
 
-  const calculateTotals = (creditsArray?: Transaction[], manualTaxOverride?: number | null) => {
+  const calculateTotals = (manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
     const subtotal = roundTo2Decimals(lineItems.reduce((sum, item) => sum + (item.amount || 0), 0));
     
@@ -550,33 +581,17 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     setTaxNames(taxNameList);
     
     // Calculate balance due (total - applied credits)
-    // Use the provided credits array if available, otherwise use state
-    const creditsToUse = creditsArray || unappliedCredits;
+    // Sum all applied credits from the appliedCredits array
+    const totalAppliedCredits = appliedCredits.reduce((sum, ac) => sum + ac.amount, 0);
     
-    // Get the accurate total of all applied credits directly from the credit array
-    const accurateAppliedTotal = creditsToUse.reduce((sum, c) => 
-      sum + (c.appliedAmount || 0), 0
-    );
-    
-    console.log("Accurate applied total from credits array:", accurateAppliedTotal);
-    
-    // Update the appliedCreditAmount state with the accurate value
-    if (Math.abs(accurateAppliedTotal - appliedCreditAmount) > 0.01) {
-      console.log("Correcting applied credit amount:", { 
-        old: appliedCreditAmount, 
-        new: accurateAppliedTotal 
-      });
-      setAppliedCreditAmount(accurateAppliedTotal);
-    }
+    console.log("Total applied credits:", totalAppliedCredits, "from", appliedCredits.length, "credits");
     
     // Calculate balance due: total - applied credits
-    // Always recalculate to reflect credit changes in both create and edit modes
-    const newBalanceDue = roundTo2Decimals(total - accurateAppliedTotal);
+    const newBalanceDue = roundTo2Decimals(total - totalAppliedCredits);
     
     console.log("Balance calculation:", {
       total,
-      appliedCreditAmount,
-      accurateAppliedTotal,
+      totalAppliedCredits,
       newBalanceDue,
       isEditMode: isEditing,
       existingBalance: invoice?.balance
