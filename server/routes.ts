@@ -27,6 +27,7 @@ import {
   invoiceSchema,
   billSchema,
   expenseSchema,
+  chequeSchema,
   journalEntrySchema,
   depositSchema,
   Transaction,
@@ -1387,6 +1388,284 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       console.error("Error creating expense:", error);
       res.status(500).json({ message: "Failed to create expense", error: error });
+    }
+  });
+
+  // Cheque routes
+  apiRouter.post("/cheques", async (req: Request, res: Response) => {
+    try {
+      console.log("Cheque payload:", JSON.stringify(req.body));
+      
+      // Convert string dates to Date objects before validation
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date),
+        paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : undefined,
+        status: req.body.status || 'completed',
+        description: req.body.description || ''
+      };
+      
+      // Get all transactions for reference check and auto-numbering
+      const transactions = await storage.getTransactions();
+      
+      // If reference not provided, generate the next cheque number
+      if (!req.body.reference) {
+        // Filter only cheque transactions
+        const cheques = transactions.filter(t => t.type === 'cheque');
+        
+        // Default starting cheque number if no cheques exist
+        let nextChequeNumber = 1001;
+        
+        if (cheques.length > 0) {
+          // Extract numeric parts from existing cheque references
+          const chequeNumbers = cheques
+            .map(cheque => {
+              // Try to extract a numeric value from the reference
+              const match = cheque.reference?.match(/(\d+)/);
+              return match ? parseInt(match[1], 10) : 0;
+            })
+            .filter(num => !isNaN(num) && num > 0);
+          
+          // Find the highest cheque number and increment by 1
+          if (chequeNumbers.length > 0) {
+            nextChequeNumber = Math.max(...chequeNumbers) + 1;
+          }
+        }
+        
+        // Set the reference to the next cheque number
+        body.reference = `CHQ-${nextChequeNumber}`;
+      }
+      
+      // Check if cheque reference already exists
+      const existingCheque = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'cheque'
+      );
+      
+      if (existingCheque) {
+        return res.status(400).json({ 
+          message: "Cheque reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A cheque with this reference number already exists" 
+          }] 
+        });
+      }
+      
+      // Validate cheque data
+      console.log("Validating cheque data:", JSON.stringify(body));
+      const result = chequeSchema.safeParse(body);
+      if (!result.success) {
+        console.log("Cheque validation errors:", JSON.stringify(result.error));
+        return res.status(400).json({ 
+          message: "Invalid cheque data", 
+          errors: result.error.errors 
+        });
+      }
+      
+      const chequeData = result.data;
+      console.log("Cheque data passed validation:", JSON.stringify(chequeData));
+      
+      // Calculate subtotal from line items (pre-tax amounts)
+      const calculatedSubTotal = roundTo2Decimals(chequeData.lineItems.reduce((sum, item) => sum + item.amount, 0));
+      
+      // Use provided values or calculated values with rounding
+      const subTotal = roundTo2Decimals(chequeData.subTotal || calculatedSubTotal);
+      const taxAmount = roundTo2Decimals(chequeData.taxAmount || 0);
+      const totalAmount = roundTo2Decimals(chequeData.totalAmount || (subTotal + taxAmount));
+      
+      // Get the payment account
+      const paymentAccount = await storage.getAccount(chequeData.paymentAccountId);
+      if (!paymentAccount) {
+        return res.status(400).json({ message: "Invalid bank account" });
+      }
+      
+      // Create transaction
+      const transaction = {
+        reference: chequeData.reference,
+        type: 'cheque' as const,
+        date: chequeData.date,
+        description: chequeData.description || '',
+        amount: totalAmount,
+        subTotal: subTotal,
+        taxAmount: taxAmount,
+        contactId: chequeData.contactId,
+        status: chequeData.status,
+        paymentMethod: 'check' as const,
+        paymentAccountId: chequeData.paymentAccountId,
+        paymentDate: chequeData.paymentDate || chequeData.date,
+        memo: chequeData.memo || null,
+        attachments: null
+      };
+      
+      // Create line items with accountId and salesTaxId
+      const lineItems = chequeData.lineItems.map(item => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: 1, // Default to 1 for cheques
+          unitPrice: roundTo2Decimals(item.amount),
+          amount: roundTo2Decimals(item.amount),
+          accountId: item.accountId,
+          transactionId: 0 // Will be set by createTransaction
+        };
+        
+        // Only add salesTaxId if it exists
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+          console.log(`Line item has sales tax ID: ${item.salesTaxId}`);
+        }
+        
+        return lineItem;
+      });
+      
+      // Create ledger entries - Double Entry Accounting
+      // For cheques: DEBIT expense accounts (from line items) + tax, CREDIT bank account
+      const ledgerEntries: any[] = [];
+      
+      // Add debit entries for each expense line item
+      for (const item of chequeData.lineItems) {
+        const expenseAccount = await storage.getAccount(item.accountId);
+        if (!expenseAccount) {
+          return res.status(400).json({ message: `Invalid expense account for line item` });
+        }
+        
+        ledgerEntries.push({
+          accountId: item.accountId,
+          description: `${item.description}`,
+          debit: roundTo2Decimals(item.amount),
+          credit: 0,
+          date: transaction.date,
+          transactionId: 0
+        });
+      }
+      
+      // Handle tax entries if there's tax
+      if (taxAmount > 0) {
+        console.log(`Processing cheque tax amount: ${taxAmount}`);
+        
+        // Get the default tax receivable account
+        const taxAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+        
+        if (!taxAccount) {
+          return res.status(500).json({ message: "Tax account not found" });
+        }
+        
+        // Calculate tax components for proper allocation
+        const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
+        let totalCalculatedTax = 0;
+        
+        // Process each line item to determine tax account allocation
+        for (const item of chequeData.lineItems) {
+          if (item.salesTaxId) {
+            const salesTax = await storage.getSalesTax(item.salesTaxId);
+            
+            if (salesTax) {
+              if (salesTax.isComposite) {
+                // Get component taxes
+                const componentTaxes = await db
+                  .select()
+                  .from(salesTaxSchema)
+                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .execute();
+                  
+                if (componentTaxes.length > 0) {
+                  for (const component of componentTaxes) {
+                    const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
+                    totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + componentTaxAmount);
+                    
+                    const accountId = component.accountId || taxAccount.id;
+                    
+                    if (taxComponents.has(accountId)) {
+                      const entry = taxComponents.get(accountId)!;
+                      entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + componentTaxAmount);
+                    } else {
+                      taxComponents.set(accountId, { accountId, calculatedAmount: componentTaxAmount });
+                    }
+                  }
+                }
+              } else {
+                // Regular non-composite tax
+                const itemTaxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
+                totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + itemTaxAmount);
+                
+                const accountId = salesTax.accountId || taxAccount.id;
+                
+                if (taxComponents.has(accountId)) {
+                  const entry = taxComponents.get(accountId)!;
+                  entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + itemTaxAmount);
+                } else {
+                  taxComponents.set(accountId, { accountId, calculatedAmount: itemTaxAmount });
+                }
+              }
+            }
+          }
+        }
+        
+        // Distribute the tax amount proportionally across the tax accounts
+        if (taxComponents.size > 0 && totalCalculatedTax > 0) {
+          let remainingTax = taxAmount;
+          const componentArray = Array.from(taxComponents.values());
+          
+          componentArray.forEach((component, index) => {
+            let proportionalAmount: number;
+            
+            if (index === componentArray.length - 1) {
+              // Last component gets the remainder
+              proportionalAmount = remainingTax;
+            } else {
+              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
+              remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
+            }
+            
+            // For cheques, we DEBIT tax (reduces tax liability or creates tax receivable)
+            ledgerEntries.push({
+              accountId: component.accountId,
+              description: `Cheque ${transaction.reference} - Sales Tax`,
+              debit: proportionalAmount,
+              credit: 0,
+              date: transaction.date,
+              transactionId: 0
+            });
+          });
+        } else {
+          // Fallback: use default tax account
+          ledgerEntries.push({
+            accountId: taxAccount.id,
+            description: `Cheque ${transaction.reference} - Sales Tax`,
+            debit: taxAmount,
+            credit: 0,
+            date: transaction.date,
+            transactionId: 0
+          });
+        }
+      }
+      
+      // Add credit entry for bank account (total amount including tax)
+      ledgerEntries.push({
+        accountId: paymentAccount.id,
+        description: `Cheque ${transaction.reference} - Payment`,
+        debit: 0,
+        credit: totalAmount,
+        date: transaction.date,
+        transactionId: 0
+      });
+      
+      const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
+      
+      res.status(201).json({
+        transaction: newTransaction,
+        lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
+        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        subTotal: chequeData.subTotal,
+        taxAmount: chequeData.taxAmount,
+        totalAmount: chequeData.totalAmount || totalAmount
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid cheque data", errors: error.errors });
+      }
+      console.error("Error creating cheque:", error);
+      res.status(500).json({ message: "Failed to create cheque", error: error });
     }
   });
 
