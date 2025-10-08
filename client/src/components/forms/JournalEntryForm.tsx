@@ -4,8 +4,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { JournalEntry, journalEntrySchema, Account } from "@shared/schema";
-import { CalendarIcon, Plus, Trash2 } from "lucide-react";
+import { JournalEntry, journalEntrySchema, Account, Contact } from "@shared/schema";
+import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
+import { CalendarIcon, Plus, Trash2, XIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,8 +42,14 @@ interface JournalEntryFormProps {
 }
 
 export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFormProps) {
+  const { toast } = useToast();
+  
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
+  });
+
+  const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
   });
 
   const form = useForm<JournalEntry>({
@@ -50,6 +58,7 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
       date: new Date(),
       reference: `JE-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
       description: '',
+      contactId: undefined,
       entries: [
         { accountId: 0, description: '', debit: 0, credit: 0 },
         { accountId: 0, description: '', debit: 0, credit: 0 }
@@ -81,6 +90,42 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
   };
 
   const onSubmit = (data: JournalEntry) => {
+    // Convert entries to line items format for validation
+    const lineItems = data.entries.map(entry => ({
+      accountId: entry.accountId
+    }));
+    
+    // Validate A/P and A/R account requirements
+    const { hasAP, hasAR, accountsLoaded } = hasAccountsPayableOrReceivable(lineItems, accounts);
+    
+    if (!accountsLoaded) {
+      toast({
+        title: "Validation Error",
+        description: "Account data is still loading. Please wait and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (hasAP || hasAR) {
+      for (const entry of data.entries) {
+        const error = validateAccountContactRequirement(
+          entry.accountId,
+          data.contactId,
+          accounts,
+          contacts
+        );
+        if (error) {
+          toast({
+            title: "Validation Error",
+            description: error,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     createJournalEntry.mutate(data);
   };
 
@@ -154,6 +199,57 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                 <FormControl>
                   <Textarea placeholder="Journal entry description" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="contactId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contact (Required for A/P or A/R accounts)</FormLabel>
+                <div className="flex items-center gap-2">
+                  <Select 
+                    onValueChange={(value) => {
+                      if (value === "none") {
+                        field.onChange(undefined);
+                      } else {
+                        field.onChange(parseInt(value));
+                      }
+                    }}
+                    value={field.value?.toString() || ""}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a contact (optional)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {contactsLoading ? (
+                        <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
+                      ) : contacts && contacts.length > 0 ? (
+                        contacts.map((contact) => (
+                          <SelectItem key={contact.id} value={contact.id.toString()}>
+                            {contact.name} ({contact.type})
+                          </SelectItem>
+                        ))
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  {field.value !== undefined && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => field.onChange(undefined)}
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
                 <FormMessage />
               </FormItem>
             )}

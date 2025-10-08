@@ -207,6 +207,7 @@ export const journalEntrySchema = z.object({
   date: z.date(),
   reference: z.string().min(1, "Reference is required"),
   description: z.string().min(1, "Description is required"),
+  contactId: z.number().optional(),
   entries: z.array(
     z.object({
       accountId: z.number(),

@@ -1187,6 +1187,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expenseData = result.data;
       console.log("Expense data passed validation:", JSON.stringify(expenseData));
       
+      // Validate A/P and A/R account requirements
+      const accounts = await storage.getAccounts();
+      const contacts = await storage.getContacts();
+      const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
+      
+      const { hasAP, hasAR } = hasAccountsPayableOrReceivable(expenseData.lineItems, accounts);
+      
+      if (hasAP || hasAR) {
+        for (const item of expenseData.lineItems) {
+          const error = validateAccountContactRequirement(
+            item.accountId,
+            expenseData.contactId,
+            accounts,
+            contacts
+          );
+          if (error) {
+            return res.status(400).json({ 
+              message: "Validation Error", 
+              errors: [{ 
+                path: ["contactId"], 
+                message: error 
+              }] 
+            });
+          }
+        }
+      }
+      
       // Calculate subtotal from line items (pre-tax amounts)
       const calculatedSubTotal = roundTo2Decimals(expenseData.lineItems.reduce((sum, item) => sum + item.amount, 0));
       
@@ -1466,6 +1493,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const chequeData = result.data;
       console.log("Cheque data passed validation:", JSON.stringify(chequeData));
       
+      // Validate A/P and A/R account requirements
+      const accounts = await storage.getAccounts();
+      const contacts = await storage.getContacts();
+      const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
+      
+      const { hasAP, hasAR } = hasAccountsPayableOrReceivable(chequeData.lineItems, accounts);
+      
+      if (hasAP || hasAR) {
+        for (const item of chequeData.lineItems) {
+          const error = validateAccountContactRequirement(
+            item.accountId,
+            chequeData.contactId,
+            accounts,
+            contacts
+          );
+          if (error) {
+            return res.status(400).json({ 
+              message: "Validation Error", 
+              errors: [{ 
+                path: ["contactId"], 
+                message: error 
+              }] 
+            });
+          }
+        }
+      }
+      
       // Calculate subtotal from line items (pre-tax amounts)
       const calculatedSubTotal = roundTo2Decimals(chequeData.lineItems.reduce((sum, item) => sum + item.amount, 0));
       
@@ -1697,6 +1751,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const journalData = journalEntrySchema.parse(body);
       
+      // Validate A/P and A/R account requirements
+      const accounts = await storage.getAccounts();
+      const contacts = await storage.getContacts();
+      const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
+      
+      const accountLineItems = journalData.entries.map(entry => ({ accountId: entry.accountId }));
+      const { hasAP, hasAR } = hasAccountsPayableOrReceivable(accountLineItems, accounts);
+      
+      if (hasAP || hasAR) {
+        for (const entry of journalData.entries) {
+          const error = validateAccountContactRequirement(
+            entry.accountId,
+            journalData.contactId,
+            accounts,
+            contacts
+          );
+          if (error) {
+            return res.status(400).json({ 
+              message: "Validation Error", 
+              errors: [{ 
+                path: ["contactId"], 
+                message: error 
+              }] 
+            });
+          }
+        }
+      }
+      
       // Validate debits = credits
       const totalDebits = journalData.entries.reduce((sum, entry) => sum + entry.debit, 0);
       const totalCredits = journalData.entries.reduce((sum, entry) => sum + entry.credit, 0);
@@ -1712,7 +1794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: journalData.date,
         description: journalData.description,
         amount: totalDebits, // Use total debits (which should equal total credits)
-        contactId: null,
+        contactId: journalData.contactId || null,
         status: 'completed' as const
       };
       

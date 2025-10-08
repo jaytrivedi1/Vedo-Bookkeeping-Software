@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
+import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -325,6 +326,37 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   };
 
   const onSubmit = (data: Expense) => {
+    // Validate A/P and A/R account requirements
+    const { hasAP, hasAR, accountsLoaded } = hasAccountsPayableOrReceivable(data.lineItems, accounts);
+    
+    if (!accountsLoaded) {
+      toast({
+        title: "Validation Error",
+        description: "Account data is still loading. Please wait and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (hasAP || hasAR) {
+      for (const item of data.lineItems) {
+        const error = validateAccountContactRequirement(
+          item.accountId,
+          data.contactId,
+          accounts,
+          contacts
+        );
+        if (error) {
+          toast({
+            title: "Validation Error",
+            description: error,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
+
     const enrichedData = {
       ...data,
       date: data.paymentDate || data.date,
