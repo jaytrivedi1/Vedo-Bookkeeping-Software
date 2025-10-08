@@ -6,6 +6,7 @@ import migrateLineItems from "./migrate-line-items";
 import { migrateCompanyTable } from "./migrate-company";
 import migrateSalesTaxComponents from "./migrate-sales-tax-components";
 import migrateTransactions from "./migrate-transactions";
+import migrateChequeTransactionType from "./migrate-cheque-transaction-type";
 import migrateStatusEnum from "./migrate-status-enum";
 import { migrateStatusEnum as migrateOpenStatus } from "./migrate-enum";
 import migrateInvoiceBalance from "./migrate-invoice-balance";
@@ -66,6 +67,9 @@ app.use((req, res, next) => {
     
     // Run transactions migration to add balance field
     await migrateTransactions();
+    
+    // Run migration to add 'cheque' to transaction_type enum
+    await migrateChequeTransactionType();
     
     // Run status enum migration to add unapplied_credit status
     await migrateStatusEnum();
