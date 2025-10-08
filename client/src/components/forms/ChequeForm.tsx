@@ -437,8 +437,8 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                   <SelectContent>
                     {accountsLoading ? (
                       <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
-                    ) : paymentAccounts.length > 0 ? (
-                      paymentAccounts.map((account) => (
+                    ) : bankAccounts.length > 0 ? (
+                      bankAccounts.map((account) => (
                         <SelectItem key={account.id} value={account.id.toString()} data-testid={`payment-account-${account.id}`}>
                           {account.name} ({account.type})
                         </SelectItem>
