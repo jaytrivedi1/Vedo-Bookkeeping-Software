@@ -28,7 +28,7 @@ export enum AccountType {
 }
 
 export const transactionTypeEnum = pgEnum('transaction_type', [
-  'invoice', 'expense', 'journal_entry', 'deposit', 'payment', 'bill'
+  'invoice', 'expense', 'journal_entry', 'deposit', 'payment', 'bill', 'cheque'
 ]);
 
 export const statusEnum = pgEnum('status', [
@@ -166,6 +166,28 @@ export const expenseSchema = z.object({
   status: z.enum(["open", "completed", "cancelled"]),
   paymentMethod: z.enum(["cash", "check", "credit_card", "bank_transfer", "other"]).optional(),
   paymentAccountId: z.number({required_error: "Payment account is required"}),
+  paymentDate: z.date().optional(),
+  memo: z.string().optional(),
+  lineItems: z.array(
+    z.object({
+      accountId: z.number({required_error: "Account is required"}),
+      description: z.string().optional(),
+      amount: z.number().min(0, "Amount cannot be negative"),
+      salesTaxId: z.number().optional(),
+    })
+  ).min(1, "At least one line item is required"),
+  subTotal: z.number().optional(),
+  taxAmount: z.number().optional(),
+  totalAmount: z.number().optional(),
+});
+
+export const chequeSchema = z.object({
+  date: z.date(),
+  contactId: z.number({required_error: "Payee is required"}),
+  reference: z.string().optional(),
+  description: z.string().optional(),
+  status: z.enum(["open", "completed", "cancelled"]),
+  paymentAccountId: z.number({required_error: "Bank account is required"}),
   paymentDate: z.date().optional(),
   memo: z.string().optional(),
   lineItems: z.array(
