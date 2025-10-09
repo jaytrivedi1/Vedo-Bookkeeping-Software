@@ -628,7 +628,7 @@ export default function PaymentView() {
       </div>
       
       {/* Bills Paid (for bill payments) */}
-      {lineItems && lineItems.some(item => item.description?.includes('Payment for bill')) ? (
+      {data?.lineItems && data.lineItems.some(item => item.description?.includes('Payment for bill')) ? (
         <div className="border rounded-md p-6 mb-6 bg-white">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Bills Paid</h2>
@@ -647,7 +647,7 @@ export default function PaymentView() {
                 </tr>
               </thead>
               <tbody>
-                {lineItems.filter(item => item.description?.includes('Payment for bill')).map((item, index) => {
+                {data.lineItems.filter(item => item.description?.includes('Payment for bill')).map((item, index) => {
                   const billRef = item.description?.match(/bill ([\w-]+)/)?.[1] || 'Unknown';
                   return (
                     <tr key={index} className="border-b">
