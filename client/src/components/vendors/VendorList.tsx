@@ -96,12 +96,13 @@ export default function VendorList({ className }: VendorListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedVendor.id)
     : [];
     
-  // Filter expenses (including bills and payments)
+  // Filter expenses (including bills, payments, and cheques)
   const vendorExpenses = vendorTransactions
     ? vendorTransactions.filter(transaction => 
         transaction.type === 'expense' || 
         transaction.type === 'bill' || 
-        transaction.type === 'payment'
+        transaction.type === 'payment' ||
+        transaction.type === 'cheque'
       )
     : [];
     
