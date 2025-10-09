@@ -2266,50 +2266,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nextPaymentNumber = existingPayments.length + 1;
       const paymentReference = `PAY-${String(nextPaymentNumber).padStart(4, '0')}`;
       
-      // Create payment transaction data (only if payment amount > 0)
+      // Create payment transaction data (always create, even for cheque-only)
       let payment = null;
+      
+      // Determine description based on payment method
+      let paymentDescription = '';
+      if (paymentAmount > 0 && validatedCheques.length > 0) {
+        const chequeRefs = validatedCheques.map(c => c.cheque.reference).join(', ');
+        paymentDescription = `Bill payment to ${vendor.name} via ${data.paymentMethod} + cheques (${chequeRefs})${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`;
+      } else if (validatedCheques.length > 0) {
+        const chequeRefs = validatedCheques.map(c => c.cheque.reference).join(', ');
+        paymentDescription = `Bill payment to ${vendor.name} using cheques (${chequeRefs})`;
+      } else {
+        paymentDescription = `Bill payment to ${vendor.name} via ${data.paymentMethod}${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`;
+      }
+      
+      const paymentData = {
+        reference: paymentReference,
+        type: 'payment' as const,
+        date: new Date(data.paymentDate),
+        description: paymentDescription,
+        amount: totalAvailable, // Total of cash payment + cheque credits
+        balance: 0, // Payments don't have a balance
+        contactId: data.vendorId,
+        status: 'open' as const
+      };
+      
+      // Create main ledger entries only if there's a cash payment
+      const mainLedgerEntries = paymentAmount > 0 ? [
+        {
+          transactionId: 0, // Will be set by createTransaction
+          accountId: Number(data.paymentAccountId), // Credit payment account (decrease cash/bank)
+          debit: 0,
+          credit: paymentAmount,
+          description: `Bill payment to ${vendor.name}`,
+          date: new Date(data.paymentDate)
+        },
+        {
+          transactionId: 0, // Will be set by createTransaction
+          accountId: 4, // Debit accounts payable (decrease liability)
+          debit: paymentAmount,
+          credit: 0,
+          description: `Bill payment to ${vendor.name}`,
+          date: new Date(data.paymentDate)
+        }
+      ] : [];
+      
+      // Create the payment transaction
+      payment = await storage.createTransaction(
+        paymentData,
+        [], // No line items for bill payments
+        mainLedgerEntries
+      );
+      
+      console.log(`Created bill payment transaction: ${paymentReference} for $${totalAvailable} (cash: $${paymentAmount}, cheques: $${totalChequeCredits})`);
+      
+      // Apply cash payment to each bill with specific ledger entries (only if paymentAmount > 0)
       if (paymentAmount > 0) {
-        const paymentData = {
-          reference: paymentReference,
-          type: 'payment' as const,
-          date: new Date(data.paymentDate),
-          description: `Bill payment to ${vendor.name} via ${data.paymentMethod}${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`,
-          amount: paymentAmount,
-          balance: 0, // Payments don't have a balance
-          contactId: data.vendorId,
-          status: 'open' as const
-        };
-        
-        // Create main ledger entries for the payment
-        const mainLedgerEntries = [
-          {
-            transactionId: 0, // Will be set by createTransaction
-            accountId: Number(data.paymentAccountId), // Credit payment account (decrease cash/bank)
-            debit: 0,
-            credit: paymentAmount,
-            description: `Bill payment to ${vendor.name}`,
-            date: new Date(data.paymentDate)
-          },
-          {
-            transactionId: 0, // Will be set by createTransaction
-            accountId: 4, // Debit accounts payable (decrease liability)
-            debit: paymentAmount,
-            credit: 0,
-            description: `Bill payment to ${vendor.name}`,
-            date: new Date(data.paymentDate)
-          }
-        ];
-        
-        // Create the payment transaction
-        payment = await storage.createTransaction(
-          paymentData,
-          [], // No line items for bill payments
-          mainLedgerEntries
-        );
-        
-        console.log(`Created bill payment transaction: ${paymentReference} for $${paymentAmount}`);
-        
-        // Apply payment to each bill with specific ledger entries
         for (const { bill, amount } of validatedBills) {
           // Create ledger entries to track which bills were paid
           const billApplicationEntries = [
