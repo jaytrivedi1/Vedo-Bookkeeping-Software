@@ -120,12 +120,13 @@ export default function CustomerList({ className }: CustomerListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedCustomer.id)
     : [];
     
-  // Filter transactions for the Invoices tab (invoices + payments + deposits)
+  // Filter transactions for the Invoices tab (invoices + payments + deposits + cheques)
   const customerInvoicesAndPayments = customerTransactions
     ? customerTransactions.filter(transaction => 
         transaction.type === 'invoice' || 
         transaction.type === 'payment' ||
-        transaction.type === 'deposit')
+        transaction.type === 'deposit' ||
+        transaction.type === 'cheque')
     : [];
     
   // Filter just invoices (for calculations and counts)
