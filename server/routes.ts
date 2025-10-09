@@ -36,6 +36,7 @@ import {
   transactions,
   ledgerEntries,
   lineItems,
+  paymentApplications,
   User,
   Permission,
   LineItem,
