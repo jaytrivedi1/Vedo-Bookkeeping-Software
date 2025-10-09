@@ -321,7 +321,7 @@ export default function VendorList({ className }: VendorListProps) {
                                       ? 'Payment'
                                       : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                                 
-                                const showBalance = transaction.type === 'bill';
+                                const showBalance = transaction.type === 'bill' || transaction.type === 'cheque';
                                 const notes = transaction.type === 'bill' 
                                   ? 'Vendor bill' 
                                   : transaction.type === 'payment'
