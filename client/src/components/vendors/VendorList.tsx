@@ -361,31 +361,27 @@ export default function VendorList({ className }: VendorListProps) {
                                     </TableCell>
                                     <TableCell className="text-right">
                                       <div className="flex justify-end gap-2">
-                                        {transaction.type === 'bill' ? (
-                                          <Button 
-                                            variant="ghost" 
-                                            size="sm"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              navigate(`/bills/${transaction.id}`);
-                                            }}
-                                          >
-                                            <Eye className="h-4 w-4 mr-1" />
-                                            View
-                                          </Button>
-                                        ) : (
-                                          <Button 
-                                            variant="ghost" 
-                                            size="sm"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              navigate(`/transactions/${transaction.id}`);
-                                            }}
-                                          >
-                                            <Eye className="h-4 w-4 mr-1" />
-                                            View
-                                          </Button>
-                                        )}
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Route to appropriate page based on transaction type
+                                            const routeMap: Record<string, string> = {
+                                              'bill': `/bills/${transaction.id}`,
+                                              'payment': `/payments/${transaction.id}`,
+                                              'expense': `/expenses/${transaction.id}`,
+                                              'cheque': `/expenses/${transaction.id}`,
+                                              'deposit': `/deposits/${transaction.id}`,
+                                              'invoice': `/invoices/${transaction.id}`
+                                            };
+                                            const route = routeMap[transaction.type] || `/expenses/${transaction.id}`;
+                                            navigate(route);
+                                          }}
+                                        >
+                                          <Eye className="h-4 w-4 mr-1" />
+                                          View
+                                        </Button>
                                         
                                         <Button 
                                           variant="ghost" 
@@ -482,7 +478,15 @@ export default function VendorList({ className }: VendorListProps) {
                                           size="sm"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            navigate(`/transactions/${transaction.id}`);
+                                            // Route to appropriate page based on transaction type
+                                            const routeMap: Record<string, string> = {
+                                              'invoice': `/invoices/${transaction.id}`,
+                                              'payment': `/payments/${transaction.id}`,
+                                              'expense': `/expenses/${transaction.id}`,
+                                              'deposit': `/deposits/${transaction.id}`
+                                            };
+                                            const route = routeMap[transaction.type] || `/invoices/${transaction.id}`;
+                                            navigate(route);
                                           }}
                                         >
                                           <Eye className="h-4 w-4 mr-1" />
