@@ -18,7 +18,6 @@ import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { migratePaymentApplications } from "./migrate-payment-applications";
 import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
 import { recalculateBillBalances } from "./recalculate-bill-balances";
-import { createChequePaymentTransactions } from "./create-cheque-payment-transactions";
 
 const app = express();
 app.use(express.json());
@@ -102,9 +101,6 @@ app.use((req, res, next) => {
     
     // Recalculate all bill balances based on payment_applications table
     await recalculateBillBalances();
-    
-    // Create payment transactions for existing cheque applications
-    await createChequePaymentTransactions();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
