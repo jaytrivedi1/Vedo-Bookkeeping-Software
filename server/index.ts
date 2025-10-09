@@ -17,6 +17,7 @@ import { fixAllBalances } from "./fix-all-balances";
 import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { migratePaymentApplications } from "./migrate-payment-applications";
 import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
+import { recalculateBillBalances } from "./recalculate-bill-balances";
 
 const app = express();
 app.use(express.json());
@@ -97,6 +98,9 @@ app.use((req, res, next) => {
     
     // Run migration to clean up orphaned credit deposits and consolidate into parent payments
     await cleanupOrphanedCredits();
+    
+    // Recalculate all bill balances based on payment_applications table
+    await recalculateBillBalances();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
