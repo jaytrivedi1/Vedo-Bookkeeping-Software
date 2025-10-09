@@ -2351,10 +2351,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Create payment_applications record to track cheque-to-bill application
           await db.insert(paymentApplications).values({
-            paymentTransactionId: cheque.id,
-            invoiceTransactionId: bill.id,
-            amount: chequeApplicationAmount,
-            appliedAt: new Date(data.paymentDate)
+            paymentId: cheque.id,
+            invoiceId: bill.id,
+            amountApplied: chequeApplicationAmount
           });
           
           console.log(`Applied $${chequeApplicationAmount} from cheque ${cheque.reference} to bill ${bill.reference}`);
