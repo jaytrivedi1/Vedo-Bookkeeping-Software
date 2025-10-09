@@ -66,7 +66,7 @@ const payBillSchema = z.object({
   paymentAccountId: z.coerce.number().min(1, "Please select a payment account"),
   referenceNumber: z.string().optional(),
   notes: z.string().optional(),
-  totalAmount: z.coerce.number().min(0.01, "Total amount must be greater than 0"),
+  totalAmount: z.coerce.number().min(0, "Total amount cannot be negative"),
 });
 
 type PayBillFormValues = z.infer<typeof payBillSchema>;
@@ -81,6 +81,15 @@ interface BillPaymentItem {
   paymentAmount: number;
   selected: boolean;
   vendor: string;
+}
+
+interface ChequePaymentItem {
+  chequeId: number;
+  chequeReference: string;
+  chequeDate: string;
+  availableCredit: number;
+  appliedAmount: number;
+  selected: boolean;
 }
 
 interface PayBillFormProps {
@@ -100,8 +109,10 @@ const PAYMENT_METHODS = [
 export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
   const { toast } = useToast();
   const [billItems, setBillItems] = useState<BillPaymentItem[]>([]);
+  const [chequeItems, setChequeItems] = useState<ChequePaymentItem[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [totalSelected, setTotalSelected] = useState(0);
+  const [totalChequeCredits, setTotalChequeCredits] = useState(0);
 
   // Form setup
   const form = useForm<PayBillFormValues>({
@@ -117,7 +128,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
 
   // Calculate remaining amount to allocate
   const paymentAmount = form.watch('totalAmount') || 0;
-  const remainingToAllocate = paymentAmount - totalSelected;
+  const remainingToAllocate = paymentAmount + totalChequeCredits - totalSelected;
 
   // Fetch vendors with outstanding bills
   const { data: vendors, isLoading: isLoadingVendors } = useQuery<Contact[]>({
@@ -143,6 +154,22 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
         account.name.toLowerCase().includes('savings')
       )
     ),
+  });
+
+  // Fetch vendor's unapplied cheques (unapplied credits)
+  const { data: vendorCheques, isLoading: isLoadingCheques } = useQuery({
+    queryKey: ['/api/transactions', { type: 'cheque', contactId: selectedVendorId }],
+    queryFn: async () => {
+      if (!selectedVendorId) return [];
+      const allTransactions = await apiRequest(`/api/transactions`);
+      return allTransactions.filter((transaction: any) => 
+        transaction.type === 'cheque' && 
+        transaction.contactId === selectedVendorId &&
+        transaction.status === 'unapplied_credit' &&
+        (transaction.balance || 0) > 0
+      );
+    },
+    enabled: !!selectedVendorId,
   });
 
   // Filter outstanding bills for selected vendor
@@ -173,6 +200,23 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     }
   }, [selectedVendorId, allTransactions, vendors]);
 
+  // Initialize cheque items when vendor cheques change
+  useEffect(() => {
+    if (vendorCheques && vendorCheques.length > 0) {
+      const items = vendorCheques.map((cheque: any) => ({
+        chequeId: cheque.id,
+        chequeReference: cheque.reference || `CHQ-${cheque.id}`,
+        chequeDate: format(new Date(cheque.date), 'yyyy-MM-dd'),
+        availableCredit: cheque.balance || 0,
+        appliedAmount: 0,
+        selected: false,
+      }));
+      setChequeItems(items);
+    } else {
+      setChequeItems([]);
+    }
+  }, [vendorCheques]);
+
   // Update bill payment amount
   const updateBillPayment = (billId: number, amount: number) => {
     setBillItems(prev => {
@@ -181,7 +225,8 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
           // Allow free input when no payment amount is set, otherwise constrain to remaining allocation
           let maxAllowable = amount;
           
-          if (paymentAmount > 0) {
+          const totalAvailable = paymentAmount + totalChequeCredits;
+          if (totalAvailable > 0) {
             const currentTotal = prev
               .filter(otherItem => otherItem.billId !== billId && otherItem.selected)
               .reduce((sum, otherItem) => sum + otherItem.paymentAmount, 0);
@@ -189,7 +234,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
             maxAllowable = Math.min(
               amount,
               item.outstandingBalance,
-              paymentAmount - currentTotal
+              totalAvailable - currentTotal
             );
           } else {
             // When no payment amount is set, only constrain to outstanding balance
@@ -216,13 +261,38 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     ));
   };
 
+  // Toggle cheque selection
+  const toggleChequeSelection = (chequeId: number, selected: boolean) => {
+    setChequeItems(prev => prev.map(item => 
+      item.chequeId === chequeId 
+        ? { ...item, selected, appliedAmount: 0 }
+        : item
+    ));
+  };
+
+  // Update cheque applied amount
+  const updateChequeAmount = (chequeId: number, amount: number) => {
+    setChequeItems(prev => prev.map(item => {
+      if (item.chequeId === chequeId) {
+        const maxAllowable = Math.min(amount, item.availableCredit);
+        return { ...item, appliedAmount: Math.max(0, maxAllowable) };
+      }
+      return item;
+    }));
+  };
+
   // Calculate totals and remaining to allocate
   useEffect(() => {
     const total = billItems
       .filter(item => item.selected)
       .reduce((sum, item) => sum + item.paymentAmount, 0);
     setTotalSelected(total);
-  }, [billItems]);
+    
+    const chequeTotal = chequeItems
+      .filter(item => item.selected)
+      .reduce((sum, item) => sum + item.appliedAmount, 0);
+    setTotalChequeCredits(chequeTotal);
+  }, [billItems, chequeItems]);
 
   // Allocate remaining payment across selected bills
   const allocateRemaining = () => {
@@ -231,10 +301,11 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     const selectedBills = billItems.filter(item => item.selected);
     if (selectedBills.length === 0) return;
     
+    const totalAvailable = paymentAmount + totalChequeCredits;
     setBillItems(prev => prev.map(item => {
       if (!item.selected) return item;
       
-      const remainingAfterOthers = paymentAmount - prev
+      const remainingAfterOthers = totalAvailable - prev
         .filter(other => other.billId !== item.billId && other.selected)
         .reduce((sum, other) => sum + other.paymentAmount, 0);
       
@@ -253,17 +324,18 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
       const allSelected = prev.map(item => ({ ...item, selected: true }));
       const totalOutstanding = allSelected.reduce((sum, item) => sum + item.outstandingBalance, 0);
       
-      if (paymentAmount === 0) {
-        // If no payment amount set, use total outstanding
+      const totalAvailable = paymentAmount + totalChequeCredits;
+      if (totalAvailable === 0) {
+        // If no payment amount or cheques set, use total outstanding
         form.setValue('totalAmount', totalOutstanding);
         return allSelected.map(item => ({ ...item, paymentAmount: item.outstandingBalance }));
       } else {
-        // Allocate payment amount proportionally
+        // Allocate available funds (payment + cheques) proportionally
         return allSelected.map(item => ({
           ...item,
           paymentAmount: Math.min(
             item.outstandingBalance,
-            (item.outstandingBalance / totalOutstanding) * paymentAmount
+            (item.outstandingBalance / totalOutstanding) * totalAvailable
           )
         }));
       }
@@ -277,12 +349,18 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
       selected: false,
       paymentAmount: 0
     })));
+    setChequeItems(prev => prev.map(item => ({
+      ...item,
+      selected: false,
+      appliedAmount: 0
+    })));
   };
 
   // Submit payment
   const payBillMutation = useMutation({
     mutationFn: async (data: PayBillFormValues) => {
       const selectedBills = billItems.filter(item => item.selected && item.paymentAmount > 0);
+      const selectedCheques = chequeItems.filter(item => item.selected && item.appliedAmount > 0);
       
       if (selectedBills.length === 0) {
         throw new Error("Please select at least one bill to pay");
@@ -293,6 +371,10 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
         bills: selectedBills.map(bill => ({
           billId: bill.billId,
           amount: bill.paymentAmount
+        })),
+        cheques: selectedCheques.map(cheque => ({
+          chequeId: cheque.chequeId,
+          amount: cheque.appliedAmount
         }))
       });
     },
@@ -662,8 +744,14 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                         <span className="font-medium">Payment Amount:</span>
                         <span className="font-semibold">{formatCurrency(paymentAmount)}</span>
                       </div>
+                      {totalChequeCredits > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">Cheque Credits:</span>
+                          <span className="font-semibold text-green-600">{formatCurrency(totalChequeCredits)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center">
-                        <span className="font-medium">Allocated:</span>
+                        <span className="font-medium">Allocated to Bills:</span>
                         <span className="font-semibold">{formatCurrency(totalSelected)}</span>
                       </div>
                       <div className="flex justify-between items-center text-lg">
@@ -708,6 +796,82 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
             </Card>
           )}
 
+          {/* Unapplied Cheques Card */}
+          {selectedVendorId && chequeItems.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="h-5 w-5" />
+                  Available Unapplied Cheques
+                </CardTitle>
+                <CardDescription>
+                  Apply existing cheque credits to these bills
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">Apply</TableHead>
+                      <TableHead>Cheque #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Available Credit</TableHead>
+                      <TableHead className="text-right">Apply Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {chequeItems.map((cheque) => (
+                      <TableRow key={cheque.chequeId}>
+                        <TableCell>
+                          <Checkbox
+                            checked={cheque.selected}
+                            onCheckedChange={(checked) => 
+                              toggleChequeSelection(cheque.chequeId, checked as boolean)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {cheque.chequeReference}
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(cheque.chequeDate), 'MMM dd, yyyy')}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(cheque.availableCredit)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={cheque.availableCredit}
+                            value={cheque.appliedAmount || ''}
+                            disabled={!cheque.selected}
+                            onChange={(e) => {
+                              const rawValue = e.target.value;
+                              const amount = rawValue === '' ? 0 : parseFloat(rawValue);
+                              updateChequeAmount(cheque.chequeId, isNaN(amount) ? 0 : amount);
+                            }}
+                            className="w-24 text-right"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {totalChequeCredits > 0 && (
+                  <div className="mt-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-green-900 dark:text-green-100">Total Cheque Credits Applied:</span>
+                      <span className="font-bold text-green-900 dark:text-green-100">{formatCurrency(totalChequeCredits)}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Form Actions */}
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={onCancel}>
@@ -717,7 +881,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
               type="submit" 
               disabled={
                 payBillMutation.isPending || 
-                paymentAmount === 0 || 
+                (paymentAmount === 0 && totalChequeCredits === 0) || 
                 totalSelected === 0 || 
                 Math.abs(remainingToAllocate) > 0.001  // Allow for floating point precision
               }

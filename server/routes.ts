@@ -2102,20 +2102,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/payments/pay-bills", async (req: Request, res: Response) => {
     const data = req.body;
     const bills = data.bills || [];
+    const cheques = data.cheques || [];
     
     console.log("Bill payment request received:", {
       vendorId: data.vendorId,
       totalAmount: data.totalAmount,
       bills: bills.length,
+      cheques: cheques.length,
       paymentMethod: data.paymentMethod
     });
     
     try {
-      // Validate input
-      if (!data.vendorId || !data.paymentAccountId || !data.totalAmount || bills.length === 0) {
+      // Validate input (allow zero totalAmount if cheques are present)
+      if (!data.vendorId || !data.paymentAccountId || bills.length === 0) {
         return res.status(400).json({ 
           message: "Missing required fields", 
-          errors: [{ path: ["general"], message: "Vendor, payment account, amount, and bills are required" }] 
+          errors: [{ path: ["general"], message: "Vendor, payment account, and bills are required" }] 
+        });
+      }
+      
+      // Validate that either payment amount or cheques are present
+      const paymentAmount = data.totalAmount != null ? Number(data.totalAmount) : 0;
+      if (paymentAmount <= 0 && cheques.length === 0) {
+        return res.status(400).json({ 
+          message: "Payment required", 
+          errors: [{ path: ["totalAmount"], message: "Either provide a payment amount or apply unapplied cheques" }] 
+        });
+      }
+      
+      // Validate and calculate cheque credits
+      let totalChequeCredits = 0;
+      const validatedCheques = [];
+      
+      for (const chequeItem of cheques) {
+        if (!chequeItem.chequeId || !chequeItem.amount || chequeItem.amount <= 0) {
+          return res.status(400).json({ 
+            message: "Invalid cheque item", 
+            errors: [{ path: ["cheques"], message: `Invalid cheque ID or amount for cheque ${chequeItem.chequeId}` }] 
+          });
+        }
+        
+        // Get the cheque transaction
+        const cheque = await storage.getTransaction(chequeItem.chequeId);
+        if (!cheque) {
+          return res.status(400).json({ 
+            message: "Cheque not found", 
+            errors: [{ path: ["cheques"], message: `Cheque #${chequeItem.chequeId} not found` }] 
+          });
+        }
+        
+        if (cheque.type !== 'cheque') {
+          return res.status(400).json({ 
+            message: "Invalid transaction type", 
+            errors: [{ path: ["cheques"], message: `Transaction #${chequeItem.chequeId} is not a cheque` }] 
+          });
+        }
+        
+        if (cheque.status !== 'unapplied_credit') {
+          return res.status(400).json({ 
+            message: "Cheque not available for application", 
+            errors: [{ path: ["cheques"], message: `Cheque ${cheque.reference} is not an unapplied credit` }] 
+          });
+        }
+        
+        // Check if cheque amount doesn't exceed available credit
+        const availableCredit = cheque.balance || 0;
+        if (chequeItem.amount > availableCredit) {
+          return res.status(400).json({ 
+            message: "Amount exceeds available credit", 
+            errors: [{ path: ["cheques"], message: `Amount $${chequeItem.amount} exceeds available credit $${availableCredit} for cheque ${cheque.reference}` }] 
+          });
+        }
+        
+        totalChequeCredits += Number(chequeItem.amount);
+        validatedCheques.push({
+          cheque,
+          amount: Number(chequeItem.amount)
         });
       }
       
@@ -2163,11 +2225,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Verify total amount matches
-      if (Math.abs(calculatedTotal - Number(data.totalAmount)) > 0.01) {
+      // Verify total amount matches (payment amount + cheque credits should equal bill payments)
+      const totalAvailable = paymentAmount + totalChequeCredits;
+      if (Math.abs(calculatedTotal - totalAvailable) > 0.01) {
         return res.status(400).json({ 
           message: "Total amount mismatch", 
-          errors: [{ path: ["totalAmount"], message: `Total amount $${data.totalAmount} doesn't match sum of bill payments $${calculatedTotal}` }] 
+          errors: [{ path: ["totalAmount"], message: `Total available $${totalAvailable} (payment: $${paymentAmount} + cheques: $${totalChequeCredits}) doesn't match sum of bill payments $${calculatedTotal}` }] 
         });
       }
       
@@ -2202,75 +2265,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nextPaymentNumber = existingPayments.length + 1;
       const paymentReference = `PAY-${String(nextPaymentNumber).padStart(4, '0')}`;
       
-      // Create payment transaction data
-      const paymentData = {
-        reference: paymentReference,
-        type: 'payment' as const,
-        date: new Date(data.paymentDate),
-        description: `Bill payment to ${vendor.name} via ${data.paymentMethod}${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`,
-        amount: Number(data.totalAmount),
-        balance: 0, // Payments don't have a balance
-        contactId: data.vendorId,
-        status: 'open' as const
-      };
-      
-      // Create main ledger entries for the payment
-      const mainLedgerEntries = [
-        {
-          transactionId: 0, // Will be set by createTransaction
-          accountId: Number(data.paymentAccountId), // Credit payment account (decrease cash/bank)
-          debit: 0,
-          credit: Number(data.totalAmount),
-          description: `Bill payment to ${vendor.name}`,
-          date: new Date(data.paymentDate)
-        },
-        {
-          transactionId: 0, // Will be set by createTransaction
-          accountId: 4, // Debit accounts payable (decrease liability)
-          debit: Number(data.totalAmount),
-          credit: 0,
-          description: `Bill payment to ${vendor.name}`,
-          date: new Date(data.paymentDate)
-        }
-      ];
-      
-      // Create the payment transaction
-      const payment = await storage.createTransaction(
-        paymentData,
-        [], // No line items for bill payments
-        mainLedgerEntries
-      );
-      
-      console.log(`Created bill payment transaction: ${paymentReference} for $${data.totalAmount}`);
-      
-      // Apply payment to each bill with specific ledger entries
-      for (const { bill, amount } of validatedBills) {
-        // Create ledger entries to track which bills were paid
-        const billApplicationEntries = [
+      // Create payment transaction data (only if payment amount > 0)
+      let payment = null;
+      if (paymentAmount > 0) {
+        const paymentData = {
+          reference: paymentReference,
+          type: 'payment' as const,
+          date: new Date(data.paymentDate),
+          description: `Bill payment to ${vendor.name} via ${data.paymentMethod}${data.referenceNumber ? ` (Ref: ${data.referenceNumber})` : ''}`,
+          amount: paymentAmount,
+          balance: 0, // Payments don't have a balance
+          contactId: data.vendorId,
+          status: 'open' as const
+        };
+        
+        // Create main ledger entries for the payment
+        const mainLedgerEntries = [
           {
-            accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
-            debit: amount, // Reduce the bill amount
-            credit: 0,
-            description: `Payment applied to bill ${bill.reference}`,
-            date: new Date(data.paymentDate),
-            transactionId: payment.id
+            transactionId: 0, // Will be set by createTransaction
+            accountId: Number(data.paymentAccountId), // Credit payment account (decrease cash/bank)
+            debit: 0,
+            credit: paymentAmount,
+            description: `Bill payment to ${vendor.name}`,
+            date: new Date(data.paymentDate)
           },
           {
-            accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
-            debit: 0,
-            credit: amount, // Create offsetting entry
-            description: `Payment from ${paymentReference} for bill ${bill.reference}`,
-            date: new Date(data.paymentDate),
-            transactionId: bill.id
+            transactionId: 0, // Will be set by createTransaction
+            accountId: 4, // Debit accounts payable (decrease liability)
+            debit: paymentAmount,
+            credit: 0,
+            description: `Bill payment to ${vendor.name}`,
+            date: new Date(data.paymentDate)
           }
         ];
         
-        // Add the bill application entries
-        for (const entry of billApplicationEntries) {
-          await db.insert(ledgerEntries).values(entry);
+        // Create the payment transaction
+        payment = await storage.createTransaction(
+          paymentData,
+          [], // No line items for bill payments
+          mainLedgerEntries
+        );
+        
+        console.log(`Created bill payment transaction: ${paymentReference} for $${paymentAmount}`);
+        
+        // Apply payment to each bill with specific ledger entries
+        for (const { bill, amount } of validatedBills) {
+          // Create ledger entries to track which bills were paid
+          const billApplicationEntries = [
+            {
+              accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
+              debit: amount, // Reduce the bill amount
+              credit: 0,
+              description: `Payment applied to bill ${bill.reference}`,
+              date: new Date(data.paymentDate),
+              transactionId: payment.id
+            },
+            {
+              accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
+              debit: 0,
+              credit: amount, // Create offsetting entry
+              description: `Payment from ${paymentReference} for bill ${bill.reference}`,
+              date: new Date(data.paymentDate),
+              transactionId: bill.id
+            }
+          ];
+          
+          // Add the bill application entries
+          for (const entry of billApplicationEntries) {
+            await db.insert(ledgerEntries).values(entry);
+          }
+          
+          console.log(`Applied $${amount} payment to bill ${bill.reference}`);
+        }
+      }
+      
+      // Apply cheques to bills and update cheque balances
+      for (const { cheque, amount } of validatedCheques) {
+        // For each bill, proportionally apply the cheque credit
+        // (In this implementation, we apply cheques proportionally across all bills)
+        const proportionPerBill = amount / calculatedTotal;
+        
+        for (const { bill, amount: billAmount } of validatedBills) {
+          const chequeApplicationAmount = billAmount * proportionPerBill;
+          
+          // Create payment_applications record to track cheque-to-bill application
+          await db.insert(paymentApplications).values({
+            paymentTransactionId: cheque.id,
+            invoiceTransactionId: bill.id,
+            amount: chequeApplicationAmount,
+            appliedAt: new Date(data.paymentDate)
+          });
+          
+          console.log(`Applied $${chequeApplicationAmount} from cheque ${cheque.reference} to bill ${bill.reference}`);
         }
         
-        console.log(`Applied $${amount} payment to bill ${bill.reference}`);
+        // Update cheque balance
+        const newChequeBalance = (cheque.balance || 0) - amount;
+        const newChequeStatus = Math.abs(newChequeBalance) < 0.01 ? 'completed' : 'unapplied_credit';
+        
+        await storage.updateTransaction(cheque.id, {
+          balance: newChequeBalance,
+          status: newChequeStatus
+        });
+        
+        console.log(`Updated cheque ${cheque.reference}: balance $${newChequeBalance}, status ${newChequeStatus}`);
       }
       
       // Recalculate bill balances
@@ -2309,6 +2407,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           billId: bill.id,
           billReference: bill.reference,
           amountPaid: amount
+        })),
+        appliedCheques: validatedCheques.map(({ cheque, amount }) => ({
+          chequeId: cheque.id,
+          chequeReference: cheque.reference,
+          amountApplied: amount
         }))
       });
     } catch (error: any) {
