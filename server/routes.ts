@@ -2289,8 +2289,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: totalAvailable, // Total of cash payment + cheque credits
         balance: 0, // Payments don't have a balance
         contactId: data.vendorId,
-        status: 'open' as const
+        status: 'completed' as const // Payment is completed once created
       };
+      
+      // Create line items showing which bills were paid
+      const paymentLineItems = validatedBills.map(({ bill, amount }) => ({
+        description: `Payment for bill ${bill.reference}`,
+        quantity: 1,
+        unitPrice: amount,
+        amount: amount,
+        transactionId: 0 // Will be set by createTransaction
+      }));
       
       // Create main ledger entries only if there's a cash payment
       const mainLedgerEntries = paymentAmount > 0 ? [
@@ -2315,7 +2324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create the payment transaction
       payment = await storage.createTransaction(
         paymentData,
-        [], // No line items for bill payments
+        paymentLineItems, // Line items showing bills paid
         mainLedgerEntries
       );
       
