@@ -140,6 +140,8 @@ export default function VendorList({ className }: VendorListProps) {
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Draft</Badge>;
       case 'cancelled':
         return <Badge className="bg-gray-100 text-gray-800 hover:bg-gray-100">Cancelled</Badge>;
+      case 'unapplied_credit':
+        return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Unapplied Payment</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }

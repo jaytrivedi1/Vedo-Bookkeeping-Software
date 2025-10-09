@@ -1534,6 +1534,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid bank account" });
       }
       
+      // Determine status and balance based on account types
+      // If cheque uses A/P or A/R accounts, it's an unapplied payment that needs to be applied to bills/invoices
+      // Otherwise, it's a direct payment (like rent, utilities) and is completed immediately
+      let chequeStatus: 'unapplied_credit' | 'completed' = 'completed';
+      let chequeBalance: number | null = null;
+      
+      if (hasAP || hasAR) {
+        chequeStatus = 'unapplied_credit';
+        chequeBalance = totalAmount; // Full amount available to apply
+      }
+      
       // Create transaction
       const transaction = {
         reference: chequeData.reference,
@@ -1541,10 +1552,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: chequeData.date,
         description: chequeData.description || '',
         amount: totalAmount,
+        balance: chequeBalance,
         subTotal: subTotal,
         taxAmount: taxAmount,
         contactId: chequeData.contactId,
-        status: chequeData.status,
+        status: chequeStatus,
         paymentMethod: 'check' as const,
         paymentAccountId: chequeData.paymentAccountId,
         paymentDate: chequeData.paymentDate || chequeData.date,
