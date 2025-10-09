@@ -627,11 +627,45 @@ export default function PaymentView() {
         </div>
       </div>
       
-      {/* Apply Payment to Invoices */}
-      <div className="border rounded-md p-6 mb-6 bg-white">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Apply Payment to Invoices</h2>
+      {/* Bills Paid (for bill payments) */}
+      {lineItems && lineItems.some(item => item.description?.includes('Payment for bill')) ? (
+        <div className="border rounded-md p-6 mb-6 bg-white">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Bills Paid</h2>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2 px-4 text-left font-medium text-xs uppercase text-gray-500">
+                    Bill Reference
+                  </th>
+                  <th className="py-2 px-4 text-right font-medium text-xs uppercase text-gray-500">
+                    Amount Paid
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineItems.filter(item => item.description?.includes('Payment for bill')).map((item, index) => {
+                  const billRef = item.description?.match(/bill ([\w-]+)/)?.[1] || 'Unknown';
+                  return (
+                    <tr key={index} className="border-b">
+                      <td className="py-3 px-4">{billRef}</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(item.amount || 0)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
+      ) : (
+        /* Apply Payment to Invoices */
+        <div className="border rounded-md p-6 mb-6 bg-white">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">Apply Payment to Invoices</h2>
+          </div>
         
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -716,7 +750,8 @@ export default function PaymentView() {
             </tbody>
           </table>
         </div>
-      </div>
+        </div>
+      )}
 
       {/* Available Unapplied Credits */}
       <div className="border rounded-md p-6 mb-6 bg-white">
