@@ -2380,11 +2380,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .from(ledgerEntries)
           .where(like(ledgerEntries.description, `%bill ${bill.reference}%`));
         
-        // Calculate total payments made to this bill
-        const totalPayments = paymentEntries.reduce((sum, entry) => {
+        // Calculate total payments from ledger entries
+        const totalLedgerPayments = paymentEntries.reduce((sum, entry) => {
           // Payment entries that reduce the bill should be credits in accounts payable
           return sum + (entry.credit || 0);
         }, 0);
+        
+        // Find all cheque/deposit applications to this bill from payment_applications table
+        const applications = await db
+          .select()
+          .from(paymentApplications)
+          .where(eq(paymentApplications.invoiceId, bill.id));
+        
+        // Calculate total from payment applications (cheques and deposits)
+        const totalApplications = applications.reduce((sum, app) => {
+          return sum + (app.amountApplied || 0);
+        }, 0);
+        
+        // Total payments = ledger entries + payment applications
+        const totalPayments = totalLedgerPayments + totalApplications;
         
         // Calculate remaining balance: Original Amount - Payments Made
         const newBalance = Number(bill.amount) - totalPayments;
@@ -2398,7 +2412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: newStatus
         });
         
-        console.log(`Updated bill ${bill.reference}: balance $${newBalance} (original: $${bill.amount}, payments: $${totalPayments}), status ${newStatus}`);
+        console.log(`Updated bill ${bill.reference}: balance $${newBalance} (original: $${bill.amount}, ledger payments: $${totalLedgerPayments}, applications: $${totalApplications}), status ${newStatus}`);
       }
       
       res.status(201).json({
