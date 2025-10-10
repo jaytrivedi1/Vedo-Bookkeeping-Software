@@ -2330,21 +2330,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Created bill payment transaction: ${paymentReference} for $${totalAvailable} (cash: $${paymentAmount}, cheques: $${totalChequeCredits})`);
       
-      // Apply cash payment to each bill with specific ledger entries (only if paymentAmount > 0)
+      // Apply cash payment to each bill proportionally (only if paymentAmount > 0)
       if (paymentAmount > 0) {
+        // Calculate the proportion of cash payment for each bill
+        const cashProportion = paymentAmount / calculatedTotal;
+        
         for (const { bill, amount } of validatedBills) {
+          // Calculate how much of the cash payment goes to this bill
+          const cashApplicationAmount = amount * cashProportion;
+          
           // Create ledger entries to track which bills were paid
           const billApplicationEntries = [
             {
-              accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
-              debit: amount, // Reduce the bill amount
+              accountId: 4, // Accounts Payable
+              debit: amount, // Reduce the bill amount by total being paid (cash + cheque)
               credit: 0,
               description: `Payment applied to bill ${bill.reference}`,
               date: new Date(data.paymentDate),
               transactionId: payment.id
             },
             {
-              accountId: 4, // Accounts Payable (FIXED: was 3 which is Inventory)
+              accountId: 4, // Accounts Payable
               debit: 0,
               credit: amount, // Create offsetting entry
               description: `Payment from ${paymentReference} for bill ${bill.reference}`,
@@ -2358,14 +2364,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await db.insert(ledgerEntries).values(entry);
           }
           
-          // Create payment_applications record to track payment-to-bill relationship
+          // Create payment_applications record to track cash payment-to-bill relationship
           await db.insert(paymentApplications).values({
             paymentId: payment.id,
             invoiceId: bill.id,
-            amountApplied: amount
+            amountApplied: cashApplicationAmount // Only the cash portion
           });
           
-          console.log(`Applied $${amount} payment to bill ${bill.reference}`);
+          console.log(`Applied $${cashApplicationAmount} cash payment to bill ${bill.reference}`);
         }
       }
       
