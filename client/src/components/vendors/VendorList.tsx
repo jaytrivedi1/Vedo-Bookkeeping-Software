@@ -152,8 +152,9 @@ export default function VendorList({ className }: VendorListProps) {
     mutationFn: async ({ transactionId, transactionType }: { transactionId: number; transactionType: string }) => {
       console.log('Deleting transaction:', transactionType, transactionId);
       
-      // Use dedicated payment endpoint for payment transactions
-      if (transactionType === 'payment') {
+      // Use dedicated payment endpoint for payment and cheque transactions
+      // (both may have payment_applications records that need cleanup)
+      if (transactionType === 'payment' || transactionType === 'cheque') {
         return apiRequest(`/api/payments/${transactionId}/delete`, 'DELETE');
       }
       
