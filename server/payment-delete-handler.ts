@@ -1,15 +1,16 @@
 import { db } from './db';
-import { transactions, ledgerEntries, paymentApplications } from '@shared/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { transactions, ledgerEntries, paymentApplications, lineItems } from '@shared/schema';
+import { eq, and, sql, or, inArray } from 'drizzle-orm';
 
 /**
  * Comprehensive payment deletion handler that ensures:
  * 1. Payment applications are properly removed
- * 2. Invoice balances and statuses are properly restored
- * 3. Related ledger entries and transactions are cleaned up
- * 4. All operations occur in a single atomic transaction
+ * 2. Invoice/bill balances and statuses are properly restored
+ * 3. Deposit/cheque balances are properly restored
+ * 4. Related ledger entries and transactions are cleaned up
+ * 5. All operations occur in a single atomic transaction
  * 
- * @param paymentId The ID of the payment to delete
+ * @param paymentId The ID of the payment/cheque to delete
  * @returns Result object with details of the deletion operation
  */
 export async function deletePaymentAndRelatedTransactions(paymentId: number) {
@@ -18,15 +19,18 @@ export async function deletePaymentAndRelatedTransactions(paymentId: number) {
   try {
     // Execute all operations in a single database transaction
     return await db.transaction(async (tx) => {
-      // Step 1: Get the payment to verify it exists
+      // Step 1: Get the payment/cheque to verify it exists
       const [payment] = await tx.select().from(transactions)
         .where(and(
           eq(transactions.id, paymentId),
-          eq(transactions.type, 'payment')
+          or(
+            eq(transactions.type, 'payment'),
+            eq(transactions.type, 'cheque')
+          )
         ));
       
       if (!payment) {
-        throw new Error(`Payment #${paymentId} not found or is not a payment transaction`);
+        throw new Error(`Payment #${paymentId} not found or is not a payment/cheque transaction`);
       }
       
       console.log(`Deleting payment #${paymentId} with balance: ${payment.balance}`);
@@ -70,6 +74,79 @@ export async function deletePaymentAndRelatedTransactions(paymentId: number) {
         }
       }
       
+      // Step 3b: Restore deposit/cheque balances from line_items
+      // Line items with negative amounts represent deposits/cheques used as payment sources
+      const paymentLineItems = await tx.select().from(lineItems)
+        .where(eq(lineItems.transactionId, paymentId));
+      
+      console.log(`Found ${paymentLineItems.length} line items for payment #${paymentId}`);
+      
+      const restoredCredits = [];
+      for (const lineItem of paymentLineItems) {
+        // Negative amounts indicate deposits/cheques being used
+        if (lineItem.amount < 0) {
+          // Extract the deposit/cheque ID from the description
+          // Format: "Using deposit DEP-XXX credit" or "Using cheque CHQ-XXX credit"
+          const match = lineItem.description?.match(/(deposit|cheque) ([A-Z0-9-]+)/i);
+          
+          if (match) {
+            const creditReference = match[2];
+            
+            // Find the deposit/cheque transaction
+            const [creditTransaction] = await tx.select().from(transactions)
+              .where(and(
+                eq(transactions.reference, creditReference),
+                or(
+                  eq(transactions.type, 'deposit'),
+                  eq(transactions.type, 'cheque')
+                )
+              ));
+            
+            if (creditTransaction) {
+              // Restore the balance (add back the amount that was used)
+              const amountUsed = Math.abs(lineItem.amount);
+              const currentBalance = Number(creditTransaction.balance ?? 0);
+              
+              // For deposits, balances are stored as negative (credits)
+              // For cheques, balances are stored as positive (credits)
+              // We need to restore the credit by adding it back
+              let newBalance;
+              if (creditTransaction.type === 'deposit') {
+                // Deposits have negative balances, so subtract to make more negative (more credit)
+                newBalance = currentBalance - amountUsed;
+              } else {
+                // Cheques have positive balances, so add to increase credit
+                newBalance = currentBalance + amountUsed;
+              }
+              
+              // Status should be unapplied_credit if there's any balance remaining (positive or negative)
+              const newStatus = Math.abs(newBalance) > 0.01 ? 'unapplied_credit' : 'completed';
+              
+              console.log(`Restoring ${creditTransaction.type} ${creditTransaction.reference}: balance from ${creditTransaction.balance} to ${newBalance}, status to ${newStatus}`);
+              
+              await tx.execute(
+                sql`UPDATE transactions 
+                    SET balance = ${newBalance}, status = ${newStatus}
+                    WHERE id = ${creditTransaction.id}`
+              );
+              
+              restoredCredits.push({
+                id: creditTransaction.id,
+                reference: creditTransaction.reference,
+                type: creditTransaction.type,
+                previousBalance: creditTransaction.balance,
+                newBalance: newBalance,
+                previousStatus: creditTransaction.status,
+                newStatus: newStatus,
+                amountRestored: amountUsed
+              });
+            }
+          }
+        }
+      }
+      
+      console.log(`Restored ${restoredCredits.length} deposit/cheque balances`);
+      
       // Step 4: Delete payment application records
       const deleteAppsResult = await tx.execute(
         sql`DELETE FROM payment_applications WHERE payment_id = ${paymentId}`
@@ -100,6 +177,7 @@ export async function deletePaymentAndRelatedTransactions(paymentId: number) {
         paymentId: paymentId,
         applicationsDeleted: applications.length,
         invoicesRestored: restoredInvoices,
+        creditsRestored: restoredCredits,
         message: "Payment and related records successfully deleted"
       };
     });

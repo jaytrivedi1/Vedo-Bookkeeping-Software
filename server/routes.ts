@@ -2053,10 +2053,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Create the payment transaction with ledger entries
+      // Build line items showing invoices paid (DEBIT side) and deposits used (CREDIT side)
+      const customerPaymentLineItems = [];
+      
+      // Add line items for invoices being paid
+      const invoicesForLineItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
+      for (const item of invoicesForLineItems) {
+        const invoice = await storage.getTransaction(item.transactionId);
+        if (invoice) {
+          customerPaymentLineItems.push({
+            description: `Payment for invoice ${invoice.reference}`,
+            quantity: 1,
+            unitPrice: item.amount,
+            amount: item.amount,
+            accountId: 2, // Accounts Receivable
+            transactionId: 0
+          });
+        }
+      }
+      
+      // Add line items for deposits being used as payment source
+      const depositsForLineItems = lineItems.filter((item: any) => item.type === 'deposit');
+      for (const item of depositsForLineItems) {
+        const deposit = await storage.getTransaction(item.transactionId);
+        if (deposit) {
+          customerPaymentLineItems.push({
+            description: `Using deposit ${deposit.reference} credit`,
+            quantity: 1,
+            unitPrice: -item.amount, // Negative to indicate credit source
+            amount: -item.amount,
+            accountId: 2, // Accounts Receivable
+            transactionId: 0
+          });
+        }
+      }
+      
+      // Create the payment transaction with ledger entries and line items
       const payment = await storage.createTransaction(
         paymentData,
-        [], // No line items for the payment itself
+        customerPaymentLineItems, // Line items showing payment details
         paymentLedgerEntries
       );
       
@@ -2292,14 +2327,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'completed' as const // Payment is completed once created
       };
       
-      // Create line items showing which bills were paid
+      // Create line items showing which bills were paid (DEBIT side)
       const paymentLineItems = validatedBills.map(({ bill, amount }) => ({
         description: `Payment for bill ${bill.reference}`,
         quantity: 1,
         unitPrice: amount,
         amount: amount,
+        accountId: 4, // Accounts Payable
         transactionId: 0 // Will be set by createTransaction
       }));
+      
+      // Add line items for cheques being used as payment source (CREDIT side)
+      for (const { cheque, amount } of validatedCheques) {
+        paymentLineItems.push({
+          description: `Using cheque ${cheque.reference} credit`,
+          quantity: 1,
+          unitPrice: -amount, // Negative to indicate credit source
+          amount: -amount,
+          accountId: 4, // Accounts Payable (cheque credit)
+          transactionId: 0
+        });
+      }
       
       // Create main ledger entries only if there's a cash payment
       const mainLedgerEntries = paymentAmount > 0 ? [
