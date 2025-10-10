@@ -16,6 +16,16 @@ import {
   CardTitle, 
   CardDescription 
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import DepositForm from "@/components/forms/DepositForm";
 import { Account, Contact, SalesTax, Transaction } from "@shared/schema";
 
@@ -30,6 +40,7 @@ export default function DepositView() {
   const params = useParams();
   const depositId = params.id;
   const [isEditing, setIsEditing] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   
   // Toast notifications
@@ -74,9 +85,8 @@ export default function DepositView() {
 
   // Handle delete confirmation
   const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this deposit? This action cannot be undone.')) {
-      deleteDepositMutation.mutate();
-    }
+    deleteDepositMutation.mutate();
+    setIsDeleteDialogOpen(false);
   };
 
   // Loading state
@@ -179,20 +189,11 @@ export default function DepositView() {
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDelete}
+              onClick={() => setIsDeleteDialogOpen(true)}
               disabled={deleteDepositMutation.isPending}
             >
-              {deleteDepositMutation.isPending ? (
-                <>
-                  <span className="animate-spin mr-2">⟳</span> 
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </>
-              )}
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
             </Button>
           </div>
         </div>
@@ -349,6 +350,34 @@ export default function DepositView() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete this deposit?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete deposit {deposit.reference || `#${deposit.id}`} 
+                and all associated ledger entries. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteDepositMutation.isPending}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDelete();
+                }}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                disabled={deleteDepositMutation.isPending}
+              >
+                {deleteDepositMutation.isPending ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
