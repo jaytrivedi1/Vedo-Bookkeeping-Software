@@ -42,6 +42,16 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 
 interface VendorListProps {
   className?: string;
@@ -183,10 +193,15 @@ export default function VendorList({ className }: VendorListProps) {
 
   const handleDeleteTransaction = (transaction: Transaction) => {
     setSelectedTransactionToDelete(transaction);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!selectedTransactionToDelete) return;
+    
     setIsDeleting(true);
     deleteTransactionMutation.mutate({ 
-      transactionId: transaction.id, 
-      transactionType: transaction.type 
+      transactionId: selectedTransactionToDelete.id, 
+      transactionType: selectedTransactionToDelete.type 
     });
   };
   
@@ -575,6 +590,33 @@ export default function VendorList({ className }: VendorListProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!selectedTransactionToDelete} onOpenChange={(open) => !open && setSelectedTransactionToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this transaction?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this {selectedTransactionToDelete?.type.replace('_', ' ')} 
+              {selectedTransactionToDelete?.reference ? ` (${selectedTransactionToDelete.reference})` : ''} 
+              and all associated records. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleConfirmDelete();
+              }}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
