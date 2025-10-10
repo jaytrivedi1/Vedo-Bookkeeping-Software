@@ -149,7 +149,15 @@ export default function VendorList({ className }: VendorListProps) {
 
   // Delete transaction mutation
   const deleteTransactionMutation = useMutation({
-    mutationFn: async (transactionId: number) => {
+    mutationFn: async ({ transactionId, transactionType }: { transactionId: number; transactionType: string }) => {
+      console.log('Deleting transaction:', transactionType, transactionId);
+      
+      // Use dedicated payment endpoint for payment transactions
+      if (transactionType === 'payment') {
+        return apiRequest(`/api/payments/${transactionId}/delete`, 'DELETE');
+      }
+      
+      // Use generic endpoint for other transaction types
       return apiRequest(`/api/transactions/${transactionId}`, 'DELETE');
     },
     onSuccess: () => {
@@ -175,7 +183,10 @@ export default function VendorList({ className }: VendorListProps) {
   const handleDeleteTransaction = (transaction: Transaction) => {
     setSelectedTransactionToDelete(transaction);
     setIsDeleting(true);
-    deleteTransactionMutation.mutate(transaction.id);
+    deleteTransactionMutation.mutate({ 
+      transactionId: transaction.id, 
+      transactionType: transaction.type 
+    });
   };
   
   return (
