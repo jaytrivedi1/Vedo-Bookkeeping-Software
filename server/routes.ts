@@ -2358,6 +2358,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await db.insert(ledgerEntries).values(entry);
           }
           
+          // Create payment_applications record to track payment-to-bill relationship
+          await db.insert(paymentApplications).values({
+            paymentId: payment.id,
+            invoiceId: bill.id,
+            amountApplied: amount
+          });
+          
           console.log(`Applied $${amount} payment to bill ${bill.reference}`);
         }
       }
