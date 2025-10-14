@@ -149,7 +149,7 @@ export default function Dashboard() {
               
               <DropdownMenuSeparator />
               
-              <Link href="/journals">
+              <Link href="/journals/new">
                 <DropdownMenuItem>
                   <BookOpen className="mr-2 h-4 w-4" />
                   <span>Journal Entry</span>
