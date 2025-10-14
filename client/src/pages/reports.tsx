@@ -523,6 +523,8 @@ export default function Reports() {
         return 'Balance Sheet';
       case 'general-ledger':
         return 'General Ledger';
+      case 'journal-entries':
+        return 'Journal Entry';
       case 'trial-balance':
         return 'Trial Balance';
       case 'expense-analysis':
@@ -549,128 +551,114 @@ export default function Reports() {
           {activeTab === '' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("income-statement")}
+                data-testid="card-income-statement"
               >
-                <CardHeader>
-                  <CardTitle>Income Statement</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Income Statement</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     View your revenues, expenses, and net income for a specific period
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The income statement shows how your business performed financially over a specific 
-                    time period, displaying revenues earned and expenses incurred.
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("balance-sheet")}
+                data-testid="card-balance-sheet"
               >
-                <CardHeader>
-                  <CardTitle>Balance Sheet</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Balance Sheet</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     Examine your assets, liabilities, and equity at a specific point in time
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The balance sheet provides a snapshot of your company's financial position, showing 
-                    what you own (assets), what you owe (liabilities), and the resulting net worth (equity).
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("general-ledger")}
+                data-testid="card-general-ledger"
               >
-                <CardHeader>
-                  <CardTitle>General Ledger</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">General Ledger</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     Examine all financial transactions with detailed debit and credit entries
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The general ledger provides a complete record of all financial transactions, 
-                    showing every debit and credit entry made to each account in your chart of accounts.
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
+                onClick={() => setActiveTab("journal-entries")}
+                data-testid="card-journal-entries"
+              >
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Journal Entry</CardTitle>
+                  <CardDescription className="text-sm mt-2">
+                    View all journal entries with detailed transaction records
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
               
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("trial-balance")}
+                data-testid="card-trial-balance"
               >
-                <CardHeader>
-                  <CardTitle>Trial Balance</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Trial Balance</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     View account balances with debit and credit columns to verify accounting equation
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The trial balance report verifies that total debits equal total credits across all accounts,
-                    confirming the accounting equation is in balance before creating financial statements.
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("expense-analysis")}
+                data-testid="card-expense-analysis"
               >
-                <CardHeader>
-                  <CardTitle>Expense Analysis</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Expense Analysis</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     Break down your expenses by category to identify spending patterns
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The expense analysis report helps you understand where your money is going by categorizing 
-                    and visualizing expense transactions across different accounts and time periods.
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
 
               <Card 
-                className="cursor-pointer hover:bg-gray-50 transition-colors" 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("revenue-analysis")}
+                data-testid="card-revenue-analysis"
               >
-                <CardHeader>
-                  <CardTitle>Revenue Analysis</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Revenue Analysis</CardTitle>
+                  <CardDescription className="text-sm mt-2">
                     Analyze your revenue streams to understand your income sources
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    The revenue analysis report helps you track where your income is coming from by breaking down
-                    revenue by source, customer, product or service categories.
-                  </p>
-                </CardContent>
-                <CardFooter className="flex justify-end">
-                  <Button variant="ghost" size="sm">View Report →</Button>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
                 </CardFooter>
               </Card>
             </div>
@@ -1457,6 +1445,26 @@ export default function Reports() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            {/* Journal Entries */}
+            <TabsContent value="journal-entries">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Journal Entry Report</CardTitle>
+                  <CardDescription>
+                    View all journal entries with detailed transaction records
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="text-center py-12">
+                  <p className="text-muted-foreground mb-6">
+                    Journal entries are available on the dedicated Journal Entries page with full search and filtering capabilities.
+                  </p>
+                  <Button onClick={() => setLocation('/journals')} data-testid="button-view-journals">
+                    View Journal Entries
+                  </Button>
+                </CardContent>
+              </Card>
             </TabsContent>
             
             {/* Trial Balance */}
