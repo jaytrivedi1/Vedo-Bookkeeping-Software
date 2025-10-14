@@ -2432,9 +2432,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const { bill, amount: billAmount } of validatedBills) {
           const chequeApplicationAmount = billAmount * proportionPerBill;
           
-          // Create payment_applications record to track cheque-to-bill application
+          // Create payment_applications record to track payment-to-bill application
+          // Note: Use payment.id (not cheque.id) so deletion handler can find these records
           await db.insert(paymentApplications).values({
-            paymentId: cheque.id,
+            paymentId: payment.id,
             invoiceId: bill.id,
             amountApplied: chequeApplicationAmount
           });
