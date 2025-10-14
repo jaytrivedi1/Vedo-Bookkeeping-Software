@@ -1,12 +1,11 @@
-import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { JournalEntry, journalEntrySchema, Account, Contact } from "@shared/schema";
+import { JournalEntry, journalEntrySchema, Account, Contact, SalesTax } from "@shared/schema";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
-import { CalendarIcon, Plus, Trash2, XIcon } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -52,16 +51,20 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
     queryKey: ['/api/contacts'],
   });
 
+  const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
+    queryKey: ['/api/sales-taxes'],
+  });
+
   const form = useForm<JournalEntry>({
     resolver: zodResolver(journalEntrySchema),
     defaultValues: {
       date: new Date(),
       reference: `JE-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
       description: '',
-      contactId: undefined,
+      attachments: '',
       entries: [
-        { accountId: 0, description: '', debit: 0, credit: 0 },
-        { accountId: 0, description: '', debit: 0, credit: 0 }
+        { accountId: 0, contactId: undefined, description: '', debit: 0, credit: 0, salesTaxId: undefined },
+        { accountId: 0, contactId: undefined, description: '', debit: 0, credit: 0, salesTaxId: undefined }
       ],
     },
   });
@@ -90,12 +93,11 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
   };
 
   const onSubmit = (data: JournalEntry) => {
-    // Convert entries to line items format for validation
+    // Validate A/P and A/R account requirements using per-line contactId
     const lineItems = data.entries.map(entry => ({
       accountId: entry.accountId
     }));
     
-    // Validate A/P and A/R account requirements
     const { hasAP, hasAR, accountsLoaded } = hasAccountsPayableOrReceivable(lineItems, accounts);
     
     if (!accountsLoaded) {
@@ -111,7 +113,7 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
       for (const entry of data.entries) {
         const error = validateAccountContactRequirement(
           entry.accountId,
-          data.contactId,
+          entry.contactId,
           accounts,
           contacts
         );
@@ -134,14 +136,15 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Header Section */}
           <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
               name="date"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Date</FormLabel>
+                  <FormLabel>Journal Date</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -151,6 +154,7 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                             "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
+                          data-testid="input-journal-date"
                         >
                           {field.value ? (
                             format(field.value, "PPP")
@@ -180,9 +184,13 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
               name="reference"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reference</FormLabel>
+                  <FormLabel>Journal Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="JE-YYYY-MM" {...field} />
+                    <Input 
+                      placeholder="JE-YYYY-MM-DD" 
+                      {...field} 
+                      data-testid="input-journal-number"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -195,9 +203,14 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Description</FormLabel>
+                <FormLabel>Memo</FormLabel>
                 <FormControl>
-                  <Textarea placeholder="Journal entry description" {...field} />
+                  <Textarea 
+                    placeholder="Enter journal entry memo..." 
+                    {...field} 
+                    rows={2}
+                    data-testid="input-memo"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -206,75 +219,46 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
 
           <FormField
             control={form.control}
-            name="contactId"
+            name="attachments"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Contact (Required for A/P or A/R accounts)</FormLabel>
-                <div className="flex items-center gap-2">
-                  <Select 
-                    onValueChange={(value) => {
-                      if (value === "none") {
-                        field.onChange(undefined);
-                      } else {
-                        field.onChange(parseInt(value));
-                      }
-                    }}
-                    value={field.value?.toString() || ""}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a contact (optional)" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {contactsLoading ? (
-                        <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                      ) : contacts && contacts.length > 0 ? (
-                        contacts.map((contact) => (
-                          <SelectItem key={contact.id} value={contact.id.toString()}>
-                            {contact.name} ({contact.type})
-                          </SelectItem>
-                        ))
-                      ) : null}
-                    </SelectContent>
-                  </Select>
-                  {field.value !== undefined && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => field.onChange(undefined)}
-                    >
-                      <XIcon className="h-4 w-4" />
+                <FormLabel>Attachments</FormLabel>
+                <FormControl>
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      placeholder="Enter attachment URLs or paths (comma-separated)" 
+                      {...field} 
+                      data-testid="input-attachments"
+                    />
+                    <Button type="button" variant="outline" size="icon">
+                      <Upload className="h-4 w-4" />
                     </Button>
-                  )}
-                </div>
+                  </div>
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <div>
-            <h3 className="text-md font-medium mb-2">Journal Entries</h3>
-            <div className="grid grid-cols-12 gap-2 mb-2">
-              <div className="col-span-5">
-                <label className="text-sm font-medium text-gray-700">Account</label>
-              </div>
-              <div className="col-span-3">
-                <label className="text-sm font-medium text-gray-700">Description</label>
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Debit</label>
-              </div>
-              <div className="col-span-2">
-                <label className="text-sm font-medium text-gray-700">Credit</label>
-              </div>
+          {/* Entry Table Section */}
+          <div className="border rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">Journal Entries</h3>
+            
+            {/* Table Header */}
+            <div className="grid grid-cols-12 gap-2 mb-3 pb-2 border-b">
+              <div className="col-span-3 text-sm font-medium text-gray-700">Account</div>
+              <div className="col-span-2 text-sm font-medium text-gray-700">Name</div>
+              <div className="col-span-2 text-sm font-medium text-gray-700">Description</div>
+              <div className="col-span-2 text-sm font-medium text-gray-700">Debits</div>
+              <div className="col-span-2 text-sm font-medium text-gray-700">Credits</div>
+              <div className="col-span-1 text-sm font-medium text-gray-700">Tax</div>
             </div>
             
+            {/* Entry Rows */}
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-12 gap-2 mb-2 items-center">
-                <div className="col-span-5">
+              <div key={field.id} className="grid grid-cols-12 gap-2 mb-3 items-start">
+                {/* Account */}
+                <div className="col-span-3">
                   <FormField
                     control={form.control}
                     name={`entries.${index}.accountId`}
@@ -282,16 +266,16 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                       <FormItem>
                         <Select 
                           onValueChange={(value) => field.onChange(parseInt(value))} 
-                          defaultValue={field.value?.toString()}
+                          value={field.value?.toString() || ""}
                         >
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select an account" />
+                            <SelectTrigger data-testid={`select-account-${index}`}>
+                              <SelectValue placeholder="Select account" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {accountsLoading ? (
-                              <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
+                              <SelectItem value="loading" disabled>Loading...</SelectItem>
                             ) : accounts && accounts.length > 0 ? (
                               accounts.map((account) => (
                                 <SelectItem key={account.id} value={account.id.toString()}>
@@ -299,7 +283,7 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                                 </SelectItem>
                               ))
                             ) : (
-                              <SelectItem value="none" disabled>No accounts available</SelectItem>
+                              <SelectItem value="none" disabled>No accounts</SelectItem>
                             )}
                           </SelectContent>
                         </Select>
@@ -308,20 +292,63 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     )}
                   />
                 </div>
-                <div className="col-span-3">
+
+                {/* Name (Contact) */}
+                <div className="col-span-2">
+                  <FormField
+                    control={form.control}
+                    name={`entries.${index}.contactId`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
+                          value={field.value?.toString() || "none"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid={`select-name-${index}`}>
+                              <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">None</SelectItem>
+                            {contactsLoading ? (
+                              <SelectItem value="loading" disabled>Loading...</SelectItem>
+                            ) : contacts && contacts.length > 0 ? (
+                              contacts.map((contact) => (
+                                <SelectItem key={contact.id} value={contact.id.toString()}>
+                                  {contact.name}
+                                </SelectItem>
+                              ))
+                            ) : null}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="col-span-2">
                   <FormField
                     control={form.control}
                     name={`entries.${index}.description`}
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Input placeholder="Description" {...field} />
+                          <Input 
+                            placeholder="Description" 
+                            {...field} 
+                            data-testid={`input-description-${index}`}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
+
+                {/* Debits */}
                 <div className="col-span-2">
                   <FormField
                     control={form.control}
@@ -333,11 +360,13 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                             type="number" 
                             min="0" 
                             step="0.01" 
+                            placeholder="0.00"
                             {...field} 
                             onChange={(e) => {
                               field.onChange(parseFloat(e.target.value) || 0);
                               form.trigger('entries');
                             }}
+                            data-testid={`input-debit-${index}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -345,6 +374,8 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     )}
                   />
                 </div>
+
+                {/* Credits */}
                 <div className="col-span-2">
                   <FormField
                     control={form.control}
@@ -356,11 +387,13 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                             type="number" 
                             min="0" 
                             step="0.01" 
+                            placeholder="0.00"
                             {...field} 
                             onChange={(e) => {
                               field.onChange(parseFloat(e.target.value) || 0);
                               form.trigger('entries');
                             }}
+                            data-testid={`input-credit-${index}`}
                           />
                         </FormControl>
                         <FormMessage />
@@ -368,17 +401,54 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     )}
                   />
                 </div>
-                {fields.length > 2 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => remove(index)}
-                    className="ml-2"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
+
+                {/* Sales Tax */}
+                <div className="col-span-1 flex items-center gap-1">
+                  <FormField
+                    control={form.control}
+                    name={`entries.${index}.salesTaxId`}
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <Select 
+                          onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
+                          value={field.value?.toString() || "none"}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid={`select-tax-${index}`}>
+                              <SelectValue placeholder="-" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">-</SelectItem>
+                            {salesTaxesLoading ? (
+                              <SelectItem value="loading" disabled>Loading...</SelectItem>
+                            ) : salesTaxes && salesTaxes.length > 0 ? (
+                              salesTaxes.map((tax) => (
+                                <SelectItem key={tax.id} value={tax.id.toString()}>
+                                  {tax.name}
+                                </SelectItem>
+                              ))
+                            ) : null}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Delete Button */}
+                  {fields.length > 2 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => remove(index)}
+                      data-testid={`button-delete-entry-${index}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
             
@@ -386,46 +456,57 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
               type="button"
               variant="outline"
               size="sm"
-              className="mt-2"
-              onClick={() => append({ accountId: 0, description: '', debit: 0, credit: 0 })}
+              className="mt-3"
+              onClick={() => append({ accountId: 0, contactId: undefined, description: '', debit: 0, credit: 0, salesTaxId: undefined })}
+              data-testid="button-add-entry"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Entry
             </Button>
             
-            <div className="flex justify-end space-x-4 mt-4 text-sm">
+            {/* Totals Section */}
+            <div className="flex justify-end gap-6 mt-6 pt-4 border-t text-sm">
               <div>
-                <p>Total Debits: <span className="font-semibold">${totalDebits.toFixed(2)}</span></p>
+                <p className="text-gray-600">Total Debits:</p>
+                <p className="font-bold text-lg" data-testid="text-total-debits">
+                  ${totalDebits.toFixed(2)}
+                </p>
               </div>
               <div>
-                <p>Total Credits: <span className="font-semibold">${totalCredits.toFixed(2)}</span></p>
+                <p className="text-gray-600">Total Credits:</p>
+                <p className="font-bold text-lg" data-testid="text-total-credits">
+                  ${totalCredits.toFixed(2)}
+                </p>
               </div>
               <div>
-                <p>Difference: <span className={cn("font-semibold", difference > 0.001 ? "text-red-500" : "text-green-500")}>
+                <p className="text-gray-600">Difference:</p>
+                <p className={cn(
+                  "font-bold text-lg",
+                  difference > 0.001 ? "text-red-500" : "text-green-600"
+                )} data-testid="text-difference">
                   ${difference.toFixed(2)}
-                </span></p>
+                </p>
               </div>
             </div>
           </div>
 
+          {/* Action Buttons */}
           <div className="flex justify-between pt-4">
-            <div>
-              <Button 
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-              >
-                Cancel
-              </Button>
-            </div>
-            <div>
-              <Button 
-                type="submit"
-                disabled={createJournalEntry.isPending || difference > 0.001}
-              >
-                {createJournalEntry.isPending ? 'Saving...' : 'Save Journal Entry'}
-              </Button>
-            </div>
+            <Button 
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              data-testid="button-cancel"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit"
+              disabled={createJournalEntry.isPending || difference > 0.001}
+              data-testid="button-save"
+            >
+              {createJournalEntry.isPending ? 'Saving...' : 'Save Journal Entry'}
+            </Button>
           </div>
         </div>
       </form>

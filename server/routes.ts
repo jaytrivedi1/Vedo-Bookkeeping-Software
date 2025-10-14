@@ -1764,7 +1764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const journalData = journalEntrySchema.parse(body);
       
-      // Validate A/P and A/R account requirements
+      // Validate A/P and A/R account requirements (using per-line contactId)
       const accounts = await storage.getAccounts();
       const contacts = await storage.getContacts();
       const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
@@ -1776,7 +1776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const entry of journalData.entries) {
           const error = validateAccountContactRequirement(
             entry.accountId,
-            journalData.contactId,
+            entry.contactId, // Use per-line contactId instead of global
             accounts,
             contacts
           );
@@ -1784,7 +1784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ 
               message: "Validation Error", 
               errors: [{ 
-                path: ["contactId"], 
+                path: ["entries"], 
                 message: error 
               }] 
             });

@@ -206,14 +206,16 @@ export const chequeSchema = z.object({
 export const journalEntrySchema = z.object({
   date: z.date(),
   reference: z.string().min(1, "Reference is required"),
-  description: z.string().min(1, "Description is required"),
-  contactId: z.number().optional(),
+  description: z.string().min(1, "Memo is required"),
+  attachments: z.string().optional(),
   entries: z.array(
     z.object({
       accountId: z.number(),
+      contactId: z.number().optional(),
       description: z.string(),
       debit: z.number().min(0, "Debit amount cannot be negative"),
       credit: z.number().min(0, "Credit amount cannot be negative"),
+      salesTaxId: z.number().optional(),
     })
   ).min(2, "At least two entries are required")
   .refine(entries => {
