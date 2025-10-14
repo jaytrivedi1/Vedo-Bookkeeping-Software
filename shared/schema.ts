@@ -206,7 +206,7 @@ export const chequeSchema = z.object({
 export const journalEntrySchema = z.object({
   date: z.date(),
   reference: z.string().min(1, "Reference is required"),
-  description: z.string().min(1, "Memo is required"),
+  description: z.string().optional(),
   attachments: z.string().optional(),
   entries: z.array(
     z.object({
