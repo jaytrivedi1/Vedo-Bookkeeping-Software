@@ -494,3 +494,85 @@ export type InsertPermission = z.infer<typeof insertPermissionSchema>;
 
 export type RolePermission = typeof rolePermissionsSchema.$inferSelect;
 export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+
+// Bank Connections (for Plaid integration)
+export const bankConnectionsSchema = pgTable('bank_connections', {
+  id: serial('id').primaryKey(),
+  itemId: text('item_id').notNull().unique(), // Plaid item_id
+  accessToken: text('access_token').notNull(), // Plaid access_token (encrypted in production)
+  institutionId: text('institution_id').notNull(),
+  institutionName: text('institution_name').notNull(),
+  accountIds: text('account_ids').array().notNull(), // Array of Plaid account IDs
+  status: text('status').notNull().default('active'), // active, inactive, error
+  lastSync: timestamp('last_sync'),
+  error: text('error'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Bank Accounts (individual accounts from bank connection)
+export const bankAccountsSchema = pgTable('bank_accounts', {
+  id: serial('id').primaryKey(),
+  connectionId: integer('connection_id').notNull().references(() => bankConnectionsSchema.id),
+  plaidAccountId: text('plaid_account_id').notNull().unique(),
+  name: text('name').notNull(),
+  mask: text('mask'), // Last 4 digits of account
+  officialName: text('official_name'),
+  type: text('type').notNull(), // checking, savings, credit card, etc.
+  subtype: text('subtype'),
+  currentBalance: doublePrecision('current_balance'),
+  availableBalance: doublePrecision('available_balance'),
+  linkedAccountId: integer('linked_account_id').references(() => accounts.id), // Link to chart of accounts
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Imported Transactions (from bank feeds)
+export const importedTransactionsSchema = pgTable('imported_transactions', {
+  id: serial('id').primaryKey(),
+  bankAccountId: integer('bank_account_id').notNull().references(() => bankAccountsSchema.id),
+  plaidTransactionId: text('plaid_transaction_id').notNull().unique(),
+  date: timestamp('date').notNull(),
+  authorizedDate: timestamp('authorized_date'),
+  name: text('name').notNull(),
+  merchantName: text('merchant_name'),
+  amount: doublePrecision('amount').notNull(),
+  isoCurrencyCode: text('iso_currency_code'),
+  category: text('category').array(), // Plaid categories
+  pending: boolean('pending').notNull().default(false),
+  paymentChannel: text('payment_channel'), // online, in store, etc.
+  matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created transaction
+  status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Insert schemas
+export const insertBankConnectionSchema = createInsertSchema(bankConnectionsSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertBankAccountSchema = createInsertSchema(bankAccountsSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertImportedTransactionSchema = createInsertSchema(importedTransactionsSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+// Types
+export type BankConnection = typeof bankConnectionsSchema.$inferSelect;
+export type InsertBankConnection = z.infer<typeof insertBankConnectionSchema>;
+
+export type BankAccount = typeof bankAccountsSchema.$inferSelect;
+export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;
+
+export type ImportedTransaction = typeof importedTransactionsSchema.$inferSelect;
+export type InsertImportedTransaction = z.infer<typeof insertImportedTransactionSchema>;

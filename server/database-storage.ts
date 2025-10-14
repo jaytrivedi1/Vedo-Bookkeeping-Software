@@ -2,11 +2,13 @@ import { db } from "./db";
 import { 
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
+  BankConnection, BankAccount, ImportedTransaction,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
+  InsertBankConnection, InsertBankAccount, InsertImportedTransaction,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
-  permissionsSchema, rolePermissionsSchema
+  permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -1831,5 +1833,173 @@ export class DatabaseStorage implements IStorage {
 
   async hashPassword(password: string): Promise<string> {
     return await hashPassword(password);
+  }
+
+  // Bank Connections
+  async getBankConnections(): Promise<BankConnection[]> {
+    return await db.select().from(bankConnectionsSchema).orderBy(desc(bankConnectionsSchema.createdAt));
+  }
+
+  async getBankConnection(id: number): Promise<BankConnection | undefined> {
+    const result = await db.select().from(bankConnectionsSchema).where(eq(bankConnectionsSchema.id, id));
+    return result[0];
+  }
+
+  async getBankConnectionByItemId(itemId: string): Promise<BankConnection | undefined> {
+    const result = await db.select().from(bankConnectionsSchema).where(eq(bankConnectionsSchema.itemId, itemId));
+    return result[0];
+  }
+
+  async createBankConnection(connection: InsertBankConnection): Promise<BankConnection> {
+    const [newConnection] = await db.insert(bankConnectionsSchema)
+      .values(connection)
+      .returning();
+    return newConnection;
+  }
+
+  async updateBankConnection(id: number, connection: Partial<BankConnection>): Promise<BankConnection | undefined> {
+    const [updatedConnection] = await db.update(bankConnectionsSchema)
+      .set(connection)
+      .where(eq(bankConnectionsSchema.id, id))
+      .returning();
+    return updatedConnection;
+  }
+
+  async deleteBankConnection(id: number): Promise<boolean> {
+    try {
+      // First delete all related bank accounts and their transactions
+      const relatedAccounts = await db.select()
+        .from(bankAccountsSchema)
+        .where(eq(bankAccountsSchema.connectionId, id));
+      
+      for (const account of relatedAccounts) {
+        await db.delete(importedTransactionsSchema)
+          .where(eq(importedTransactionsSchema.bankAccountId, account.id));
+      }
+      
+      await db.delete(bankAccountsSchema)
+        .where(eq(bankAccountsSchema.connectionId, id));
+      
+      const result = await db.delete(bankConnectionsSchema)
+        .where(eq(bankConnectionsSchema.id, id));
+      
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting bank connection with ID ${id}:`, error);
+      return false;
+    }
+  }
+
+  // Bank Accounts
+  async getBankAccounts(): Promise<BankAccount[]> {
+    return await db.select().from(bankAccountsSchema).orderBy(bankAccountsSchema.name);
+  }
+
+  async getBankAccount(id: number): Promise<BankAccount | undefined> {
+    const result = await db.select().from(bankAccountsSchema).where(eq(bankAccountsSchema.id, id));
+    return result[0];
+  }
+
+  async getBankAccountsByConnectionId(connectionId: number): Promise<BankAccount[]> {
+    return await db.select()
+      .from(bankAccountsSchema)
+      .where(eq(bankAccountsSchema.connectionId, connectionId))
+      .orderBy(bankAccountsSchema.name);
+  }
+
+  async getBankAccountByPlaidId(plaidAccountId: string): Promise<BankAccount | undefined> {
+    const result = await db.select()
+      .from(bankAccountsSchema)
+      .where(eq(bankAccountsSchema.plaidAccountId, plaidAccountId));
+    return result[0];
+  }
+
+  async createBankAccount(account: InsertBankAccount): Promise<BankAccount> {
+    const [newAccount] = await db.insert(bankAccountsSchema)
+      .values(account)
+      .returning();
+    return newAccount;
+  }
+
+  async updateBankAccount(id: number, account: Partial<BankAccount>): Promise<BankAccount | undefined> {
+    const [updatedAccount] = await db.update(bankAccountsSchema)
+      .set(account)
+      .where(eq(bankAccountsSchema.id, id))
+      .returning();
+    return updatedAccount;
+  }
+
+  async deleteBankAccount(id: number): Promise<boolean> {
+    try {
+      // First delete all related imported transactions
+      await db.delete(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.bankAccountId, id));
+      
+      const result = await db.delete(bankAccountsSchema)
+        .where(eq(bankAccountsSchema.id, id));
+      
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting bank account with ID ${id}:`, error);
+      return false;
+    }
+  }
+
+  // Imported Transactions
+  async getImportedTransactions(): Promise<ImportedTransaction[]> {
+    return await db.select().from(importedTransactionsSchema).orderBy(desc(importedTransactionsSchema.date));
+  }
+
+  async getImportedTransaction(id: number): Promise<ImportedTransaction | undefined> {
+    const result = await db.select().from(importedTransactionsSchema).where(eq(importedTransactionsSchema.id, id));
+    return result[0];
+  }
+
+  async getImportedTransactionsByBankAccount(bankAccountId: number): Promise<ImportedTransaction[]> {
+    return await db.select()
+      .from(importedTransactionsSchema)
+      .where(eq(importedTransactionsSchema.bankAccountId, bankAccountId))
+      .orderBy(desc(importedTransactionsSchema.date));
+  }
+
+  async getImportedTransactionByPlaidId(plaidTransactionId: string): Promise<ImportedTransaction | undefined> {
+    const result = await db.select()
+      .from(importedTransactionsSchema)
+      .where(eq(importedTransactionsSchema.plaidTransactionId, plaidTransactionId));
+    return result[0];
+  }
+
+  async getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]> {
+    return await db.select()
+      .from(importedTransactionsSchema)
+      .where(eq(importedTransactionsSchema.status, 'unmatched'))
+      .orderBy(desc(importedTransactionsSchema.date));
+  }
+
+  async createImportedTransaction(transaction: InsertImportedTransaction): Promise<ImportedTransaction> {
+    const [newTransaction] = await db.insert(importedTransactionsSchema)
+      .values(transaction)
+      .returning();
+    return newTransaction;
+  }
+
+  async updateImportedTransaction(id: number, transaction: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined> {
+    const [updatedTransaction] = await db.update(importedTransactionsSchema)
+      .set(transaction)
+      .where(eq(importedTransactionsSchema.id, id))
+      .returning();
+    return updatedTransaction;
+  }
+
+  async deleteImportedTransaction(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, id));
+      
+      return result.rowCount !== null && result.rowCount > 0;
+    } catch (error) {
+      console.error(`Error deleting imported transaction with ID ${id}:`, error);
+      return false;
+    }
   }
 }

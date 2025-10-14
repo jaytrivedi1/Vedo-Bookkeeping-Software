@@ -13,6 +13,9 @@ import {
   userCompaniesSchema,
   permissionsSchema,
   rolePermissionsSchema,
+  bankConnectionsSchema,
+  bankAccountsSchema,
+  importedTransactionsSchema,
   type Account,
   type InsertAccount,
   type Contact,
@@ -41,6 +44,12 @@ import {
   type InsertPermission,
   type RolePermission,
   type InsertRolePermission,
+  type BankConnection,
+  type InsertBankConnection,
+  type BankAccount,
+  type InsertBankAccount,
+  type ImportedTransaction,
+  type InsertImportedTransaction,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -149,6 +158,33 @@ export interface IStorage {
   // Authentication helpers
   validatePassword(storedPassword: string, suppliedPassword: string): Promise<boolean>;
   hashPassword(password: string): Promise<string>;
+  
+  // Bank Connections
+  getBankConnections(): Promise<BankConnection[]>;
+  getBankConnection(id: number): Promise<BankConnection | undefined>;
+  getBankConnectionByItemId(itemId: string): Promise<BankConnection | undefined>;
+  createBankConnection(connection: InsertBankConnection): Promise<BankConnection>;
+  updateBankConnection(id: number, connection: Partial<BankConnection>): Promise<BankConnection | undefined>;
+  deleteBankConnection(id: number): Promise<boolean>;
+  
+  // Bank Accounts
+  getBankAccounts(): Promise<BankAccount[]>;
+  getBankAccount(id: number): Promise<BankAccount | undefined>;
+  getBankAccountsByConnectionId(connectionId: number): Promise<BankAccount[]>;
+  getBankAccountByPlaidId(plaidAccountId: string): Promise<BankAccount | undefined>;
+  createBankAccount(account: InsertBankAccount): Promise<BankAccount>;
+  updateBankAccount(id: number, account: Partial<BankAccount>): Promise<BankAccount | undefined>;
+  deleteBankAccount(id: number): Promise<boolean>;
+  
+  // Imported Transactions
+  getImportedTransactions(): Promise<ImportedTransaction[]>;
+  getImportedTransaction(id: number): Promise<ImportedTransaction | undefined>;
+  getImportedTransactionsByBankAccount(bankAccountId: number): Promise<ImportedTransaction[]>;
+  getImportedTransactionByPlaidId(plaidTransactionId: string): Promise<ImportedTransaction | undefined>;
+  getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]>;
+  createImportedTransaction(transaction: InsertImportedTransaction): Promise<ImportedTransaction>;
+  updateImportedTransaction(id: number, transaction: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined>;
+  deleteImportedTransaction(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -1014,6 +1050,93 @@ export class MemStorage implements IStorage {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Bank Connections
+  async getBankConnections(): Promise<BankConnection[]> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  async getBankConnection(id: number): Promise<BankConnection | undefined> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  async getBankConnectionByItemId(itemId: string): Promise<BankConnection | undefined> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  async createBankConnection(connection: InsertBankConnection): Promise<BankConnection> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  async updateBankConnection(id: number, connection: Partial<BankConnection>): Promise<BankConnection | undefined> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  async deleteBankConnection(id: number): Promise<boolean> {
+    throw new Error("Bank connections not supported in MemStorage");
+  }
+
+  // Bank Accounts
+  async getBankAccounts(): Promise<BankAccount[]> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async getBankAccount(id: number): Promise<BankAccount | undefined> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async getBankAccountsByConnectionId(connectionId: number): Promise<BankAccount[]> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async getBankAccountByPlaidId(plaidAccountId: string): Promise<BankAccount | undefined> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async createBankAccount(account: InsertBankAccount): Promise<BankAccount> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async updateBankAccount(id: number, account: Partial<BankAccount>): Promise<BankAccount | undefined> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  async deleteBankAccount(id: number): Promise<boolean> {
+    throw new Error("Bank accounts not supported in MemStorage");
+  }
+
+  // Imported Transactions
+  async getImportedTransactions(): Promise<ImportedTransaction[]> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async getImportedTransaction(id: number): Promise<ImportedTransaction | undefined> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async getImportedTransactionsByBankAccount(bankAccountId: number): Promise<ImportedTransaction[]> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async getImportedTransactionByPlaidId(plaidTransactionId: string): Promise<ImportedTransaction | undefined> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async createImportedTransaction(transaction: InsertImportedTransaction): Promise<ImportedTransaction> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async updateImportedTransaction(id: number, transaction: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined> {
+    throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  async deleteImportedTransaction(id: number): Promise<boolean> {
+    throw new Error("Imported transactions not supported in MemStorage");
   }
 }
 
