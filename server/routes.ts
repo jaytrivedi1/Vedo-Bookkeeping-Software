@@ -6827,10 +6827,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
             amount = debit - credit; // Positive for debits, negative for credits
           }
 
-          // Parse date
-          const date = new Date(dateStr);
-          if (isNaN(date.getTime())) {
-            errors.push({ row: i + 1, error: 'Invalid date format', data: row });
+          // Parse date - try multiple formats
+          let date: Date | null = null;
+          const commonDateFormats = [
+            // ISO format
+            /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
+            // US format
+            /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // MM/DD/YYYY
+            /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // MM-DD-YYYY
+            // EU format
+            /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // DD/MM/YYYY (check context)
+            /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // DD-MM-YYYY (check context)
+          ];
+
+          // Try ISO format first
+          if (/^\d{4}-\d{1,2}-\d{1,2}/.test(dateStr)) {
+            date = new Date(dateStr);
+          }
+          
+          // Try parsing MM/DD/YYYY or DD/MM/YYYY
+          if (!date || isNaN(date.getTime())) {
+            const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            const dashMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+            
+            if (slashMatch || dashMatch) {
+              const match = slashMatch || dashMatch;
+              const part1 = parseInt(match![1]);
+              const part2 = parseInt(match![2]);
+              const year = parseInt(match![3]);
+              
+              // Heuristic: if first part > 12, assume DD/MM/YYYY, otherwise MM/DD/YYYY
+              let month: number, day: number;
+              if (part1 > 12) {
+                // Must be DD/MM/YYYY
+                day = part1;
+                month = part2;
+              } else if (part2 > 12) {
+                // Must be MM/DD/YYYY
+                month = part1;
+                day = part2;
+              } else {
+                // Ambiguous - default to MM/DD/YYYY (US format)
+                month = part1;
+                day = part2;
+              }
+              
+              date = new Date(year, month - 1, day);
+            }
+          }
+          
+          // Fallback: try native Date parsing
+          if (!date || isNaN(date.getTime())) {
+            date = new Date(dateStr);
+          }
+          
+          if (!date || isNaN(date.getTime())) {
+            errors.push({ 
+              row: i + 1, 
+              error: `Invalid date format: "${dateStr}". Supported formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY`, 
+              data: row 
+            });
             continue;
           }
 

@@ -71,6 +71,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     description: '',
   });
   const [importedCount, setImportedCount] = useState(0);
+  const [importErrors, setImportErrors] = useState<any[]>([]);
 
   // Fetch bank accounts for selection
   const { data: bankAccounts = [] } = useQuery<BankAccount[]>({
@@ -168,12 +169,17 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     },
     onSuccess: (data) => {
       setImportedCount(data.imported);
+      setImportErrors(data.errors || []);
       setStep('complete');
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
       
+      const hasErrors = data.errors && data.errors.length > 0;
       toast({
-        title: "Success",
-        description: `Imported ${data.imported} transactions`,
+        title: hasErrors ? "Import Completed with Errors" : "Success",
+        description: hasErrors 
+          ? `Imported ${data.imported} transactions, ${data.errors.length} rows failed`
+          : `Imported ${data.imported} transactions`,
+        variant: hasErrors ? "default" : "default",
       });
     },
     onError: (error: any) => {
@@ -265,6 +271,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     setSelectedAccountId('');
     setColumnMapping({ date: '', description: '' });
     setImportedCount(0);
+    setImportErrors([]);
     onOpenChange(false);
   };
 
@@ -517,12 +524,38 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
 
         {/* Step 5: Complete */}
         {step === 'complete' && (
-          <div className="text-center py-8">
-            <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Import Complete!</h3>
-            <p className="text-gray-600">
-              Successfully imported {importedCount} transactions
-            </p>
+          <div className="space-y-4">
+            <div className="text-center py-6">
+              <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Import Complete!</h3>
+              <p className="text-gray-600">
+                Successfully imported {importedCount} transactions
+              </p>
+            </div>
+
+            {importErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Import Errors ({importErrors.length})</AlertTitle>
+                <AlertDescription>
+                  <div className="mt-2 max-h-48 overflow-y-auto">
+                    <div className="space-y-2 text-sm">
+                      {importErrors.slice(0, 10).map((error, index) => (
+                        <div key={index} className="border-l-2 border-red-300 pl-2">
+                          <div className="font-medium">Row {error.row}:</div>
+                          <div className="text-red-700">{error.error}</div>
+                        </div>
+                      ))}
+                      {importErrors.length > 10 && (
+                        <p className="text-gray-600 italic">
+                          ... and {importErrors.length - 10} more errors
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
