@@ -6475,11 +6475,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Exchange public token for access token and save bank connection
   apiRouter.post("/plaid/exchange-token", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { public_token } = req.body;
+      const { public_token, accountId } = req.body;
       
       if (!public_token) {
         return res.status(400).json({ error: 'public_token is required' });
       }
+
+      const linkedAccountId = accountId ? parseInt(accountId) : null;
 
       // Exchange public token for access token
       const tokenResponse = await plaidClient.itemPublicTokenExchange({
@@ -6528,7 +6530,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Save individual bank accounts
+      // Note: If a GL account was pre-selected, only link the first Plaid account to it
+      // Multiple Plaid accounts in one session will need to be linked manually later
       const bankAccounts = [];
+      let isFirstAccount = true;
       for (const account of accounts) {
         const bankAccount = await storage.createBankAccount({
           connectionId: connection.id!,
@@ -6540,10 +6545,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           subtype: account.subtype || null,
           currentBalance: account.balances.current || null,
           availableBalance: account.balances.available || null,
-          linkedAccountId: null,
+          linkedAccountId: isFirstAccount ? linkedAccountId : null,
           isActive: true,
         });
         bankAccounts.push(bankAccount);
+        isFirstAccount = false;
       }
 
       res.json({
