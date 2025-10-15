@@ -1,6 +1,5 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { usePlaidLink } from 'react-plaid-link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,44 +12,48 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { 
   Building2,
-  CreditCard,
   RefreshCw,
   Trash2,
   AlertCircle,
-  CheckCircle2,
   Link as LinkIcon,
-  Download,
-  Upload
+  Upload,
+  Plus,
+  CheckCircle2
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { BankConnection, BankAccount, ImportedTransaction } from "@shared/schema";
-import CSVUploadDialog from "@/components/csv-upload-dialog";
+import { BankAccount, ImportedTransaction } from "@shared/schema";
+import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
+
+interface GLAccount {
+  id: number;
+  name: string;
+  accountNumber: string;
+  type: string;
+  category: string;
+  balance: number;
+}
 
 export default function Banking() {
   const { toast } = useToast();
-  const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [selectedAccount, setSelectedAccount] = useState<BankAccount | null>(null);
-  const [showTransactions, setShowTransactions] = useState(false);
-  const [showCSVUpload, setShowCSVUpload] = useState(false);
+  const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
 
-  // Fetch bank connections
-  const { data: connections = [], isLoading: connectionsLoading } = useQuery<BankConnection[]>({
-    queryKey: ['/api/plaid/connections'],
+  // Fetch GL accounts (bank/cash only)
+  const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
+    queryKey: ['/api/accounts'],
+    select: (data: GLAccount[]) => {
+      return data.filter(acc => 
+        acc.type === 'asset' && 
+        (acc.category === 'cash' || acc.category === 'bank')
+      );
+    },
   });
 
-  // Fetch bank accounts
-  const { data: bankAccounts = [], isLoading: accountsLoading } = useQuery<BankAccount[]>({
+  // Fetch bank accounts (Plaid connections)
+  const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useQuery<BankAccount[]>({
     queryKey: ['/api/plaid/accounts'],
   });
 
@@ -64,71 +67,10 @@ export default function Banking() {
     },
   });
 
-  // Create link token mutation
-  const createLinkTokenMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('/api/plaid/link-token', 'POST');
-    },
-    onSuccess: (data) => {
-      setLinkToken(data.link_token);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to initialize bank connection",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Exchange token mutation
-  const exchangeTokenMutation = useMutation({
-    mutationFn: async (public_token: string) => {
-      return await apiRequest('/api/plaid/exchange-token', 'POST', { public_token });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/plaid/connections'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/plaid/accounts'] });
-      toast({
-        title: "Success",
-        description: "Bank account connected successfully",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to connect bank account",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Delete connection mutation
-  const deleteConnectionMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return await apiRequest(`/api/plaid/connections/${id}`, 'DELETE');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/plaid/connections'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/plaid/accounts'] });
-      toast({
-        title: "Success",
-        description: "Bank connection removed",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to remove connection",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Sync transactions mutation
   const syncTransactionsMutation = useMutation({
-    mutationFn: async (accountId: number) => {
-      return await apiRequest(`/api/plaid/sync-transactions/${accountId}`, 'POST');
+    mutationFn: async (bankAccountId: number) => {
+      return await apiRequest(`/api/plaid/sync-transactions/${bankAccountId}`, 'POST');
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
@@ -146,42 +88,27 @@ export default function Banking() {
     },
   });
 
-  // Plaid Link configuration
-  const onSuccess = useCallback((public_token: string) => {
-    exchangeTokenMutation.mutate(public_token);
-  }, []);
-
-  const { open, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess,
+  // Delete bank account mutation
+  const deleteBankAccountMutation = useMutation({
+    mutationFn: async (bankAccountId: number) => {
+      return await apiRequest(`/api/plaid/accounts/${bankAccountId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      toast({
+        title: "Success",
+        description: "Bank feed disconnected",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to disconnect bank feed",
+        variant: "destructive",
+      });
+    },
   });
-
-  // Start connection flow
-  const handleConnectBank = () => {
-    createLinkTokenMutation.mutate();
-  };
-
-  // Open Plaid Link when token is ready
-  if (linkToken && ready && !exchangeTokenMutation.isPending) {
-    open();
-    setLinkToken(null);
-  }
-
-  const handleSyncTransactions = (accountId: number) => {
-    syncTransactionsMutation.mutate(accountId);
-  };
-
-  const handleViewTransactions = (account: BankAccount) => {
-    setSelectedAccount(account);
-    setShowTransactions(true);
-  };
-
-  const getAccountIcon = (type: string) => {
-    if (type === 'credit' || type === 'credit card') {
-      return <CreditCard className="h-5 w-5 text-primary" />;
-    }
-    return <Building2 className="h-5 w-5 text-primary" />;
-  };
 
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-';
@@ -191,6 +118,21 @@ export default function Banking() {
     }).format(amount);
   };
 
+  // Group GL accounts with their bank feed status
+  const accountsWithFeedStatus = glAccounts.map(glAccount => {
+    const bankAccount = bankAccounts.find(ba => ba.linkedAccountId === glAccount.id);
+    const csvImports = importedTransactions.filter(tx => 
+      tx.source === 'csv' && tx.accountId === glAccount.id
+    );
+    
+    return {
+      ...glAccount,
+      bankAccount,
+      hasCSVImports: csvImports.length > 0,
+      feedType: bankAccount ? 'plaid' : csvImports.length > 0 ? 'csv' : null
+    };
+  });
+
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -198,130 +140,128 @@ export default function Banking() {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Banking</h1>
             <p className="mt-1 text-sm text-gray-500">
-              Connect your bank accounts and import transactions automatically
+              Manage bank feeds for your Chart of Accounts
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={() => setShowCSVUpload(true)}
-              data-testid="button-upload-csv"
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload CSV
-            </Button>
-            <Button
-              onClick={handleConnectBank}
-              disabled={createLinkTokenMutation.isPending}
-              data-testid="button-connect-bank"
-            >
-              <LinkIcon className="mr-2 h-4 w-4" />
-              {createLinkTokenMutation.isPending ? 'Loading...' : 'Connect Bank Account'}
-            </Button>
-          </div>
+          <Button
+            onClick={() => setShowBankFeedSetup(true)}
+            data-testid="button-setup-bank-feed"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Set Up Bank Feed
+          </Button>
         </div>
 
-        {/* Connected Accounts */}
+        {/* Bank Accounts with Feed Status */}
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Connected Bank Accounts</CardTitle>
+              <CardTitle>Bank & Cash Accounts</CardTitle>
               <CardDescription>
-                Manage your connected bank accounts and sync transactions
+                Connect bank feeds to automatically import transactions
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {connectionsLoading || accountsLoading ? (
+              {glAccountsLoading || bankAccountsLoading ? (
                 <div className="text-center py-8 text-gray-500">Loading...</div>
-              ) : connections.length === 0 ? (
+              ) : accountsWithFeedStatus.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No accounts connected</AlertTitle>
+                  <AlertTitle>No bank accounts found</AlertTitle>
                   <AlertDescription>
-                    Connect your bank account to automatically import transactions. Click "Connect Bank Account" to get started.
+                    Add bank or cash accounts to your Chart of Accounts first, then connect bank feeds to them.
                   </AlertDescription>
                 </Alert>
               ) : (
-                <div className="space-y-4">
-                  {connections.map((connection) => {
-                    const accountsForConnection = bankAccounts.filter(
-                      (acc) => acc.connectionId === connection.id
-                    );
-
-                    return (
-                      <div key={connection.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <Building2 className="h-6 w-6 text-primary" />
-                            <div>
-                              <h3 className="font-semibold">{connection.institutionName}</h3>
-                              <p className="text-sm text-gray-500">
-                                Last synced: {connection.lastSync ? format(new Date(connection.lastSync), 'PPp') : 'Never'}
+                <div className="space-y-3">
+                  {accountsWithFeedStatus.map((account) => (
+                    <div key={account.id} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <Building2 className="h-5 w-5 text-primary" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{account.name}</h3>
+                              <span className="text-sm text-gray-500">({account.accountNumber})</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <p className="text-sm text-gray-600">
+                                Balance: {formatCurrency(account.balance)}
                               </p>
+                              {account.feedType && (
+                                <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'}>
+                                  {account.feedType === 'plaid' ? (
+                                    <>
+                                      <LinkIcon className="h-3 w-3 mr-1" />
+                                      Plaid Connected
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="h-3 w-3 mr-1" />
+                                      CSV Imports
+                                    </>
+                                  )}
+                                </Badge>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={connection.status === 'active' ? 'default' : 'destructive'}>
-                              {connection.status}
-                            </Badge>
+                        </div>
+
+                        <div className="flex gap-2">
+                          {account.bankAccount ? (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => syncTransactionsMutation.mutate(account.bankAccount!.id)}
+                                disabled={syncTransactionsMutation.isPending}
+                                data-testid={`button-sync-${account.id}`}
+                              >
+                                <RefreshCw className={`h-4 w-4 mr-2 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                                Sync
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => deleteBankAccountMutation.mutate(account.bankAccount!.id)}
+                                disabled={deleteBankAccountMutation.isPending}
+                                data-testid={`button-disconnect-${account.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Disconnect
+                              </Button>
+                            </>
+                          ) : (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => deleteConnectionMutation.mutate(connection.id!)}
-                              disabled={deleteConnectionMutation.isPending}
-                              data-testid={`button-delete-connection-${connection.id}`}
+                              onClick={() => setShowBankFeedSetup(true)}
+                              data-testid={`button-connect-${account.id}`}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Plus className="h-4 w-4 mr-2" />
+                              {account.hasCSVImports ? 'Add Connection' : 'Connect'}
                             </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          {accountsForConnection.map((account) => (
-                            <div
-                              key={account.id}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-md"
-                            >
-                              <div className="flex items-center gap-3">
-                                {getAccountIcon(account.type)}
-                                <div>
-                                  <p className="font-medium">{account.name}</p>
-                                  <p className="text-sm text-gray-500">
-                                    {account.type} {account.mask ? `••••${account.mask}` : ''}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="text-right">
-                                  <p className="text-sm text-gray-500">Balance</p>
-                                  <p className="font-semibold">{formatCurrency(account.currentBalance)}</p>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleSyncTransactions(account.id!)}
-                                  disabled={syncTransactionsMutation.isPending}
-                                  data-testid={`button-sync-${account.id}`}
-                                >
-                                  <RefreshCw className="h-4 w-4 mr-2" />
-                                  Sync
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleViewTransactions(account)}
-                                  data-testid={`button-view-transactions-${account.id}`}
-                                >
-                                  <Download className="h-4 w-4 mr-2" />
-                                  View
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {account.bankAccount && (
+                        <div className="mt-3 pt-3 border-t text-sm text-gray-600">
+                          <div className="grid grid-cols-3 gap-4">
+                            <div>
+                              <span className="font-medium">Institution:</span> {account.bankAccount.name}
+                            </div>
+                            <div>
+                              <span className="font-medium">Account:</span> ***{account.bankAccount.mask}
+                            </div>
+                            <div>
+                              <span className="font-medium">Type:</span> {account.bankAccount.type}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -399,27 +339,10 @@ export default function Banking() {
         </div>
       </div>
 
-      {/* Transaction Details Dialog */}
-      <Dialog open={showTransactions} onOpenChange={setShowTransactions}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>
-              {selectedAccount?.name} Transactions
-            </DialogTitle>
-            <DialogDescription>
-              Recent transactions from your bank account
-            </DialogDescription>
-          </DialogHeader>
-          <div className="text-center py-8 text-gray-500">
-            Transaction details will be available in the next update
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* CSV Upload Dialog */}
-      <CSVUploadDialog 
-        open={showCSVUpload} 
-        onOpenChange={setShowCSVUpload}
+      {/* Bank Feed Setup Dialog */}
+      <BankFeedSetupDialog 
+        open={showBankFeedSetup} 
+        onOpenChange={setShowBankFeedSetup}
       />
     </div>
   );

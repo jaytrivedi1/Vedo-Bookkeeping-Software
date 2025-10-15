@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -28,26 +28,20 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { Upload, FileText, CheckCircle2, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
 
-interface CSVUploadDialogProps {
+interface CSVUploadWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preSelectedAccountId: number;
+  onComplete?: () => void;
 }
 
 interface ParsedCSV {
   headers: string[];
   rows: string[][];
   rowCount: number;
-}
-
-interface BankAccount {
-  id: number;
-  accountName: string;
-  accountNumber: string;
-  accountType: string;
 }
 
 interface ColumnMapping {
@@ -58,26 +52,24 @@ interface ColumnMapping {
   debit?: string;
 }
 
-type UploadStep = 'upload' | 'account' | 'mapping' | 'preview' | 'complete';
+type UploadStep = 'upload' | 'mapping' | 'preview' | 'importing';
 
-export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogProps) {
+export default function CSVUploadWizard({ 
+  open, 
+  onOpenChange, 
+  preSelectedAccountId,
+  onComplete 
+}: CSVUploadWizardProps) {
   const { toast } = useToast();
   const [step, setStep] = useState<UploadStep>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [parsedCSV, setParsedCSV] = useState<ParsedCSV | null>(null);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
     date: '',
     description: '',
   });
   const [importedCount, setImportedCount] = useState(0);
   const [importErrors, setImportErrors] = useState<any[]>([]);
-
-  // Fetch bank accounts for selection
-  const { data: bankAccounts = [] } = useQuery<BankAccount[]>({
-    queryKey: ['/api/plaid/accounts'],
-    enabled: open && step === 'account',
-  });
 
   // Parse CSV mutation
   const parseCSVMutation = useMutation({
@@ -100,7 +92,6 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     },
     onSuccess: (data) => {
       setParsedCSV(data);
-      setStep('account');
       
       // Auto-detect column mapping
       const headers = data.headers.map((h: string) => h.toLowerCase());
@@ -134,6 +125,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
       }
 
       setColumnMapping(mapping);
+      setStep('mapping');
     },
     onError: (error: any) => {
       toast({
@@ -147,11 +139,11 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
   // Import CSV mutation
   const importCSVMutation = useMutation({
     mutationFn: async () => {
-      if (!file || !selectedAccountId) throw new Error('Missing file or account');
+      if (!file) throw new Error('Missing file');
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('accountId', selectedAccountId);
+      formData.append('accountId', preSelectedAccountId.toString());
       formData.append('columnMapping', JSON.stringify(columnMapping));
 
       const response = await fetch('/api/csv/import', {
@@ -170,8 +162,8 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     onSuccess: (data) => {
       setImportedCount(data.imported);
       setImportErrors(data.errors || []);
-      setStep('complete');
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       
       const hasErrors = data.errors && data.errors.length > 0;
       toast({
@@ -179,8 +171,13 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
         description: hasErrors 
           ? `Imported ${data.imported} transactions, ${data.errors.length} rows failed`
           : `Imported ${data.imported} transactions`,
-        variant: hasErrors ? "default" : "default",
       });
+
+      if (onComplete) {
+        onComplete();
+      } else {
+        handleClose();
+      }
     },
     onError: (error: any) => {
       toast({
@@ -232,8 +229,6 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
   const handleNext = () => {
     if (step === 'upload' && file) {
       parseCSVMutation.mutate(file);
-    } else if (step === 'account' && selectedAccountId) {
-      setStep('mapping');
     } else if (step === 'mapping') {
       // Validate mapping
       if (!columnMapping.date || !columnMapping.description) {
@@ -254,13 +249,13 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
       }
       setStep('preview');
     } else if (step === 'preview') {
+      setStep('importing');
       importCSVMutation.mutate();
     }
   };
 
   const handleBack = () => {
-    if (step === 'account') setStep('upload');
-    else if (step === 'mapping') setStep('account');
+    if (step === 'mapping') setStep('upload');
     else if (step === 'preview') setStep('mapping');
   };
 
@@ -268,7 +263,6 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
     setStep('upload');
     setFile(null);
     setParsedCSV(null);
-    setSelectedAccountId('');
     setColumnMapping({ date: '', description: '' });
     setImportedCount(0);
     setImportErrors([]);
@@ -281,7 +275,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
   };
 
   const getStepProgress = () => {
-    const steps = ['upload', 'account', 'mapping', 'preview', 'complete'];
+    const steps = ['upload', 'mapping', 'preview', 'importing'];
     const currentIndex = steps.indexOf(step);
     return ((currentIndex + 1) / steps.length) * 100;
   };
@@ -343,38 +337,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
           </div>
         )}
 
-        {/* Step 2: Account Selection */}
-        {step === 'account' && (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="bank-account">Select Bank Account</Label>
-              <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                <SelectTrigger id="bank-account" data-testid="select-bank-account">
-                  <SelectValue placeholder="Choose an account..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {bankAccounts.map((account) => (
-                    <SelectItem key={account.id} value={account.id.toString()}>
-                      {account.accountName} - {account.accountNumber} ({account.accountType})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {parsedCSV && (
-              <Alert>
-                <FileText className="h-4 w-4" />
-                <AlertTitle>CSV Preview</AlertTitle>
-                <AlertDescription>
-                  Found {parsedCSV.rowCount} transactions in {file?.name}
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-        )}
-
-        {/* Step 3: Column Mapping */}
+        {/* Step 2: Column Mapping */}
         {step === 'mapping' && parsedCSV && (
           <div className="space-y-4">
             <Alert>
@@ -465,7 +428,7 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
           </div>
         )}
 
-        {/* Step 4: Preview */}
+        {/* Step 3: Preview */}
         {step === 'preview' && parsedCSV && (
           <div className="space-y-4">
             <Alert>
@@ -522,39 +485,49 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
           </div>
         )}
 
-        {/* Step 5: Complete */}
-        {step === 'complete' && (
-          <div className="space-y-4">
-            <div className="text-center py-6">
-              <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Import Complete!</h3>
-              <p className="text-gray-600">
-                Successfully imported {importedCount} transactions
-              </p>
-            </div>
+        {/* Step 4: Importing */}
+        {step === 'importing' && (
+          <div className="text-center py-8">
+            {importCSVMutation.isPending ? (
+              <>
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
+                <h3 className="text-lg font-semibold mb-2">Importing Transactions...</h3>
+                <p className="text-gray-600">Please wait while we process your CSV file</p>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <CheckCircle2 className="mx-auto h-16 w-16 text-green-500 mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Import Complete!</h3>
+                  <p className="text-gray-600">
+                    Successfully imported {importedCount} transactions
+                  </p>
+                </div>
 
-            {importErrors.length > 0 && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Import Errors ({importErrors.length})</AlertTitle>
-                <AlertDescription>
-                  <div className="mt-2 max-h-48 overflow-y-auto">
-                    <div className="space-y-2 text-sm">
-                      {importErrors.slice(0, 10).map((error, index) => (
-                        <div key={index} className="border-l-2 border-red-300 pl-2">
-                          <div className="font-medium">Row {error.row}:</div>
-                          <div className="text-red-700">{error.error}</div>
+                {importErrors.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Import Errors ({importErrors.length})</AlertTitle>
+                    <AlertDescription>
+                      <div className="mt-2 max-h-48 overflow-y-auto">
+                        <div className="space-y-2 text-sm">
+                          {importErrors.slice(0, 10).map((error, index) => (
+                            <div key={index} className="border-l-2 border-red-300 pl-2">
+                              <div className="font-medium">Row {error.row}:</div>
+                              <div className="text-red-700">{error.error}</div>
+                            </div>
+                          ))}
+                          {importErrors.length > 10 && (
+                            <p className="text-gray-600 italic">
+                              ... and {importErrors.length - 10} more errors
+                            </p>
+                          )}
                         </div>
-                      ))}
-                      {importErrors.length > 10 && (
-                        <p className="text-gray-600 italic">
-                          ... and {importErrors.length - 10} more errors
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </AlertDescription>
-              </Alert>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -563,19 +536,22 @@ export default function CSVUploadDialog({ open, onOpenChange }: CSVUploadDialogP
         <div className="flex justify-between pt-4 border-t">
           <Button
             variant="outline"
-            onClick={step === 'complete' ? handleClose : handleBack}
-            disabled={step === 'upload' || parseCSVMutation.isPending || importCSVMutation.isPending}
+            onClick={step === 'importing' && !importCSVMutation.isPending ? handleClose : handleBack}
+            disabled={
+              step === 'upload' || 
+              parseCSVMutation.isPending || 
+              importCSVMutation.isPending
+            }
             data-testid="button-back"
           >
-            {step === 'complete' ? 'Close' : 'Back'}
+            {step === 'importing' && !importCSVMutation.isPending ? 'Close' : 'Back'}
           </Button>
 
-          {step !== 'complete' && (
+          {step !== 'importing' && (
             <Button
               onClick={handleNext}
               disabled={
                 (step === 'upload' && !file) ||
-                (step === 'account' && !selectedAccountId) ||
                 parseCSVMutation.isPending ||
                 importCSVMutation.isPending
               }
