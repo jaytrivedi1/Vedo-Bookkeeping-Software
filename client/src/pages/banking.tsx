@@ -349,6 +349,7 @@ export default function Banking() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Description</TableHead>
+                      <TableHead>Source</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
@@ -364,6 +365,14 @@ export default function Banking() {
                               <p className="text-sm text-gray-500">{tx.merchantName}</p>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={tx.source === 'csv' ? 'secondary' : 'outline'}
+                            data-testid={`badge-source-${tx.source}`}
+                          >
+                            {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {tx.category && tx.category.length > 0 ? (
