@@ -28,18 +28,21 @@ import {
   AlertCircle,
   CheckCircle2,
   Link as LinkIcon,
-  Download
+  Download,
+  Upload
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankConnection, BankAccount, ImportedTransaction } from "@shared/schema";
+import CSVUploadDialog from "@/components/csv-upload-dialog";
 
 export default function Banking() {
   const { toast } = useToast();
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<BankAccount | null>(null);
   const [showTransactions, setShowTransactions] = useState(false);
+  const [showCSVUpload, setShowCSVUpload] = useState(false);
 
   // Fetch bank connections
   const { data: connections = [], isLoading: connectionsLoading } = useQuery<BankConnection[]>({
@@ -198,14 +201,24 @@ export default function Banking() {
               Connect your bank accounts and import transactions automatically
             </p>
           </div>
-          <Button
-            onClick={handleConnectBank}
-            disabled={createLinkTokenMutation.isPending}
-            data-testid="button-connect-bank"
-          >
-            <LinkIcon className="mr-2 h-4 w-4" />
-            {createLinkTokenMutation.isPending ? 'Loading...' : 'Connect Bank Account'}
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowCSVUpload(true)}
+              data-testid="button-upload-csv"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload CSV
+            </Button>
+            <Button
+              onClick={handleConnectBank}
+              disabled={createLinkTokenMutation.isPending}
+              data-testid="button-connect-bank"
+            >
+              <LinkIcon className="mr-2 h-4 w-4" />
+              {createLinkTokenMutation.isPending ? 'Loading...' : 'Connect Bank Account'}
+            </Button>
+          </div>
         </div>
 
         {/* Connected Accounts */}
@@ -393,6 +406,12 @@ export default function Banking() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* CSV Upload Dialog */}
+      <CSVUploadDialog 
+        open={showCSVUpload} 
+        onOpenChange={setShowCSVUpload}
+      />
     </div>
   );
 }
