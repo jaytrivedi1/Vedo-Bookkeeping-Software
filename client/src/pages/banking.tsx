@@ -124,20 +124,22 @@ export default function Banking() {
     }).format(amount);
   };
 
-  // Group GL accounts with their bank feed status
-  const accountsWithFeedStatus = glAccounts.map(glAccount => {
-    const bankAccount = bankAccounts.find(ba => ba.linkedAccountId === glAccount.id);
-    const csvImports = importedTransactions.filter(tx => 
-      tx.source === 'csv' && tx.accountId === glAccount.id
-    );
-    
-    return {
-      ...glAccount,
-      bankAccount,
-      hasCSVImports: csvImports.length > 0,
-      feedType: bankAccount ? 'plaid' : csvImports.length > 0 ? 'csv' : null
-    };
-  });
+  // Group GL accounts with their bank feed status - only show accounts with feeds
+  const accountsWithFeedStatus = glAccounts
+    .map(glAccount => {
+      const bankAccount = bankAccounts.find(ba => ba.linkedAccountId === glAccount.id);
+      const csvImports = importedTransactions.filter(tx => 
+        tx.source === 'csv' && tx.accountId === glAccount.id
+      );
+      
+      return {
+        ...glAccount,
+        bankAccount,
+        hasCSVImports: csvImports.length > 0,
+        feedType: bankAccount ? 'plaid' : csvImports.length > 0 ? 'csv' : null
+      };
+    })
+    .filter(account => account.feedType !== null); // Only show accounts with bank feeds connected
 
   return (
     <div className="py-6">
@@ -173,9 +175,9 @@ export default function Banking() {
               ) : accountsWithFeedStatus.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No eligible accounts found</AlertTitle>
+                  <AlertTitle>No bank feeds connected yet</AlertTitle>
                   <AlertDescription>
-                    Add Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts to your Chart of Accounts first, then connect bank feeds to them.
+                    Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
                   </AlertDescription>
                 </Alert>
               ) : (
