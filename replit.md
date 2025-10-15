@@ -62,6 +62,22 @@ Preferred communication style: Simple, everyday language.
 - **Stripe**: Payment processing with React Stripe.js integration
 - **Payment Methods**: Credit card processing and payment intent management
 
+### Bank Integration
+- **Plaid**: Secure bank account connection and transaction import
+- **Supported Features**: 
+  - Bank account linking via OAuth through Plaid Link
+  - Automatic transaction syncing (last 30 days)
+  - Real-time balance updates
+  - Support for checking, savings, and credit card accounts
+- **Database Schema**:
+  - bank_connections: Stores Plaid item_id, access_token, and institution details
+  - bank_accounts: Individual account details with balances and account linking
+  - imported_transactions: Raw transaction data from bank feeds with matching status
+- **Transaction Workflow**:
+  - Connect bank via Plaid Link (Sandbox/Development/Production)
+  - Sync transactions on demand or automatically
+  - Imported transactions stored with status: unmatched, matched, or ignored
+  - Future: Transaction matching UI to categorize and create bookkeeping entries
 
 ### Development Tools
 - **Build System**: Vite with hot module replacement

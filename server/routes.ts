@@ -45,6 +45,8 @@ import {
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
+import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
+import { CountryCode, Products } from 'plaid';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint - responds immediately for deployment health checks
@@ -6442,6 +6444,245 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         error: error.message
       });
+    }
+  });
+
+  // Plaid Integration Routes
+  
+  // Create link token for Plaid Link
+  apiRouter.post("/plaid/link-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const request = {
+        user: {
+          client_user_id: `user_${req.user?.id || 'default'}`,
+        },
+        client_name: 'FinLedger',
+        products: PLAID_PRODUCTS,
+        country_codes: PLAID_COUNTRY_CODES,
+        language: 'en',
+      };
+
+      const response = await plaidClient.linkTokenCreate(request);
+      res.json({ link_token: response.data.link_token });
+    } catch (error: any) {
+      console.error('Error creating link token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Exchange public token for access token and save bank connection
+  apiRouter.post("/plaid/exchange-token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { public_token } = req.body;
+      
+      if (!public_token) {
+        return res.status(400).json({ error: 'public_token is required' });
+      }
+
+      // Exchange public token for access token
+      const tokenResponse = await plaidClient.itemPublicTokenExchange({
+        public_token,
+      });
+
+      const accessToken = tokenResponse.data.access_token;
+      const itemId = tokenResponse.data.item_id;
+
+      // Get institution info
+      const itemResponse = await plaidClient.itemGet({
+        access_token: accessToken,
+      });
+
+      const institutionId = itemResponse.data.item.institution_id;
+      
+      if (!institutionId) {
+        return res.status(400).json({ error: 'Institution ID not found' });
+      }
+
+      const institutionResponse = await plaidClient.institutionsGetById({
+        institution_id: institutionId,
+        country_codes: PLAID_COUNTRY_CODES,
+      });
+
+      const institutionName = institutionResponse.data.institution.name;
+
+      // Get accounts
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: accessToken,
+      });
+
+      const accounts = accountsResponse.data.accounts;
+      const accountIds = accounts.map(acc => acc.account_id);
+
+      // Save bank connection to database
+      const connection = await storage.createBankConnection({
+        itemId,
+        accessToken,
+        institutionId,
+        institutionName,
+        accountIds,
+        status: 'active',
+        lastSync: null,
+        error: null,
+      });
+
+      // Save individual bank accounts
+      const bankAccounts = [];
+      for (const account of accounts) {
+        const bankAccount = await storage.createBankAccount({
+          connectionId: connection.id!,
+          plaidAccountId: account.account_id,
+          name: account.name,
+          mask: account.mask || null,
+          officialName: account.official_name || null,
+          type: account.type,
+          subtype: account.subtype || null,
+          currentBalance: account.balances.current || null,
+          availableBalance: account.balances.available || null,
+          linkedAccountId: null,
+          isActive: true,
+        });
+        bankAccounts.push(bankAccount);
+      }
+
+      res.json({
+        connection,
+        bankAccounts,
+      });
+    } catch (error: any) {
+      console.error('Error exchanging token:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all bank connections
+  apiRouter.get("/plaid/connections", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const connections = await storage.getBankConnections();
+      res.json(connections);
+    } catch (error: any) {
+      console.error('Error fetching connections:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get bank accounts for a connection
+  apiRouter.get("/plaid/accounts", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const accounts = await storage.getBankAccounts();
+      res.json(accounts);
+    } catch (error: any) {
+      console.error('Error fetching bank accounts:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Sync transactions for a bank account
+  apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const accountId = parseInt(req.params.accountId);
+      const bankAccount = await storage.getBankAccount(accountId);
+      
+      if (!bankAccount) {
+        return res.status(404).json({ error: 'Bank account not found' });
+      }
+
+      const connection = await storage.getBankConnection(bankAccount.connectionId);
+      
+      if (!connection) {
+        return res.status(404).json({ error: 'Bank connection not found' });
+      }
+
+      // Get transactions from Plaid (last 30 days)
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      const endDate = new Date();
+
+      const transactionsResponse = await plaidClient.transactionsGet({
+        access_token: connection.accessToken,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0],
+        options: {
+          account_ids: [bankAccount.plaidAccountId],
+        },
+      });
+
+      const transactions = transactionsResponse.data.transactions;
+      
+      // Save transactions to database
+      const importedTransactions = [];
+      for (const tx of transactions) {
+        // Check if transaction already exists
+        const existing = await storage.getImportedTransactionByPlaidId(tx.transaction_id);
+        
+        if (!existing) {
+          const imported = await storage.createImportedTransaction({
+            bankAccountId: bankAccount.id!,
+            plaidTransactionId: tx.transaction_id,
+            date: new Date(tx.date),
+            authorizedDate: tx.authorized_date ? new Date(tx.authorized_date) : null,
+            name: tx.name,
+            merchantName: tx.merchant_name || null,
+            amount: tx.amount,
+            isoCurrencyCode: tx.iso_currency_code || null,
+            category: tx.category || [],
+            pending: tx.pending,
+            paymentChannel: tx.payment_channel || null,
+            matchedTransactionId: null,
+            status: 'unmatched',
+          });
+          importedTransactions.push(imported);
+        }
+      }
+
+      // Update last sync time
+      await storage.updateBankConnection(connection.id!, {
+        lastSync: new Date(),
+      });
+
+      res.json({
+        synced: importedTransactions.length,
+        total: transactions.length,
+        transactions: importedTransactions,
+      });
+    } catch (error: any) {
+      console.error('Error syncing transactions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get imported transactions
+  apiRouter.get("/plaid/imported-transactions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { status } = req.query;
+      
+      let transactions;
+      if (status === 'unmatched') {
+        transactions = await storage.getUnmatchedImportedTransactions();
+      } else {
+        transactions = await storage.getImportedTransactions();
+      }
+      
+      res.json(transactions);
+    } catch (error: any) {
+      console.error('Error fetching imported transactions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete bank connection
+  apiRouter.delete("/plaid/connections/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteBankConnection(id);
+      
+      if (success) {
+        res.json({ success: true });
+      } else {
+        res.status(404).json({ error: 'Connection not found' });
+      }
+    } catch (error: any) {
+      console.error('Error deleting connection:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
