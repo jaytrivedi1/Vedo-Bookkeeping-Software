@@ -19,6 +19,7 @@ import { migratePaymentApplications } from "./migrate-payment-applications";
 import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
 import { recalculateBillBalances } from "./recalculate-bill-balances";
 import { seedAdminUser } from "./migrations/seed-admin-user";
+import { addCsvSupport } from "./migrations/add-csv-support";
 
 const app = express();
 app.use(express.json());
@@ -105,6 +106,9 @@ app.use((req, res, next) => {
     
     // Seed admin user (idempotent - only creates if doesn't exist)
     await seedAdminUser();
+    
+    // Add CSV upload support to imported_transactions table
+    await addCsvSupport();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }

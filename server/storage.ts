@@ -50,6 +50,8 @@ import {
   type InsertBankAccount,
   type ImportedTransaction,
   type InsertImportedTransaction,
+  type CsvMappingPreference,
+  type InsertCsvMappingPreference,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -185,6 +187,12 @@ export interface IStorage {
   createImportedTransaction(transaction: InsertImportedTransaction): Promise<ImportedTransaction>;
   updateImportedTransaction(id: number, transaction: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined>;
   deleteImportedTransaction(id: number): Promise<boolean>;
+  
+  // CSV Mapping Preferences
+  getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined>;
+  createCsvMappingPreference(preference: InsertCsvMappingPreference): Promise<CsvMappingPreference>;
+  updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference>;
+  bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]>;
 }
 
 export class MemStorage implements IStorage {
@@ -1137,6 +1145,23 @@ export class MemStorage implements IStorage {
 
   async deleteImportedTransaction(id: number): Promise<boolean> {
     throw new Error("Imported transactions not supported in MemStorage");
+  }
+
+  // CSV Mapping Preferences
+  async getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined> {
+    throw new Error("CSV mapping preferences not supported in MemStorage");
+  }
+
+  async createCsvMappingPreference(preference: InsertCsvMappingPreference): Promise<CsvMappingPreference> {
+    throw new Error("CSV mapping preferences not supported in MemStorage");
+  }
+
+  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference> {
+    throw new Error("CSV mapping preferences not supported in MemStorage");
+  }
+
+  async bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]> {
+    throw new Error("Bulk import not supported in MemStorage");
   }
 }
 

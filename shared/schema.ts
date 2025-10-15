@@ -528,11 +528,29 @@ export const bankAccountsSchema = pgTable('bank_accounts', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
-// Imported Transactions (from bank feeds)
+// CSV Column Mapping Preferences (remembers user's column choices)
+export const csvMappingPreferencesSchema = pgTable('csv_mapping_preferences', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => usersSchema.id),
+  accountId: integer('account_id').notNull().references(() => accounts.id), // Which bank account
+  dateColumn: text('date_column').notNull(),
+  descriptionColumn: text('description_column').notNull(),
+  amountColumn: text('amount_column'), // For 3-column format
+  creditColumn: text('credit_column'), // For 4-column format
+  debitColumn: text('debit_column'), // For 4-column format
+  dateFormat: text('date_format').notNull().default('MM/DD/YYYY'),
+  hasHeaderRow: boolean('has_header_row').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Imported Transactions (from bank feeds - Plaid or CSV)
 export const importedTransactionsSchema = pgTable('imported_transactions', {
   id: serial('id').primaryKey(),
-  bankAccountId: integer('bank_account_id').notNull().references(() => bankAccountsSchema.id),
-  plaidTransactionId: text('plaid_transaction_id').notNull().unique(),
+  source: text('source').notNull().default('plaid'), // 'plaid' or 'csv'
+  bankAccountId: integer('bank_account_id').references(() => bankAccountsSchema.id), // For Plaid imports
+  accountId: integer('account_id').references(() => accounts.id), // For CSV imports (chart of accounts)
+  plaidTransactionId: text('plaid_transaction_id').unique(), // Only for Plaid
   date: timestamp('date').notNull(),
   authorizedDate: timestamp('authorized_date'),
   name: text('name').notNull(),
@@ -567,6 +585,12 @@ export const insertImportedTransactionSchema = createInsertSchema(importedTransa
   updatedAt: true
 });
 
+export const insertCsvMappingPreferenceSchema = createInsertSchema(csvMappingPreferencesSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 // Types
 export type BankConnection = typeof bankConnectionsSchema.$inferSelect;
 export type InsertBankConnection = z.infer<typeof insertBankConnectionSchema>;
@@ -576,3 +600,6 @@ export type InsertBankAccount = z.infer<typeof insertBankAccountSchema>;
 
 export type ImportedTransaction = typeof importedTransactionsSchema.$inferSelect;
 export type InsertImportedTransaction = z.infer<typeof insertImportedTransactionSchema>;
+
+export type CsvMappingPreference = typeof csvMappingPreferencesSchema.$inferSelect;
+export type InsertCsvMappingPreference = z.infer<typeof insertCsvMappingPreferenceSchema>;

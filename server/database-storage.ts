@@ -2,13 +2,13 @@ import { db } from "./db";
 import { 
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
-  BankConnection, BankAccount, ImportedTransaction,
+  BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
-  InsertBankConnection, InsertBankAccount, InsertImportedTransaction,
+  InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
-  permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema
+  permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -2001,5 +2001,48 @@ export class DatabaseStorage implements IStorage {
       console.error(`Error deleting imported transaction with ID ${id}:`, error);
       return false;
     }
+  }
+
+  // CSV Mapping Preferences
+  async getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined> {
+    const result = await db.select()
+      .from(csvMappingPreferencesSchema)
+      .where(
+        and(
+          eq(csvMappingPreferencesSchema.userId, userId),
+          eq(csvMappingPreferencesSchema.accountId, accountId)
+        )
+      )
+      .orderBy(desc(csvMappingPreferencesSchema.updatedAt))
+      .limit(1);
+    
+    return result[0];
+  }
+
+  async createCsvMappingPreference(preference: InsertCsvMappingPreference): Promise<CsvMappingPreference> {
+    const [newPreference] = await db.insert(csvMappingPreferencesSchema)
+      .values(preference)
+      .returning();
+    return newPreference;
+  }
+
+  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference> {
+    const [updatedPreference] = await db.update(csvMappingPreferencesSchema)
+      .set({ ...preference, updatedAt: new Date() })
+      .where(eq(csvMappingPreferencesSchema.id, id))
+      .returning();
+    return updatedPreference;
+  }
+
+  async bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]> {
+    if (transactions.length === 0) {
+      return [];
+    }
+    
+    const newTransactions = await db.insert(importedTransactionsSchema)
+      .values(transactions)
+      .returning();
+    
+    return newTransactions;
   }
 }

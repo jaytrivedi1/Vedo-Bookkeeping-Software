@@ -47,6 +47,8 @@ import { companyRouter } from "./company-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
 import { CountryCode, Products } from 'plaid';
+import multer from 'multer';
+import Papa from 'papaparse';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint - responds immediately for deployment health checks
@@ -6682,6 +6684,208 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     } catch (error: any) {
       console.error('Error deleting connection:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // CSV Import Routes
+  
+  // Configure multer for CSV file upload (store in memory)
+  const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only CSV files are allowed'));
+      }
+    }
+  });
+
+  // POST /api/csv/parse-preview - Upload CSV and return preview
+  apiRouter.post("/csv/parse-preview", requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      // Convert buffer to string
+      const csvString = req.file.buffer.toString('utf-8');
+      
+      // Parse CSV
+      const parseResult = Papa.parse(csvString, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false, // Keep all values as strings for preview
+      });
+
+      if (parseResult.errors.length > 0) {
+        return res.status(400).json({ 
+          error: 'CSV parsing failed', 
+          details: parseResult.errors 
+        });
+      }
+
+      // Get columns from the first row keys
+      const columns = parseResult.meta.fields || [];
+      
+      // Return preview of first 10 rows
+      const preview = parseResult.data.slice(0, 10);
+      
+      res.json({
+        columns,
+        preview,
+        rowCount: parseResult.data.length
+      });
+    } catch (error: any) {
+      console.error('Error parsing CSV:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/csv/mapping-preference/:accountId - Get saved column mapping
+  apiRouter.get("/csv/mapping-preference/:accountId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const accountId = parseInt(req.params.accountId);
+      const userId = (req.user as any)?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const preference = await storage.getCsvMappingPreference(userId, accountId);
+      
+      res.json(preference || null);
+    } catch (error: any) {
+      console.error('Error fetching CSV mapping preference:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/csv/import - Import CSV with column mapping
+  apiRouter.post("/csv/import", requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any)?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      // Get mapping from request body
+      const { accountId, mapping, dateFormat, hasHeaderRow } = req.body;
+      
+      if (!accountId || !mapping) {
+        return res.status(400).json({ error: 'Account ID and mapping are required' });
+      }
+
+      const parsedAccountId = parseInt(accountId);
+      const parsedMapping = typeof mapping === 'string' ? JSON.parse(mapping) : mapping;
+      const parsedDateFormat = dateFormat || 'MM/DD/YYYY';
+      const parsedHasHeaderRow = hasHeaderRow === 'true' || hasHeaderRow === true;
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      // Convert buffer to string
+      const csvString = req.file.buffer.toString('utf-8');
+      
+      // Parse CSV
+      const parseResult = Papa.parse(csvString, {
+        header: parsedHasHeaderRow,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+      });
+
+      if (parseResult.errors.length > 0) {
+        return res.status(400).json({ 
+          error: 'CSV parsing failed', 
+          details: parseResult.errors 
+        });
+      }
+
+      const errors: any[] = [];
+      const importedTransactions: any[] = [];
+
+      // Process each row
+      for (let i = 0; i < parseResult.data.length; i++) {
+        const row: any = parseResult.data[i];
+        
+        try {
+          // Extract data based on mapping
+          const dateStr = row[parsedMapping.dateColumn];
+          const description = row[parsedMapping.descriptionColumn];
+          
+          // Handle amount - could be single column or debit/credit columns
+          let amount = 0;
+          if (parsedMapping.amountColumn) {
+            amount = parseFloat(row[parsedMapping.amountColumn]) || 0;
+          } else if (parsedMapping.debitColumn && parsedMapping.creditColumn) {
+            const debit = parseFloat(row[parsedMapping.debitColumn]) || 0;
+            const credit = parseFloat(row[parsedMapping.creditColumn]) || 0;
+            amount = debit - credit; // Positive for debits, negative for credits
+          }
+
+          // Parse date
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) {
+            errors.push({ row: i + 1, error: 'Invalid date format', data: row });
+            continue;
+          }
+
+          // Create imported transaction
+          importedTransactions.push({
+            source: 'csv',
+            accountId: parsedAccountId,
+            date,
+            name: description || 'Imported transaction',
+            amount,
+            isoCurrencyCode: 'USD',
+            pending: false,
+            status: 'unmatched',
+          });
+        } catch (error: any) {
+          errors.push({ row: i + 1, error: error.message, data: row });
+        }
+      }
+
+      // Bulk create imported transactions
+      const created = await storage.bulkCreateImportedTransactions(importedTransactions);
+
+      // Save or update mapping preference
+      const existingPreference = await storage.getCsvMappingPreference(userId, parsedAccountId);
+      
+      if (existingPreference) {
+        await storage.updateCsvMappingPreference(existingPreference.id, {
+          dateColumn: parsedMapping.dateColumn,
+          descriptionColumn: parsedMapping.descriptionColumn,
+          amountColumn: parsedMapping.amountColumn || null,
+          creditColumn: parsedMapping.creditColumn || null,
+          debitColumn: parsedMapping.debitColumn || null,
+          dateFormat: parsedDateFormat,
+          hasHeaderRow: parsedHasHeaderRow,
+        });
+      } else {
+        await storage.createCsvMappingPreference({
+          userId,
+          accountId: parsedAccountId,
+          dateColumn: parsedMapping.dateColumn,
+          descriptionColumn: parsedMapping.descriptionColumn,
+          amountColumn: parsedMapping.amountColumn || null,
+          creditColumn: parsedMapping.creditColumn || null,
+          debitColumn: parsedMapping.debitColumn || null,
+          dateFormat: parsedDateFormat,
+          hasHeaderRow: parsedHasHeaderRow,
+        });
+      }
+
+      res.json({
+        imported: created.length,
+        errors,
+      });
+    } catch (error: any) {
+      console.error('Error importing CSV:', error);
       res.status(500).json({ error: error.message });
     }
   });
