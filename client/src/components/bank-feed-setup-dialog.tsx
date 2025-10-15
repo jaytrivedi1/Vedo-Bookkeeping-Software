@@ -38,9 +38,9 @@ interface BankFeedSetupDialogProps {
 interface Account {
   id: number;
   name: string;
-  accountNumber: string;
+  code: string;
   type: string;
-  category: string;
+  balance: number;
 }
 
 type SetupStep = 'account' | 'method' | 'plaid' | 'csv' | 'complete';
@@ -54,15 +54,21 @@ export default function BankFeedSetupDialog({ open, onOpenChange }: BankFeedSetu
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [showCSVUpload, setShowCSVUpload] = useState(false);
 
-  // Fetch bank/cash accounts from Chart of Accounts
+  // Fetch accounts eligible for bank feeds from Chart of Accounts
   const { data: accounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
     select: (data: Account[]) => {
-      // Filter only bank and cash accounts
-      return data.filter(acc => 
-        acc.type === 'asset' && 
-        (acc.category === 'cash' || acc.category === 'bank')
-      );
+      // Filter accounts that can have bank feeds:
+      // Cash, Bank Accounts, Investment Accounts, Credit Cards, Line of Credit, Loans
+      const eligibleTypes = [
+        'current_assets',           // Cash and current investment accounts
+        'bank',                     // Bank accounts
+        'long_term_assets',         // Long-term investment accounts
+        'credit_card',              // Credit card accounts
+        'other_current_liabilities', // Line of credit and short-term loans
+        'long_term_liabilities'     // Long-term loans
+      ];
+      return data.filter(acc => eligibleTypes.includes(acc.type));
     },
     enabled: open,
   });
@@ -199,7 +205,7 @@ export default function BankFeedSetupDialog({ open, onOpenChange }: BankFeedSetu
               </Alert>
 
               <div>
-                <Label htmlFor="gl-account">Chart of Accounts - Bank/Cash Account</Label>
+                <Label htmlFor="gl-account">Chart of Accounts Account</Label>
                 <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                   <SelectTrigger id="gl-account" data-testid="select-gl-account" className="mt-2">
                     <SelectValue placeholder="Select an account..." />
@@ -208,18 +214,18 @@ export default function BankFeedSetupDialog({ open, onOpenChange }: BankFeedSetu
                     {accountsLoading ? (
                       <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
                     ) : accounts.length === 0 ? (
-                      <SelectItem value="none" disabled>No bank/cash accounts found</SelectItem>
+                      <SelectItem value="none" disabled>No eligible accounts found</SelectItem>
                     ) : (
                       accounts.map((account) => (
                         <SelectItem key={account.id} value={account.id.toString()}>
-                          {account.accountNumber} - {account.name}
+                          {account.code} - {account.name}
                         </SelectItem>
                       ))
                     )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-2">
-                  Only bank and cash accounts from your Chart of Accounts are shown
+                  Eligible: Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
                 </p>
               </div>
             </div>
@@ -233,7 +239,7 @@ export default function BankFeedSetupDialog({ open, onOpenChange }: BankFeedSetu
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertTitle>Selected Account</AlertTitle>
                   <AlertDescription>
-                    {selectedAccount.accountNumber} - {selectedAccount.name}
+                    {selectedAccount.code} - {selectedAccount.name}
                   </AlertDescription>
                 </Alert>
               )}
