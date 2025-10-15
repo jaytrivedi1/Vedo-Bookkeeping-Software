@@ -63,19 +63,28 @@ Preferred communication style: Simple, everyday language.
 - **Payment Methods**: Credit card processing and payment intent management
 
 ### Bank Integration
-- **Plaid**: Secure bank account connection and transaction import
-- **Supported Features**: 
+- **Bank Feed Setup**: Account-first approach where users select a Chart of Accounts bank/cash account first, then choose connection method
+- **Plaid Integration**: Secure bank account connection and transaction import
   - Bank account linking via OAuth through Plaid Link
   - Automatic transaction syncing (last 30 days)
   - Real-time balance updates
   - Support for checking, savings, and credit card accounts
+  - One-to-one mapping: Each GL account can link to one Plaid account (only first account linked if multiple authorized)
+- **CSV Upload Support**: Manual bank statement import as alternative to Plaid
+  - Flexible column mapping with user preferences saved per GL account
+  - Support for multiple date formats (YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, DD-MM-YYYY)
+  - Handles both single amount column and separate debit/credit columns
+  - Comprehensive validation with row-level error reporting
+  - CSV mapping preferences stored in csv_mapping_preferences table
 - **Database Schema**:
   - bank_connections: Stores Plaid item_id, access_token, and institution details
-  - bank_accounts: Individual account details with balances and account linking
-  - imported_transactions: Raw transaction data from bank feeds with matching status
+  - bank_accounts: Individual Plaid account details with balances and linkedAccountId to Chart of Accounts
+  - imported_transactions: Raw transaction data from both Plaid and CSV with source tracking (accountId links to GL account)
+  - csv_mapping_preferences: Stores user's column mapping preferences per GL account
 - **Transaction Workflow**:
-  - Connect bank via Plaid Link (Sandbox/Development/Production)
-  - Sync transactions on demand or automatically
+  - Set up bank feed from Chart of Accounts page (select account → choose Plaid or CSV)
+  - Connect via Plaid Link (Sandbox/Development/Production) or upload CSV statement
+  - Sync/import transactions on demand or automatically
   - Imported transactions stored with status: unmatched, matched, or ignored
   - Future: Transaction matching UI to categorize and create bookkeeping entries
 
