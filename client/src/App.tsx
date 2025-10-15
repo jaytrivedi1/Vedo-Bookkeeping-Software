@@ -1,7 +1,8 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Invoices from "@/pages/invoices";
@@ -29,39 +30,93 @@ import ExpenseEdit from "@/pages/expense-edit";
 import ChequeNew from "@/pages/cheque-new";
 import ChequeEdit from "@/pages/cheque-edit";
 import JournalEntryNew from "@/pages/journal-entry-new";
+import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
 
+function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
+  const { user, isLoading } = useAuth();
+  const [location] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  return <Component {...rest} />;
+}
+
 function Router() {
+  const { user, isLoading } = useAuth();
+  const [location] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user && location !== '/login') {
+    return <Redirect to="/login" />;
+  }
+
+  if (user && location === '/login') {
+    return <Redirect to="/" />;
+  }
+
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/invoices" component={Invoices} />
-      <Route path="/invoice-new" component={InvoiceNew} />
-      <Route path="/invoice-edit/:id" component={InvoiceEdit} />
-      <Route path="/invoices/:id" component={InvoiceView} />
-      <Route path="/payments/edit/:id" component={PaymentReceive} />
-      <Route path="/payments/:id" component={PaymentView} />
-      <Route path="/payment-receive" component={PaymentReceive} />
-      <Route path="/bill-create" component={BillCreate} />
-      <Route path="/bills/:id" component={BillView} />
-      <Route path="/pay-bill" component={PayBill} />
-      <Route path="/expenses" component={Expenses} />
-      <Route path="/expenses/new" component={ExpenseNew} />
-      <Route path="/expenses/:id/edit" component={ExpenseEdit} />
-      <Route path="/expenses/:id" component={ExpenseView} />
-      <Route path="/cheques/new" component={ChequeNew} />
-      <Route path="/cheques/:id/edit" component={ChequeEdit} />
-      <Route path="/journals" component={Journals} />
-      <Route path="/journals/new" component={JournalEntryNew} />
-      <Route path="/deposits" component={Deposits} />
-      <Route path="/deposits/:id" component={DepositView} />
-      <Route path="/banking" component={Banking} />
-      <Route path="/chart-of-accounts" component={ChartOfAccounts} />
-      <Route path="/account-books" component={AccountBooks} />
-      <Route path="/sales-taxes" component={SalesTaxes} />
-      <Route path="/products" component={Products} />
-      <Route path="/reports" component={Reports} />
-      <Route component={NotFound} />
+      <Route path="/login" component={Login} />
+      <Route path="/">
+        {() => (
+          <MainLayout>
+            <Switch>
+              <Route path="/" component={Dashboard} />
+              <Route path="/invoices" component={Invoices} />
+              <Route path="/invoice-new" component={InvoiceNew} />
+              <Route path="/invoice-edit/:id" component={InvoiceEdit} />
+              <Route path="/invoices/:id" component={InvoiceView} />
+              <Route path="/payments/edit/:id" component={PaymentReceive} />
+              <Route path="/payments/:id" component={PaymentView} />
+              <Route path="/payment-receive" component={PaymentReceive} />
+              <Route path="/bill-create" component={BillCreate} />
+              <Route path="/bills/:id" component={BillView} />
+              <Route path="/pay-bill" component={PayBill} />
+              <Route path="/expenses" component={Expenses} />
+              <Route path="/expenses/new" component={ExpenseNew} />
+              <Route path="/expenses/:id/edit" component={ExpenseEdit} />
+              <Route path="/expenses/:id" component={ExpenseView} />
+              <Route path="/cheques/new" component={ChequeNew} />
+              <Route path="/cheques/:id/edit" component={ChequeEdit} />
+              <Route path="/journals" component={Journals} />
+              <Route path="/journals/new" component={JournalEntryNew} />
+              <Route path="/deposits" component={Deposits} />
+              <Route path="/deposits/:id" component={DepositView} />
+              <Route path="/banking" component={Banking} />
+              <Route path="/chart-of-accounts" component={ChartOfAccounts} />
+              <Route path="/account-books" component={AccountBooks} />
+              <Route path="/sales-taxes" component={SalesTaxes} />
+              <Route path="/products" component={Products} />
+              <Route path="/reports" component={Reports} />
+              <Route component={NotFound} />
+            </Switch>
+          </MainLayout>
+        )}
+      </Route>
     </Switch>
   );
 }
@@ -69,10 +124,10 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <MainLayout>
+      <AuthProvider>
         <Router />
-      </MainLayout>
-      <Toaster />
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

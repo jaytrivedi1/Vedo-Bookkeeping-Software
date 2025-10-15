@@ -15,17 +15,20 @@ import {
   PercentIcon,
   PackageIcon,
   ShoppingBagIcon,
-  DollarSignIcon
+  DollarSignIcon,
+  LogOutIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import SettingsButton from "@/components/settings/SettingsButton";
 import { CompanySelector } from "@/components/layout/CompanySelector";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SidebarProps {
   open: boolean;
@@ -34,6 +37,7 @@ interface SidebarProps {
 
 export default function Sidebar({ open, setOpen }: SidebarProps) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   const menuItems = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-5 h-5 mr-3" /> },
@@ -141,17 +145,36 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
         <div className="px-3 py-3">
           <SettingsButton />
         </div>
-        <div className="flex items-center px-4 py-3 hover:bg-muted/30 border-t border-border/30 smooth-transition group" data-testid="user-profile-section">
-          <div className="flex-shrink-0">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold shadow-md glow-hover smooth-transition group-hover:scale-110">
-              JD
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className="flex items-center px-4 py-3 hover:bg-muted/30 border-t border-border/30 smooth-transition group cursor-pointer" data-testid="user-profile-section">
+              <div className="flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white font-bold shadow-md glow-hover smooth-transition group-hover:scale-110">
+                  {user?.firstName?.[0] || user?.username?.[0] || 'U'}
+                  {user?.lastName?.[0] || ''}
+                </div>
+              </div>
+              <div className="ml-3 flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  {user?.firstName && user?.lastName 
+                    ? `${user.firstName} ${user.lastName}` 
+                    : user?.username || 'User'}
+                </p>
+                <p className="text-xs text-muted-foreground capitalize">{user?.role || 'User'}</p>
+              </div>
             </div>
-          </div>
-          <div className="ml-3">
-            <p className="text-sm font-semibold text-foreground">John Doe</p>
-            <p className="text-xs text-muted-foreground">Administrator</p>
-          </div>
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 glass-card border-border/50">
+            <DropdownMenuItem 
+              onClick={() => logout()} 
+              className="cursor-pointer smooth-transition hover:bg-destructive/10 text-destructive"
+              data-testid="button-logout"
+            >
+              <LogOutIcon className="w-4 h-4 mr-2" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
