@@ -379,12 +379,12 @@ export default function CSVUploadWizard({
 
               <div>
                 <Label htmlFor="amount-column">Amount Column</Label>
-                <Select value={columnMapping.amount || ''} onValueChange={(value) => setColumnMapping({ ...columnMapping, amount: value, credit: undefined, debit: undefined })}>
+                <Select value={columnMapping.amount || '__none__'} onValueChange={(value) => setColumnMapping({ ...columnMapping, amount: value === '__none__' ? undefined : value, credit: undefined, debit: undefined })}>
                   <SelectTrigger id="amount-column" data-testid="select-amount-column">
                     <SelectValue placeholder="Select amount column..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {parsedCSV.columns.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
                     ))}
@@ -396,12 +396,12 @@ export default function CSVUploadWizard({
               <div className="space-y-2">
                 <div>
                   <Label htmlFor="credit-column">Credit Column</Label>
-                  <Select value={columnMapping.credit || ''} onValueChange={(value) => setColumnMapping({ ...columnMapping, credit: value, amount: undefined })}>
+                  <Select value={columnMapping.credit || '__none__'} onValueChange={(value) => setColumnMapping({ ...columnMapping, credit: value === '__none__' ? undefined : value, amount: undefined })}>
                     <SelectTrigger id="credit-column" data-testid="select-credit-column">
                       <SelectValue placeholder="Select credit column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="__none__">None</SelectItem>
                       {parsedCSV.columns.map((header) => (
                         <SelectItem key={header} value={header}>{header}</SelectItem>
                       ))}
@@ -410,12 +410,12 @@ export default function CSVUploadWizard({
                 </div>
                 <div>
                   <Label htmlFor="debit-column">Debit Column</Label>
-                  <Select value={columnMapping.debit || ''} onValueChange={(value) => setColumnMapping({ ...columnMapping, debit: value, amount: undefined })}>
+                  <Select value={columnMapping.debit || '__none__'} onValueChange={(value) => setColumnMapping({ ...columnMapping, debit: value === '__none__' ? undefined : value, amount: undefined })}>
                     <SelectTrigger id="debit-column" data-testid="select-debit-column">
                       <SelectValue placeholder="Select debit column..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="__none__">None</SelectItem>
                       {parsedCSV.columns.map((header) => (
                         <SelectItem key={header} value={header}>{header}</SelectItem>
                       ))}
