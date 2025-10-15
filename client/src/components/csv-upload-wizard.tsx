@@ -141,10 +141,21 @@ export default function CSVUploadWizard({
     mutationFn: async () => {
       if (!file) throw new Error('Missing file');
 
+      // Transform column mapping to match backend expected format
+      const backendMapping = {
+        dateColumn: columnMapping.date,
+        descriptionColumn: columnMapping.description,
+        amountColumn: columnMapping.amount,
+        creditColumn: columnMapping.credit,
+        debitColumn: columnMapping.debit,
+      };
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('accountId', preSelectedAccountId.toString());
-      formData.append('columnMapping', JSON.stringify(columnMapping));
+      formData.append('mapping', JSON.stringify(backendMapping));
+      formData.append('dateFormat', 'YYYY-MM-DD'); // Default date format
+      formData.append('hasHeaderRow', 'true'); // CSV has headers
 
       const response = await fetch('/api/csv/import', {
         method: 'POST',
