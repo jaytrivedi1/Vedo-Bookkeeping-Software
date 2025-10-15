@@ -68,6 +68,8 @@ export default function CSVUploadWizard({
     date: '',
     description: '',
   });
+  const [dateFormat, setDateFormat] = useState<string>('YYYY-MM-DD');
+  const [signConvention, setSignConvention] = useState<string>('negative-withdrawal');
   const [importedCount, setImportedCount] = useState(0);
   const [importErrors, setImportErrors] = useState<any[]>([]);
 
@@ -154,7 +156,8 @@ export default function CSVUploadWizard({
       formData.append('file', file);
       formData.append('accountId', preSelectedAccountId.toString());
       formData.append('mapping', JSON.stringify(backendMapping));
-      formData.append('dateFormat', 'YYYY-MM-DD'); // Default date format
+      formData.append('dateFormat', dateFormat);
+      formData.append('signConvention', signConvention);
       formData.append('hasHeaderRow', 'true'); // CSV has headers
 
       const response = await fetch('/api/csv/import', {
@@ -275,6 +278,8 @@ export default function CSVUploadWizard({
     setFile(null);
     setParsedCSV(null);
     setColumnMapping({ date: '', description: '' });
+    setDateFormat('YYYY-MM-DD');
+    setSignConvention('negative-withdrawal');
     setImportedCount(0);
     setImportErrors([]);
     onOpenChange(false);
@@ -434,6 +439,43 @@ export default function CSVUploadWizard({
                   </Select>
                 </div>
                 <p className="text-xs text-gray-500">Use if your CSV has separate Credit/Debit columns</p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-semibold mb-3">Import Settings</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="date-format">Date Format *</Label>
+                  <Select value={dateFormat} onValueChange={setDateFormat}>
+                    <SelectTrigger id="date-format" data-testid="select-date-format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2025-01-15)</SelectItem>
+                      <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (01/15/2025)</SelectItem>
+                      <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (15/01/2025)</SelectItem>
+                      <SelectItem value="DD-MM-YYYY">DD-MM-YYYY (15-01-2025)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">Format of dates in your CSV file</p>
+                </div>
+
+                {columnMapping.amount && (
+                  <div>
+                    <Label htmlFor="sign-convention">Amount Sign Convention *</Label>
+                    <Select value={signConvention} onValueChange={setSignConvention}>
+                      <SelectTrigger id="sign-convention" data-testid="select-sign-convention">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="negative-withdrawal">Negative = Withdrawal/Payment</SelectItem>
+                        <SelectItem value="negative-deposit">Negative = Deposit/Receipt</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">How negative amounts should be interpreted</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -6779,7 +6779,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get mapping from request body
-      const { accountId, mapping, dateFormat, hasHeaderRow } = req.body;
+      const { accountId, mapping, dateFormat, signConvention, hasHeaderRow } = req.body;
       
       if (!accountId || !mapping) {
         return res.status(400).json({ error: 'Account ID and mapping are required' });
@@ -6787,7 +6787,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const parsedAccountId = parseInt(accountId);
       const parsedMapping = typeof mapping === 'string' ? JSON.parse(mapping) : mapping;
-      const parsedDateFormat = dateFormat || 'MM/DD/YYYY';
+      const parsedDateFormat = dateFormat || 'YYYY-MM-DD';
+      const parsedSignConvention = signConvention || 'negative-withdrawal';
       const parsedHasHeaderRow = hasHeaderRow === 'true' || hasHeaderRow === true;
 
       if (!req.file) {
@@ -6827,57 +6828,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
           let amount = 0;
           if (parsedMapping.amountColumn) {
             amount = parseFloat(row[parsedMapping.amountColumn]) || 0;
+            
+            // Apply sign convention for single amount column
+            // If negative-deposit, flip the sign (negative becomes positive deposit)
+            if (parsedSignConvention === 'negative-deposit') {
+              amount = -amount;
+            }
+            // If negative-withdrawal (default), keep as is (negative = withdrawal, positive = deposit)
           } else if (parsedMapping.debitColumn && parsedMapping.creditColumn) {
             const debit = parseFloat(row[parsedMapping.debitColumn]) || 0;
             const credit = parseFloat(row[parsedMapping.creditColumn]) || 0;
             amount = debit - credit; // Positive for debits, negative for credits
           }
 
-          // Parse date - try multiple formats
+          // Parse date based on specified format
           let date: Date | null = null;
-          const commonDateFormats = [
-            // ISO format
-            /^(\d{4})-(\d{1,2})-(\d{1,2})$/, // YYYY-MM-DD
-            // US format
-            /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // MM/DD/YYYY
-            /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // MM-DD-YYYY
-            // EU format
-            /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/, // DD/MM/YYYY (check context)
-            /^(\d{1,2})-(\d{1,2})-(\d{4})$/, // DD-MM-YYYY (check context)
-          ];
-
-          // Try ISO format first
-          if (/^\d{4}-\d{1,2}-\d{1,2}/.test(dateStr)) {
-            date = new Date(dateStr);
-          }
           
-          // Try parsing MM/DD/YYYY or DD/MM/YYYY
-          if (!date || isNaN(date.getTime())) {
-            const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            const dashMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-            
-            if (slashMatch || dashMatch) {
-              const match = slashMatch || dashMatch;
-              const part1 = parseInt(match![1]);
-              const part2 = parseInt(match![2]);
-              const year = parseInt(match![3]);
-              
-              // Heuristic: if first part > 12, assume DD/MM/YYYY, otherwise MM/DD/YYYY
-              let month: number, day: number;
-              if (part1 > 12) {
-                // Must be DD/MM/YYYY
-                day = part1;
-                month = part2;
-              } else if (part2 > 12) {
-                // Must be MM/DD/YYYY
-                month = part1;
-                day = part2;
-              } else {
-                // Ambiguous - default to MM/DD/YYYY (US format)
-                month = part1;
-                day = part2;
-              }
-              
+          if (parsedDateFormat === 'YYYY-MM-DD') {
+            // ISO format: YYYY-MM-DD
+            if (/^\d{4}-\d{1,2}-\d{1,2}/.test(dateStr)) {
+              date = new Date(dateStr);
+            }
+          } else if (parsedDateFormat === 'MM/DD/YYYY') {
+            // US format: MM/DD/YYYY
+            const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (match) {
+              const month = parseInt(match[1]);
+              const day = parseInt(match[2]);
+              const year = parseInt(match[3]);
+              date = new Date(year, month - 1, day);
+            }
+          } else if (parsedDateFormat === 'DD/MM/YYYY') {
+            // EU format: DD/MM/YYYY
+            const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (match) {
+              const day = parseInt(match[1]);
+              const month = parseInt(match[2]);
+              const year = parseInt(match[3]);
+              date = new Date(year, month - 1, day);
+            }
+          } else if (parsedDateFormat === 'DD-MM-YYYY') {
+            // EU format with dash: DD-MM-YYYY
+            const match = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+            if (match) {
+              const day = parseInt(match[1]);
+              const month = parseInt(match[2]);
+              const year = parseInt(match[3]);
               date = new Date(year, month - 1, day);
             }
           }
