@@ -18,6 +18,7 @@ import { fixCreditApplicationLogic } from "./fix-credit-logic";
 import { migratePaymentApplications } from "./migrate-payment-applications";
 import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
 import { recalculateBillBalances } from "./recalculate-bill-balances";
+import { seedAdminUser } from "./migrations/seed-admin-user";
 
 const app = express();
 app.use(express.json());
@@ -101,6 +102,9 @@ app.use((req, res, next) => {
     
     // Recalculate all bill balances based on payment_applications table
     await recalculateBillBalances();
+    
+    // Seed admin user (idempotent - only creates if doesn't exist)
+    await seedAdminUser();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
