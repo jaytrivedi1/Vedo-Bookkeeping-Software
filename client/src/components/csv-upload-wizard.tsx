@@ -39,8 +39,8 @@ interface CSVUploadWizardProps {
 }
 
 interface ParsedCSV {
-  headers: string[];
-  rows: string[][];
+  columns: string[];
+  preview: any[];
   rowCount: number;
 }
 
@@ -94,7 +94,7 @@ export default function CSVUploadWizard({
       setParsedCSV(data);
       
       // Auto-detect column mapping
-      const headers = data.headers.map((h: string) => h.toLowerCase());
+      const headers = data.columns.map((h: string) => h.toLowerCase());
       const mapping: ColumnMapping = {
         date: '',
         description: '',
@@ -104,13 +104,13 @@ export default function CSVUploadWizard({
       const dateIndex = headers.findIndex((h: string) => 
         h.includes('date') || h.includes('posted') || h.includes('transaction date')
       );
-      if (dateIndex >= 0) mapping.date = data.headers[dateIndex];
+      if (dateIndex >= 0) mapping.date = data.columns[dateIndex];
 
       // Auto-detect description column
       const descIndex = headers.findIndex((h: string) => 
         h.includes('desc') || h.includes('detail') || h.includes('memo') || h.includes('payee')
       );
-      if (descIndex >= 0) mapping.description = data.headers[descIndex];
+      if (descIndex >= 0) mapping.description = data.columns[descIndex];
 
       // Auto-detect amount/credit/debit columns
       const amountIndex = headers.findIndex((h: string) => h.includes('amount'));
@@ -118,10 +118,10 @@ export default function CSVUploadWizard({
       const debitIndex = headers.findIndex((h: string) => h.includes('debit') || h.includes('withdrawal'));
 
       if (amountIndex >= 0) {
-        mapping.amount = data.headers[amountIndex];
+        mapping.amount = data.columns[amountIndex];
       } else if (creditIndex >= 0 && debitIndex >= 0) {
-        mapping.credit = data.headers[creditIndex];
-        mapping.debit = data.headers[debitIndex];
+        mapping.credit = data.columns[creditIndex];
+        mapping.debit = data.columns[debitIndex];
       }
 
       setColumnMapping(mapping);
@@ -271,7 +271,7 @@ export default function CSVUploadWizard({
 
   const getPreviewRows = () => {
     if (!parsedCSV) return [];
-    return parsedCSV.rows.slice(0, 5);
+    return parsedCSV.preview.slice(0, 5);
   };
 
   const getStepProgress = () => {
@@ -356,7 +356,7 @@ export default function CSVUploadWizard({
                     <SelectValue placeholder="Select date column..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {parsedCSV.headers.map((header) => (
+                    {parsedCSV.columns.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
                     ))}
                   </SelectContent>
@@ -370,7 +370,7 @@ export default function CSVUploadWizard({
                     <SelectValue placeholder="Select description column..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {parsedCSV.headers.map((header) => (
+                    {parsedCSV.columns.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
                     ))}
                   </SelectContent>
@@ -385,7 +385,7 @@ export default function CSVUploadWizard({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">None</SelectItem>
-                    {parsedCSV.headers.map((header) => (
+                    {parsedCSV.columns.map((header) => (
                       <SelectItem key={header} value={header}>{header}</SelectItem>
                     ))}
                   </SelectContent>
@@ -402,7 +402,7 @@ export default function CSVUploadWizard({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">None</SelectItem>
-                      {parsedCSV.headers.map((header) => (
+                      {parsedCSV.columns.map((header) => (
                         <SelectItem key={header} value={header}>{header}</SelectItem>
                       ))}
                     </SelectContent>
@@ -416,7 +416,7 @@ export default function CSVUploadWizard({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">None</SelectItem>
-                      {parsedCSV.headers.map((header) => (
+                      {parsedCSV.columns.map((header) => (
                         <SelectItem key={header} value={header}>{header}</SelectItem>
                       ))}
                     </SelectContent>
@@ -450,25 +450,20 @@ export default function CSVUploadWizard({
                 </TableHeader>
                 <TableBody>
                   {getPreviewRows().map((row, index) => {
-                    const dateIdx = parsedCSV.headers.indexOf(columnMapping.date);
-                    const descIdx = parsedCSV.headers.indexOf(columnMapping.description);
                     let amount = 0;
 
                     if (columnMapping.amount) {
-                      const amtIdx = parsedCSV.headers.indexOf(columnMapping.amount);
-                      amount = parseFloat(row[amtIdx]) || 0;
+                      amount = parseFloat(row[columnMapping.amount]) || 0;
                     } else if (columnMapping.credit && columnMapping.debit) {
-                      const creditIdx = parsedCSV.headers.indexOf(columnMapping.credit);
-                      const debitIdx = parsedCSV.headers.indexOf(columnMapping.debit);
-                      const credit = parseFloat(row[creditIdx]) || 0;
-                      const debit = parseFloat(row[debitIdx]) || 0;
+                      const credit = parseFloat(row[columnMapping.credit]) || 0;
+                      const debit = parseFloat(row[columnMapping.debit]) || 0;
                       amount = credit - debit;
                     }
 
                     return (
                       <TableRow key={index}>
-                        <TableCell>{row[dateIdx]}</TableCell>
-                        <TableCell>{row[descIdx]}</TableCell>
+                        <TableCell>{row[columnMapping.date]}</TableCell>
+                        <TableCell>{row[columnMapping.description]}</TableCell>
                         <TableCell className={`text-right ${amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           ${Math.abs(amount).toFixed(2)}
                         </TableCell>
