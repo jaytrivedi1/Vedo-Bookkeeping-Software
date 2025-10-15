@@ -31,9 +31,8 @@ import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
 interface GLAccount {
   id: number;
   name: string;
-  accountNumber: string;
+  code: string;
   type: string;
-  category: string;
   balance: number;
 }
 
@@ -41,14 +40,21 @@ export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
 
-  // Fetch GL accounts (bank/cash only)
+  // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
     queryKey: ['/api/accounts'],
     select: (data: GLAccount[]) => {
-      return data.filter(acc => 
-        acc.type === 'asset' && 
-        (acc.category === 'cash' || acc.category === 'bank')
-      );
+      // Filter accounts that can have bank feeds:
+      // Cash, Bank Accounts, Investment Accounts, Credit Cards, Line of Credit, Loans
+      const eligibleTypes = [
+        'current_assets',           // Cash and current investment accounts
+        'bank',                     // Bank accounts
+        'long_term_assets',         // Long-term investment accounts
+        'credit_card',              // Credit card accounts
+        'other_current_liabilities', // Line of credit and short-term loans
+        'long_term_liabilities'     // Long-term loans
+      ];
+      return data.filter(acc => eligibleTypes.includes(acc.type));
     },
   });
 
@@ -156,9 +162,9 @@ export default function Banking() {
         <div className="grid gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Bank & Cash Accounts</CardTitle>
+              <CardTitle>Accounts with Bank Feeds</CardTitle>
               <CardDescription>
-                Connect bank feeds to automatically import transactions
+                Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -167,9 +173,9 @@ export default function Banking() {
               ) : accountsWithFeedStatus.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No bank accounts found</AlertTitle>
+                  <AlertTitle>No eligible accounts found</AlertTitle>
                   <AlertDescription>
-                    Add bank or cash accounts to your Chart of Accounts first, then connect bank feeds to them.
+                    Add Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts to your Chart of Accounts first, then connect bank feeds to them.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -182,7 +188,7 @@ export default function Banking() {
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <h3 className="font-semibold">{account.name}</h3>
-                              <span className="text-sm text-gray-500">({account.accountNumber})</span>
+                              <span className="text-sm text-gray-500">({account.code})</span>
                             </div>
                             <div className="flex items-center gap-3 mt-1">
                               <p className="text-sm text-gray-600">
