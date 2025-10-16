@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -27,7 +29,12 @@ import {
   Link as LinkIcon,
   Upload,
   Plus,
-  CheckCircle2
+  CheckCircle2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Paperclip,
+  Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -43,12 +50,19 @@ interface GLAccount {
   balance: number;
 }
 
+type SortField = 'date' | 'description' | null;
+type SortDirection = 'asc' | 'desc';
+
 export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
+  const [transactionMatchModes, setTransactionMatchModes] = useState<Map<number, 'match' | 'categorize'>>(new Map());
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -152,9 +166,24 @@ export default function Banking() {
     .filter(account => account.feedType !== null); // Only show accounts with bank feeds connected
 
   // Filter transactions by selected account
-  const filteredTransactions = selectedAccountId 
+  let filteredTransactions = selectedAccountId 
     ? importedTransactions.filter(tx => tx.accountId === selectedAccountId)
     : importedTransactions;
+
+  // Sort transactions
+  if (sortField) {
+    filteredTransactions = [...filteredTransactions].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortField === 'date') {
+        comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+      } else if (sortField === 'description') {
+        comparison = a.name.localeCompare(b.name);
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }
 
   // Pagination calculations
   const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
@@ -179,6 +208,46 @@ export default function Banking() {
     setPageSize(newSize);
     setCurrentPage(1);
   };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // Select all transactions in the filtered set (not just current page)
+      setSelectedTransactions(new Set(filteredTransactions.map(tx => tx.id)));
+    } else {
+      setSelectedTransactions(new Set());
+    }
+  };
+
+  const handleSelectTransaction = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedTransactions);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedTransactions(newSelected);
+  };
+
+  const handleToggleMatchMode = (txId: number, mode: 'match' | 'categorize') => {
+    setTransactionMatchModes(new Map(transactionMatchModes).set(txId, mode));
+  };
+
+  const allSelected = paginatedTransactions.length > 0 && 
+    paginatedTransactions.every(tx => selectedTransactions.has(tx.id));
+
+  // Determine if the selected account is AP or AR type
+  const selectedAccount = accountsWithFeedStatus.find(a => a.id === selectedAccountId);
+  const showNameColumn = selectedAccount && 
+    (selectedAccount.type === 'accounts_payable' || selectedAccount.type === 'accounts_receivable');
 
   return (
     <div className="py-6">
@@ -366,16 +435,51 @@ export default function Banking() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Source</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead className="w-12">
+                              <Checkbox 
+                                checked={allSelected}
+                                onCheckedChange={handleSelectAll}
+                                data-testid="checkbox-select-all"
+                              />
+                            </TableHead>
+                            <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
+                              <div className="flex items-center gap-1">
+                                Date
+                                {sortField === 'date' ? (
+                                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                                ) : (
+                                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                )}
+                              </div>
+                            </TableHead>
+                            <TableHead className="cursor-pointer" onClick={() => handleSort('description')}>
+                              <div className="flex items-center gap-1">
+                                Description
+                                {sortField === 'description' ? (
+                                  sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                                ) : (
+                                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                )}
+                              </div>
+                            </TableHead>
+                            {showNameColumn && <TableHead>Name</TableHead>}
+                            <TableHead className="text-right">Payments</TableHead>
+                            <TableHead className="text-right">Deposits</TableHead>
+                            <TableHead>Match/Categorize</TableHead>
+                            <TableHead className="w-12">Docs</TableHead>
+                            <TableHead>Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id}>
+                              <TableCell>
+                                <Checkbox 
+                                  checked={selectedTransactions.has(tx.id)}
+                                  onCheckedChange={(checked) => handleSelectTransaction(tx.id, checked as boolean)}
+                                  data-testid={`checkbox-transaction-${tx.id}`}
+                                />
+                              </TableCell>
                               <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
                               <TableCell>
                                 <div>
@@ -385,23 +489,51 @@ export default function Banking() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell>
-                                <Badge 
-                                  variant={tx.source === 'csv' ? 'secondary' : 'outline'}
-                                  data-testid={`badge-source-${tx.source}`}
-                                >
-                                  {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {tx.category && tx.category.length > 0 ? (
-                                  <Badge variant="outline">{tx.category[0]}</Badge>
-                                ) : (
-                                  <span className="text-gray-400">Uncategorized</span>
-                                )}
+                              {showNameColumn && (
+                                <TableCell>
+                                  {tx.merchantName ? (
+                                    <span className="text-sm">{tx.merchantName}</span>
+                                  ) : (
+                                    <span className="text-sm text-gray-400 italic">Not specified</span>
+                                  )}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-right font-medium">
+                                {tx.amount > 0 ? formatCurrency(tx.amount) : '-'}
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                {formatCurrency(tx.amount)}
+                                {tx.amount < 0 ? formatCurrency(Math.abs(tx.amount)) : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-600">
+                                    {transactionMatchModes.get(tx.id) === 'categorize' ? 'Categorize' : 'Match'}
+                                  </span>
+                                  <Switch
+                                    checked={transactionMatchModes.get(tx.id) === 'categorize'}
+                                    onCheckedChange={(checked) => handleToggleMatchMode(tx.id, checked ? 'categorize' : 'match')}
+                                    data-testid={`switch-match-categorize-${tx.id}`}
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  data-testid={`button-attach-${tx.id}`}
+                                >
+                                  <Paperclip className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                              <TableCell>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  data-testid={`button-post-${tx.id}`}
+                                >
+                                  <Send className="h-4 w-4 mr-1" />
+                                  Post
+                                </Button>
                               </TableCell>
                             </TableRow>
                           ))}
