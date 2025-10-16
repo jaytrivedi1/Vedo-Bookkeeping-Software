@@ -39,6 +39,7 @@ interface GLAccount {
 export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -141,6 +142,11 @@ export default function Banking() {
     })
     .filter(account => account.feedType !== null); // Only show accounts with bank feeds connected
 
+  // Filter transactions by selected account
+  const filteredTransactions = selectedAccountId 
+    ? importedTransactions.filter(tx => tx.accountId === selectedAccountId)
+    : importedTransactions;
+
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -181,165 +187,181 @@ export default function Banking() {
                   </AlertDescription>
                 </Alert>
               ) : (
-                <div className="space-y-3">
-                  {accountsWithFeedStatus.map((account) => (
-                    <div key={account.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <Building2 className="h-5 w-5 text-primary" />
-                          <div className="flex-1">
+                <div className="relative">
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                    {accountsWithFeedStatus.map((account) => (
+                      <div
+                        key={account.id}
+                        onClick={() => setSelectedAccountId(account.id)}
+                        className={`flex-shrink-0 w-64 border rounded-lg p-4 cursor-pointer transition-all ${
+                          selectedAccountId === account.id 
+                            ? 'border-primary bg-primary/5 shadow-md' 
+                            : 'border-gray-200 hover:border-primary/50 hover:shadow-sm'
+                        }`}
+                        data-testid={`tile-account-${account.id}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Building2 className={`h-5 w-5 flex-shrink-0 ${selectedAccountId === account.id ? 'text-primary' : 'text-gray-400'}`} />
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">{account.name}</h3>
-                              <span className="text-sm text-gray-500">({account.code})</span>
+                              <h3 className="font-semibold text-sm truncate">{account.name}</h3>
                             </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <p className="text-sm text-gray-600">
-                                Balance: {formatCurrency(account.balance)}
-                              </p>
-                              {account.feedType && (
-                                <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'}>
-                                  {account.feedType === 'plaid' ? (
-                                    <>
-                                      <LinkIcon className="h-3 w-3 mr-1" />
-                                      Plaid Connected
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="h-3 w-3 mr-1" />
-                                      CSV Imports
-                                    </>
-                                  )}
-                                </Badge>
-                              )}
-                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">({account.code})</p>
+                            <p className="text-sm font-medium mt-2">
+                              {formatCurrency(account.balance)}
+                            </p>
+                            {account.feedType && (
+                              <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="mt-2">
+                                {account.feedType === 'plaid' ? (
+                                  <>
+                                    <LinkIcon className="h-3 w-3 mr-1" />
+                                    Plaid
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="h-3 w-3 mr-1" />
+                                    CSV
+                                  </>
+                                )}
+                              </Badge>
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="mt-3 pt-3 border-t flex gap-2">
                           {account.bankAccount ? (
                             <>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => syncTransactionsMutation.mutate(account.bankAccount!.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                }}
                                 disabled={syncTransactionsMutation.isPending}
+                                className="flex-1"
                                 data-testid={`button-sync-${account.id}`}
                               >
-                                <RefreshCw className={`h-4 w-4 mr-2 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
-                                Sync
+                                <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => deleteBankAccountMutation.mutate(account.bankAccount!.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteBankAccountMutation.mutate(account.bankAccount!.id);
+                                }}
                                 disabled={deleteBankAccountMutation.isPending}
+                                className="flex-1"
                                 data-testid={`button-disconnect-${account.id}`}
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Disconnect
+                                <Trash2 className="h-3 w-3" />
                               </Button>
                             </>
                           ) : (
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => setShowBankFeedSetup(true)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowBankFeedSetup(true);
+                              }}
+                              className="w-full"
                               data-testid={`button-connect-${account.id}`}
                             >
-                              <Plus className="h-4 w-4 mr-2" />
-                              {account.hasCSVImports ? 'Add Connection' : 'Connect'}
+                              <Plus className="h-3 w-3 mr-1" />
+                              {account.hasCSVImports ? 'Add' : 'Connect'}
                             </Button>
                           )}
                         </div>
                       </div>
-
-                      {account.bankAccount && (
-                        <div className="mt-3 pt-3 border-t text-sm text-gray-600">
-                          <div className="grid grid-cols-3 gap-4">
-                            <div>
-                              <span className="font-medium">Institution:</span> {account.bankAccount.name}
-                            </div>
-                            <div>
-                              <span className="font-medium">Account:</span> ***{account.bankAccount.mask}
-                            </div>
-                            <div>
-                              <span className="font-medium">Type:</span> {account.bankAccount.type}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
           {/* Unmatched Transactions */}
-          {importedTransactions.length > 0 && (
+          {accountsWithFeedStatus.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Unmatched Transactions</CardTitle>
                 <CardDescription>
-                  {importedTransactions.length} transactions waiting to be categorized
+                  {filteredTransactions.length} transactions waiting to be categorized
+                  {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Alert className="mb-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Action Required</AlertTitle>
-                  <AlertDescription>
-                    You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
-                  </AlertDescription>
-                </Alert>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Source</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {importedTransactions.slice(0, 10).map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{tx.name}</p>
-                            {tx.merchantName && (
-                              <p className="text-sm text-gray-500">{tx.merchantName}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={tx.source === 'csv' ? 'secondary' : 'outline'}
-                            data-testid={`badge-source-${tx.source}`}
-                          >
-                            {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {tx.category && tx.category.length > 0 ? (
-                            <Badge variant="outline">{tx.category[0]}</Badge>
-                          ) : (
-                            <span className="text-gray-400">Uncategorized</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(tx.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {importedTransactions.length > 10 && (
-                  <p className="text-sm text-gray-500 mt-4 text-center">
-                    Showing 10 of {importedTransactions.length} unmatched transactions
-                  </p>
+                {filteredTransactions.length === 0 ? (
+                  <Alert>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <AlertTitle>No unmatched transactions</AlertTitle>
+                    <AlertDescription>
+                      {selectedAccountId 
+                        ? `All transactions for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name} have been categorized or there are no imports yet.`
+                        : 'All transactions have been categorized or there are no imports yet.'}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <Alert className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Action Required</AlertTitle>
+                      <AlertDescription>
+                        You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
+                      </AlertDescription>
+                    </Alert>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Source</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredTransactions.slice(0, 10).map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">{tx.name}</p>
+                                {tx.merchantName && (
+                                  <p className="text-sm text-gray-500">{tx.merchantName}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant={tx.source === 'csv' ? 'secondary' : 'outline'}
+                                data-testid={`badge-source-${tx.source}`}
+                              >
+                                {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {tx.category && tx.category.length > 0 ? (
+                                <Badge variant="outline">{tx.category[0]}</Badge>
+                              ) : (
+                                <span className="text-gray-400">Uncategorized</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(tx.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {filteredTransactions.length > 10 && (
+                      <p className="text-sm text-gray-500 mt-4 text-center">
+                        Showing 10 of {filteredTransactions.length} unmatched transactions
+                      </p>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
