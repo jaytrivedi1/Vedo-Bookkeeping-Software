@@ -96,9 +96,18 @@ export default function Banking() {
     queryKey: ['/api/accounts'],
   });
 
-  // Fetch sales tax rates
+  // Fetch contacts for Name dropdown
+  const { data: contacts = [] } = useQuery<any[]>({
+    queryKey: ['/api/contacts'],
+  });
+
+  // Fetch sales tax rates (filter out composite tax components)
   const { data: salesTaxes = [] } = useQuery<any[]>({
     queryKey: ['/api/sales-taxes'],
+    select: (data: any[]) => {
+      // Only show main taxes, not composite tax components (those with parent_id)
+      return data.filter(tax => !tax.parentId);
+    },
   });
 
   // Fetch imported transactions
@@ -520,13 +529,21 @@ export default function Banking() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  value={transactionNames.get(tx.id) ?? tx.merchantName ?? ''}
-                                  onChange={(e) => handleNameChange(tx.id, e.target.value)}
-                                  placeholder="Enter name"
-                                  className="w-full"
-                                  data-testid={`input-name-${tx.id}`}
-                                />
+                                <Select 
+                                  value={transactionNames.get(tx.id) || ''} 
+                                  onValueChange={(value) => handleNameChange(tx.id, value)}
+                                >
+                                  <SelectTrigger className="w-full" data-testid={`select-name-${tx.id}`}>
+                                    <SelectValue placeholder="Select vendor/customer" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {contacts.map((contact) => (
+                                      <SelectItem key={contact.id} value={contact.name}>
+                                        {contact.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </TableCell>
                               <TableCell className="text-right font-medium">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
