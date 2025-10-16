@@ -13,7 +13,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
   SelectContent,
@@ -63,6 +64,9 @@ export default function Banking() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
   const [transactionMatchModes, setTransactionMatchModes] = useState<Map<number, 'match' | 'categorize'>>(new Map());
+  const [transactionNames, setTransactionNames] = useState<Map<number, string>>(new Map());
+  const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
+  const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -85,6 +89,16 @@ export default function Banking() {
   // Fetch bank accounts (Plaid connections)
   const { data: bankAccounts = [], isLoading: bankAccountsLoading } = useQuery<BankAccount[]>({
     queryKey: ['/api/plaid/accounts'],
+  });
+
+  // Fetch all GL accounts for categorization dropdown
+  const { data: allAccounts = [] } = useQuery<GLAccount[]>({
+    queryKey: ['/api/accounts'],
+  });
+
+  // Fetch sales tax rates
+  const { data: salesTaxes = [] } = useQuery<any[]>({
+    queryKey: ['/api/sales-taxes'],
   });
 
   // Fetch imported transactions
@@ -241,13 +255,27 @@ export default function Banking() {
     setTransactionMatchModes(new Map(transactionMatchModes).set(txId, mode));
   };
 
+  const handleNameChange = (txId: number, name: string) => {
+    setTransactionNames(new Map(transactionNames).set(txId, name));
+  };
+
+  const handleAccountChange = (txId: number, accountId: number | null) => {
+    setTransactionAccounts(new Map(transactionAccounts).set(txId, accountId));
+  };
+
+  const handleTaxChange = (txId: number, taxId: number | null) => {
+    setTransactionTaxes(new Map(transactionTaxes).set(txId, taxId));
+  };
+
+  const getMatchMode = (txId: number): 'match' | 'categorize' => {
+    return transactionMatchModes.get(txId) || 'categorize'; // Default to categorize
+  };
+
   const allSelected = paginatedTransactions.length > 0 && 
     paginatedTransactions.every(tx => selectedTransactions.has(tx.id));
 
   // Determine if the selected account is AP or AR type
   const selectedAccount = accountsWithFeedStatus.find(a => a.id === selectedAccountId);
-  const showNameColumn = selectedAccount && 
-    (selectedAccount.type === 'accounts_payable' || selectedAccount.type === 'accounts_receivable');
 
   return (
     <div className="py-6">
@@ -462,9 +490,11 @@ export default function Banking() {
                                 )}
                               </div>
                             </TableHead>
-                            {showNameColumn && <TableHead>Name</TableHead>}
+                            <TableHead>Name</TableHead>
                             <TableHead className="text-right">Payments</TableHead>
                             <TableHead className="text-right">Deposits</TableHead>
+                            <TableHead>Account</TableHead>
+                            <TableHead>Tax</TableHead>
                             <TableHead>Match/Categorize</TableHead>
                             <TableHead className="w-12">Docs</TableHead>
                             <TableHead>Action</TableHead>
@@ -489,32 +519,71 @@ export default function Banking() {
                                   )}
                                 </div>
                               </TableCell>
-                              {showNameColumn && (
-                                <TableCell>
-                                  {tx.merchantName ? (
-                                    <span className="text-sm">{tx.merchantName}</span>
-                                  ) : (
-                                    <span className="text-sm text-gray-400 italic">Not specified</span>
-                                  )}
-                                </TableCell>
-                              )}
-                              <TableCell className="text-right font-medium">
-                                {tx.amount > 0 ? formatCurrency(tx.amount) : '-'}
+                              <TableCell>
+                                <Input
+                                  value={transactionNames.get(tx.id) ?? tx.merchantName ?? ''}
+                                  onChange={(e) => handleNameChange(tx.id, e.target.value)}
+                                  placeholder="Enter name"
+                                  className="w-full"
+                                  data-testid={`input-name-${tx.id}`}
+                                />
                               </TableCell>
                               <TableCell className="text-right font-medium">
-                                {tx.amount < 0 ? formatCurrency(Math.abs(tx.amount)) : '-'}
+                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
                               <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm text-gray-600">
-                                    {transactionMatchModes.get(tx.id) === 'categorize' ? 'Categorize' : 'Match'}
-                                  </span>
-                                  <Switch
-                                    checked={transactionMatchModes.get(tx.id) === 'categorize'}
-                                    onCheckedChange={(checked) => handleToggleMatchMode(tx.id, checked ? 'categorize' : 'match')}
-                                    data-testid={`switch-match-categorize-${tx.id}`}
-                                  />
-                                </div>
+                                <Select 
+                                  value={transactionAccounts.get(tx.id)?.toString() || ''} 
+                                  onValueChange={(value) => handleAccountChange(tx.id, value ? Number(value) : null)}
+                                >
+                                  <SelectTrigger className="w-full" data-testid={`select-account-${tx.id}`}>
+                                    <SelectValue placeholder="Select account" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allAccounts.map((acc) => (
+                                      <SelectItem key={acc.id} value={acc.id.toString()}>
+                                        {acc.code} - {acc.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <Select 
+                                  value={transactionTaxes.get(tx.id)?.toString() || 'none'} 
+                                  onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
+                                >
+                                  <SelectTrigger className="w-full" data-testid={`select-tax-${tx.id}`}>
+                                    <SelectValue placeholder="No tax" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">No tax</SelectItem>
+                                    {salesTaxes.map((tax) => (
+                                      <SelectItem key={tax.id} value={tax.id.toString()}>
+                                        {tax.name} ({tax.rate}%)
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <ToggleGroup 
+                                  type="single" 
+                                  value={getMatchMode(tx.id)}
+                                  onValueChange={(value) => value && handleToggleMatchMode(tx.id, value as 'match' | 'categorize')}
+                                  className="justify-start"
+                                  data-testid={`toggle-match-categorize-${tx.id}`}
+                                >
+                                  <ToggleGroupItem value="match" className="text-xs px-3">
+                                    Match
+                                  </ToggleGroupItem>
+                                  <ToggleGroupItem value="categorize" className="text-xs px-3">
+                                    Categorize
+                                  </ToggleGroupItem>
+                                </ToggleGroup>
                               </TableCell>
                               <TableCell>
                                 <Button 
