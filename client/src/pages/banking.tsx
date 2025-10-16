@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,13 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Building2,
   RefreshCw,
@@ -40,6 +47,8 @@ export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -147,6 +156,30 @@ export default function Banking() {
     ? importedTransactions.filter(tx => tx.accountId === selectedAccountId)
     : importedTransactions;
 
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex);
+
+  // Clamp currentPage when totalPages changes (e.g., transactions removed or account switched)
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(Math.max(1, totalPages));
+    }
+  }, [totalPages, currentPage]);
+
+  // Reset to page 1 when account selection changes
+  const handleAccountSelect = (accountId: number) => {
+    setSelectedAccountId(accountId);
+    setCurrentPage(1);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -192,7 +225,7 @@ export default function Banking() {
                     {accountsWithFeedStatus.map((account) => (
                       <div
                         key={account.id}
-                        onClick={() => setSelectedAccountId(account.id)}
+                        onClick={() => handleAccountSelect(account.id)}
                         className={`flex-shrink-0 w-64 border rounded-lg p-4 cursor-pointer transition-all ${
                           selectedAccountId === account.id 
                             ? 'border-primary bg-primary/5 shadow-md' 
@@ -286,11 +319,28 @@ export default function Banking() {
           {accountsWithFeedStatus.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Unmatched Transactions</CardTitle>
-                <CardDescription>
-                  {filteredTransactions.length} transactions waiting to be categorized
-                  {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
-                </CardDescription>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Unmatched Transactions</CardTitle>
+                    <CardDescription>
+                      {filteredTransactions.length} transactions waiting to be categorized
+                      {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Show:</span>
+                    <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
+                      <SelectTrigger className="w-24" data-testid="select-page-size">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {filteredTransactions.length === 0 ? (
@@ -312,55 +362,82 @@ export default function Banking() {
                         You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
                       </AlertDescription>
                     </Alert>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Source</TableHead>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredTransactions.slice(0, 10).map((tx) => (
-                          <TableRow key={tx.id}>
-                            <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">{tx.name}</p>
-                                {tx.merchantName && (
-                                  <p className="text-sm text-gray-500">{tx.merchantName}</p>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge 
-                                variant={tx.source === 'csv' ? 'secondary' : 'outline'}
-                                data-testid={`badge-source-${tx.source}`}
-                              >
-                                {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {tx.category && tx.category.length > 0 ? (
-                                <Badge variant="outline">{tx.category[0]}</Badge>
-                              ) : (
-                                <span className="text-gray-400">Uncategorized</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCurrency(tx.amount)}
-                            </TableCell>
+                    <div className="max-h-[500px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead>Source</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {filteredTransactions.length > 10 && (
-                      <p className="text-sm text-gray-500 mt-4 text-center">
-                        Showing 10 of {filteredTransactions.length} unmatched transactions
+                        </TableHeader>
+                        <TableBody>
+                          {paginatedTransactions.map((tx) => (
+                            <TableRow key={tx.id}>
+                              <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{tx.name}</p>
+                                  {tx.merchantName && (
+                                    <p className="text-sm text-gray-500">{tx.merchantName}</p>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge 
+                                  variant={tx.source === 'csv' ? 'secondary' : 'outline'}
+                                  data-testid={`badge-source-${tx.source}`}
+                                >
+                                  {tx.source === 'csv' ? 'CSV Import' : 'Plaid'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {tx.category && tx.category.length > 0 ? (
+                                  <Badge variant="outline">{tx.category[0]}</Badge>
+                                ) : (
+                                  <span className="text-gray-400">Uncategorized</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatCurrency(tx.amount)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    
+                    {/* Pagination Controls */}
+                    <div className="mt-4 flex items-center justify-between">
+                      <p className="text-sm text-gray-500">
+                        Showing {startIndex + 1} to {Math.min(endIndex, filteredTransactions.length)} of {filteredTransactions.length} transactions
                       </p>
-                    )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          data-testid="button-previous-page"
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          data-testid="button-next-page"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
                   </>
                 )}
               </CardContent>
