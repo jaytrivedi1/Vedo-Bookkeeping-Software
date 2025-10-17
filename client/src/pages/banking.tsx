@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,8 @@ import {
   ArrowUp,
   ArrowDown,
   Paperclip,
-  Send
+  Send,
+  GripVertical
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +56,34 @@ interface GLAccount {
 type SortField = 'date' | 'description' | null;
 type SortDirection = 'asc' | 'desc';
 
+interface ColumnWidths {
+  checkbox: number;
+  date: number;
+  description: number;
+  name: number;
+  payments: number;
+  deposits: number;
+  account: number;
+  tax: number;
+  matchCategorize: number;
+  docs: number;
+  action: number;
+}
+
+const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  checkbox: 48,
+  date: 120,
+  description: 250,
+  name: 200,
+  payments: 120,
+  deposits: 120,
+  account: 200,
+  tax: 150,
+  matchCategorize: 180,
+  docs: 60,
+  action: 100,
+};
+
 export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
@@ -68,6 +97,63 @@ export default function Banking() {
   const [transactionNames, setTransactionNames] = useState<Map<number, string>>(new Map());
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
+
+  // Column widths state with localStorage persistence
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
+    try {
+      const saved = localStorage.getItem('banking-column-widths');
+      return saved ? JSON.parse(saved) : DEFAULT_COLUMN_WIDTHS;
+    } catch {
+      return DEFAULT_COLUMN_WIDTHS;
+    }
+  });
+
+  const [resizing, setResizing] = useState<{
+    column: keyof ColumnWidths;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  // Save column widths to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('banking-column-widths', JSON.stringify(columnWidths));
+  }, [columnWidths]);
+
+  // Handle resize start
+  const handleResizeStart = (column: keyof ColumnWidths, e: React.MouseEvent) => {
+    e.preventDefault();
+    setResizing({
+      column,
+      startX: e.clientX,
+      startWidth: columnWidths[column],
+    });
+  };
+
+  // Handle resize move
+  useEffect(() => {
+    if (!resizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const diff = e.clientX - resizing.startX;
+      const newWidth = Math.max(50, resizing.startWidth + diff); // Minimum 50px
+      setColumnWidths(prev => ({
+        ...prev,
+        [resizing.column]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setResizing(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizing]);
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -499,18 +585,24 @@ export default function Banking() {
                         You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
                       </AlertDescription>
                     </Alert>
-                    <div className="max-h-[500px] overflow-y-auto">
+                    <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-12">
+                            <TableHead style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="relative">
                               <Checkbox 
                                 checked={allSelected}
                                 onCheckedChange={handleSelectAll}
                                 data-testid="checkbox-select-all"
                               />
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('checkbox', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
                             </TableHead>
-                            <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
+                            <TableHead style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="cursor-pointer relative" onClick={() => handleSort('date')}>
                               <div className="flex items-center gap-1">
                                 Date
                                 {sortField === 'date' ? (
@@ -519,8 +611,14 @@ export default function Banking() {
                                   <ArrowUpDown className="h-3 w-3 opacity-50" />
                                 )}
                               </div>
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => { e.stopPropagation(); handleResizeStart('date', e); }}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
                             </TableHead>
-                            <TableHead className="cursor-pointer" onClick={() => handleSort('description')}>
+                            <TableHead style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="cursor-pointer relative" onClick={() => handleSort('description')}>
                               <div className="flex items-center gap-1">
                                 Description
                                 {sortField === 'description' ? (
@@ -529,29 +627,93 @@ export default function Banking() {
                                   <ArrowUpDown className="h-3 w-3 opacity-50" />
                                 )}
                               </div>
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => { e.stopPropagation(); handleResizeStart('description', e); }}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
                             </TableHead>
-                            <TableHead>Name</TableHead>
-                            <TableHead className="text-right">Payments</TableHead>
-                            <TableHead className="text-right">Deposits</TableHead>
-                            <TableHead>Account</TableHead>
-                            <TableHead>Tax</TableHead>
-                            <TableHead>Match/Categorize</TableHead>
-                            <TableHead className="w-12">Docs</TableHead>
-                            <TableHead>Action</TableHead>
+                            <TableHead style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="relative">
+                              Name
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('name', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative">
+                              Payments
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('payments', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right relative">
+                              Deposits
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('deposits', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="relative">
+                              Account
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('account', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="relative">
+                              Tax
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('tax', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="relative">
+                              Match/Categorize
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('matchCategorize', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="relative">
+                              Docs
+                              <div
+                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                onMouseDown={(e) => handleResizeStart('docs', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="relative">
+                              Action
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id}>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }}>
                                 <Checkbox 
                                   checked={selectedTransactions.has(tx.id)}
                                   onCheckedChange={(checked) => handleSelectTransaction(tx.id, checked as boolean)}
                                   data-testid={`checkbox-transaction-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell>{format(new Date(tx.date), 'PP')}</TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }}>{format(new Date(tx.date), 'PP')}</TableCell>
+                              <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }}>
                                 <div>
                                   <p className="font-medium">{tx.name}</p>
                                   {tx.merchantName && (
@@ -559,7 +721,7 @@ export default function Banking() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }}>
                                 <SearchableSelect
                                   items={contactItems}
                                   value={transactionNames.get(tx.id) || ''}
@@ -570,13 +732,13 @@ export default function Banking() {
                                   data-testid={`select-name-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell className="text-right font-medium">
+                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
                               </TableCell>
-                              <TableCell className="text-right font-medium">
+                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium">
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }}>
                                 <SearchableSelect
                                   items={accountItems}
                                   value={transactionAccounts.get(tx.id)?.toString() || ''}
@@ -587,7 +749,7 @@ export default function Banking() {
                                   data-testid={`select-account-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }}>
                                 <SearchableSelect
                                   items={taxItems}
                                   value={transactionTaxes.get(tx.id)?.toString() || 'none'}
@@ -598,7 +760,7 @@ export default function Banking() {
                                   data-testid={`select-tax-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }}>
                                 <ToggleGroup 
                                   type="single" 
                                   value={getMatchMode(tx.id)}
@@ -614,7 +776,7 @@ export default function Banking() {
                                   </ToggleGroupItem>
                                 </ToggleGroup>
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }}>
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
@@ -623,7 +785,7 @@ export default function Banking() {
                                   <Paperclip className="h-4 w-4" />
                                 </Button>
                               </TableCell>
-                              <TableCell>
+                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }}>
                                 <Button 
                                   variant="outline" 
                                   size="sm"
