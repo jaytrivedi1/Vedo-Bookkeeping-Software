@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { DatePicker } from "../components/ui/date-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -84,6 +85,13 @@ export default function PaymentReceive() {
   const depositAccounts = accounts?.filter(
     (account: Account) => account.type === AccountType.BANK || account.type === AccountType.CREDIT
   ) || [];
+
+  // Transform deposit accounts for SearchableSelect
+  const depositAccountItems: SearchableSelectItem[] = depositAccounts.map((account: Account) => ({
+    value: account.id.toString(),
+    label: `${account.name} (${account.code})`,
+    subtitle: undefined
+  }));
 
   // Create form
   const form = useForm<PaymentFormValues>({
@@ -653,24 +661,15 @@ export default function PaymentReceive() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Deposit To</FormLabel>
-                        <Select 
-                          onValueChange={(value) => field.onChange(parseInt(value))}
+                        <SearchableSelect
+                          items={depositAccountItems}
                           value={field.value?.toString() || ""}
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          placeholder="Select account"
+                          searchPlaceholder="Search accounts..."
+                          emptyText="No accounts found."
                           disabled={isAccountsLoading}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {depositAccounts.map((account: any) => (
-                              <SelectItem key={account.id} value={account.id.toString()}>
-                                {account.name} ({account.code})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                         <FormMessage />
                       </FormItem>
                     )}

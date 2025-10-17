@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Label } from "@/components/ui/label";
@@ -71,6 +72,13 @@ export default function BillCreate() {
       setExpenseAccounts(filteredAccounts);
     }
   }, [allAccounts]);
+
+  // Transform expense accounts for SearchableSelect
+  const expenseAccountItems: SearchableSelectItem[] = expenseAccounts.map((account) => ({
+    value: account.id.toString(),
+    label: account.name,
+    subtitle: undefined
+  }));
 
   // Use a simple hardcoded pattern for bill numbers until the API is fixed
   const { data: nextBillNumber, isLoading: isLoadingBillNumber } = useQuery({
@@ -472,23 +480,16 @@ export default function BillCreate() {
                                 {index + 1}
                               </td>
                               <td className="p-2 pl-3">
-                                <Select
+                                <SearchableSelect
+                                  items={expenseAccountItems}
                                   value={form.getValues(`lineItems.${index}.accountId`)?.toString()}
                                   onValueChange={(value) => {
                                     form.setValue(`lineItems.${index}.accountId`, parseInt(value));
                                   }}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Select account" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {expenseAccounts.map((account) => (
-                                      <SelectItem key={account.id} value={account.id.toString()}>
-                                        {account.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select account"
+                                  searchPlaceholder="Search accounts..."
+                                  emptyText="No accounts found."
+                                />
                               </td>
                               <td className="p-2">
                                 <Input

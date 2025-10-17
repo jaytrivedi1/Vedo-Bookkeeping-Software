@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,16 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     queryKey: ['/api/sales-taxes'],
   });
 
+  // Transform sales taxes for SearchableSelect
+  const taxItems: SearchableSelectItem[] = [
+    { value: '0', label: 'No tax', subtitle: undefined },
+    ...salesTaxes.map((tax: any) => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    }))
+  ];
+
   // Filter only revenue accounts - show only primary revenue accounts
   // (excluding other income and liability accounts)
   console.log("All accounts:", accounts);
@@ -85,6 +96,16 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
   });
   
   console.log("Filtered revenue accounts:", revenueAccounts);
+
+  // Transform revenue accounts for SearchableSelect
+  const revenueAccountItems: SearchableSelectItem[] = [
+    { value: "0", label: "Select a Revenue Account (Required)", subtitle: undefined },
+    ...revenueAccounts.map((account: any) => ({
+      value: account.id.toString(),
+      label: account.name,
+      subtitle: undefined
+    }))
+  ];
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -258,25 +279,14 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Revenue Account</FormLabel>
-                  <Select 
-                    onValueChange={(value) => field.onChange(Number(value))} 
-                    defaultValue={field.value?.toString() || "0"}
+                  <SearchableSelect
+                    items={revenueAccountItems}
                     value={field.value?.toString() || "0"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select revenue account" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="0">Select a Revenue Account (Required)</SelectItem>
-                      {revenueAccounts.map((account: any) => (
-                        <SelectItem key={account.id} value={account.id.toString()}>
-                          {account.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(value) => field.onChange(Number(value))}
+                    placeholder="Select revenue account"
+                    searchPlaceholder="Search accounts..."
+                    emptyText="No accounts found."
+                  />
                   <FormDescription>
                     The revenue account where sales will be recorded
                   </FormDescription>
@@ -292,25 +302,16 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Sales Tax</FormLabel>
-                  <Select 
-                    onValueChange={(value) => field.onChange(Number(value))} 
-                    defaultValue={field.value?.toString() || "0"}
-                    value={field.value?.toString() || "0"}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select sales tax" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="0">None</SelectItem>
-                      {salesTaxes.filter((tax: any) => !tax.parentId).map((tax: any) => (
-                        <SelectItem key={tax.id} value={tax.id.toString()}>
-                          {tax.name} ({tax.rate}%)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SearchableSelect
+                      items={taxItems}
+                      value={field.value?.toString() || "0"}
+                      onValueChange={(value) => field.onChange(Number(value))}
+                      placeholder="Select sales tax"
+                      searchPlaceholder="Search taxes..."
+                      emptyText="No taxes found."
+                    />
+                  </FormControl>
                   <FormDescription>
                     The default sales tax applied to this {product ? (product.type === "service" ? "service" : "product") : (defaultType === "service" ? "service" : "product")}
                   </FormDescription>

@@ -47,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Form,
   FormControl,
@@ -116,6 +117,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = [
+    { value: '0', label: 'None', subtitle: undefined },
+    ...(salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    })) || [])
+  ];
   
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
@@ -167,6 +178,15 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     ...product,
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
+
+  // Transform contacts into SearchableSelectItem format for customer dropdown (filtered)
+  const customerItems: SearchableSelectItem[] = contacts
+    ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
+    .map(contact => ({
+      value: contact.id.toString(),
+      label: contact.name,
+      subtitle: `· ${contact.type}`
+    })) || [];
 
   // Use our custom form type that includes taxComponentsInfo
   const form = useForm<Invoice>({
@@ -782,32 +802,20 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             <HelpCircle className="h-4 w-4 text-gray-400" />
                           </div>
                           <FormControl>
-                            <Select 
+                            <SearchableSelect
+                              items={customerItems}
+                              value={field.value?.toString() || ""}
                               onValueChange={(value) => {
-                                field.onChange(parseInt(value));
-                                handleContactChange(parseInt(value));
-                              }} 
-                              defaultValue={field.value?.toString()}
-                            >
-                              <SelectTrigger className="bg-white border-gray-300 h-10">
-                                <SelectValue placeholder="Select a customer" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {contactsLoading ? (
-                                  <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                                ) : contacts && contacts.length > 0 ? (
-                                  contacts
-                                    .filter(contact => contact.type === 'customer' || contact.type === 'both')
-                                    .map((contact) => (
-                                      <SelectItem key={contact.id} value={contact.id.toString()}>
-                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
-                                      </SelectItem>
-                                    ))
-                                ) : (
-                                  <SelectItem value="none" disabled>No customers available</SelectItem>
-                                )}
-                              </SelectContent>
-                            </Select>
+                                const contactId = parseInt(value);
+                                field.onChange(contactId);
+                                handleContactChange(contactId);
+                              }}
+                              placeholder="Select a customer"
+                              emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
+                              searchPlaceholder="Search customers..."
+                              className="bg-white border-gray-300 h-10"
+                              disabled={contactsLoading}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -1142,7 +1150,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Select
+                                <SearchableSelect
+                                  items={taxItems}
                                   value={field.value?.toString() || "0"}
                                   onValueChange={(value) => {
                                     const numValue = parseInt(value);
@@ -1154,19 +1163,11 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     updateLineItemAmount(index);
                                     calculateTotals();
                                   }}
-                                >
-                                  <SelectTrigger className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50">
-                                    <SelectValue placeholder="Select Tax" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="0">None</SelectItem>
-                                    {salesTaxes?.filter(tax => !tax.parentId).map((tax) => (
-                                      <SelectItem key={tax.id} value={tax.id.toString()}>
-                                        {tax.name} ({tax.rate}%)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select Tax"
+                                  searchPlaceholder="Search taxes..."
+                                  emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                                  className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>

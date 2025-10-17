@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Form,
   FormControl,
@@ -103,6 +104,16 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = [
+    { value: '0', label: 'None', subtitle: undefined },
+    ...(salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    })) || [])
+  ];
   
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
@@ -113,6 +124,36 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const bankAccounts = accounts?.filter(account => 
     account.type === 'bank'
   ) || [];
+
+  // Transform contacts into SearchableSelectItem format
+  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
+    value: contact.id.toString(),
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  })) || [];
+
+  // Transform bank accounts into SearchableSelectItem format
+  const bankAccountItems: SearchableSelectItem[] = bankAccounts.map(account => ({
+    value: account.id.toString(),
+    label: `${account.name} (${account.type})`,
+    subtitle: undefined
+  }));
+
+  // Transform all accounts into SearchableSelectItem format
+  const allAccountItems: SearchableSelectItem[] = allAccounts.map(account => ({
+    value: account.id.toString(),
+    label: account.name,
+    subtitle: undefined
+  }));
+
+  // Transform payment methods into SearchableSelectItem format
+  const paymentMethodItems: SearchableSelectItem[] = [
+    { value: "cash", label: "Cash", subtitle: undefined },
+    { value: "check", label: "Check", subtitle: undefined },
+    { value: "credit_card", label: "Credit Card", subtitle: undefined },
+    { value: "bank_transfer", label: "Bank Transfer", subtitle: undefined },
+    { value: "other", label: "Other", subtitle: undefined }
+  ];
 
   const form = useForm<Cheque>({
     resolver: zodResolver(chequeSchema),
@@ -404,35 +445,24 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
               <FormItem>
                 <FormLabel>Payee</FormLabel>
                 <div className="flex gap-2 items-center">
-                  <Select 
-                    onValueChange={(value) => {
-                      if (value === "none") {
-                        field.onChange(undefined);
-                      } else {
-                        field.onChange(parseInt(value));
-                      }
-                    }}
-                    value={field.value?.toString() || ""}
-                    data-testid="select-payee"
-                  >
-                    <FormControl>
-                      <SelectTrigger data-testid="trigger-payee">
-                        <SelectValue placeholder="Select a payee" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {contactsLoading ? (
-                        <SelectItem value="loading" disabled>Loading contacts...</SelectItem>
-                      ) : payees.length > 0 ? (
-                        payees.map((payee) => (
-                          <SelectItem key={payee.id} value={payee.id.toString()} data-testid={`payee-${payee.id}`}>
-                            {payee.name} <span className="text-muted-foreground">· {payee.type}</span>
-                          </SelectItem>
-                        ))
-                      ) : null}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <SearchableSelect
+                      items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
+                      value={field.value?.toString() || ""}
+                      onValueChange={(value) => {
+                        if (value === "") {
+                          field.onChange(undefined);
+                        } else {
+                          field.onChange(parseInt(value));
+                        }
+                      }}
+                      placeholder="Select a payee"
+                      emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
+                      searchPlaceholder="Search contacts..."
+                      disabled={contactsLoading}
+                      data-testid="select-payee"
+                    />
+                  </FormControl>
                   {field.value !== undefined && (
                     <Button
                       type="button"
@@ -456,30 +486,16 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Bank Account *</FormLabel>
-                <Select 
-                  onValueChange={(value) => field.onChange(parseInt(value))} 
+                <SearchableSelect
+                  items={bankAccountItems}
                   value={field.value?.toString()}
+                  onValueChange={(value) => field.onChange(parseInt(value))}
+                  placeholder="Select payment account"
+                  searchPlaceholder="Search accounts..."
+                  emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
+                  disabled={accountsLoading}
                   data-testid="select-bank-account"
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="trigger-payment-account">
-                      <SelectValue placeholder="Select payment account" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {accountsLoading ? (
-                      <SelectItem value="loading" disabled>Loading accounts...</SelectItem>
-                    ) : bankAccounts.length > 0 ? (
-                      bankAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id.toString()} data-testid={`payment-account-${account.id}`}>
-                          {account.name} ({account.type})
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="none" disabled>No payment accounts available</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -534,24 +550,15 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Payment Method</FormLabel>
-                <Select 
-                  onValueChange={field.onChange} 
+                <SearchableSelect
+                  items={paymentMethodItems}
                   value={field.value}
+                  onValueChange={field.onChange}
+                  placeholder="Select payment method"
+                  searchPlaceholder="Search methods..."
+                  emptyText="No payment methods found"
                   data-testid="select-payment-method"
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="trigger-payment-method">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="cash" data-testid="method-cash">Cash</SelectItem>
-                    <SelectItem value="check" data-testid="method-check">Check</SelectItem>
-                    <SelectItem value="credit_card" data-testid="method-credit-card">Credit Card</SelectItem>
-                    <SelectItem value="bank_transfer" data-testid="method-bank-transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="other" data-testid="method-other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -591,30 +598,16 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     name={`lineItems.${index}.accountId`}
                     render={({ field }) => (
                       <FormItem>
-                        <Select 
-                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                        <SearchableSelect
+                          items={allAccountItems}
                           value={field.value?.toString()}
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          placeholder="Select account"
+                          searchPlaceholder="Search accounts..."
+                          emptyText={accountsLoading ? "Loading..." : "No accounts available"}
+                          disabled={accountsLoading}
                           data-testid={`select-account-${index}`}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {accountsLoading ? (
-                              <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : allAccounts.length > 0 ? (
-                              allAccounts.map((account) => (
-                                <SelectItem key={account.id} value={account.id.toString()} data-testid={`account-${account.id}-${index}`}>
-                                  {account.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>No accounts available</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -668,39 +661,25 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     name={`lineItems.${index}.salesTaxId`}
                     render={({ field }) => (
                       <FormItem>
-                        <Select 
-                          onValueChange={(value) => {
-                            const numValue = parseInt(value);
-                            if (numValue === 0) {
-                              field.onChange(undefined);
-                            } else {
-                              field.onChange(numValue);
-                            }
-                            updateLineItemAmount(index);
-                          }}
-                          value={field.value?.toString() || "0"}
-                          data-testid={`select-tax-${index}`}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="None" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="0">None</SelectItem>
-                            {salesTaxesLoading ? (
-                              <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : salesTaxes && salesTaxes.length > 0 ? (
-                              salesTaxes
-                                .filter(tax => !tax.parentId)
-                                .map((tax) => (
-                                  <SelectItem key={tax.id} value={tax.id.toString()} data-testid={`tax-${tax.id}-${index}`}>
-                                    {tax.name} ({tax.rate}%)
-                                  </SelectItem>
-                                ))
-                            ) : null}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SearchableSelect
+                            items={taxItems}
+                            value={field.value?.toString() || "0"}
+                            onValueChange={(value) => {
+                              const numValue = parseInt(value);
+                              if (numValue === 0) {
+                                field.onChange(undefined);
+                              } else {
+                                field.onChange(numValue);
+                              }
+                              updateLineItemAmount(index);
+                            }}
+                            placeholder="None"
+                            searchPlaceholder="Search taxes..."
+                            emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                            data-testid={`select-tax-${index}`}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

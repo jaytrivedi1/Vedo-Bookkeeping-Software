@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Form,
   FormControl,
@@ -54,6 +55,30 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+
+  // Transform contacts into SearchableSelectItem format
+  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
+    value: contact.id.toString(),
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  })) || [];
+
+  // Transform accounts into SearchableSelectItem format
+  const accountItems: SearchableSelectItem[] = accounts?.map(account => ({
+    value: account.id.toString(),
+    label: `${account.code} - ${account.name}`,
+    subtitle: undefined
+  })) || [];
+
+  // Transform sales taxes for SearchableSelect
+  const taxItems: SearchableSelectItem[] = [
+    { value: 'none', label: 'Exempt', subtitle: undefined },
+    ...(salesTaxes?.map(tax => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    })) || [])
+  ];
 
   const form = useForm<JournalEntry>({
     resolver: zodResolver(journalEntrySchema),
@@ -264,29 +289,18 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     name={`entries.${index}.accountId`}
                     render={({ field }) => (
                       <FormItem>
-                        <Select 
-                          onValueChange={(value) => field.onChange(parseInt(value))} 
-                          value={field.value?.toString() || ""}
-                        >
-                          <FormControl>
-                            <SelectTrigger data-testid={`select-account-${index}`}>
-                              <SelectValue placeholder="Select account" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {accountsLoading ? (
-                              <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : accounts && accounts.length > 0 ? (
-                              accounts.map((account) => (
-                                <SelectItem key={account.id} value={account.id.toString()}>
-                                  {account.code} - {account.name}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="none" disabled>No accounts</SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SearchableSelect
+                            items={accountItems}
+                            value={field.value?.toString() || ""}
+                            onValueChange={(value) => field.onChange(parseInt(value))}
+                            placeholder="Select account"
+                            searchPlaceholder="Search accounts..."
+                            emptyText={accountsLoading ? "Loading..." : "No accounts found."}
+                            disabled={accountsLoading}
+                            data-testid={`select-account-${index}`}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -300,28 +314,18 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     name={`entries.${index}.contactId`}
                     render={({ field }) => (
                       <FormItem>
-                        <Select 
-                          onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
-                          value={field.value?.toString() || "none"}
-                        >
-                          <FormControl>
-                            <SelectTrigger data-testid={`select-name-${index}`}>
-                              <SelectValue placeholder="None" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">None</SelectItem>
-                            {contactsLoading ? (
-                              <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : contacts && contacts.length > 0 ? (
-                              contacts.map((contact) => (
-                                <SelectItem key={contact.id} value={contact.id.toString()}>
-                                  {contact.name}
-                                </SelectItem>
-                              ))
-                            ) : null}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SearchableSelect
+                            items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
+                            value={field.value?.toString() || ""}
+                            onValueChange={(value) => field.onChange(value === "" ? undefined : parseInt(value))}
+                            placeholder="None"
+                            emptyText={contactsLoading ? "Loading..." : "No contacts found"}
+                            searchPlaceholder="Search contacts..."
+                            disabled={contactsLoading}
+                            data-testid={`select-name-${index}`}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -409,28 +413,17 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                     name={`entries.${index}.salesTaxId`}
                     render={({ field }) => (
                       <FormItem className="flex-1">
-                        <Select 
-                          onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
-                          value={field.value?.toString() || "none"}
-                        >
-                          <FormControl>
-                            <SelectTrigger data-testid={`select-tax-${index}`}>
-                              <SelectValue placeholder="-" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">-</SelectItem>
-                            {salesTaxesLoading ? (
-                              <SelectItem value="loading" disabled>Loading...</SelectItem>
-                            ) : salesTaxes && salesTaxes.length > 0 ? (
-                              salesTaxes.map((tax) => (
-                                <SelectItem key={tax.id} value={tax.id.toString()}>
-                                  {tax.name}
-                                </SelectItem>
-                              ))
-                            ) : null}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <SearchableSelect
+                            items={taxItems}
+                            value={field.value?.toString() || "none"}
+                            onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))}
+                            placeholder="-"
+                            searchPlaceholder="Search taxes..."
+                            emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                            data-testid={`select-tax-${index}`}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

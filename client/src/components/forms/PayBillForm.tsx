@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Card,
   CardContent,
@@ -155,6 +156,13 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
       )
     ),
   });
+
+  // Transform accounts into SearchableSelectItem format
+  const accountItems: SearchableSelectItem[] = allAccounts?.map(account => ({
+    value: account.id.toString(),
+    label: `${account.name} (${account.code})`,
+    subtitle: undefined
+  })) || [];
 
   // Fetch vendor's unapplied cheques (unapplied credits)
   const { data: vendorCheques, isLoading: isLoadingCheques } = useQuery({
@@ -519,20 +527,15 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Pay From Account</FormLabel>
-                    <Select onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {allAccounts?.map(account => (
-                          <SelectItem key={account.id} value={account.id.toString()}>
-                            {account.name} ({account.code})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      items={accountItems}
+                      value={field.value?.toString()}
+                      onValueChange={field.onChange}
+                      placeholder="Select account"
+                      searchPlaceholder="Search accounts..."
+                      emptyText={isLoadingAccounts ? "Loading accounts..." : "No accounts found."}
+                      disabled={isLoadingAccounts}
+                    />
                     <FormMessage />
                   </FormItem>
                 )}

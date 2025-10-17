@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { 
   Building2,
   RefreshCw,
@@ -101,6 +102,20 @@ export default function Banking() {
     queryKey: ['/api/contacts'],
   });
 
+  // Transform contacts for SearchableSelect
+  const contactItems: SearchableSelectItem[] = contacts.map(contact => ({
+    value: contact.name,
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  }));
+
+  // Transform accounts for SearchableSelect
+  const accountItems: SearchableSelectItem[] = allAccounts.map(acc => ({
+    value: acc.id.toString(),
+    label: `${acc.code} - ${acc.name}`,
+    subtitle: undefined
+  }));
+
   // Fetch sales tax rates (filter out composite tax components)
   const { data: salesTaxes = [] } = useQuery<any[]>({
     queryKey: ['/api/sales-taxes'],
@@ -109,6 +124,23 @@ export default function Banking() {
       return data.filter(tax => !tax.parentId);
     },
   });
+
+  // Transform sales taxes for SearchableSelect
+  const taxItems: SearchableSelectItem[] = [
+    { value: 'none', label: 'No tax', subtitle: undefined },
+    ...salesTaxes.map(tax => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    }))
+  ];
+
+  // Transform page size options for SearchableSelect
+  const pageSizeItems: SearchableSelectItem[] = [
+    { value: "25", label: "25 per page", subtitle: undefined },
+    { value: "50", label: "50 per page", subtitle: undefined },
+    { value: "100", label: "100 per page", subtitle: undefined }
+  ];
 
   // Fetch imported transactions
   const { data: importedTransactions = [], isLoading: transactionsLoading } = useQuery<ImportedTransaction[]>({
@@ -435,16 +467,15 @@ export default function Banking() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Show:</span>
-                    <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(Number(value))}>
-                      <SelectTrigger className="w-24" data-testid="select-page-size">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="25">25</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      items={pageSizeItems}
+                      value={pageSize.toString()}
+                      onValueChange={(value) => handlePageSizeChange(Number(value))}
+                      placeholder="Select page size"
+                      searchPlaceholder="Search..."
+                      emptyText="No options found"
+                      data-testid="select-page-size"
+                    />
                   </div>
                 </div>
               </CardHeader>
@@ -529,21 +560,15 @@ export default function Banking() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Select 
-                                  value={transactionNames.get(tx.id) || ''} 
+                                <SearchableSelect
+                                  items={contactItems}
+                                  value={transactionNames.get(tx.id) || ''}
                                   onValueChange={(value) => handleNameChange(tx.id, value)}
-                                >
-                                  <SelectTrigger className="w-full" data-testid={`select-name-${tx.id}`}>
-                                    <SelectValue placeholder="Select vendor/customer" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {contacts.map((contact) => (
-                                      <SelectItem key={contact.id} value={contact.name}>
-                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select vendor/customer"
+                                  searchPlaceholder="Search contacts..."
+                                  emptyText="No contacts found."
+                                  data-testid={`select-name-${tx.id}`}
+                                />
                               </TableCell>
                               <TableCell className="text-right font-medium">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
@@ -552,39 +577,26 @@ export default function Banking() {
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
                               <TableCell>
-                                <Select 
-                                  value={transactionAccounts.get(tx.id)?.toString() || ''} 
+                                <SearchableSelect
+                                  items={accountItems}
+                                  value={transactionAccounts.get(tx.id)?.toString() || ''}
                                   onValueChange={(value) => handleAccountChange(tx.id, value ? Number(value) : null)}
-                                >
-                                  <SelectTrigger className="w-full" data-testid={`select-account-${tx.id}`}>
-                                    <SelectValue placeholder="Select account" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {allAccounts.map((acc) => (
-                                      <SelectItem key={acc.id} value={acc.id.toString()}>
-                                        {acc.code} - {acc.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select account"
+                                  searchPlaceholder="Search accounts..."
+                                  emptyText="No accounts found."
+                                  data-testid={`select-account-${tx.id}`}
+                                />
                               </TableCell>
                               <TableCell>
-                                <Select 
-                                  value={transactionTaxes.get(tx.id)?.toString() || 'none'} 
+                                <SearchableSelect
+                                  items={taxItems}
+                                  value={transactionTaxes.get(tx.id)?.toString() || 'none'}
                                   onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
-                                >
-                                  <SelectTrigger className="w-full" data-testid={`select-tax-${tx.id}`}>
-                                    <SelectValue placeholder="No tax" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="none">No tax</SelectItem>
-                                    {salesTaxes.map((tax) => (
-                                      <SelectItem key={tax.id} value={tax.id.toString()}>
-                                        {tax.name} ({tax.rate}%)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="No tax"
+                                  searchPlaceholder="Search taxes..."
+                                  emptyText="No taxes found."
+                                  data-testid={`select-tax-${tx.id}`}
+                                />
                               </TableCell>
                               <TableCell>
                                 <ToggleGroup 

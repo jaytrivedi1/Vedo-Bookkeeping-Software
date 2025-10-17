@@ -61,6 +61,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 
 // Form schema for creating/editing tax rates
 const salesTaxFormSchema = z.object({
@@ -104,6 +105,21 @@ export default function SalesTaxes() {
   const { data: accounts } = useQuery<any[]>({
     queryKey: ["/api/accounts"],
   });
+
+  // Transform accounts for SearchableSelect (filter for liability accounts)
+  const liabilityAccountItems: SearchableSelectItem[] = [
+    { value: "0", label: "None", subtitle: undefined },
+    ...(accounts || [])
+      .filter(account => 
+        account.type === "accounts_payable" || 
+        account.type === "other_current_liabilities"
+      )
+      .map(account => ({
+        value: account.id.toString(),
+        label: `${account.code} - ${account.name}`,
+        subtitle: undefined
+      }))
+  ];
 
   // State to manage UI flow for composite taxes
   const [isComposite, setIsComposite] = useState(false);
@@ -496,29 +512,14 @@ export default function SalesTaxes() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Tax Liability Account</FormLabel>
-                      <Select
-                        onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                      <SearchableSelect
+                        items={liabilityAccountItems}
                         value={field.value?.toString() || "0"}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select account" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="0">None</SelectItem>
-                          {accounts && accounts
-                            .filter(account => 
-                              account.type === "accounts_payable" || 
-                              account.type === "other_current_liabilities"
-                            )
-                            .map((account) => (
-                              <SelectItem key={account.id} value={account.id.toString()}>
-                                {account.code} - {account.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+                        onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                        placeholder="Select account"
+                        searchPlaceholder="Search accounts..."
+                        emptyText="No accounts found."
+                      />
                       <FormDescription>
                         The account where collected tax will be recorded
                       </FormDescription>
@@ -642,29 +643,14 @@ export default function SalesTaxes() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Tax Liability Account</FormLabel>
-                            <Select
-                              onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                            <SearchableSelect
+                              items={liabilityAccountItems}
                               value={field.value?.toString() || "0"}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select account" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="0">None</SelectItem>
-                                {accounts && accounts
-                                  .filter(account => 
-                                    account.type === "accounts_payable" || 
-                                    account.type === "other_current_liabilities"
-                                  )
-                                  .map((account) => (
-                                    <SelectItem key={account.id} value={account.id.toString()}>
-                                      {account.code} - {account.name}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
+                              onValueChange={(value) => field.onChange(value !== "0" ? parseInt(value) : null)}
+                              placeholder="Select account"
+                              searchPlaceholder="Search accounts..."
+                              emptyText="No accounts found."
+                            />
                             <FormDescription>
                               The account where this component's collected tax will be recorded
                             </FormDescription>

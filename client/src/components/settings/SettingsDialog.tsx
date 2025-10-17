@@ -19,13 +19,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Tabs,
   TabsContent,
@@ -131,6 +125,13 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       fiscalYearStartMonth: 1,
     },
   });
+  
+  // Transform month options for SearchableSelect
+  const monthItems: SearchableSelectItem[] = MONTH_OPTIONS.map(month => ({
+    value: month.value.toString(),
+    label: month.label,
+    subtitle: undefined
+  }));
   
   // Update form when company data is loaded
   useEffect(() => {
@@ -388,23 +389,15 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Fiscal Year Start Month</FormLabel>
-                        <Select 
-                          onValueChange={(value) => field.onChange(parseInt(value))} 
+                        <SearchableSelect
+                          items={monthItems}
                           value={field.value?.toString()}
-                        >
-                          <FormControl>
-                            <SelectTrigger data-testid="select-fiscal-year-month">
-                              <SelectValue placeholder="Select first month of fiscal year" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {MONTH_OPTIONS.map((month) => (
-                              <SelectItem key={month.value} value={month.value.toString()}>
-                                {month.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          placeholder="Select first month of fiscal year"
+                          searchPlaceholder="Search months..."
+                          emptyText="No months found"
+                          data-testid="select-fiscal-year-month"
+                        />
                         <p className="text-sm text-muted-foreground">
                           This setting affects all financial reports and determines how fiscal periods are calculated
                         </p>

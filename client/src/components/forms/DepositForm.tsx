@@ -18,6 +18,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
   Accordion,
   AccordionContent,
@@ -100,6 +101,16 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
     queryKey: ['/api/sales-taxes'],
   });
 
+  // Transform sales taxes for SearchableSelect
+  const taxItems: SearchableSelectItem[] = [
+    { value: '0', label: 'No tax', subtitle: undefined },
+    ...(salesTaxes?.map(tax => ({
+      value: tax.id.toString(),
+      label: tax.name,
+      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+    })) || [])
+  ];
+
   // Filter bank and credit accounts
   const bankAccounts = accounts?.filter(account => 
     account.type === 'bank' || account.type === 'credit_card'
@@ -112,6 +123,35 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   const depositableAccounts = accounts?.filter(account => 
     account.type === 'income' || account.type === 'other_income'
   ) || [];
+
+  // Transform contacts into SearchableSelectItem format (uses contact.name as value for deposit)
+  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
+    value: contact.name,
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  })) || [];
+
+  // Transform bank accounts into SearchableSelectItem format
+  const bankAccountItems: SearchableSelectItem[] = bankAccounts.map(account => ({
+    value: account.id.toString(),
+    label: `${account.name} ${account.code ? `(${account.code})` : ''}`,
+    subtitle: undefined
+  }));
+
+  // Transform all accounts into SearchableSelectItem format
+  const allAccountItems: SearchableSelectItem[] = allAccounts.map(account => ({
+    value: account.id.toString(),
+    label: `${account.name} ${account.code ? `(${account.code})` : ''}`,
+    subtitle: undefined
+  }));
+  
+  // Transform payment methods into SearchableSelectItem format
+  const paymentMethodItems: SearchableSelectItem[] = [
+    { value: "cash", label: "Cash", subtitle: undefined },
+    { value: "cheque", label: "Cheque", subtitle: undefined },
+    { value: "bank_transfer", label: "Bank Transfer", subtitle: undefined },
+    { value: "credit_card", label: "Credit Card", subtitle: undefined }
+  ];
   
   // Set up default values or populate from initialData if editing
   const getDestinationAccountId = () => {
@@ -423,23 +463,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                   render={({ field }) => (
                     <FormItem className="flex-1">
                       <FormLabel>Deposit Account</FormLabel>
-                      <Select
+                      <SearchableSelect
+                        items={bankAccountItems}
                         value={field.value?.toString()}
                         onValueChange={(value) => field.onChange(parseInt(value))}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="Select account" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {bankAccounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id.toString()}>
-                              {account.name} {account.code ? `(${account.code})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="Select account"
+                        searchPlaceholder="Search accounts..."
+                        emptyText="No accounts found."
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -560,35 +591,27 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                             name={`lineItems.${index}.receivedFrom`}
                             render={({ field }) => (
                               <FormItem>
-                                <Select
-                                  value={field.value}
-                                  onValueChange={(value) => {
-                                    field.onChange(value);
-                                    // When a contact is selected, update the contactId
-                                    if (value !== 'none') {
-                                      const contact = contacts?.find(c => c.name === value);
-                                      if (contact) {
-                                        form.setValue(`lineItems.${index}.contactId`, contact.id);
+                                <FormControl>
+                                  <SearchableSelect
+                                    items={[{ value: "none", label: "-- Select a source --", subtitle: undefined }, ...contactItems]}
+                                    value={field.value || "none"}
+                                    onValueChange={(value) => {
+                                      field.onChange(value === "none" ? "" : value);
+                                      // When a contact is selected, update the contactId
+                                      if (value !== "none") {
+                                        const contact = contacts?.find(c => c.name === value);
+                                        if (contact) {
+                                          form.setValue(`lineItems.${index}.contactId`, contact.id);
+                                        }
+                                      } else {
+                                        form.setValue(`lineItems.${index}.contactId`, undefined);
                                       }
-                                    } else {
-                                      form.setValue(`lineItems.${index}.contactId`, undefined);
-                                    }
-                                  }}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select source" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="none">-- Select a source --</SelectItem>
-                                    {contacts?.map((contact) => (
-                                      <SelectItem key={contact.id} value={contact.name}>
-                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                    }}
+                                    placeholder="Select source"
+                                    emptyText="No contacts found"
+                                    searchPlaceholder="Search contacts..."
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -600,23 +623,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                             name={`lineItems.${index}.accountId`}
                             render={({ field }) => (
                               <FormItem>
-                                <Select
+                                <SearchableSelect
+                                  items={allAccountItems}
                                   value={field.value?.toString()}
                                   onValueChange={(value) => field.onChange(parseInt(value))}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select account" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {allAccounts.map((account) => (
-                                      <SelectItem key={account.id} value={account.id.toString()}>
-                                        {account.name} {account.code ? `(${account.code})` : ''}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select account"
+                                  searchPlaceholder="Search accounts..."
+                                  emptyText="No accounts found."
+                                />
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -646,22 +660,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                             name={`lineItems.${index}.paymentMethod`}
                             render={({ field }) => (
                               <FormItem>
-                                <Select
+                                <SearchableSelect
+                                  items={paymentMethodItems}
                                   value={field.value?.toString()}
                                   onValueChange={(value) => field.onChange(value)}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Select method" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="cash">Cash</SelectItem>
-                                    <SelectItem value="cheque">Cheque</SelectItem>
-                                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                                    <SelectItem value="credit_card">Credit Card</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                  placeholder="Select method"
+                                  searchPlaceholder="Search methods..."
+                                  emptyText="No payment methods found"
+                                />
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -695,23 +701,23 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                             name={`lineItems.${index}.salesTaxId`}
                             render={({ field }) => (
                               <FormItem>
-                                <Select
-                                  value={field.value?.toString()}
-                                  onValueChange={(value) => field.onChange(parseInt(value))}
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                      <SelectValue placeholder="Tax rate" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    {salesTaxes?.map((tax) => (
-                                      <SelectItem key={tax.id} value={tax.id.toString()}>
-                                        {tax.name} ({tax.rate}%)
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                <FormControl>
+                                  <SearchableSelect
+                                    items={taxItems}
+                                    value={field.value?.toString() || "0"}
+                                    onValueChange={(value) => {
+                                      const numValue = parseInt(value);
+                                      if (numValue === 0) {
+                                        field.onChange(undefined);
+                                      } else {
+                                        field.onChange(numValue);
+                                      }
+                                    }}
+                                    placeholder="Tax rate"
+                                    searchPlaceholder="Search taxes..."
+                                    emptyText="No taxes found."
+                                  />
+                                </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}

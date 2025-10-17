@@ -20,13 +20,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -62,6 +56,13 @@ const ALL_CURRENCIES = [
 export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps) {
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  // Transform currencies for SearchableSelect
+  const currencyItems: SearchableSelectItem[] = ALL_CURRENCIES.map(code => ({
+    value: code,
+    label: `${code} - ${getCurrencyName(code)}`,
+    subtitle: undefined
+  }));
   
   // Form with validation
   const form = useForm<CustomerFormValues>({
@@ -204,35 +205,14 @@ export default function CustomerForm({ onSuccess, onCancel }: CustomerFormProps)
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Currency</FormLabel>
-                  <Select
+                  <SearchableSelect
+                    items={currencyItems}
+                    value={field.value}
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <div className="p-2 border-b">
-                        <h3 className="text-sm font-medium">Preferred Currencies</h3>
-                      </div>
-                      {PREFERRED_CURRENCIES.map(currency => (
-                        <SelectItem key={currency} value={currency}>
-                          {currency} - {getCurrencyName(currency)}
-                        </SelectItem>
-                      ))}
-                      
-                      <div className="p-2 border-b">
-                        <h3 className="text-sm font-medium">All Currencies</h3>
-                      </div>
-                      {ALL_CURRENCIES.filter(c => !PREFERRED_CURRENCIES.includes(c)).map(currency => (
-                        <SelectItem key={currency} value={currency}>
-                          {currency} - {getCurrencyName(currency)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Select currency"
+                    searchPlaceholder="Search currencies..."
+                    emptyText="No currencies found"
+                  />
                   <FormMessage />
                 </FormItem>
               )}
