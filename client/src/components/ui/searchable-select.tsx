@@ -57,14 +57,14 @@ export function SearchableSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between",
+            "w-full justify-between overflow-hidden",
             !value && "text-muted-foreground",
             className
           )}
           disabled={disabled}
           data-testid={testId}
         >
-          <span className="truncate">
+          <span className="truncate flex-1 text-left">
             {selectedItem ? (
               <>
                 {selectedItem.label}

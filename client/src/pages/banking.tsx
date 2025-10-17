@@ -705,15 +705,15 @@ export default function Banking() {
                         <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id} className="h-12">
-                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="py-2 overflow-hidden">
                                 <Checkbox 
                                   checked={selectedTransactions.has(tx.id)}
                                   onCheckedChange={(checked) => handleSelectTransaction(tx.id, checked as boolean)}
                                   data-testid={`checkbox-transaction-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="py-2 truncate">{format(new Date(tx.date), 'PP')}</TableCell>
-                              <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="py-2 overflow-hidden truncate">{format(new Date(tx.date), 'PP')}</TableCell>
+                              <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="py-2 overflow-hidden">
                                 <div className="truncate">
                                   <p className="font-medium truncate">{tx.name}</p>
                                   {tx.merchantName && (
@@ -721,7 +721,7 @@ export default function Banking() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2 overflow-hidden">
                                 <SearchableSelect
                                   items={contactItems}
                                   value={transactionNames.get(tx.id) || ''}
@@ -732,13 +732,13 @@ export default function Banking() {
                                   data-testid={`select-name-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 truncate">
+                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 truncate">
+                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2 overflow-hidden">
                                 <SearchableSelect
                                   items={accountItems}
                                   value={transactionAccounts.get(tx.id)?.toString() || ''}
@@ -749,7 +749,7 @@ export default function Banking() {
                                   data-testid={`select-account-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2 overflow-hidden">
                                 <SearchableSelect
                                   items={taxItems}
                                   value={transactionTaxes.get(tx.id)?.toString() || 'none'}
@@ -760,7 +760,7 @@ export default function Banking() {
                                   data-testid={`select-tax-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
                                 <ToggleGroup 
                                   type="single" 
                                   value={getMatchMode(tx.id)}
@@ -776,7 +776,7 @@ export default function Banking() {
                                   </ToggleGroupItem>
                                 </ToggleGroup>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
@@ -785,7 +785,7 @@ export default function Banking() {
                                   <Paperclip className="h-4 w-4" />
                                 </Button>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2">
+                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2 overflow-hidden">
                                 <Button 
                                   variant="outline" 
                                   size="sm"
