@@ -539,7 +539,7 @@ export default function Banking() {
                                   <SelectContent>
                                     {contacts.map((contact) => (
                                       <SelectItem key={contact.id} value={contact.name}>
-                                        {contact.name}
+                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>

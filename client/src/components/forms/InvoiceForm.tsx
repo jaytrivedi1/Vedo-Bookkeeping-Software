@@ -800,7 +800,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                     .filter(contact => contact.type === 'customer' || contact.type === 'both')
                                     .map((contact) => (
                                       <SelectItem key={contact.id} value={contact.id.toString()}>
-                                        {contact.name}
+                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
                                       </SelectItem>
                                     ))
                                 ) : (

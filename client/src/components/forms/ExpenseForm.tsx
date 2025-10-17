@@ -412,7 +412,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                       ) : payees.length > 0 ? (
                         payees.map((payee) => (
                           <SelectItem key={payee.id} value={payee.id.toString()} data-testid={`payee-${payee.id}`}>
-                            {payee.name}
+                            {payee.name} <span className="text-muted-foreground">· {payee.type}</span>
                           </SelectItem>
                         ))
                       ) : null}

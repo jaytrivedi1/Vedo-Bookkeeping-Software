@@ -584,7 +584,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                                     <SelectItem value="none">-- Select a source --</SelectItem>
                                     {contacts?.map((contact) => (
                                       <SelectItem key={contact.id} value={contact.name}>
-                                        {contact.name} ({contact.type})
+                                        {contact.name} <span className="text-muted-foreground">· {contact.type}</span>
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
