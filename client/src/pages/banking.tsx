@@ -704,24 +704,24 @@ export default function Banking() {
                         </TableHeader>
                         <TableBody>
                           {paginatedTransactions.map((tx) => (
-                            <TableRow key={tx.id}>
-                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }}>
+                            <TableRow key={tx.id} className="h-12">
+                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="py-2">
                                 <Checkbox 
                                   checked={selectedTransactions.has(tx.id)}
                                   onCheckedChange={(checked) => handleSelectTransaction(tx.id, checked as boolean)}
                                   data-testid={`checkbox-transaction-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }}>{format(new Date(tx.date), 'PP')}</TableCell>
-                              <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }}>
-                                <div>
-                                  <p className="font-medium">{tx.name}</p>
+                              <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="py-2 truncate">{format(new Date(tx.date), 'PP')}</TableCell>
+                              <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="py-2">
+                                <div className="truncate">
+                                  <p className="font-medium truncate">{tx.name}</p>
                                   {tx.merchantName && (
-                                    <p className="text-sm text-gray-500">{tx.merchantName}</p>
+                                    <p className="text-sm text-gray-500 truncate">{tx.merchantName}</p>
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }}>
+                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2">
                                 <SearchableSelect
                                   items={contactItems}
                                   value={transactionNames.get(tx.id) || ''}
@@ -732,13 +732,13 @@ export default function Banking() {
                                   data-testid={`select-name-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium">
+                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 truncate">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium">
+                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 truncate">
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }}>
+                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2">
                                 <SearchableSelect
                                   items={accountItems}
                                   value={transactionAccounts.get(tx.id)?.toString() || ''}
@@ -749,7 +749,7 @@ export default function Banking() {
                                   data-testid={`select-account-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }}>
+                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2">
                                 <SearchableSelect
                                   items={taxItems}
                                   value={transactionTaxes.get(tx.id)?.toString() || 'none'}
@@ -760,7 +760,7 @@ export default function Banking() {
                                   data-testid={`select-tax-${tx.id}`}
                                 />
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }}>
+                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2">
                                 <ToggleGroup 
                                   type="single" 
                                   value={getMatchMode(tx.id)}
@@ -776,7 +776,7 @@ export default function Banking() {
                                   </ToggleGroupItem>
                                 </ToggleGroup>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }}>
+                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2">
                                 <Button 
                                   variant="ghost" 
                                   size="sm"
@@ -785,7 +785,7 @@ export default function Banking() {
                                   <Paperclip className="h-4 w-4" />
                                 </Button>
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }}>
+                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2">
                                 <Button 
                                   variant="outline" 
                                   size="sm"
