@@ -602,8 +602,8 @@ export default function Banking() {
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="cursor-pointer relative" onClick={() => handleSort('date')}>
-                              <div className="flex items-center gap-1">
+                            <TableHead style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="relative">
+                              <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('date')}>
                                 Date
                                 {sortField === 'date' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -613,13 +613,13 @@ export default function Banking() {
                               </div>
                               <div
                                 className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
-                                onMouseDown={(e) => { e.stopPropagation(); handleResizeStart('date', e); }}
+                                onMouseDown={(e) => handleResizeStart('date', e)}
                               >
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="cursor-pointer relative" onClick={() => handleSort('description')}>
-                              <div className="flex items-center gap-1">
+                            <TableHead style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="relative">
+                              <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('description')}>
                                 Description
                                 {sortField === 'description' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -629,7 +629,7 @@ export default function Banking() {
                               </div>
                               <div
                                 className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
-                                onMouseDown={(e) => { e.stopPropagation(); handleResizeStart('description', e); }}
+                                onMouseDown={(e) => handleResizeStart('description', e)}
                               >
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
                               </div>
