@@ -603,7 +603,7 @@ export default function Banking() {
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="relative">
-                              <div className="flex items-center gap-1 cursor-pointer pr-2" onClick={() => handleSort('date')}>
+                              <div className="flex items-center gap-1 cursor-pointer pr-6" onClick={() => handleSort('date')}>
                                 Date
                                 {sortField === 'date' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -612,14 +612,14 @@ export default function Banking() {
                                 )}
                               </div>
                               <div
-                                className="absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-primary/20 group z-10"
+                                className="absolute top-0 right-0 w-4 h-full cursor-col-resize hover:bg-primary/20 group z-10"
                                 onMouseDown={(e) => handleResizeStart('date', e)}
                               >
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="relative">
-                              <div className="flex items-center gap-1 cursor-pointer pr-2" onClick={() => handleSort('description')}>
+                              <div className="flex items-center gap-1 cursor-pointer pr-6" onClick={() => handleSort('description')}>
                                 Description
                                 {sortField === 'description' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -628,7 +628,7 @@ export default function Banking() {
                                 )}
                               </div>
                               <div
-                                className="absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-primary/20 group z-10"
+                                className="absolute top-0 right-0 w-4 h-full cursor-col-resize hover:bg-primary/20 group z-10"
                                 onMouseDown={(e) => handleResizeStart('description', e)}
                               >
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
