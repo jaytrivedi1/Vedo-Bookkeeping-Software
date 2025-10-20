@@ -634,15 +634,6 @@ export default function Banking() {
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="relative pr-10">
-                              Name
-                              <div
-                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
-                                onMouseDown={(e) => handleResizeStart('name', e)}
-                              >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
-                              </div>
-                            </TableHead>
                             <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative pr-10">
                               Payments
                               <div
@@ -657,6 +648,15 @@ export default function Banking() {
                               <div
                                 className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('deposits', e)}
+                              >
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
+                              </div>
+                            </TableHead>
+                            <TableHead style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="relative pr-10">
+                              Name
+                              <div
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
+                                onMouseDown={(e) => handleResizeStart('name', e)}
                               >
                                 <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
@@ -721,6 +721,12 @@ export default function Banking() {
                                   )}
                                 </div>
                               </TableCell>
+                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
+                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
+                              </TableCell>
+                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
+                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
+                              </TableCell>
                               <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2 overflow-hidden">
                                 <SearchableSelect
                                   items={contactItems}
@@ -731,12 +737,6 @@ export default function Banking() {
                                   emptyText="No contacts found."
                                   data-testid={`select-name-${tx.id}`}
                                 />
-                              </TableCell>
-                              <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
-                              </TableCell>
-                              <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2 overflow-hidden">
                                 <SearchableSelect
