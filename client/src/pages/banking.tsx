@@ -596,14 +596,14 @@ export default function Banking() {
                                 data-testid="checkbox-select-all"
                               />
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('checkbox', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="relative">
-                              <div className="flex items-center gap-1 cursor-pointer pr-6" onClick={() => handleSort('date')}>
+                              <div className="flex items-center gap-1 cursor-pointer pr-10" onClick={() => handleSort('date')}>
                                 Date
                                 {sortField === 'date' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -612,14 +612,14 @@ export default function Banking() {
                                 )}
                               </div>
                               <div
-                                className="absolute top-0 right-0 w-4 h-full cursor-col-resize hover:bg-primary/20 group z-10"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('date', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="relative">
-                              <div className="flex items-center gap-1 cursor-pointer pr-6" onClick={() => handleSort('description')}>
+                              <div className="flex items-center gap-1 cursor-pointer pr-10" onClick={() => handleSort('description')}>
                                 Description
                                 {sortField === 'description' ? (
                                   sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
@@ -628,73 +628,73 @@ export default function Banking() {
                                 )}
                               </div>
                               <div
-                                className="absolute top-0 right-0 w-4 h-full cursor-col-resize hover:bg-primary/20 group z-10"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('description', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="relative">
+                            <TableHead style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="relative pr-10">
                               Name
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('name', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative">
+                            <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative pr-10">
                               Payments
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('payments', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right relative">
+                            <TableHead style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right relative pr-10">
                               Deposits
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('deposits', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="relative">
+                            <TableHead style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="relative pr-10">
                               Account
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('account', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="relative">
+                            <TableHead style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="relative pr-10">
                               Tax
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('tax', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="relative">
+                            <TableHead style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="relative pr-10">
                               Match/Categorize
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('matchCategorize', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
-                            <TableHead style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="relative">
+                            <TableHead style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="relative pr-10">
                               Docs
                               <div
-                                className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 group"
+                                className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('docs', e)}
                               >
-                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 -translate-x-1/2" />
+                                <GripVertical className="h-4 w-4 opacity-0 group-hover:opacity-100 absolute top-1/2 -translate-y-1/2 right-2 transition-opacity" />
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="relative">
