@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { apiRequest } from "@/lib/queryClient";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { Account, Contact, SalesTax } from "@shared/schema";
 
 // Define the deposit line item schema
@@ -85,6 +86,8 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   const [_, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+  const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [accountDialogContext, setAccountDialogContext] = useState<{type: 'deposit' | 'lineItem', index?: number} | null>(null);
 
   // Fetch accounts for the dropdown
   const { data: accounts } = useQuery<Account[]>({
@@ -470,6 +473,11 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                         placeholder="Select account"
                         searchPlaceholder="Search accounts..."
                         emptyText="No accounts found."
+                        onAddNew={() => {
+                          setAccountDialogContext({type: 'deposit'});
+                          setShowAddAccountDialog(true);
+                        }}
+                        addNewText="Add New Account"
                       />
                       <FormMessage />
                     </FormItem>
@@ -630,6 +638,11 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                                   placeholder="Select account"
                                   searchPlaceholder="Search accounts..."
                                   emptyText="No accounts found."
+                                  onAddNew={() => {
+                                    setAccountDialogContext({type: 'lineItem', index});
+                                    setShowAddAccountDialog(true);
+                                  }}
+                                  addNewText="Add New Account"
                                 />
                                 <FormMessage />
                               </FormItem>
@@ -923,6 +936,19 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
             </div>
           </div>
         </form>
+
+        <AddAccountDialog
+          open={showAddAccountDialog}
+          onOpenChange={setShowAddAccountDialog}
+          onAccountCreated={(accountId) => {
+            if (accountDialogContext?.type === 'deposit') {
+              form.setValue('depositAccountId', accountId);
+            } else if (accountDialogContext?.type === 'lineItem' && accountDialogContext.index !== undefined) {
+              form.setValue(`lineItems.${accountDialogContext.index}.accountId`, accountId);
+            }
+            setAccountDialogContext(null);
+          }}
+        />
       </Form>
     </div>
   );

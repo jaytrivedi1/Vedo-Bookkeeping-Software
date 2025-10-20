@@ -7,6 +7,7 @@ import { queryClient } from "@/lib/queryClient";
 import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,8 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [taxNames, setTaxNames] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [manualComponentAmounts, setManualComponentAmounts] = useState<Record<number, number>>({});
+  const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [accountDialogContext, setAccountDialogContext] = useState<{type: 'payment' | 'lineItem', index?: number} | null>(null);
   const { toast } = useToast();
 
   const defaultExpenseNumber = isEditing ? expense?.reference : `EXP-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
@@ -479,6 +482,11 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                   searchPlaceholder="Search accounts..."
                   emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
                   disabled={accountsLoading}
+                  onAddNew={() => {
+                    setAccountDialogContext({type: 'payment'});
+                    setShowAddAccountDialog(true);
+                  }}
+                  addNewText="Add New Account"
                   data-testid="select-payment-account"
                 />
                 <FormMessage />
@@ -591,6 +599,11 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                           searchPlaceholder="Search accounts..."
                           emptyText={accountsLoading ? "Loading..." : "No accounts available"}
                           disabled={accountsLoading}
+                          onAddNew={() => {
+                            setAccountDialogContext({type: 'lineItem', index});
+                            setShowAddAccountDialog(true);
+                          }}
+                          addNewText="Add New Account"
                           data-testid={`select-account-${index}`}
                         />
                         <FormMessage />
@@ -876,6 +889,19 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           </Button>
         </div>
       </form>
+
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={(accountId) => {
+          if (accountDialogContext?.type === 'payment') {
+            form.setValue('paymentAccountId', accountId);
+          } else if (accountDialogContext?.type === 'lineItem' && accountDialogContext.index !== undefined) {
+            form.setValue(`lineItems.${accountDialogContext.index}.accountId`, accountId);
+          }
+          setAccountDialogContext(null);
+        }}
+      />
     </Form>
   );
 }

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { 
   Building2,
   RefreshCw,
@@ -87,6 +88,7 @@ const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
 export default function Banking() {
   const { toast } = useToast();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
+  const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -97,6 +99,7 @@ export default function Banking() {
   const [transactionNames, setTransactionNames] = useState<Map<number, string>>(new Map());
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
+  const [currentTransactionId, setCurrentTransactionId] = useState<number | null>(null);
 
   // Column widths state with localStorage persistence
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
@@ -747,6 +750,11 @@ export default function Banking() {
                                   searchPlaceholder="Search accounts..."
                                   emptyText="No accounts found."
                                   data-testid={`select-account-${tx.id}`}
+                                  onAddNew={() => {
+                                    setCurrentTransactionId(tx.id);
+                                    setShowAddAccountDialog(true);
+                                  }}
+                                  addNewText="Add New Account"
                                 />
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2 overflow-hidden">
@@ -842,6 +850,19 @@ export default function Banking() {
       <BankFeedSetupDialog 
         open={showBankFeedSetup} 
         onOpenChange={setShowBankFeedSetup}
+      />
+
+      {/* Add Account Dialog */}
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={(accountId) => {
+          // Auto-select the newly created account for the current transaction
+          if (currentTransactionId !== null) {
+            handleAccountChange(currentTransactionId, accountId);
+          }
+          setCurrentTransactionId(null);
+        }}
       />
     </div>
   );

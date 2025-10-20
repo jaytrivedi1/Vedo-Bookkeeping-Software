@@ -5,8 +5,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { JournalEntry, journalEntrySchema, Account, Contact, SalesTax } from "@shared/schema";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { CalendarIcon, Plus, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,8 @@ interface JournalEntryFormProps {
 
 export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFormProps) {
   const { toast } = useToast();
+  const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [currentEntryIndex, setCurrentEntryIndex] = useState<number | null>(null);
   
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
@@ -298,6 +302,11 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
                             searchPlaceholder="Search accounts..."
                             emptyText={accountsLoading ? "Loading..." : "No accounts found."}
                             disabled={accountsLoading}
+                            onAddNew={() => {
+                              setCurrentEntryIndex(index);
+                              setShowAddAccountDialog(true);
+                            }}
+                            addNewText="Add New Account"
                             data-testid={`select-account-${index}`}
                           />
                         </FormControl>
@@ -503,6 +512,16 @@ export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFo
           </div>
         </div>
       </form>
+
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={(accountId) => {
+          if (currentEntryIndex !== null) {
+            form.setValue(`entries.${currentEntryIndex}.accountId`, accountId);
+          }
+        }}
+      />
     </Form>
   );
 }

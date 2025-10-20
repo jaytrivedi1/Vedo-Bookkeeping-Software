@@ -7,6 +7,7 @@ import { queryClient } from "@/lib/queryClient";
 import { chequeSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,8 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [manualComponentAmounts, setManualComponentAmounts] = useState<Record<number, number>>({});
   const [payeeAddress, setPayeeAddress] = useState<string>("");
+  const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [accountDialogContext, setAccountDialogContext] = useState<{type: 'payment' | 'lineItem', index?: number} | null>(null);
   const { toast } = useToast();
 
   const defaultChequeNumber = isEditing ? cheque?.reference : '';
@@ -494,6 +497,11 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                   searchPlaceholder="Search accounts..."
                   emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
                   disabled={accountsLoading}
+                  onAddNew={() => {
+                    setAccountDialogContext({type: 'payment'});
+                    setShowAddAccountDialog(true);
+                  }}
+                  addNewText="Add New Account"
                   data-testid="select-bank-account"
                 />
                 <FormMessage />
@@ -606,6 +614,11 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                           searchPlaceholder="Search accounts..."
                           emptyText={accountsLoading ? "Loading..." : "No accounts available"}
                           disabled={accountsLoading}
+                          onAddNew={() => {
+                            setAccountDialogContext({type: 'lineItem', index});
+                            setShowAddAccountDialog(true);
+                          }}
+                          addNewText="Add New Account"
                           data-testid={`select-account-${index}`}
                         />
                         <FormMessage />
@@ -891,6 +904,19 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
           </Button>
         </div>
       </form>
+
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={(accountId) => {
+          if (accountDialogContext?.type === 'payment') {
+            form.setValue('paymentAccountId', accountId);
+          } else if (accountDialogContext?.type === 'lineItem' && accountDialogContext.index !== undefined) {
+            form.setValue(`lineItems.${accountDialogContext.index}.accountId`, accountId);
+          }
+          setAccountDialogContext(null);
+        }}
+      />
     </Form>
   );
 }
