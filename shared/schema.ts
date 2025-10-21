@@ -561,7 +561,7 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
   pending: boolean('pending').notNull().default(false),
   paymentChannel: text('payment_channel'), // online, in store, etc.
   matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created transaction
-  status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored
+  status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored, deleted
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -92,6 +93,7 @@ export default function Banking() {
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'uncategorized' | 'categorized' | 'deleted'>('uncategorized');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [sortField, setSortField] = useState<SortField>(null);
@@ -233,11 +235,15 @@ export default function Banking() {
     { value: "100", label: "100 per page", subtitle: undefined }
   ];
 
-  // Fetch imported transactions
+  // Fetch imported transactions based on active tab
   const { data: importedTransactions = [], isLoading: transactionsLoading } = useQuery<ImportedTransaction[]>({
-    queryKey: ['/api/plaid/imported-transactions'],
+    queryKey: ['/api/plaid/imported-transactions', activeTab],
     queryFn: async () => {
-      const response = await fetch('/api/plaid/imported-transactions?status=unmatched');
+      let status = 'unmatched';
+      if (activeTab === 'categorized') status = 'matched';
+      if (activeTab === 'deleted') status = 'deleted';
+      
+      const response = await fetch(`/api/plaid/imported-transactions?status=${status}`);
       if (!response.ok) throw new Error('Failed to fetch transactions');
       return response.json();
     },
@@ -621,18 +627,32 @@ export default function Banking() {
             </CardContent>
           </Card>
 
-          {/* Unmatched Transactions */}
+          {/* Imported Transactions */}
           {accountsWithFeedStatus.length > 0 && (
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Unmatched Transactions</CardTitle>
-                    <CardDescription>
-                      {filteredTransactions.length} transactions waiting to be categorized
-                      {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
-                    </CardDescription>
-                  </div>
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
+                <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
+                <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value={activeTab}>
+                <Card>
+                  <CardHeader>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <CardTitle>
+                          {activeTab === 'uncategorized' && 'Uncategorized Transactions'}
+                          {activeTab === 'categorized' && 'Categorized Transactions'}
+                          {activeTab === 'deleted' && 'Deleted Transactions'}
+                        </CardTitle>
+                        <CardDescription>
+                          {activeTab === 'uncategorized' && `${filteredTransactions.length} transactions waiting to be categorized`}
+                          {activeTab === 'categorized' && `${filteredTransactions.length} transactions have been categorized`}
+                          {activeTab === 'deleted' && `${filteredTransactions.length} deleted transactions`}
+                          {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
+                        </CardDescription>
+                      </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-600">Show:</span>
                     <SearchableSelect
@@ -651,22 +671,34 @@ export default function Banking() {
                 {filteredTransactions.length === 0 ? (
                   <Alert>
                     <CheckCircle2 className="h-4 w-4" />
-                    <AlertTitle>No unmatched transactions</AlertTitle>
+                    <AlertTitle>
+                      {activeTab === 'uncategorized' && 'No uncategorized transactions'}
+                      {activeTab === 'categorized' && 'No categorized transactions'}
+                      {activeTab === 'deleted' && 'No deleted transactions'}
+                    </AlertTitle>
                     <AlertDescription>
-                      {selectedAccountId 
+                      {activeTab === 'uncategorized' && (selectedAccountId 
                         ? `All transactions for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name} have been categorized or there are no imports yet.`
-                        : 'All transactions have been categorized or there are no imports yet.'}
+                        : 'All transactions have been categorized or there are no imports yet.')}
+                      {activeTab === 'categorized' && (selectedAccountId 
+                        ? `No transactions have been categorized for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name} yet.`
+                        : 'No transactions have been categorized yet.')}
+                      {activeTab === 'deleted' && (selectedAccountId 
+                        ? `No deleted transactions for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}.`
+                        : 'No deleted transactions.')}
                     </AlertDescription>
                   </Alert>
                 ) : (
                   <>
-                    <Alert className="mb-4">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>Action Required</AlertTitle>
-                      <AlertDescription>
-                        You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
-                      </AlertDescription>
-                    </Alert>
+                    {activeTab === 'uncategorized' && (
+                      <Alert className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Action Required</AlertTitle>
+                        <AlertDescription>
+                          You have imported transactions that need to be categorized. These will be available in the transaction matching interface soon.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
                       <Table>
                         <TableHeader>
@@ -939,6 +971,8 @@ export default function Banking() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+        </Tabs>
           )}
         </div>
       </div>
