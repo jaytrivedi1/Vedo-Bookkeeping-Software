@@ -6962,16 +6962,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
       
-      // If there's a matched transaction, delete it first (this will cascade to line items and ledger entries)
-      if (importedTx.matchedTransactionId) {
-        await storage.deleteTransaction(importedTx.matchedTransactionId);
-      }
+      // Save the matched transaction ID for deletion
+      const matchedTransactionId = importedTx.matchedTransactionId;
       
-      // Reset status to 'unmatched' and clear matchedTransactionId
+      // FIRST: Clear the foreign key reference to avoid constraint violation
       await storage.updateImportedTransaction(id, { 
         status: 'unmatched',
         matchedTransactionId: null 
       });
+      
+      // THEN: Delete the matched transaction (this will cascade to line items and ledger entries)
+      if (matchedTransactionId) {
+        await storage.deleteTransaction(matchedTransactionId);
+      }
       
       res.json({ success: true });
     } catch (error: any) {
