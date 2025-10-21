@@ -35,6 +35,7 @@ export default function BillCreate() {
   const [activeTab, setActiveTab] = useState("details");
   const [vendors, setVendors] = useState<Contact[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
+  const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -152,12 +153,12 @@ export default function BillCreate() {
     }
   }, [nextBillNumber, form]);
 
-  // Initialize totals when sales taxes are loaded
+  // Initialize totals when sales taxes are loaded or when tax mode changes
   useEffect(() => {
     if (salesTaxes && salesTaxes.length > 0) {
       updateTotals();
     }
-  }, [salesTaxes]);
+  }, [salesTaxes, isExclusiveOfTax]);
 
   // Create mutation for saving the bill
   const createBill = useMutation({
@@ -214,11 +215,21 @@ export default function BillCreate() {
             
             // For composite taxes, sum up all component rates
             const totalRate = components.reduce((sum, component) => sum + component.rate, 0);
-            const taxAmount = (item.amount * totalRate) / 100;
+            let taxAmount: number;
+            if (isExclusiveOfTax) {
+              taxAmount = (item.amount * totalRate) / 100;
+            } else {
+              taxAmount = item.amount - (item.amount * 100) / (100 + totalRate);
+            }
             totalTaxAmount += taxAmount;
           } else {
             // For regular taxes, just use the rate directly
-            const taxAmount = (item.amount * salesTax.rate) / 100;
+            let taxAmount: number;
+            if (isExclusiveOfTax) {
+              taxAmount = (item.amount * salesTax.rate) / 100;
+            } else {
+              taxAmount = item.amount - (item.amount * 100) / (100 + salesTax.rate);
+            }
             totalTaxAmount += taxAmount;
           }
         }
@@ -227,7 +238,7 @@ export default function BillCreate() {
     
     form.setValue("subTotal", subTotal);
     form.setValue("taxAmount", totalTaxAmount);
-    form.setValue("totalAmount", subTotal + totalTaxAmount);
+    form.setValue("totalAmount", isExclusiveOfTax ? subTotal + totalTaxAmount : subTotal);
   };
 
   // Add a new line item
@@ -458,7 +469,26 @@ export default function BillCreate() {
                   <Separator />
 
                   <div>
-                    <div className="font-medium mb-2">Line Items</div>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-medium">Line Items</div>
+                      <div className="w-full flex justify-end">
+                        <div className="flex items-center">
+                          <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
+                          <Select
+                            value={isExclusiveOfTax ? "exclusive" : "inclusive"}
+                            onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
+                          >
+                            <SelectTrigger className="w-[180px] h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                              <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
                     <div className="rounded-md border">
                       <table className="w-full">
                         <thead>
