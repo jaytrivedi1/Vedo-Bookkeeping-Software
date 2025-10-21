@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -87,6 +88,7 @@ const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
 
 export default function Banking() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [showBankFeedSetup, setShowBankFeedSetup] = useState(false);
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
@@ -794,12 +796,28 @@ export default function Banking() {
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.date}px`, minWidth: `${columnWidths.date}px` }} className="py-2 overflow-hidden truncate">{format(new Date(tx.date), 'PP')}</TableCell>
                               <TableCell style={{ width: `${columnWidths.description}px`, minWidth: `${columnWidths.description}px` }} className="py-2 overflow-hidden">
-                                <div className="truncate">
-                                  <p className="font-medium truncate">{tx.name}</p>
-                                  {tx.merchantName && (
-                                    <p className="text-sm text-gray-500 truncate">{tx.merchantName}</p>
-                                  )}
-                                </div>
+                                {tx.matchedTransactionId ? (
+                                  <div 
+                                    className="truncate cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => {
+                                      const txType = Number(tx.amount) < 0 ? 'expenses' : 'deposits';
+                                      setLocation(`/${txType}/${tx.matchedTransactionId}`);
+                                    }}
+                                    data-testid={`link-transaction-${tx.id}`}
+                                  >
+                                    <p className="font-medium truncate text-primary underline">{tx.name}</p>
+                                    {tx.merchantName && (
+                                      <p className="text-sm text-gray-500 truncate">{tx.merchantName}</p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="truncate">
+                                    <p className="font-medium truncate">{tx.name}</p>
+                                    {tx.merchantName && (
+                                      <p className="text-sm text-gray-500 truncate">{tx.merchantName}</p>
+                                    )}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
                                 {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
