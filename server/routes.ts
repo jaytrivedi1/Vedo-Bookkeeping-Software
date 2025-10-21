@@ -32,6 +32,8 @@ import {
   depositSchema,
   Transaction,
   InsertTransaction,
+  InsertLineItem,
+  InsertLedgerEntry,
   salesTaxSchema,
   transactions,
   ledgerEntries,
@@ -6743,11 +6745,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create transaction based on type
       if (isExpense) {
         // Create expense transaction
-        const lineItems: InsertLineItem[] = [{
+        const lineItems: any[] = [{
           accountId: accountId, // The expense account (e.g., Office Supplies)
           description: description || importedTx.name,
+          quantity: 1,
+          unitPrice: absoluteAmount,
           amount: absoluteAmount,
           salesTaxId: salesTaxId || null,
+          transactionId: 0, // Will be set by createTransaction
         }];
 
         // Calculate sales tax if applicable
@@ -6762,7 +6767,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Create ledger entries for expense
-        const ledgerEntries: InsertLedgerEntry[] = [
+        const ledgerEntries: any[] = [
           {
             transactionId: 0, // Will be set after transaction is created
             accountId: accountId, // Debit expense account
@@ -6822,11 +6827,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.json({ success: true, transaction, type: 'expense' });
       } else {
         // Create deposit transaction
-        const lineItems: InsertLineItem[] = [{
+        const lineItems: any[] = [{
           accountId: accountId, // The income/deposit account
           description: description || importedTx.name,
+          quantity: 1,
+          unitPrice: absoluteAmount,
           amount: absoluteAmount,
           salesTaxId: salesTaxId || null,
+          transactionId: 0, // Will be set by createTransaction
         }];
 
         // Calculate sales tax if applicable
@@ -6841,7 +6849,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Create ledger entries for deposit
-        const ledgerEntries: InsertLedgerEntry[] = [
+        const ledgerEntries: any[] = [
           {
             transactionId: 0,
             accountId: glAccountId, // Debit bank/cash account
