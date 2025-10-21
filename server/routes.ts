@@ -6812,6 +6812,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             amount: totalWithTax,
             contactId,
             status: 'completed',
+            paymentAccountId: glAccountId,
+            paymentDate: importedTx.date,
           },
           lineItems,
           ledgerEntries
@@ -6894,6 +6896,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             amount: totalWithTax,
             contactId,
             status: 'completed',
+            paymentAccountId: glAccountId,
+            paymentDate: importedTx.date,
           },
           lineItems,
           ledgerEntries
