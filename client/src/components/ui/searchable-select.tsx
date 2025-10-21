@@ -51,11 +51,20 @@ export function SearchableSelect({
   addNewText = "Add New...",
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const selectedItem = items.find((item) => item.value === value);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover 
+      open={open} 
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen);
+        if (!isOpen) {
+          setSearchQuery("");
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -85,42 +94,58 @@ export function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput 
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+          />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandEmpty>
+              <div className="py-6 text-center text-sm">{emptyText}</div>
+            </CommandEmpty>
             <CommandGroup>
-              {items.map((item) => (
-                <CommandItem
-                  key={item.value}
-                  value={item.label}
-                  onSelect={() => {
-                    // Only change value if selecting a different item
-                    // Reselecting the same item just closes the popover
-                    if (item.value !== value) {
-                      onValueChange(item.value);
-                    }
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === item.value ? "opacity-100" : "opacity-0"
+              {items
+                .filter((item) => {
+                  if (!searchQuery) return true;
+                  const query = searchQuery.toLowerCase();
+                  return (
+                    item.label.toLowerCase().includes(query) ||
+                    item.subtitle?.toLowerCase().includes(query)
+                  );
+                })
+                .map((item) => (
+                  <CommandItem
+                    key={item.value}
+                    value={item.value}
+                    onSelect={() => {
+                      // Only change value if selecting a different item
+                      // Reselecting the same item just closes the popover
+                      if (item.value !== value) {
+                        onValueChange(item.value);
+                      }
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === item.value ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    {item.label}
+                    {item.subtitle && (
+                      <span className="text-muted-foreground"> {item.subtitle}</span>
                     )}
-                  />
-                  {item.label}
-                  {item.subtitle && (
-                    <span className="text-muted-foreground"> {item.subtitle}</span>
-                  )}
-                </CommandItem>
-              ))}
+                  </CommandItem>
+                ))}
             </CommandGroup>
             {onAddNew && (
               <>
                 <CommandSeparator />
                 <CommandGroup>
                   <CommandItem
+                    value="__add_new_action__"
                     onSelect={() => {
                       setOpen(false);
                       onAddNew();
