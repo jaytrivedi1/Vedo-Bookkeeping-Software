@@ -49,12 +49,22 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
     defaultValues: {
       code: "",
       name: "",
-      type: "current_assets",
+      type: "current_assets" as const,
       currency: "CAD",
       salesTaxType: "",
       isActive: true,
     },
   });
+
+  // Log form errors for debugging
+  const onError = (errors: any) => {
+    console.error("Form validation errors:", errors);
+    toast({
+      title: "Validation Error",
+      description: "Please check all required fields are filled correctly.",
+      variant: "destructive",
+    });
+  };
 
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
@@ -96,7 +106,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit, onError)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -133,7 +143,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Account Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-account-type">
                         <SelectValue placeholder="Select account type" />
@@ -184,7 +194,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Currency</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger data-testid="select-currency">
                           <SelectValue placeholder="Select currency" />
@@ -208,7 +218,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sales Tax Type</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value || "none"}>
+                    <Select onValueChange={field.onChange} value={field.value || "none"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-sales-tax-type">
                           <SelectValue placeholder="Select tax type" />
