@@ -249,6 +249,32 @@ export default function Banking() {
     },
   });
 
+  // Fetch matched transaction details for categorized transactions
+  const matchedTransactionIds = importedTransactions
+    .filter(tx => tx.matchedTransactionId)
+    .map(tx => tx.matchedTransactionId);
+
+  const { data: matchedTransactions = [] } = useQuery({
+    queryKey: ['/api/transactions/batch', matchedTransactionIds],
+    queryFn: async () => {
+      if (matchedTransactionIds.length === 0) return [];
+      
+      const transactions = await Promise.all(
+        matchedTransactionIds.map(async (id) => {
+          try {
+            const response = await fetch(`/api/transactions/${id}`);
+            if (!response.ok) return null;
+            return response.json();
+          } catch {
+            return null;
+          }
+        })
+      );
+      return transactions.filter(t => t !== null);
+    },
+    enabled: activeTab === 'categorized' && matchedTransactionIds.length > 0,
+  });
+
   // Sync transactions mutation
   const syncTransactionsMutation = useMutation({
     mutationFn: async (bankAccountId: number) => {
@@ -354,12 +380,39 @@ export default function Banking() {
     },
   });
 
+  // Undo transaction categorization mutation
+  const undoCategorizationMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return await apiRequest(`/api/plaid/imported-transactions/${transactionId}/undo`, 'POST');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      toast({
+        title: "Success",
+        description: "Transaction moved back to uncategorized",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to undo categorization",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-';
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
     }).format(amount);
+  };
+
+  // Helper function to get matched transaction details
+  const getMatchedTransaction = (importedTx: ImportedTransaction) => {
+    if (!importedTx.matchedTransactionId) return null;
+    return matchedTransactions.find((mt: any) => mt?.transaction?.id === importedTx.matchedTransactionId);
   };
 
   // Group GL accounts with their bank feed status - only show accounts with feeds
@@ -879,68 +932,118 @@ export default function Banking() {
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2 overflow-hidden">
-                                <SearchableSelect
-                                  items={contactItems}
-                                  value={transactionNames.get(tx.id) || ''}
-                                  onValueChange={(value) => handleNameChange(tx.id, value)}
-                                  placeholder="Select vendor/customer"
-                                  searchPlaceholder="Search contacts..."
-                                  emptyText="No contacts found."
-                                  data-testid={`select-name-${tx.id}`}
-                                />
+                                {activeTab === 'uncategorized' ? (
+                                  <SearchableSelect
+                                    items={contactItems}
+                                    value={transactionNames.get(tx.id) || ''}
+                                    onValueChange={(value) => handleNameChange(tx.id, value)}
+                                    placeholder="Select vendor/customer"
+                                    searchPlaceholder="Search contacts..."
+                                    emptyText="No contacts found."
+                                    data-testid={`select-name-${tx.id}`}
+                                  />
+                                ) : (
+                                  <span className="text-sm text-gray-700">
+                                    {(() => {
+                                      const matched = getMatchedTransaction(tx);
+                                      if (!matched) return '-';
+                                      const contact = contacts.find(c => c.id === matched.transaction.contactId);
+                                      return contact ? contact.name : '-';
+                                    })()}
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2 overflow-hidden">
-                                <SearchableSelect
-                                  items={accountItems}
-                                  value={transactionAccounts.get(tx.id)?.toString() || ''}
-                                  onValueChange={(value) => handleAccountChange(tx.id, value ? Number(value) : null)}
-                                  placeholder="Select account"
-                                  searchPlaceholder="Search accounts..."
-                                  emptyText="No accounts found."
-                                  data-testid={`select-account-${tx.id}`}
-                                  onAddNew={() => {
-                                    setCurrentTransactionId(tx.id);
-                                    setShowAddAccountDialog(true);
-                                  }}
-                                  addNewText="Add New Account"
-                                />
+                                {activeTab === 'uncategorized' ? (
+                                  <SearchableSelect
+                                    items={accountItems}
+                                    value={transactionAccounts.get(tx.id)?.toString() || ''}
+                                    onValueChange={(value) => handleAccountChange(tx.id, value ? Number(value) : null)}
+                                    placeholder="Select account"
+                                    searchPlaceholder="Search accounts..."
+                                    emptyText="No accounts found."
+                                    data-testid={`select-account-${tx.id}`}
+                                    onAddNew={() => {
+                                      setCurrentTransactionId(tx.id);
+                                      setShowAddAccountDialog(true);
+                                    }}
+                                    addNewText="Add New Account"
+                                  />
+                                ) : (
+                                  <span className="text-sm text-gray-700">
+                                    {(() => {
+                                      const matched = getMatchedTransaction(tx);
+                                      if (!matched || !matched.lineItems || matched.lineItems.length === 0) return '-';
+                                      const lineItem = matched.lineItems[0];
+                                      const account = glAccounts.find(a => a.id === lineItem.accountId);
+                                      return account ? account.name : '-';
+                                    })()}
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2 overflow-hidden">
-                                <SearchableSelect
-                                  items={taxItems}
-                                  value={transactionTaxes.get(tx.id)?.toString() || 'none'}
-                                  onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
-                                  placeholder="No tax"
-                                  searchPlaceholder="Search taxes..."
-                                  emptyText="No taxes found."
-                                  data-testid={`select-tax-${tx.id}`}
-                                />
+                                {activeTab === 'uncategorized' ? (
+                                  <SearchableSelect
+                                    items={taxItems}
+                                    value={transactionTaxes.get(tx.id)?.toString() || 'none'}
+                                    onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
+                                    placeholder="No tax"
+                                    searchPlaceholder="Search taxes..."
+                                    emptyText="No taxes found."
+                                    data-testid={`select-tax-${tx.id}`}
+                                  />
+                                ) : (
+                                  <span className="text-sm text-gray-700">
+                                    {(() => {
+                                      const matched = getMatchedTransaction(tx);
+                                      if (!matched || !matched.lineItems || matched.lineItems.length === 0) return '-';
+                                      const lineItem = matched.lineItems[0];
+                                      if (!lineItem.salesTaxId) return 'No tax';
+                                      const tax = salesTaxes.find(t => t.id === lineItem.salesTaxId);
+                                      return tax ? `${tax.name} (${tax.rate}%)` : '-';
+                                    })()}
+                                  </span>
+                                )}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
-                                <ToggleGroup 
-                                  type="single" 
-                                  value={getMatchMode(tx.id)}
-                                  onValueChange={(value) => value && handleToggleMatchMode(tx.id, value as 'match' | 'categorize')}
-                                  className="justify-start"
-                                  data-testid={`toggle-match-categorize-${tx.id}`}
-                                >
-                                  <ToggleGroupItem value="match" className="text-xs px-3">
-                                    Match
-                                  </ToggleGroupItem>
-                                  <ToggleGroupItem value="categorize" className="text-xs px-3">
-                                    Categorize
-                                  </ToggleGroupItem>
-                                </ToggleGroup>
-                              </TableCell>
-                              <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm"
-                                  data-testid={`button-attach-${tx.id}`}
-                                >
-                                  <Paperclip className="h-4 w-4" />
-                                </Button>
-                              </TableCell>
+                              {activeTab === 'uncategorized' && (
+                                <>
+                                  <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
+                                    <ToggleGroup 
+                                      type="single" 
+                                      value={getMatchMode(tx.id)}
+                                      onValueChange={(value) => value && handleToggleMatchMode(tx.id, value as 'match' | 'categorize')}
+                                      className="justify-start"
+                                      data-testid={`toggle-match-categorize-${tx.id}`}
+                                    >
+                                      <ToggleGroupItem value="match" className="text-xs px-3">
+                                        Match
+                                      </ToggleGroupItem>
+                                      <ToggleGroupItem value="categorize" className="text-xs px-3">
+                                        Categorize
+                                      </ToggleGroupItem>
+                                    </ToggleGroup>
+                                  </TableCell>
+                                  <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      data-testid={`button-attach-${tx.id}`}
+                                    >
+                                      <Paperclip className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                </>
+                              )}
+                              {activeTab !== 'uncategorized' && (
+                                <>
+                                  <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
+                                    <span className="text-sm text-gray-500">-</span>
+                                  </TableCell>
+                                  <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
+                                    <span className="text-sm text-gray-500">-</span>
+                                  </TableCell>
+                                </>
+                              )}
                               <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2 overflow-hidden">
                                 <div className="flex gap-1">
                                   {activeTab === 'uncategorized' && (
@@ -966,18 +1069,31 @@ export default function Banking() {
                                       </Button>
                                     </>
                                   )}
-                                  {activeTab === 'categorized' && tx.matchedTransactionId && (
-                                    <Button 
-                                      variant="outline" 
-                                      size="sm"
-                                      onClick={() => {
-                                        const txType = Number(tx.amount) < 0 ? 'expenses' : 'deposits';
-                                        setLocation(`/${txType}/${tx.matchedTransactionId}`);
-                                      }}
-                                      data-testid={`button-view-${tx.id}`}
-                                    >
-                                      View
-                                    </Button>
+                                  {activeTab === 'categorized' && (
+                                    <>
+                                      {tx.matchedTransactionId && (
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => {
+                                            const txType = Number(tx.amount) < 0 ? 'expenses' : 'deposits';
+                                            setLocation(`/${txType}/${tx.matchedTransactionId}`);
+                                          }}
+                                          data-testid={`button-view-${tx.id}`}
+                                        >
+                                          View
+                                        </Button>
+                                      )}
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => undoCategorizationMutation.mutate(tx.id)}
+                                        disabled={undoCategorizationMutation.isPending}
+                                        data-testid={`button-undo-${tx.id}`}
+                                      >
+                                        Undo
+                                      </Button>
+                                    </>
                                   )}
                                   {activeTab === 'deleted' && (
                                     <span className="text-sm text-gray-500">-</span>

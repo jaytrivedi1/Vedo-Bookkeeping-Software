@@ -6665,11 +6665,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { status } = req.query;
       
+      // Get all transactions and filter by status
+      const allTransactions = await storage.getImportedTransactions();
+      
       let transactions;
-      if (status === 'unmatched') {
-        transactions = await storage.getUnmatchedImportedTransactions();
+      if (status) {
+        transactions = allTransactions.filter(tx => tx.status === status);
       } else {
-        transactions = await storage.getImportedTransactions();
+        transactions = allTransactions;
       }
       
       res.json(transactions);
@@ -6944,6 +6947,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting imported transaction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Undo categorization - move transaction back to uncategorized
+  apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Reset status to 'unmatched' and clear matchedTransactionId
+      await storage.updateImportedTransaction(id, { 
+        status: 'unmatched',
+        matchedTransactionId: null 
+      });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error undoing transaction categorization:', error);
       res.status(500).json({ error: error.message });
     }
   });
