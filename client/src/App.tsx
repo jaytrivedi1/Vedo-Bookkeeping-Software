@@ -19,18 +19,15 @@ import AccountBooks from "@/pages/account-books";
 import Banking from "@/pages/banking";
 import SalesTaxes from "@/pages/sales-taxes";
 import Products from "@/pages/products";
-import InvoiceNew from "@/pages/invoice-new";
-import InvoiceEdit from "@/pages/invoice-edit";
+import InvoiceForm from "@/pages/invoice-form";
 import InvoiceView from "@/pages/invoice-view";
 import PaymentView from "@/pages/payment-view";
 import PaymentReceive from "@/pages/payment-receive";
-import ExpenseNew from "@/pages/expense-new";
+import ExpenseForm from "@/pages/expense-form";
 import ExpenseView from "@/pages/expense-view";
-import ExpenseEdit from "@/pages/expense-edit";
-import ChequeNew from "@/pages/cheque-new";
-import ChequeEdit from "@/pages/cheque-edit";
+import ChequeForm from "@/pages/cheque-form";
 import ChequeView from "@/pages/cheque-view";
-import JournalEntryNew from "@/pages/journal-entry-new";
+import JournalEntryForm from "@/pages/journal-entry-form";
 import JournalEntryView from "@/pages/journal-entry-view";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
@@ -89,8 +86,8 @@ function Router() {
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/invoices" component={Invoices} />
-              <Route path="/invoice-new" component={InvoiceNew} />
-              <Route path="/invoice-edit/:id" component={InvoiceEdit} />
+              <Route path="/invoice-new" component={InvoiceForm} />
+              <Route path="/invoice-edit/:id" component={InvoiceForm} />
               <Route path="/invoices/:id" component={InvoiceView} />
               <Route path="/payments/edit/:id" component={PaymentReceive} />
               <Route path="/payments/:id" component={PaymentView} />
@@ -99,14 +96,15 @@ function Router() {
               <Route path="/bills/:id" component={BillView} />
               <Route path="/pay-bill" component={PayBill} />
               <Route path="/expenses" component={Expenses} />
-              <Route path="/expenses/new" component={ExpenseNew} />
-              <Route path="/expenses/:id/edit" component={ExpenseEdit} />
+              <Route path="/expenses/new" component={ExpenseForm} />
+              <Route path="/expenses/:id/edit" component={ExpenseForm} />
               <Route path="/expenses/:id" component={ExpenseView} />
-              <Route path="/cheques/new" component={ChequeNew} />
-              <Route path="/cheques/:id/edit" component={ChequeEdit} />
+              <Route path="/cheques/new" component={ChequeForm} />
+              <Route path="/cheques/:id/edit" component={ChequeForm} />
               <Route path="/cheques/:id" component={ChequeView} />
               <Route path="/journals" component={Journals} />
-              <Route path="/journals/new" component={JournalEntryNew} />
+              <Route path="/journals/new" component={JournalEntryForm} />
+              <Route path="/journals/:id/edit" component={JournalEntryForm} />
               <Route path="/journals/:id" component={JournalEntryView} />
               <Route path="/deposits" component={Deposits} />
               <Route path="/deposits/:id" component={DepositView} />
