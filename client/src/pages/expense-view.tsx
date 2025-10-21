@@ -7,15 +7,31 @@ import {
   Printer, 
   FileDown, 
   Edit2,
-  Mail
+  Mail,
+  Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 
 export default function ExpenseView() {
   const [, navigate] = useLocation();
   const [expenseId, setExpenseId] = useState<number | null>(null);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   
   // Extract the expense ID from the URL
   useEffect(() => {
@@ -130,6 +146,23 @@ export default function ExpenseView() {
     return methodMap[method] || method;
   };
   
+  // Handle delete expense
+  const handleDelete = async () => {
+    if (!expenseId) return;
+    
+    setIsDeleteLoading(true);
+    try {
+      await apiRequest(`/api/transactions/${expenseId}`, 'DELETE');
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      setShowDeleteDialog(false);
+      navigate("/expenses");
+    } catch (error) {
+      console.error('Failed to delete expense:', error);
+    } finally {
+      setIsDeleteLoading(false);
+    }
+  };
+  
   if (expenseLoading || contactsLoading || taxesLoading || accountsLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
@@ -184,6 +217,40 @@ export default function ExpenseView() {
               Edit
             </Button>
           </Link>
+          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+                data-testid="button-delete"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete this expense and all associated records.
+                  This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                  disabled={isDeleteLoading}
+                >
+                  {isDeleteLoading ? 'Deleting...' : 'Delete'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
       
