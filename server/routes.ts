@@ -6714,18 +6714,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         glAccountId = bankAccount.linkedAccountId;
       }
 
-      // Generate reference number
-      const referencePrefix = isExpense ? 'EXP' : 'DEP';
-      const existingTransactions = await storage.getTransactions();
-      const existingRefs = existingTransactions
-        .filter(t => t.reference.startsWith(referencePrefix))
-        .map(t => t.reference);
-      let refNumber = 1;
-      while (existingRefs.includes(`${referencePrefix}-${String(refNumber).padStart(4, '0')}`)) {
-        refNumber++;
-      }
-      const reference = `${referencePrefix}-${String(refNumber).padStart(4, '0')}`;
-
       // Find or create contact if contactName is provided
       let contactId: number | null = null;
       if (contactName && contactName.trim()) {
@@ -6806,7 +6794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const transaction = await storage.createTransaction(
           {
             type: 'expense',
-            reference,
+            reference: '',
             date: importedTx.date,
             description: description || importedTx.name,
             amount: totalWithTax,
@@ -6890,7 +6878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const transaction = await storage.createTransaction(
           {
             type: 'deposit',
-            reference,
+            reference: '',
             date: importedTx.date,
             description: description || importedTx.name,
             amount: totalWithTax,
