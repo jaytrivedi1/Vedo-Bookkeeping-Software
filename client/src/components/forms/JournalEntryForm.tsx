@@ -39,11 +39,13 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 interface JournalEntryFormProps {
+  journalEntry?: any;
+  ledgerEntries?: any[];
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export default function JournalEntryForm({ onSuccess, onCancel }: JournalEntryFormProps) {
+export default function JournalEntryForm({ journalEntry, ledgerEntries, onSuccess, onCancel }: JournalEntryFormProps) {
   const { toast } = useToast();
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [currentEntryIndex, setCurrentEntryIndex] = useState<number | null>(null);
