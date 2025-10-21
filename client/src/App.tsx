@@ -31,6 +31,7 @@ import ChequeNew from "@/pages/cheque-new";
 import ChequeEdit from "@/pages/cheque-edit";
 import ChequeView from "@/pages/cheque-view";
 import JournalEntryNew from "@/pages/journal-entry-new";
+import JournalEntryView from "@/pages/journal-entry-view";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
 
@@ -106,6 +107,7 @@ function Router() {
               <Route path="/cheques/:id" component={ChequeView} />
               <Route path="/journals" component={Journals} />
               <Route path="/journals/new" component={JournalEntryNew} />
+              <Route path="/journals/:id" component={JournalEntryView} />
               <Route path="/deposits" component={Deposits} />
               <Route path="/deposits/:id" component={DepositView} />
               <Route path="/banking" component={Banking} />
