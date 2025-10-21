@@ -1191,7 +1191,7 @@ export class DatabaseStorage implements IStorage {
     return result as LedgerEntry[];
   }
 
-  async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]> {
+  async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<any[]> {
     let conditions = [];
     
     if (startDate) {
@@ -1202,12 +1202,29 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(ledgerEntries.date, endDate));
     }
     
-    const query = conditions.length > 0
-      ? db.select().from(ledgerEntries).where(and(...conditions))
-      : db.select().from(ledgerEntries);
+    const query = db
+      .select({
+        id: ledgerEntries.id,
+        transactionId: ledgerEntries.transactionId,
+        accountId: ledgerEntries.accountId,
+        description: ledgerEntries.description,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+        date: ledgerEntries.date,
+        contactName: contacts.name,
+        transactionType: transactions.type,
+        referenceNumber: transactions.reference,
+      })
+      .from(ledgerEntries)
+      .leftJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+      .leftJoin(contacts, eq(transactions.contactId, contacts.id));
+    
+    const finalQuery = conditions.length > 0
+      ? query.where(and(...conditions))
+      : query;
       
-    const result = await query.orderBy(ledgerEntries.date);
-    return result as LedgerEntry[];
+    const result = await finalQuery.orderBy(ledgerEntries.date);
+    return result;
   }
 
   async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
