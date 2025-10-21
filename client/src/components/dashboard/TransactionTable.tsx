@@ -233,7 +233,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
                       {/* Edit buttons for invoices and deposits */}
                       {transaction.type === 'invoice' && (
                         <Link 
-                          href={`/invoice-edit/${transaction.id}`}
+                          href={`/invoices/${transaction.id}/edit`}
                           className="text-blue-500 hover:text-blue-600"
                         >
                           <Button

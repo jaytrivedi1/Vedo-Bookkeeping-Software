@@ -18,7 +18,7 @@ export default function InvoiceFormPage() {
   // Extract invoice ID from URL
   useEffect(() => {
     const path = window.location.pathname;
-    const editMatch = path.match(/\/invoice-edit\/(\d+)/);
+    const editMatch = path.match(/\/invoices\/(\d+)\/edit/);
     if (editMatch && editMatch[1]) {
       setInvoiceId(parseInt(editMatch[1]));
     } else {

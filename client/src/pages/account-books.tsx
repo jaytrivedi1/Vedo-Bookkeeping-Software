@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { format, subMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, parseISO } from "date-fns";
 import { BookOpen, ChevronDown, ChevronRight, Search, Book, Filter, Calendar, Trash2, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -233,6 +234,28 @@ export default function AccountBooks() {
         return "Deposit";
       default:
         return type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+    }
+  };
+  
+  // Get URL for transaction based on its type
+  const getTransactionUrl = (transaction: Transaction): string => {
+    switch (transaction.type) {
+      case "invoice":
+        return `/invoices/${transaction.id}`;
+      case "expense":
+        return `/expenses/${transaction.id}`;
+      case "journal_entry":
+        return `/journals/${transaction.id}`;
+      case "deposit":
+        return `/deposits/${transaction.id}`;
+      case "payment":
+        return `/payments/${transaction.id}`;
+      case "bill":
+        return `/bills/${transaction.id}`;
+      case "cheque":
+        return `/cheques/${transaction.id}`;
+      default:
+        return "#";
     }
   };
   
@@ -527,7 +550,15 @@ export default function AccountBooks() {
                                     {index === 0 ? format(new Date(date), 'dd-MMM-yy') : ''}
                                   </TableCell>
                                   <TableCell>
-                                    {index === 0 ? transaction?.reference || '' : ''}
+                                    {index === 0 && transaction ? (
+                                      <Link 
+                                        href={getTransactionUrl(transaction)}
+                                        className="text-primary hover:underline font-medium"
+                                        data-testid={`link-transaction-${transaction.id}`}
+                                      >
+                                        {transaction.reference || ''}
+                                      </Link>
+                                    ) : ''}
                                   </TableCell>
                                   <TableCell>
                                     {index === 0 && transaction ? formatTransactionType(transaction.type) : ''}

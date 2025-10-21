@@ -86,8 +86,8 @@ function Router() {
             <Switch>
               <Route path="/" component={Dashboard} />
               <Route path="/invoices" component={Invoices} />
-              <Route path="/invoice-new" component={InvoiceForm} />
-              <Route path="/invoice-edit/:id" component={InvoiceForm} />
+              <Route path="/invoices/new" component={InvoiceForm} />
+              <Route path="/invoices/:id/edit" component={InvoiceForm} />
               <Route path="/invoices/:id" component={InvoiceView} />
               <Route path="/payments/edit/:id" component={PaymentReceive} />
               <Route path="/payments/:id" component={PaymentView} />

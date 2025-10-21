@@ -127,7 +127,7 @@ export default function Invoices() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem asChild>
-                <Link href="/invoice-new">
+                <Link href="/invoices/new">
                   <FileText className="mr-2 h-4 w-4" />
                   <span>Invoice</span>
                 </Link>

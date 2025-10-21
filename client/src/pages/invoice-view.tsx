@@ -240,7 +240,7 @@ export default function InvoiceView() {
             <Mail className="mr-2 h-4 w-4" />
             Send by Email
           </Button>
-          <Link href={`/invoice-edit/${invoice.id}`}>
+          <Link href={`/invoices/${invoice.id}/edit`}>
             <Button size="sm">
               <Edit2 className="mr-2 h-4 w-4" />
               Edit

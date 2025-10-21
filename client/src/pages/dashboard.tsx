@@ -101,7 +101,7 @@ export default function Dashboard() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <Link href="/invoice-new">
+              <Link href="/invoices/new">
                 <DropdownMenuItem>
                   <FileText className="mr-2 h-4 w-4" />
                   <span>Invoice</span>
