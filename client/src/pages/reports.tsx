@@ -294,6 +294,28 @@ export default function Reports() {
       : <ArrowDown className="ml-2 h-4 w-4" />;
   };
   
+  // Helper function to format transaction type for display
+  const formatTransactionType = (type: string) => {
+    switch (type) {
+      case 'invoice':
+        return 'Invoice';
+      case 'payment':
+        return 'Payment';
+      case 'bill':
+        return 'Bill';
+      case 'deposit':
+        return 'Deposit';
+      case 'expense':
+        return 'Expense';
+      case 'journal_entry':
+        return 'Journal Entry';
+      case 'cheque':
+        return 'Cheque';
+      default:
+        return type;
+    }
+  };
+
   // Handle transaction row click
   const handleTransactionClick = (transactionId: number, transactionType: string) => {
     if (!transactionId || !transactionType) {
@@ -315,12 +337,13 @@ export default function Reports() {
         setLocation(`/deposits/${transactionId}`);
         break;
       case 'expense':
-        // Expenses don't have individual view pages, navigate to expenses page
-        setLocation('/expenses');
+        setLocation(`/expenses/${transactionId}`);
         break;
       case 'journal_entry':
-        // Journal entries don't have individual view pages, navigate to journals page
-        setLocation('/journals');
+        setLocation(`/journals/${transactionId}`);
+        break;
+      case 'cheque':
+        setLocation(`/cheques/${transactionId}`);
         break;
       default:
         console.warn(`Unknown transaction type: ${transactionType}`);
@@ -1299,6 +1322,9 @@ export default function Reports() {
                                   {renderSortIcon('date')}
                                 </div>
                               </TableHead>
+                              <TableHead data-testid="header-type">
+                                Type
+                              </TableHead>
                               <TableHead 
                                 className="cursor-pointer select-none hover:bg-gray-100"
                                 onClick={() => handleSort('referenceNumber')}
@@ -1377,7 +1403,7 @@ export default function Reports() {
                               !isBalanceSheetAccount(selectedAccount.type) || 
                               (openingBalanceData !== undefined && startingBalance === 0)) ? (
                               <TableRow>
-                                <TableCell colSpan={8} className="text-center py-6 text-gray-500">
+                                <TableCell colSpan={9} className="text-center py-6 text-gray-500">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
@@ -1386,7 +1412,7 @@ export default function Reports() {
                                 {/* Opening Balance row for balance sheet accounts */}
                                 {selectedAccount && isBalanceSheetAccount(selectedAccount.type) && startingBalance !== 0 && (
                                   <TableRow className="bg-blue-50 font-semibold">
-                                    <TableCell colSpan={4}>Opening Balance</TableCell>
+                                    <TableCell colSpan={5}>Opening Balance</TableCell>
                                     <TableCell>{selectedAccount.name}</TableCell>
                                     <TableCell className="text-right"></TableCell>
                                     <TableCell className="text-right"></TableCell>
@@ -1408,6 +1434,11 @@ export default function Reports() {
                                       data-testid={`transaction-row-${entry.transactionId}`}
                                     >
                                       <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                      <TableCell>
+                                        <span className="text-sm font-medium">
+                                          {formatTransactionType(entry.transactionType)}
+                                        </span>
+                                      </TableCell>
                                       <TableCell>{entry.referenceNumber || ''}</TableCell>
                                       <TableCell>{entry.contactName || '-'}</TableCell>
                                       <TableCell>{entry.description}</TableCell>
@@ -1426,7 +1457,7 @@ export default function Reports() {
                                 })}
                                 {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length > 0 && (
                                   <TableRow className="border-t-2 border-gray-300 font-bold bg-gray-50">
-                                    <TableCell colSpan={5} className="text-right">Total</TableCell>
+                                    <TableCell colSpan={6} className="text-right">Total</TableCell>
                                     <TableCell className="text-right" data-testid="total-debits">
                                       {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
                                     </TableCell>
