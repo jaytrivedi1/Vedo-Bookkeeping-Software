@@ -387,9 +387,12 @@ export default function Banking() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       toast({
         title: "Success",
-        description: "Transaction moved back to uncategorized",
+        description: "Transaction moved back to uncategorized and ledger entries deleted",
       });
     },
     onError: (error: any) => {

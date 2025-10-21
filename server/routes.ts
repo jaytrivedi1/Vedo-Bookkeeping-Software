@@ -6956,6 +6956,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       
+      // Get the imported transaction to find the matched transaction ID
+      const importedTx = await storage.getImportedTransaction(id);
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+      
+      // If there's a matched transaction, delete it first (this will cascade to line items and ledger entries)
+      if (importedTx.matchedTransactionId) {
+        await storage.deleteTransaction(importedTx.matchedTransactionId);
+      }
+      
       // Reset status to 'unmatched' and clear matchedTransactionId
       await storage.updateImportedTransaction(id, { 
         status: 'unmatched',
