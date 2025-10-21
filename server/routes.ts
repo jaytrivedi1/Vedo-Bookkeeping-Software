@@ -6677,6 +6677,235 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Categorize imported transaction (creates expense or deposit)
+  apiRouter.post("/plaid/categorize-transaction/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const importedTxId = parseInt(req.params.id);
+      const { accountId, contactName, salesTaxId, description } = req.body;
+
+      // Get the imported transaction
+      const importedTx = await storage.getImportedTransaction(importedTxId);
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      // Determine transaction type based on amount
+      // Negative amount = money out = expense
+      // Positive amount = money in = deposit
+      const isExpense = importedTx.amount < 0;
+      const transactionType = isExpense ? 'expense' : 'deposit';
+      const absoluteAmount = Math.abs(importedTx.amount);
+
+      // Find the bank/cash account this transaction came from
+      const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+      let glAccountId: number;
+      
+      if (importedTx.source === 'csv') {
+        // For CSV imports, accountId is the GL account
+        glAccountId = importedTx.accountId!;
+      } else {
+        // For Plaid imports, get the linkedAccountId from bank account
+        const bankAccount = await storage.getBankAccount(importedTx.bankAccountId!);
+        if (!bankAccount || !bankAccount.linkedAccountId) {
+          return res.status(400).json({ error: 'Bank account not linked to Chart of Accounts' });
+        }
+        glAccountId = bankAccount.linkedAccountId;
+      }
+
+      // Generate reference number
+      const referencePrefix = isExpense ? 'EXP' : 'DEP';
+      const existingTransactions = await storage.getTransactions();
+      const existingRefs = existingTransactions
+        .filter(t => t.reference.startsWith(referencePrefix))
+        .map(t => t.reference);
+      let refNumber = 1;
+      while (existingRefs.includes(`${referencePrefix}-${String(refNumber).padStart(4, '0')}`)) {
+        refNumber++;
+      }
+      const reference = `${referencePrefix}-${String(refNumber).padStart(4, '0')}`;
+
+      // Find or create contact if contactName is provided
+      let contactId: number | null = null;
+      if (contactName && contactName.trim()) {
+        const contacts = await storage.getContacts();
+        let contact = contacts.find(c => c.name.toLowerCase() === contactName.toLowerCase());
+        
+        if (!contact) {
+          // Create new contact as vendor for expenses, customer for deposits
+          contact = await storage.createContact({
+            name: contactName,
+            type: isExpense ? 'vendor' : 'customer',
+          });
+        }
+        contactId = contact.id;
+      }
+
+      // Create transaction based on type
+      if (isExpense) {
+        // Create expense transaction
+        const lineItems: InsertLineItem[] = [{
+          accountId: accountId, // The expense account (e.g., Office Supplies)
+          description: description || importedTx.name,
+          amount: absoluteAmount,
+          salesTaxId: salesTaxId || null,
+        }];
+
+        // Calculate sales tax if applicable
+        let totalWithTax = absoluteAmount;
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax) {
+            const taxAmount = (absoluteAmount * tax.rate) / 100;
+            totalWithTax = absoluteAmount + taxAmount;
+          }
+        }
+
+        // Create ledger entries for expense
+        const ledgerEntries: InsertLedgerEntry[] = [
+          {
+            transactionId: 0, // Will be set after transaction is created
+            accountId: accountId, // Debit expense account
+            description: description || importedTx.name,
+            debit: absoluteAmount,
+            credit: 0,
+            date: importedTx.date,
+          },
+          {
+            transactionId: 0,
+            accountId: glAccountId, // Credit bank/cash account
+            description: description || importedTx.name,
+            debit: 0,
+            credit: totalWithTax,
+            date: importedTx.date,
+          },
+        ];
+
+        // Add sales tax ledger entry if applicable
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax && tax.payableAccountId) {
+            const taxAmount = (absoluteAmount * tax.rate) / 100;
+            ledgerEntries.push({
+              transactionId: 0,
+              accountId: tax.payableAccountId, // Credit tax payable account
+              description: `${tax.name} on ${description || importedTx.name}`,
+              debit: taxAmount,
+              credit: 0,
+              date: importedTx.date,
+            });
+          }
+        }
+
+        const transaction = await storage.createTransaction(
+          {
+            type: 'expense',
+            reference,
+            date: importedTx.date,
+            description: description || importedTx.name,
+            amount: totalWithTax,
+            contactId,
+            status: 'completed',
+          },
+          lineItems,
+          ledgerEntries
+        );
+
+        // Update imported transaction with matched transaction ID
+        await storage.updateImportedTransaction(importedTxId, {
+          matchedTransactionId: transaction.id,
+          status: 'matched',
+          name: contactName || importedTx.name, // Update name if contact was selected
+        });
+
+        res.json({ success: true, transaction, type: 'expense' });
+      } else {
+        // Create deposit transaction
+        const lineItems: InsertLineItem[] = [{
+          accountId: accountId, // The income/deposit account
+          description: description || importedTx.name,
+          amount: absoluteAmount,
+          salesTaxId: salesTaxId || null,
+        }];
+
+        // Calculate sales tax if applicable
+        let totalWithTax = absoluteAmount;
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax) {
+            const taxAmount = (absoluteAmount * tax.rate) / 100;
+            totalWithTax = absoluteAmount + taxAmount;
+          }
+        }
+
+        // Create ledger entries for deposit
+        const ledgerEntries: InsertLedgerEntry[] = [
+          {
+            transactionId: 0,
+            accountId: glAccountId, // Debit bank/cash account
+            description: description || importedTx.name,
+            debit: totalWithTax,
+            credit: 0,
+            date: importedTx.date,
+          },
+          {
+            transactionId: 0,
+            accountId: accountId, // Credit income account
+            description: description || importedTx.name,
+            debit: 0,
+            credit: absoluteAmount,
+            date: importedTx.date,
+          },
+        ];
+
+        // Add sales tax ledger entry if applicable
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax && tax.payableAccountId) {
+            const taxAmount = (absoluteAmount * tax.rate) / 100;
+            ledgerEntries.push({
+              transactionId: 0,
+              accountId: tax.payableAccountId, // Credit tax payable account
+              description: `${tax.name} on ${description || importedTx.name}`,
+              debit: 0,
+              credit: taxAmount,
+              date: importedTx.date,
+            });
+          }
+        }
+
+        const transaction = await storage.createTransaction(
+          {
+            type: 'deposit',
+            reference,
+            date: importedTx.date,
+            description: description || importedTx.name,
+            amount: totalWithTax,
+            contactId,
+            status: 'completed',
+          },
+          lineItems,
+          ledgerEntries
+        );
+
+        // Update imported transaction with matched transaction ID
+        await storage.updateImportedTransaction(importedTxId, {
+          matchedTransactionId: transaction.id,
+          status: 'matched',
+          name: contactName || importedTx.name, // Update name if contact was selected
+        });
+
+        res.json({ success: true, transaction, type: 'deposit' });
+      }
+    } catch (error: any) {
+      console.error('Error categorizing transaction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Delete bank connection
   apiRouter.delete("/plaid/connections/:id", requireAuth, async (req: Request, res: Response) => {
     try {
