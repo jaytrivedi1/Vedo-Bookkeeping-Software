@@ -6732,27 +6732,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create transaction based on type
       if (isExpense) {
+        // Bank transactions are tax-inclusive: the amount already includes tax
+        // Calculate base amount: base = total / (1 + rate/100)
+        let baseAmount = absoluteAmount;
+        let taxAmount = 0;
+        let totalWithTax = absoluteAmount;
+        
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax) {
+            // Tax-inclusive calculation
+            baseAmount = absoluteAmount / (1 + tax.rate / 100);
+            taxAmount = absoluteAmount - baseAmount;
+            totalWithTax = absoluteAmount; // Total stays the same (it's inclusive)
+          }
+        }
+        
         // Create expense transaction
         const lineItems: any[] = [{
           accountId: accountId, // The expense account (e.g., Office Supplies)
           description: description || importedTx.name,
           quantity: 1,
-          unitPrice: absoluteAmount,
-          amount: absoluteAmount,
+          unitPrice: baseAmount,
+          amount: baseAmount,
           salesTaxId: salesTaxId || null,
           transactionId: 0, // Will be set by createTransaction
         }];
-
-        // Calculate sales tax if applicable
-        let totalWithTax = absoluteAmount;
-        if (salesTaxId) {
-          const allTaxes = await storage.getSalesTaxes();
-          const tax = allTaxes.find(t => t.id === salesTaxId);
-          if (tax) {
-            const taxAmount = (absoluteAmount * tax.rate) / 100;
-            totalWithTax = absoluteAmount + taxAmount;
-          }
-        }
 
         // Create ledger entries for expense
         const ledgerEntries: any[] = [
@@ -6760,7 +6766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionId: 0, // Will be set after transaction is created
             accountId: accountId, // Debit expense account
             description: description || importedTx.name,
-            debit: absoluteAmount,
+            debit: baseAmount,
             credit: 0,
             date: importedTx.date,
           },
@@ -6775,14 +6781,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ];
 
         // Add sales tax ledger entry if applicable
-        if (salesTaxId) {
+        if (salesTaxId && taxAmount > 0) {
           const allTaxes = await storage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
-          if (tax && tax.payableAccountId) {
-            const taxAmount = (absoluteAmount * tax.rate) / 100;
+          if (tax && tax.accountId) {
             ledgerEntries.push({
               transactionId: 0,
-              accountId: tax.payableAccountId, // Credit tax payable account
+              accountId: tax.accountId, // Debit tax payable account
               description: `${tax.name} on ${description || importedTx.name}`,
               debit: taxAmount,
               credit: 0,
@@ -6816,27 +6821,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({ success: true, transaction, type: 'expense' });
       } else {
+        // Bank transactions are tax-inclusive: the amount already includes tax
+        // Calculate base amount: base = total / (1 + rate/100)
+        let baseAmount = absoluteAmount;
+        let taxAmount = 0;
+        let totalWithTax = absoluteAmount;
+        
+        if (salesTaxId) {
+          const allTaxes = await storage.getSalesTaxes();
+          const tax = allTaxes.find(t => t.id === salesTaxId);
+          if (tax) {
+            // Tax-inclusive calculation
+            baseAmount = absoluteAmount / (1 + tax.rate / 100);
+            taxAmount = absoluteAmount - baseAmount;
+            totalWithTax = absoluteAmount; // Total stays the same (it's inclusive)
+          }
+        }
+        
         // Create deposit transaction
         const lineItems: any[] = [{
           accountId: accountId, // The income/deposit account
           description: description || importedTx.name,
           quantity: 1,
-          unitPrice: absoluteAmount,
-          amount: absoluteAmount,
+          unitPrice: baseAmount,
+          amount: baseAmount,
           salesTaxId: salesTaxId || null,
           transactionId: 0, // Will be set by createTransaction
         }];
-
-        // Calculate sales tax if applicable
-        let totalWithTax = absoluteAmount;
-        if (salesTaxId) {
-          const allTaxes = await storage.getSalesTaxes();
-          const tax = allTaxes.find(t => t.id === salesTaxId);
-          if (tax) {
-            const taxAmount = (absoluteAmount * tax.rate) / 100;
-            totalWithTax = absoluteAmount + taxAmount;
-          }
-        }
 
         // Create ledger entries for deposit
         const ledgerEntries: any[] = [
@@ -6853,20 +6864,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountId: accountId, // Credit income account
             description: description || importedTx.name,
             debit: 0,
-            credit: absoluteAmount,
+            credit: baseAmount,
             date: importedTx.date,
           },
         ];
 
         // Add sales tax ledger entry if applicable
-        if (salesTaxId) {
+        if (salesTaxId && taxAmount > 0) {
           const allTaxes = await storage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
-          if (tax && tax.payableAccountId) {
-            const taxAmount = (absoluteAmount * tax.rate) / 100;
+          if (tax && tax.accountId) {
             ledgerEntries.push({
               transactionId: 0,
-              accountId: tax.payableAccountId, // Credit tax payable account
+              accountId: tax.accountId, // Credit tax payable account
               description: `${tax.name} on ${description || importedTx.name}`,
               debit: 0,
               credit: taxAmount,
