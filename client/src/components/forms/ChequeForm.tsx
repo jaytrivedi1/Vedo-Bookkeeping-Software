@@ -96,6 +96,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const [payeeAddress, setPayeeAddress] = useState<string>("");
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [accountDialogContext, setAccountDialogContext] = useState<{type: 'payment' | 'lineItem', index?: number} | null>(null);
+  const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const { toast } = useToast();
 
   const defaultChequeNumber = isEditing ? cheque?.reference : '';
@@ -268,7 +269,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             
             if (components.length > 0) {
               components.forEach(component => {
-                const componentTaxAmount = roundTo2Decimals((item.amount || 0) * (component.rate / 100));
+                let componentTaxAmount: number;
+                if (isExclusiveOfTax) {
+                  componentTaxAmount = roundTo2Decimals((item.amount || 0) * (component.rate / 100));
+                } else {
+                  componentTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + component.rate));
+                }
                 totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
                 
                 const existingComponent = taxComponents.get(component.id);
@@ -289,7 +295,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
               
               usedTaxes.set(salesTax.id, salesTax);
             } else {
-              const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+              let itemTaxAmount: number;
+              if (isExclusiveOfTax) {
+                itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+              } else {
+                itemTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + salesTax.rate));
+              }
               totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
               usedTaxes.set(salesTax.id, salesTax);
               
@@ -308,7 +319,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
               }
             }
           } else {
-            const itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+            let itemTaxAmount: number;
+            if (isExclusiveOfTax) {
+              itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+            } else {
+              itemTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + salesTax.rate));
+            }
             totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
             usedTaxes.set(salesTax.id, salesTax);
             
@@ -333,7 +349,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     const finalTaxAmount = manualTaxOverride !== undefined 
       ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
       : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
-    const total = roundTo2Decimals(subtotal + finalTaxAmount);
+    const total = isExclusiveOfTax ? roundTo2Decimals(subtotal + finalTaxAmount) : roundTo2Decimals(subtotal);
     
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     const taxComponentsArray = Array.from(taxComponents.values());
@@ -371,7 +387,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
 
   useEffect(() => {
     calculateTotals();
-  }, [fields.length]);
+  }, [fields.length, isExclusiveOfTax]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -589,6 +605,23 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
 
         <div>
           <h3 className="text-lg font-semibold mb-3">Line Items</h3>
+          <div className="w-full flex justify-end mb-2">
+            <div className="flex items-center">
+              <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
+              <Select
+                value={isExclusiveOfTax ? "exclusive" : "inclusive"}
+                onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
+              >
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                  <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="border rounded-lg overflow-hidden">
             <div className="bg-muted/50 grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 font-medium text-sm">
               <div>Account</div>
