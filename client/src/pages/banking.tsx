@@ -284,6 +284,47 @@ export default function Banking() {
     },
   });
 
+  // Categorize transaction mutation
+  const categorizeTransactionMutation = useMutation({
+    mutationFn: async ({ 
+      transactionId, 
+      accountId, 
+      contactName, 
+      salesTaxId, 
+      description 
+    }: { 
+      transactionId: number; 
+      accountId: number | null; 
+      contactName: string; 
+      salesTaxId: number | null; 
+      description?: string;
+    }) => {
+      return await apiRequest(`/api/plaid/categorize-transaction/${transactionId}`, 'POST', {
+        accountId,
+        contactName,
+        salesTaxId,
+        description,
+      });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      toast({
+        title: "Success",
+        description: `Transaction categorized as ${data.type}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to categorize transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-';
     return new Intl.NumberFormat('en-US', {
@@ -399,6 +440,42 @@ export default function Banking() {
 
   const getMatchMode = (txId: number): 'match' | 'categorize' => {
     return transactionMatchModes.get(txId) || 'categorize'; // Default to categorize
+  };
+
+  const handlePostTransaction = (tx: any) => {
+    const mode = getMatchMode(tx.id);
+    const accountId = transactionAccounts.get(tx.id);
+    const contactName = transactionNames.get(tx.id) || '';
+    const salesTaxId = transactionTaxes.get(tx.id) || null;
+
+    // Validate required fields
+    if (!accountId) {
+      toast({
+        title: "Error",
+        description: "Please select an account to categorize this transaction",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // For now, only categorize mode is supported
+    if (mode === 'match') {
+      toast({
+        title: "Not implemented",
+        description: "Transaction matching is not yet implemented. Please use Categorize mode.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Categorize the transaction
+    categorizeTransactionMutation.mutate({
+      transactionId: tx.id,
+      accountId,
+      contactName,
+      salesTaxId,
+      description: tx.name,
+    });
   };
 
   const allSelected = paginatedTransactions.length > 0 && 
@@ -797,10 +874,12 @@ export default function Banking() {
                                 <Button 
                                   variant="outline" 
                                   size="sm"
+                                  onClick={() => handlePostTransaction(tx)}
+                                  disabled={categorizeTransactionMutation.isPending}
                                   data-testid={`button-post-${tx.id}`}
                                 >
                                   <Send className="h-4 w-4 mr-1" />
-                                  Post
+                                  {categorizeTransactionMutation.isPending ? 'Posting...' : 'Post'}
                                 </Button>
                               </TableCell>
                             </TableRow>
