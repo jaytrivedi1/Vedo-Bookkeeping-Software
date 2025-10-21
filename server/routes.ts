@@ -6933,6 +6933,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete (soft delete) imported transaction
+  apiRouter.delete("/plaid/imported-transactions/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Soft delete by marking status as 'deleted'
+      await storage.updateImportedTransaction(id, { status: 'deleted' });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting imported transaction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // CSV Import Routes
   
   // Configure multer for CSV file upload (store in memory)

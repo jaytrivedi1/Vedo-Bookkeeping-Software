@@ -333,6 +333,27 @@ export default function Banking() {
     },
   });
 
+  // Delete imported transaction mutation
+  const deleteTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return await apiRequest(`/api/plaid/imported-transactions/${transactionId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      toast({
+        title: "Success",
+        description: "Transaction deleted",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-';
     return new Intl.NumberFormat('en-US', {
@@ -921,16 +942,47 @@ export default function Banking() {
                                 </Button>
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2 overflow-hidden">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={() => handlePostTransaction(tx)}
-                                  disabled={categorizeTransactionMutation.isPending}
-                                  data-testid={`button-post-${tx.id}`}
-                                >
-                                  <Send className="h-4 w-4 mr-1" />
-                                  {categorizeTransactionMutation.isPending ? 'Posting...' : 'Post'}
-                                </Button>
+                                <div className="flex gap-1">
+                                  {activeTab === 'uncategorized' && (
+                                    <>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => handlePostTransaction(tx)}
+                                        disabled={categorizeTransactionMutation.isPending}
+                                        data-testid={`button-post-${tx.id}`}
+                                      >
+                                        <Send className="h-4 w-4 mr-1" />
+                                        {categorizeTransactionMutation.isPending ? 'Posting...' : 'Post'}
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => deleteTransactionMutation.mutate(tx.id)}
+                                        disabled={deleteTransactionMutation.isPending}
+                                        data-testid={`button-delete-${tx.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {activeTab === 'categorized' && tx.matchedTransactionId && (
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => {
+                                        const txType = Number(tx.amount) < 0 ? 'expenses' : 'deposits';
+                                        setLocation(`/${txType}/${tx.matchedTransactionId}`);
+                                      }}
+                                      data-testid={`button-view-${tx.id}`}
+                                    >
+                                      View
+                                    </Button>
+                                  )}
+                                  {activeTab === 'deleted' && (
+                                    <span className="text-sm text-gray-500">-</span>
+                                  )}
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
