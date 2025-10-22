@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -17,7 +18,16 @@ export default function Login() {
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Load remember me preference from localStorage
+  useEffect(() => {
+    const savedRememberMe = localStorage.getItem('rememberMe');
+    if (savedRememberMe === 'true') {
+      setRememberMe(true);
+    }
+  }, []);
 
   // Register form state
   const [registerUsername, setRegisterUsername] = useState('');
@@ -32,7 +42,10 @@ export default function Login() {
     setLoginLoading(true);
 
     try {
-      await login(loginUsername, loginPassword);
+      // Save remember me preference
+      localStorage.setItem('rememberMe', rememberMe.toString());
+      
+      await login(loginUsername, loginPassword, rememberMe);
       toast({
         title: 'Success',
         description: 'Logged in successfully',
@@ -123,6 +136,20 @@ export default function Login() {
                       required
                       data-testid="input-login-password"
                     />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="remember-me"
+                      checked={rememberMe}
+                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                      data-testid="checkbox-remember-me"
+                    />
+                    <Label
+                      htmlFor="remember-me"
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      Remember me
+                    </Label>
                   </div>
                   <Button
                     type="submit"
