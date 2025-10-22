@@ -784,9 +784,11 @@ export default function Banking() {
                   </Alert>
                 ) : (
                   <>
-                    <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-white z-30 shadow-sm">
+                    <div className="relative flex flex-col h-[500px]">
+                      {/* Fixed header table */}
+                      <div className="overflow-x-hidden border-b bg-white">
+                        <Table>
+                          <TableHeader>
                           <TableRow>
                             <TableHead style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="relative">
                               <Checkbox 
@@ -901,6 +903,19 @@ export default function Banking() {
                             </TableHead>
                           </TableRow>
                         </TableHeader>
+                      </Table>
+                    </div>
+                    {/* Scrollable body table with permanent scrollbar */}
+                    <div 
+                      className="flex-1 overflow-auto"
+                      onScroll={(e) => {
+                        const headerDiv = e.currentTarget.previousElementSibling as HTMLElement;
+                        if (headerDiv) {
+                          headerDiv.scrollLeft = e.currentTarget.scrollLeft;
+                        }
+                      }}
+                    >
+                      <Table>
                         <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id} className="h-12">
@@ -1115,6 +1130,7 @@ export default function Banking() {
                           ))}
                         </TableBody>
                       </Table>
+                    </div>
                     </div>
                     
                     
