@@ -589,29 +589,28 @@ export default function Banking() {
         </div>
 
         {/* Bank Accounts with Feed Status */}
-        <div className="grid gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Accounts with Bank Feeds</CardTitle>
-              <CardDescription>
-                Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {glAccountsLoading || bankAccountsLoading ? (
-                <div className="text-center py-8 text-gray-500">Loading...</div>
-              ) : accountsWithFeedStatus.length === 0 ? (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No bank feeds connected yet</AlertTitle>
-                  <AlertDescription>
-                    Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <div className="relative">
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                    {accountsWithFeedStatus.map((account) => (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Accounts with Bank Feeds</CardTitle>
+            <CardDescription>
+              Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {glAccountsLoading || bankAccountsLoading ? (
+              <div className="text-center py-8 text-gray-500">Loading...</div>
+            ) : accountsWithFeedStatus.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>No bank feeds connected yet</AlertTitle>
+                <AlertDescription>
+                  Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="relative">
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                  {accountsWithFeedStatus.map((account) => (
                       <div
                         key={account.id}
                         onClick={() => handleAccountSelect(account.id)}
@@ -702,15 +701,15 @@ export default function Banking() {
                 </div>
               )}
             </CardContent>
-          </Card>
+        </Card>
 
-          {/* Imported Transactions */}
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
-            <TabsList className="mb-4">
-              <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
-              <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
-              <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
-            </TabsList>
+        {/* Imported Transactions */}
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
+            <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
+            <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
+          </TabsList>
               
               <TabsContent value={activeTab}>
                 <Card>
@@ -1143,7 +1142,6 @@ export default function Banking() {
             </Card>
           </TabsContent>
         </Tabs>
-        </div>
       </div>
 
       {/* Bank Feed Setup Dialog */}
