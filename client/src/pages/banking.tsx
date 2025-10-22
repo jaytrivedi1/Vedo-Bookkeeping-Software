@@ -487,6 +487,13 @@ export default function Banking() {
     }
   }, [totalPages, currentPage]);
 
+  // Auto-select the first account when there's only one account with feeds
+  useEffect(() => {
+    if (accountsWithFeedStatus.length === 1 && selectedAccountId === null) {
+      setSelectedAccountId(accountsWithFeedStatus[0].id);
+    }
+  }, [accountsWithFeedStatus, selectedAccountId]);
+
   // Reset to page 1 when account selection changes
   const handleAccountSelect = (accountId: number) => {
     setSelectedAccountId(accountId);
