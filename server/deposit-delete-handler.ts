@@ -1,5 +1,5 @@
 import { db } from './db';
-import { transactions, ledgerEntries, paymentApplications } from '@shared/schema';
+import { transactions, ledgerEntries, paymentApplications, lineItems } from '@shared/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
 /**
@@ -129,7 +129,17 @@ export async function deleteDepositAndReverseApplications(depositId: number) {
         console.log(`Deleted ${depositLedgerEntries.length} ledger entries for deposit #${depositId}`);
       }
       
-      // Step 7: Delete the deposit transaction itself
+      // Step 7: Delete deposit's line items
+      const depositLineItems = await tx.select().from(lineItems)
+        .where(eq(lineItems.transactionId, depositId));
+      
+      if (depositLineItems.length > 0) {
+        await tx.delete(lineItems)
+          .where(eq(lineItems.transactionId, depositId));
+        console.log(`Deleted ${depositLineItems.length} line items for deposit #${depositId}`);
+      }
+      
+      // Step 8: Delete the deposit transaction itself
       await tx.delete(transactions)
         .where(eq(transactions.id, depositId));
       console.log(`Deleted deposit transaction #${depositId}`);
