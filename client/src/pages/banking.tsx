@@ -430,6 +430,9 @@ export default function Banking() {
     }).format(amount);
   };
 
+  // Calculate total table width for fixed table layout
+  const totalTableWidth = Object.values(columnWidths).reduce((sum, width) => sum + width, 0);
+
   // Helper function to get matched transaction details
   const getMatchedTransaction = (importedTx: ImportedTransaction) => {
     if (!importedTx.matchedTransactionId) return null;
@@ -801,10 +804,10 @@ export default function Banking() {
                         className="absolute inset-0 overflow-x-auto overflow-y-hidden"
                         id="table-scroll-container"
                       >
-                        <div style={{ minWidth: 'max-content' }}>
+                        <div style={{ minWidth: `${totalTableWidth}px` }}>
                           {/* Fixed header */}
                           <div className="sticky top-0 z-10 bg-white border-b">
-                            <Table>
+                            <Table style={{ tableLayout: 'fixed', width: `${totalTableWidth}px` }}>
                               <TableHeader>
                                 <TableRow>
                             <TableHead style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="relative">
@@ -925,7 +928,7 @@ export default function Banking() {
                           
                           {/* Scrollable body */}
                           <div className="overflow-y-auto" style={{ maxHeight: '450px' }}>
-                            <Table>
+                            <Table style={{ tableLayout: 'fixed', width: `${totalTableWidth}px` }}>
                               <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id} className="h-12">
