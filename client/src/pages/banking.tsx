@@ -786,7 +786,15 @@ export default function Banking() {
                   <>
                     <div className="relative flex flex-col h-[500px]">
                       {/* Fixed header table */}
-                      <div className="overflow-x-hidden border-b bg-white">
+                      <div 
+                        className="overflow-x-auto overflow-y-hidden border-b bg-white"
+                        onScroll={(e) => {
+                          const bodyDiv = e.currentTarget.nextElementSibling as HTMLElement;
+                          if (bodyDiv) {
+                            bodyDiv.scrollLeft = e.currentTarget.scrollLeft;
+                          }
+                        }}
+                      >
                         <Table>
                           <TableHeader>
                           <TableRow>
