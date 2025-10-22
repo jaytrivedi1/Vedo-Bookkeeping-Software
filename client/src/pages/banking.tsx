@@ -26,6 +26,12 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   Building2,
   RefreshCw,
