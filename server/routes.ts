@@ -4010,11 +4010,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // SYNCHRONIZATION: Check if this transaction is referenced by any imported_transactions
       // If so, reset them to unmatched status so they appear in the Uncategorized tab again
       try {
-        const { importedTransactions } = await import('@shared/schema');
+        const { importedTransactionsSchema } = await import('@shared/schema');
         const linkedImports = await db
           .select()
-          .from(importedTransactions)
-          .where(eq(importedTransactions.matchedTransactionId, id));
+          .from(importedTransactionsSchema)
+          .where(eq(importedTransactionsSchema.matchedTransactionId, id));
         
         if (linkedImports.length > 0) {
           console.log(`Found ${linkedImports.length} imported transactions linked to transaction #${id}`);
@@ -4022,12 +4022,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Reset each linked imported transaction to unmatched status
           for (const imported of linkedImports) {
             await db
-              .update(importedTransactions)
+              .update(importedTransactionsSchema)
               .set({ 
                 status: 'unmatched',
                 matchedTransactionId: null 
               })
-              .where(eq(importedTransactions.id, imported.id));
+              .where(eq(importedTransactionsSchema.id, imported.id));
             
             console.log(`Reset imported transaction #${imported.id} to unmatched status`);
           }
