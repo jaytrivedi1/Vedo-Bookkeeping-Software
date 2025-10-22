@@ -784,20 +784,22 @@ export default function Banking() {
                   </Alert>
                 ) : (
                   <>
-                    <div className="relative flex flex-col h-[500px]">
-                      {/* Fixed header table */}
+                    {/* Table container with fixed height and bottom scrollbar always visible */}
+                    <div 
+                      className="relative"
+                      style={{ height: '500px' }}
+                    >
+                      {/* Horizontal scroll wrapper that contains both header and body */}
                       <div 
-                        className="overflow-x-auto overflow-y-hidden border-b bg-white"
-                        onScroll={(e) => {
-                          const bodyDiv = e.currentTarget.nextElementSibling as HTMLElement;
-                          if (bodyDiv) {
-                            bodyDiv.scrollLeft = e.currentTarget.scrollLeft;
-                          }
-                        }}
+                        className="absolute inset-0 overflow-x-auto overflow-y-hidden"
+                        id="table-scroll-container"
                       >
-                        <Table>
-                          <TableHeader>
-                          <TableRow>
+                        <div style={{ minWidth: 'max-content' }}>
+                          {/* Fixed header */}
+                          <div className="sticky top-0 z-10 bg-white border-b">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
                             <TableHead style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="relative">
                               <Checkbox 
                                 checked={allSelected}
@@ -909,22 +911,15 @@ export default function Banking() {
                             <TableHead style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="relative">
                               Action
                             </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                      </Table>
-                    </div>
-                    {/* Scrollable body table with permanent scrollbar */}
-                    <div 
-                      className="flex-1 overflow-auto"
-                      onScroll={(e) => {
-                        const headerDiv = e.currentTarget.previousElementSibling as HTMLElement;
-                        if (headerDiv) {
-                          headerDiv.scrollLeft = e.currentTarget.scrollLeft;
-                        }
-                      }}
-                    >
-                      <Table>
-                        <TableBody>
+                                </TableRow>
+                              </TableHeader>
+                            </Table>
+                          </div>
+                          
+                          {/* Scrollable body */}
+                          <div className="overflow-y-auto" style={{ maxHeight: '450px' }}>
+                            <Table>
+                              <TableBody>
                           {paginatedTransactions.map((tx) => (
                             <TableRow key={tx.id} className="h-12">
                               <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="py-2 overflow-hidden">
@@ -1136,9 +1131,11 @@ export default function Banking() {
                               </TableCell>
                             </TableRow>
                           ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                     
                     
