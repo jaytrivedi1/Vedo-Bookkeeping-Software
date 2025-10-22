@@ -705,13 +705,12 @@ export default function Banking() {
           </Card>
 
           {/* Imported Transactions */}
-          {accountsWithFeedStatus.length > 0 && (
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
-                <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
-                <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
-              </TabsList>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
+              <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
+              <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
+            </TabsList>
               
               <TabsContent value={activeTab}>
                 <Card>
@@ -1144,7 +1143,6 @@ export default function Banking() {
             </Card>
           </TabsContent>
         </Tabs>
-          )}
         </div>
       </div>
 
