@@ -786,7 +786,7 @@ export default function Banking() {
                   <>
                     <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
                       <Table>
-                        <TableHeader>
+                        <TableHeader className="sticky top-0 bg-white z-30 shadow-sm">
                           <TableRow>
                             <TableHead style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="relative">
                               <Checkbox 
