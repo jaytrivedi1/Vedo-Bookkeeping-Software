@@ -235,7 +235,17 @@ export default function Banking() {
     { value: "100", label: "100 per page", subtitle: undefined }
   ];
 
-  // Fetch imported transactions based on active tab
+  // Fetch ALL imported transactions (for determining which accounts have feeds)
+  const { data: allImportedTransactions = [] } = useQuery<ImportedTransaction[]>({
+    queryKey: ['/api/plaid/imported-transactions/all'],
+    queryFn: async () => {
+      const response = await fetch('/api/plaid/imported-transactions');
+      if (!response.ok) throw new Error('Failed to fetch all transactions');
+      return response.json();
+    },
+  });
+
+  // Fetch imported transactions based on active tab (for displaying in table)
   const { data: importedTransactions = [], isLoading: transactionsLoading } = useQuery<ImportedTransaction[]>({
     queryKey: ['/api/plaid/imported-transactions', activeTab],
     queryFn: async () => {
@@ -281,7 +291,9 @@ export default function Banking() {
       return await apiRequest(`/api/plaid/sync-transactions/${bankAccountId}`, 'POST');
     },
     onSuccess: (data) => {
+      // Invalidate both tab-filtered and all-transactions queries
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
       toast({
         title: "Success",
         description: `Synced ${data.synced} new transactions`,
@@ -341,7 +353,9 @@ export default function Banking() {
       });
     },
     onSuccess: (data) => {
+      // Invalidate both tab-filtered and all-transactions queries
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
@@ -365,7 +379,9 @@ export default function Banking() {
       return await apiRequest(`/api/plaid/imported-transactions/${transactionId}`, 'DELETE');
     },
     onSuccess: () => {
+      // Invalidate both tab-filtered and all-transactions queries
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
       toast({
         title: "Success",
         description: "Transaction deleted",
@@ -386,7 +402,9 @@ export default function Banking() {
       return await apiRequest(`/api/plaid/imported-transactions/${transactionId}/undo`, 'POST');
     },
     onSuccess: () => {
+      // Invalidate both tab-filtered and all-transactions queries
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
@@ -422,7 +440,8 @@ export default function Banking() {
   const accountsWithFeedStatus = glAccounts
     .map(glAccount => {
       const bankAccount = bankAccounts.find(ba => ba.linkedAccountId === glAccount.id);
-      const csvImports = importedTransactions.filter(tx => 
+      // Check ALL imported transactions (not just current tab) to determine if CSV imports exist
+      const csvImports = allImportedTransactions.filter(tx => 
         tx.source === 'csv' && tx.accountId === glAccount.id
       );
       
