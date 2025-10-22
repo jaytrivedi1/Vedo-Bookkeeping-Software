@@ -793,7 +793,9 @@ export default function Banking() {
                         </AlertDescription>
                       </Alert>
                     )}
-                    <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
+                    {/* Sticky container for table scroll area and pagination */}
+                    <div className="sticky bottom-0 left-0 right-0 bg-white border-t shadow-[0_-2px_8px_rgba(0,0,0,0.1)] -mx-6 px-6 pt-3 pb-3 z-10">
+                    <div className="max-h-[400px] overflow-x-auto overflow-y-auto mb-3">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -1127,7 +1129,7 @@ export default function Banking() {
                     </div>
                     
                     {/* Pagination Controls */}
-                    <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-500">
                         Showing {startIndex + 1} to {Math.min(endIndex, filteredTransactions.length)} of {filteredTransactions.length} transactions
                       </p>
@@ -1154,6 +1156,7 @@ export default function Banking() {
                           Next
                         </Button>
                       </div>
+                    </div>
                     </div>
                   </>
                 )}
