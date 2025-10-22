@@ -72,7 +72,7 @@ export default function DepositView() {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
-      navigate('/dashboard');
+      navigate(-1);
     },
     onError: (error) => {
       toast({

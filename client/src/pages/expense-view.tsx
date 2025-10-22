@@ -155,7 +155,7 @@ export default function ExpenseView() {
       await apiRequest(`/api/transactions/${expenseId}`, 'DELETE');
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       setShowDeleteDialog(false);
-      navigate("/expenses");
+      navigate(-1);
     } catch (error) {
       console.error('Failed to delete expense:', error);
     } finally {
