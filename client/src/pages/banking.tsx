@@ -605,6 +605,7 @@ export default function Banking() {
   const selectedAccount = accountsWithFeedStatus.find(a => a.id === selectedAccountId);
 
   return (
+    <TooltipProvider>
     <div className="py-6">
       <div className="px-4">
         <div className="flex justify-between items-center mb-6">
@@ -1093,16 +1094,22 @@ export default function Banking() {
                                 <div className="flex gap-1">
                                   {activeTab === 'uncategorized' && (
                                     <>
-                                      <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={() => handlePostTransaction(tx)}
-                                        disabled={categorizeTransactionMutation.isPending}
-                                        data-testid={`button-post-${tx.id}`}
-                                      >
-                                        <Send className="h-4 w-4 mr-1" />
-                                        {categorizeTransactionMutation.isPending ? 'Posting...' : 'Post'}
-                                      </Button>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            onClick={() => handlePostTransaction(tx)}
+                                            disabled={categorizeTransactionMutation.isPending}
+                                            data-testid={`button-post-${tx.id}`}
+                                          >
+                                            <Send className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Post</p>
+                                        </TooltipContent>
+                                      </Tooltip>
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
@@ -1211,5 +1218,6 @@ export default function Banking() {
         }}
       />
     </div>
+    </TooltipProvider>
   );
 }
