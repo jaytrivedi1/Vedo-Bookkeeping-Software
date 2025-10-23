@@ -1849,6 +1849,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Transfer routes
+  apiRouter.post("/transfers", async (req: Request, res: Response) => {
+    try {
+      const { fromAccountId, toAccountId, amount, date, memo } = req.body;
+
+      // Validate required fields
+      if (!fromAccountId || !toAccountId || !amount || !date) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          errors: [{ message: "fromAccountId, toAccountId, amount, and date are required" }] 
+        });
+      }
+
+      // Validate that from and to accounts are different
+      if (fromAccountId === toAccountId) {
+        return res.status(400).json({ 
+          message: "Invalid transfer", 
+          errors: [{ message: "From and To accounts must be different" }] 
+        });
+      }
+
+      // Fetch account details
+      const fromAccount = await storage.getAccount(fromAccountId);
+      const toAccount = await storage.getAccount(toAccountId);
+
+      if (!fromAccount || !toAccount) {
+        return res.status(400).json({ 
+          message: "Invalid accounts", 
+          errors: [{ message: "One or both accounts not found" }] 
+        });
+      }
+
+      // Generate reference number
+      const transferDate = new Date(date);
+      const reference = `TRF-${transferDate.getFullYear()}-${String(transferDate.getMonth() + 1).padStart(2, '0')}${String(transferDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+
+      // Create transaction
+      const transaction: InsertTransaction = {
+        type: 'journal_entry',
+        reference,
+        date: transferDate,
+        description: memo || `Transfer from ${fromAccount.name} to ${toAccount.name}`,
+        amount: Number(amount),
+        status: 'completed'
+      };
+
+      // Create ledger entries for double-entry bookkeeping
+      const ledgerEntries: InsertLedgerEntry[] = [
+        {
+          accountId: toAccountId,
+          description: `Transfer from ${fromAccount.name}`,
+          debit: Number(amount),
+          credit: 0,
+          date: transferDate,
+          transactionId: 0 // Will be set by createTransaction
+        },
+        {
+          accountId: fromAccountId,
+          description: `Transfer to ${toAccount.name}`,
+          debit: 0,
+          credit: Number(amount),
+          date: transferDate,
+          transactionId: 0 // Will be set by createTransaction
+        }
+      ];
+
+      // Create the transfer transaction with empty line items
+      const newTransaction = await storage.createTransaction(transaction, [], ledgerEntries);
+
+      res.status(201).json({
+        transaction: newTransaction,
+        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id)
+      });
+    } catch (error) {
+      console.error("Error creating transfer:", error);
+      res.status(500).json({ message: "Failed to create transfer", error: error });
+    }
+  });
+
   // Deposit routes
   apiRouter.post("/payments", async (req: Request, res: Response) => {
     const data = req.body;
