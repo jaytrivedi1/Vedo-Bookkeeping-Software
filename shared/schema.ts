@@ -566,6 +566,17 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
+// Transaction Attachments (for imported transactions)
+export const transactionAttachmentsSchema = pgTable('transaction_attachments', {
+  id: serial('id').primaryKey(),
+  importedTransactionId: integer('imported_transaction_id').notNull().references(() => importedTransactionsSchema.id),
+  fileName: text('file_name').notNull(),
+  filePath: text('file_path').notNull(),
+  fileSize: integer('file_size').notNull(), // in bytes
+  mimeType: text('mime_type').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Insert schemas
 export const insertBankConnectionSchema = createInsertSchema(bankConnectionsSchema).omit({
   id: true,
@@ -591,6 +602,11 @@ export const insertCsvMappingPreferenceSchema = createInsertSchema(csvMappingPre
   updatedAt: true
 });
 
+export const insertTransactionAttachmentSchema = createInsertSchema(transactionAttachmentsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types
 export type BankConnection = typeof bankConnectionsSchema.$inferSelect;
 export type InsertBankConnection = z.infer<typeof insertBankConnectionSchema>;
@@ -603,3 +619,6 @@ export type InsertImportedTransaction = z.infer<typeof insertImportedTransaction
 
 export type CsvMappingPreference = typeof csvMappingPreferencesSchema.$inferSelect;
 export type InsertCsvMappingPreference = z.infer<typeof insertCsvMappingPreferenceSchema>;
+
+export type TransactionAttachment = typeof transactionAttachmentsSchema.$inferSelect;
+export type InsertTransactionAttachment = z.infer<typeof insertTransactionAttachmentSchema>;

@@ -42,7 +42,10 @@ import {
   User,
   Permission,
   LineItem,
-  RolePermission
+  RolePermission,
+  transactionAttachmentsSchema,
+  insertTransactionAttachmentSchema,
+  importedTransactionsSchema
 } from "@shared/schema";
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
@@ -51,6 +54,8 @@ import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client
 import { CountryCode, Products } from 'plaid';
 import multer from 'multer';
 import Papa from 'papaparse';
+import path from 'path';
+import fs from 'fs';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint - responds immediately for deployment health checks
@@ -7264,6 +7269,208 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error importing CSV:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== TRANSACTION ATTACHMENTS ROUTES ====================
+  
+  // Configure multer for file uploads
+  const attachmentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const transactionId = req.params.id;
+      const uploadDir = path.join(process.cwd(), 'uploads', 'attachments', transactionId);
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      // Use original filename with timestamp prefix to avoid conflicts
+      const timestamp = Date.now();
+      const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+      cb(null, `${timestamp}_${sanitizedName}`);
+    }
+  });
+
+  const attachmentUpload = multer({ 
+    storage: attachmentStorage,
+    limits: {
+      fileSize: 10 * 1024 * 1024 // 10MB limit
+    }
+  });
+
+  // POST /api/imported-transactions/:id/attachments - Upload attachment file
+  apiRouter.post("/imported-transactions/:id/attachments", attachmentUpload.single('file'), async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      // Verify the imported transaction exists
+      const [transaction] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!transaction) {
+        // Delete the uploaded file since transaction doesn't exist
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      // Create attachment record
+      const attachmentData = insertTransactionAttachmentSchema.parse({
+        importedTransactionId: transactionId,
+        fileName: req.file.originalname,
+        filePath: req.file.path,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype
+      });
+
+      const [attachment] = await db
+        .insert(transactionAttachmentsSchema)
+        .values(attachmentData)
+        .returning();
+
+      res.status(201).json(attachment);
+    } catch (error: any) {
+      console.error('Error uploading attachment:', error);
+      
+      // Clean up file if there was an error
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid attachment data', details: error.errors });
+      }
+      
+      res.status(500).json({ error: error.message || 'Failed to upload attachment' });
+    }
+  });
+
+  // GET /api/imported-transactions/:id/attachments - List all attachments for a transaction
+  apiRouter.get("/imported-transactions/:id/attachments", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+
+      // Verify the imported transaction exists
+      const [transaction] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!transaction) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      // Get all attachments for this transaction
+      const attachments = await db
+        .select()
+        .from(transactionAttachmentsSchema)
+        .where(eq(transactionAttachmentsSchema.importedTransactionId, transactionId));
+
+      res.json(attachments);
+    } catch (error: any) {
+      console.error('Error fetching attachments:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch attachments' });
+    }
+  });
+
+  // DELETE /api/imported-transactions/:transactionId/attachments/:attachmentId - Delete an attachment
+  apiRouter.delete("/imported-transactions/:transactionId/attachments/:attachmentId", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.transactionId);
+      const attachmentId = parseInt(req.params.attachmentId);
+
+      // Get the attachment to find the file path
+      const [attachment] = await db
+        .select()
+        .from(transactionAttachmentsSchema)
+        .where(eq(transactionAttachmentsSchema.id, attachmentId));
+
+      if (!attachment) {
+        return res.status(404).json({ error: 'Attachment not found' });
+      }
+
+      // Verify the attachment belongs to the specified transaction
+      if (attachment.importedTransactionId !== transactionId) {
+        return res.status(400).json({ error: 'Attachment does not belong to the specified transaction' });
+      }
+
+      // Delete the file from filesystem
+      if (fs.existsSync(attachment.filePath)) {
+        fs.unlinkSync(attachment.filePath);
+        
+        // Try to remove the directory if it's empty
+        const dir = path.dirname(attachment.filePath);
+        try {
+          const files = fs.readdirSync(dir);
+          if (files.length === 0) {
+            fs.rmdirSync(dir);
+          }
+        } catch (err) {
+          // Ignore errors when removing directory
+        }
+      }
+
+      // Delete the database record
+      await db
+        .delete(transactionAttachmentsSchema)
+        .where(eq(transactionAttachmentsSchema.id, attachmentId));
+
+      res.json({ success: true, message: 'Attachment deleted successfully' });
+    } catch (error: any) {
+      console.error('Error deleting attachment:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete attachment' });
+    }
+  });
+
+  // GET /api/imported-transactions/:transactionId/attachments/:attachmentId/download - Download attachment file
+  apiRouter.get("/imported-transactions/:transactionId/attachments/:attachmentId/download", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.transactionId);
+      const attachmentId = parseInt(req.params.attachmentId);
+
+      // Get the attachment
+      const [attachment] = await db
+        .select()
+        .from(transactionAttachmentsSchema)
+        .where(eq(transactionAttachmentsSchema.id, attachmentId));
+
+      if (!attachment) {
+        return res.status(404).json({ error: 'Attachment not found' });
+      }
+
+      // Verify the attachment belongs to the specified transaction
+      if (attachment.importedTransactionId !== transactionId) {
+        return res.status(400).json({ error: 'Attachment does not belong to the specified transaction' });
+      }
+
+      // Check if file exists
+      if (!fs.existsSync(attachment.filePath)) {
+        return res.status(404).json({ error: 'File not found on disk' });
+      }
+
+      // Send the file for download
+      res.download(attachment.filePath, attachment.fileName, (err) => {
+        if (err) {
+          console.error('Error downloading file:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Failed to download file' });
+          }
+        }
+      });
+    } catch (error: any) {
+      console.error('Error serving attachment download:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message || 'Failed to serve attachment' });
+      }
     }
   });
 
