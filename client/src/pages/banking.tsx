@@ -238,14 +238,11 @@ export default function Banking() {
   });
 
   // Transform sales taxes for SearchableSelect
-  const taxItems: SearchableSelectItem[] = [
-    { value: 'none', label: 'No tax', subtitle: undefined },
-    ...salesTaxes.map(tax => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    }))
-  ];
+  const taxItems: SearchableSelectItem[] = salesTaxes.map(tax => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  }));
 
   // Transform page size options for SearchableSelect
   const pageSizeItems: SearchableSelectItem[] = [
@@ -1145,8 +1142,8 @@ export default function Banking() {
                                 {activeTab === 'uncategorized' ? (
                                   <SearchableSelect
                                     items={taxItems}
-                                    value={transactionTaxes.get(tx.id)?.toString() || 'none'}
-                                    onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
+                                    value={transactionTaxes.get(tx.id)?.toString() || ''}
+                                    onValueChange={(value) => handleTaxChange(tx.id, value ? Number(value) : null)}
                                     placeholder="Select Tax"
                                     searchPlaceholder="Search taxes..."
                                     emptyText="No taxes found."
