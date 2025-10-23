@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { AttachmentDialog } from "@/components/dialogs/AttachmentDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -113,6 +114,8 @@ export default function Banking() {
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
   const [currentTransactionId, setCurrentTransactionId] = useState<number | null>(null);
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
+  const [selectedAttachmentTransactionId, setSelectedAttachmentTransactionId] = useState<number | null>(null);
   
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -1184,6 +1187,10 @@ export default function Banking() {
                                     <Button 
                                       variant="ghost" 
                                       size="sm"
+                                      onClick={() => {
+                                        setSelectedAttachmentTransactionId(tx.id);
+                                        setAttachmentDialogOpen(true);
+                                      }}
                                       data-testid={`button-attach-${tx.id}`}
                                     >
                                       <Paperclip className="h-4 w-4" />
@@ -1328,6 +1335,15 @@ export default function Banking() {
           setCurrentTransactionId(null);
         }}
       />
+
+      {/* Attachment Dialog */}
+      {selectedAttachmentTransactionId && (
+        <AttachmentDialog
+          open={attachmentDialogOpen}
+          onOpenChange={setAttachmentDialogOpen}
+          transactionId={selectedAttachmentTransactionId}
+        />
+      )}
     </div>
     </TooltipProvider>
   );
