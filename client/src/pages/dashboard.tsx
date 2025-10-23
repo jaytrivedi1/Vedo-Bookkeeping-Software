@@ -26,11 +26,20 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Link } from "wouter";
 import { Transaction } from "@shared/schema";
+import TransferForm from "@/components/forms/TransferForm";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   
   // Fetch transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
@@ -163,7 +172,7 @@ export default function Dashboard() {
                 <FileText className="mr-2 h-4 w-4" />
                 <span>Customer Credit</span>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setTransferDialogOpen(true)}>
                 <ArrowLeftRight className="mr-2 h-4 w-4" />
                 <span>Transfer</span>
               </DropdownMenuItem>
@@ -171,6 +180,25 @@ export default function Dashboard() {
           </DropdownMenu>
         </div>
       </div>
+      
+      {/* Transfer Dialog */}
+      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Transfer</DialogTitle>
+            <DialogDescription>
+              Move money between balance sheet accounts (bank accounts, assets, liabilities).
+            </DialogDescription>
+          </DialogHeader>
+          <TransferForm
+            onSuccess={() => {
+              setTransferDialogOpen(false);
+              refetch();
+            }}
+            onCancel={() => setTransferDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         {/* Dashboard content */}
