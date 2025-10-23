@@ -1147,7 +1147,7 @@ export default function Banking() {
                                     items={taxItems}
                                     value={transactionTaxes.get(tx.id)?.toString() || 'none'}
                                     onValueChange={(value) => handleTaxChange(tx.id, value === 'none' ? null : Number(value))}
-                                    placeholder="No tax"
+                                    placeholder="Select Tax"
                                     searchPlaceholder="Search taxes..."
                                     emptyText="No taxes found."
                                     data-testid={`select-tax-${tx.id}`}
