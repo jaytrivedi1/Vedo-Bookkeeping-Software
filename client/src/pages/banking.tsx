@@ -46,7 +46,10 @@ import {
   ArrowDown,
   Paperclip,
   Send,
-  GripVertical
+  GripVertical,
+  Search,
+  Filter,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -110,6 +113,13 @@ export default function Banking() {
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
   const [currentTransactionId, setCurrentTransactionId] = useState<number | null>(null);
+  
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [amountMin, setAmountMin] = useState('');
+  const [amountMax, setAmountMax] = useState('');
 
   // Column widths state with localStorage persistence
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
@@ -468,6 +478,36 @@ export default function Banking() {
     ? importedTransactions.filter(tx => tx.accountId === selectedAccountId)
     : importedTransactions;
 
+  // Apply search and filters
+  filteredTransactions = filteredTransactions.filter(tx => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesDescription = tx.name.toLowerCase().includes(query);
+      const matchesPayee = tx.payeeName?.toLowerCase().includes(query);
+      if (!matchesDescription && !matchesPayee) return false;
+    }
+
+    // Date range filter
+    if (dateFrom) {
+      const txDate = new Date(tx.date);
+      const fromDate = new Date(dateFrom);
+      if (txDate < fromDate) return false;
+    }
+    if (dateTo) {
+      const txDate = new Date(tx.date);
+      const toDate = new Date(dateTo);
+      if (txDate > toDate) return false;
+    }
+
+    // Amount range filter
+    const absAmount = Math.abs(parseFloat(tx.amount));
+    if (amountMin && absAmount < parseFloat(amountMin)) return false;
+    if (amountMax && absAmount > parseFloat(amountMax)) return false;
+
+    return true;
+  });
+
   // Sort transactions
   if (sortField) {
     filteredTransactions = [...filteredTransactions].sort((a, b) => {
@@ -750,7 +790,7 @@ export default function Banking() {
               <TabsContent value={activeTab}>
                 <Card>
                   <CardHeader>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center mb-4">
                       <div>
                         <CardTitle>
                           {activeTab === 'uncategorized' && 'Uncategorized Transactions'}
@@ -777,6 +817,77 @@ export default function Banking() {
                     />
                   </div>
                 </div>
+                
+                {/* Search and Filter Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
+                  <div className="lg:col-span-2 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search description or name..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="date"
+                      placeholder="From date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      data-testid="input-date-from"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="date"
+                      placeholder="To date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      data-testid="input-date-to"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      placeholder="Min $"
+                      value={amountMin}
+                      onChange={(e) => setAmountMin(e.target.value)}
+                      className="w-1/2"
+                      data-testid="input-amount-min"
+                    />
+                    <Input
+                      type="number"
+                      placeholder="Max $"
+                      value={amountMax}
+                      onChange={(e) => setAmountMax(e.target.value)}
+                      className="w-1/2"
+                      data-testid="input-amount-max"
+                    />
+                  </div>
+                </div>
+                
+                {/* Clear Filters Button */}
+                {(searchQuery || dateFrom || dateTo || amountMin || amountMax) && (
+                  <div className="mt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setDateFrom('');
+                        setDateTo('');
+                        setAmountMin('');
+                        setAmountMax('');
+                      }}
+                      data-testid="button-clear-filters"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Clear Filters
+                    </Button>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {filteredTransactions.length === 0 ? (
