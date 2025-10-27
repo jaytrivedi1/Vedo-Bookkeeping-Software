@@ -39,6 +39,10 @@ export const paymentMethodEnum = pgEnum('payment_method', [
   'cash', 'check', 'credit_card', 'bank_transfer', 'other'
 ]);
 
+export const reconciliationStatusEnum = pgEnum('reconciliation_status', [
+  'in_progress', 'completed', 'cancelled'
+]);
+
 // Chart of Accounts
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
@@ -122,6 +126,28 @@ export const paymentApplications = pgTable('payment_applications', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Reconciliations (tracks account reconciliation sessions)
+export const reconciliations = pgTable('reconciliations', {
+  id: serial('id').primaryKey(),
+  accountId: integer('account_id').notNull().references(() => accounts.id),
+  statementDate: timestamp('statement_date').notNull(),
+  statementEndingBalance: doublePrecision('statement_ending_balance').notNull(),
+  clearedBalance: doublePrecision('cleared_balance').notNull().default(0),
+  difference: doublePrecision('difference').notNull().default(0),
+  status: reconciliationStatusEnum('status').notNull().default('in_progress'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  completedAt: timestamp('completed_at'),
+  notes: text('notes'),
+});
+
+// Reconciliation Items (tracks which ledger entries are cleared/reconciled)
+export const reconciliationItems = pgTable('reconciliation_items', {
+  id: serial('id').primaryKey(),
+  reconciliationId: integer('reconciliation_id').notNull().references(() => reconciliations.id),
+  ledgerEntryId: integer('ledger_entry_id').notNull().references(() => ledgerEntries.id),
+  isCleared: boolean('is_cleared').notNull().default(false),
+});
+
 // Create insert schemas
 export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, balance: true });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
@@ -129,6 +155,8 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({ i
 export const insertLineItemSchema = createInsertSchema(lineItems).omit({ id: true });
 export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({ id: true });
 export const insertPaymentApplicationSchema = createInsertSchema(paymentApplications).omit({ id: true, createdAt: true });
+export const insertReconciliationSchema = createInsertSchema(reconciliations).omit({ id: true, createdAt: true, completedAt: true, clearedBalance: true, difference: true });
+export const insertReconciliationItemSchema = createInsertSchema(reconciliationItems).omit({ id: true });
 
 // Custom schemas for form validation
 export const invoiceSchema = z.object({
@@ -256,6 +284,12 @@ export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
 
 export type PaymentApplication = typeof paymentApplications.$inferSelect;
 export type InsertPaymentApplication = z.infer<typeof insertPaymentApplicationSchema>;
+
+export type Reconciliation = typeof reconciliations.$inferSelect;
+export type InsertReconciliation = z.infer<typeof insertReconciliationSchema>;
+
+export type ReconciliationItem = typeof reconciliationItems.$inferSelect;
+export type InsertReconciliationItem = z.infer<typeof insertReconciliationItemSchema>;
 
 // Forward declare salesTaxSchema to fix circular reference
 export const salesTaxesTable = 'sales_taxes';
