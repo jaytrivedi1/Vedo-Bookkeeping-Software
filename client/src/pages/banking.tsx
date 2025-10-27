@@ -667,139 +667,139 @@ export default function Banking() {
           </TabsList>
           
           <TabsContent value="bank-feeds">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-medium text-gray-900">Bank Feeds</h2>
-          <Button
-            onClick={() => setShowBankFeedSetup(true)}
-            data-testid="button-setup-bank-feed"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Set Up Bank Feed
-          </Button>
-        </div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-medium text-gray-900">Bank Feeds</h2>
+              <Button
+                onClick={() => setShowBankFeedSetup(true)}
+                data-testid="button-setup-bank-feed"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Set Up Bank Feed
+              </Button>
+            </div>
 
-        {/* Bank Accounts with Feed Status */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Accounts with Bank Feeds</CardTitle>
-            <CardDescription>
-              Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {glAccountsLoading || bankAccountsLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
-            ) : accountsWithFeedStatus.length === 0 ? (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>No bank feeds connected yet</AlertTitle>
-                <AlertDescription>
-                  Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="relative">
-                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                  {accountsWithFeedStatus.map((account) => (
-                      <div
-                        key={account.id}
-                        onClick={() => handleAccountSelect(account.id)}
-                        className={`flex-shrink-0 w-64 border rounded-lg p-4 cursor-pointer transition-all ${
-                          selectedAccountId === account.id 
-                            ? 'border-primary bg-primary/5 shadow-md' 
-                            : 'border-gray-200 hover:border-primary/50 hover:shadow-sm'
-                        }`}
-                        data-testid={`tile-account-${account.id}`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Building2 className={`h-5 w-5 flex-shrink-0 ${selectedAccountId === account.id ? 'text-primary' : 'text-gray-400'}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-sm truncate">{account.name}</h3>
+            {/* Bank Accounts with Feed Status */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Accounts with Bank Feeds</CardTitle>
+                <CardDescription>
+                  Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {glAccountsLoading || bankAccountsLoading ? (
+                  <div className="text-center py-8 text-gray-500">Loading...</div>
+                ) : accountsWithFeedStatus.length === 0 ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>No bank feeds connected yet</AlertTitle>
+                    <AlertDescription>
+                      Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="relative">
+                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                      {accountsWithFeedStatus.map((account) => (
+                        <div
+                          key={account.id}
+                          onClick={() => handleAccountSelect(account.id)}
+                          className={`flex-shrink-0 w-64 border rounded-lg p-4 cursor-pointer transition-all ${
+                            selectedAccountId === account.id 
+                              ? 'border-primary bg-primary/5 shadow-md' 
+                              : 'border-gray-200 hover:border-primary/50 hover:shadow-sm'
+                          }`}
+                          data-testid={`tile-account-${account.id}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <Building2 className={`h-5 w-5 flex-shrink-0 ${selectedAccountId === account.id ? 'text-primary' : 'text-gray-400'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-sm truncate">{account.name}</h3>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">({account.code})</p>
+                              <p className="text-sm font-medium mt-2">
+                                {formatCurrency(account.balance)}
+                              </p>
+                              {account.feedType && (
+                                <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="mt-2">
+                                  {account.feedType === 'plaid' ? (
+                                    <>
+                                      <LinkIcon className="h-3 w-3 mr-1" />
+                                      Plaid
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="h-3 w-3 mr-1" />
+                                      CSV
+                                    </>
+                                  )}
+                                </Badge>
+                              )}
                             </div>
-                            <p className="text-xs text-gray-500 mt-0.5">({account.code})</p>
-                            <p className="text-sm font-medium mt-2">
-                              {formatCurrency(account.balance)}
-                            </p>
-                            {account.feedType && (
-                              <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="mt-2">
-                                {account.feedType === 'plaid' ? (
-                                  <>
-                                    <LinkIcon className="h-3 w-3 mr-1" />
-                                    Plaid
-                                  </>
-                                ) : (
-                                  <>
-                                    <Upload className="h-3 w-3 mr-1" />
-                                    CSV
-                                  </>
-                                )}
-                              </Badge>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t flex gap-2">
+                            {account.bankAccount ? (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                  }}
+                                  disabled={syncTransactionsMutation.isPending}
+                                  className="flex-1"
+                                  data-testid={`button-sync-${account.id}`}
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteBankAccountMutation.mutate(account.bankAccount!.id);
+                                  }}
+                                  disabled={deleteBankAccountMutation.isPending}
+                                  className="flex-1"
+                                  data-testid={`button-disconnect-${account.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowBankFeedSetup(true);
+                                }}
+                                className="w-full"
+                                data-testid={`button-connect-${account.id}`}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                {account.hasCSVImports ? 'Add' : 'Connect'}
+                              </Button>
                             )}
                           </div>
                         </div>
-
-                        <div className="mt-3 pt-3 border-t flex gap-2">
-                          {account.bankAccount ? (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  syncTransactionsMutation.mutate(account.bankAccount!.id);
-                                }}
-                                disabled={syncTransactionsMutation.isPending}
-                                className="flex-1"
-                                data-testid={`button-sync-${account.id}`}
-                              >
-                                <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteBankAccountMutation.mutate(account.bankAccount!.id);
-                                }}
-                                disabled={deleteBankAccountMutation.isPending}
-                                className="flex-1"
-                                data-testid={`button-disconnect-${account.id}`}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowBankFeedSetup(true);
-                              }}
-                              className="w-full"
-                              data-testid={`button-connect-${account.id}`}
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              {account.hasCSVImports ? 'Add' : 'Connect'}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-        </Card>
+                )}
+              </CardContent>
+            </Card>
 
-        {/* Imported Transactions */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
-          <TabsList className="mb-4">
-            <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
-            <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
-            <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
-          </TabsList>
+            {/* Imported Transactions */}
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
+                <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
+                <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
+              </TabsList>
               
               <TabsContent value={activeTab}>
                 <Card>
@@ -818,19 +818,19 @@ export default function Banking() {
                           {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
                         </CardDescription>
                       </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Show:</span>
-                    <SearchableSelect
-                      items={pageSizeItems}
-                      value={pageSize.toString()}
-                      onValueChange={(value) => handlePageSizeChange(Number(value))}
-                      placeholder="Select page size"
-                      searchPlaceholder="Search..."
-                      emptyText="No options found"
-                      data-testid="select-page-size"
-                    />
-                  </div>
-                </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Show:</span>
+                        <SearchableSelect
+                          items={pageSizeItems}
+                          value={pageSize.toString()}
+                          onValueChange={(value) => handlePageSizeChange(Number(value))}
+                          placeholder="Select page size"
+                          searchPlaceholder="Search..."
+                          emptyText="No options found"
+                          data-testid="select-page-size"
+                        />
+                      </div>
+                    </div>
                 
                 {/* Search and Filter Controls */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
@@ -1362,6 +1362,8 @@ export default function Banking() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+            </Tabs>
           </TabsContent>
           
           <TabsContent value="reconciliation">
