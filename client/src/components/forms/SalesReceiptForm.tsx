@@ -111,14 +111,13 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
       subtitle: `· ${contact.type}`
     }));
 
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'None', subtitle: undefined },
-    ...salesTaxes.filter((tax: SalesTax) => !tax.parentId).map((tax: SalesTax) => ({
+  const taxItems: SearchableSelectItem[] = salesTaxes
+    .filter((tax: SalesTax) => !tax.parentId)
+    .map((tax: SalesTax) => ({
       value: tax.id.toString(),
       label: tax.name,
       subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    }))
-  ];
+    }));
 
   const depositAccountItems: SearchableSelectItem[] = depositAccounts.map((acc: Account) => ({
     value: acc.id.toString(),
@@ -426,8 +425,8 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                 <div className="col-span-3 md:col-span-2">
                   <label className="text-sm font-medium">Tax</label>
                   <Select
-                    value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || '0'}
-                    onValueChange={(value) => form.setValue(`lineItems.${index}.salesTaxId`, value === '0' ? undefined : Number(value))}
+                    value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || ''}
+                    onValueChange={(value) => form.setValue(`lineItems.${index}.salesTaxId`, value ? Number(value) : undefined)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select Tax" />
