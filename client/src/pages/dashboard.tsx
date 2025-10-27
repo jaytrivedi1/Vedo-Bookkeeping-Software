@@ -36,10 +36,12 @@ import {
 import { Link } from "wouter";
 import { Transaction } from "@shared/schema";
 import TransferForm from "@/components/forms/TransferForm";
+import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   
   // Fetch transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
@@ -122,6 +124,10 @@ export default function Dashboard() {
                   <span>Receive Payment</span>
                 </DropdownMenuItem>
               </Link>
+              <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
+                <Receipt className="mr-2 h-4 w-4" />
+                <span>Sales Receipt</span>
+              </DropdownMenuItem>
               <Link href="/deposits">
                 <DropdownMenuItem>
                   <PiggyBank className="mr-2 h-4 w-4" />
@@ -196,6 +202,25 @@ export default function Dashboard() {
               refetch();
             }}
             onCancel={() => setTransferDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Sales Receipt Dialog */}
+      <Dialog open={salesReceiptDialogOpen} onOpenChange={setSalesReceiptDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Sales Receipt</DialogTitle>
+            <DialogDescription>
+              Record immediate cash sales without creating an invoice
+            </DialogDescription>
+          </DialogHeader>
+          <SalesReceiptForm
+            onSuccess={() => {
+              setSalesReceiptDialogOpen(false);
+              refetch();
+            }}
+            onCancel={() => setSalesReceiptDialogOpen(false)}
           />
         </DialogContent>
       </Dialog>
