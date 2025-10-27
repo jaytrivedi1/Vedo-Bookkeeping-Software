@@ -93,9 +93,11 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     queryKey: ['/api/accounts'],
   });
 
-  // Filter for bank and cash accounts only (exclude fixed assets, inventory, investments)
+  // Filter for deposit accounts: bank, cash, credit card, line of credit, and undeposited funds
   const depositAccounts = accounts.filter((acc: Account) => 
     acc.type === 'bank' || 
+    acc.type === 'credit_card' ||
+    acc.type === 'other_current_liabilities' || // Includes line of credit
     acc.code === '1000' || // Cash account
     acc.name === 'Undeposited Funds'
   );
