@@ -1887,7 +1887,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create transaction
       const transaction: InsertTransaction = {
-        type: 'journal_entry',
+        type: 'transfer',
         reference,
         date: transferDate,
         description: memo || `Transfer from ${fromAccount.name} to ${toAccount.name}`,
@@ -1962,7 +1962,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create transaction
       const transaction: InsertTransaction = {
-        type: 'journal_entry', // Use journal_entry type for sales receipts
+        type: 'sales_receipt',
         reference,
         date: salesDate,
         description: description || `Sales Receipt ${reference}`,

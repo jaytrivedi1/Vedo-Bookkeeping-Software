@@ -20,6 +20,7 @@ import { cleanupOrphanedCredits } from "./migrate-cleanup-orphaned-credits";
 import { recalculateBillBalances } from "./recalculate-bill-balances";
 import { seedAdminUser } from "./migrations/seed-admin-user";
 import { addCsvSupport } from "./migrations/add-csv-support";
+import migrateAddSalesReceiptTransfer from "./migrate-add-sales-receipt-transfer";
 
 const app = express();
 app.use(express.json());
@@ -109,6 +110,9 @@ app.use((req, res, next) => {
     
     // Add CSV upload support to imported_transactions table
     await addCsvSupport();
+    
+    // Add 'sales_receipt' and 'transfer' transaction types to enum
+    await migrateAddSalesReceiptTransfer();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }

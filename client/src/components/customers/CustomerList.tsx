@@ -120,13 +120,15 @@ export default function CustomerList({ className }: CustomerListProps) {
     ? transactions.filter(transaction => transaction.contactId === selectedCustomer.id)
     : [];
     
-  // Filter transactions for the Invoices tab (invoices + payments + deposits + cheques)
+  // Filter transactions for the Invoices tab (invoices + payments + deposits + cheques + sales receipts + transfers)
   const customerInvoicesAndPayments = customerTransactions
     ? customerTransactions.filter(transaction => 
         transaction.type === 'invoice' || 
         transaction.type === 'payment' ||
         transaction.type === 'deposit' ||
-        transaction.type === 'cheque')
+        transaction.type === 'cheque' ||
+        transaction.type === 'sales_receipt' ||
+        transaction.type === 'transfer')
     : [];
     
   // Filter just invoices (for calculations and counts)
@@ -490,7 +492,11 @@ export default function CustomerList({ className }: CustomerListProps) {
                                   ? 'Payment'
                                   : transaction.type === 'deposit'
                                     ? transaction.status === 'unapplied_credit' ? 'Credit' : 'Deposit'
-                                    : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                    : transaction.type === 'sales_receipt'
+                                      ? 'Sales Receipt'
+                                      : transaction.type === 'transfer'
+                                        ? 'Transfer'
+                                        : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                               
                               // Determine balance display approach
                               const showBalance = transaction.type === 'invoice' || transaction.type === 'payment';
@@ -660,6 +666,8 @@ export default function CustomerList({ className }: CustomerListProps) {
                  ? selectedTransaction.status === 'unapplied_credit' 
                     ? 'Deposit (Unapplied Credit)' 
                     : 'Deposit'
+                 : selectedTransaction?.type === 'sales_receipt' ? 'Sales Receipt'
+                 : selectedTransaction?.type === 'transfer' ? 'Transfer'
                  : (selectedTransaction?.type ? selectedTransaction.type.charAt(0).toUpperCase() + selectedTransaction.type.slice(1) : 'Transaction')} 
               {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
             </DialogTitle>
@@ -677,6 +685,8 @@ export default function CustomerList({ className }: CustomerListProps) {
                         ? selectedTransaction.status === 'unapplied_credit'
                             ? 'Deposit Details (Unapplied Credit)' 
                             : 'Deposit Details'
+                        : selectedTransaction.type === 'sales_receipt' ? 'Sales Receipt Details'
+                        : selectedTransaction.type === 'transfer' ? 'Transfer Details'
                         : 'Transaction Details'}
                   </CardTitle>
                 </CardHeader>
