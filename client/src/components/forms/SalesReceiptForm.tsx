@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -144,20 +144,19 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     name: "lineItems",
   });
 
-  // Calculate totals whenever line items change
-  const lineItems = form.watch("lineItems");
-  
-  useEffect(() => {
+  // Function to recalculate totals
+  const recalculateTotals = useCallback(() => {
+    const currentLineItems = form.getValues("lineItems");
     let newSubTotal = 0;
     let newTaxAmount = 0;
 
-    lineItems.forEach((item, index) => {
+    currentLineItems.forEach((item, index) => {
       const quantity = item.quantity || 0;
       const unitPrice = item.unitPrice || 0;
       const lineTotal = roundTo2Decimals(quantity * unitPrice);
       
       // Update the amount in the form
-      form.setValue(`lineItems.${index}.amount`, lineTotal);
+      form.setValue(`lineItems.${index}.amount`, lineTotal, { shouldValidate: false });
       
       newSubTotal += lineTotal;
 
@@ -174,7 +173,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     setSubTotal(roundTo2Decimals(newSubTotal));
     setTaxAmount(roundTo2Decimals(newTaxAmount));
     setTotalAmount(roundTo2Decimals(newSubTotal + newTaxAmount));
-  }, [lineItems, salesTaxes]);
+  }, [form, salesTaxes]);
 
   const createSalesReceiptMutation = useMutation({
     mutationFn: async (data: SalesReceiptFormData) => {
@@ -219,6 +218,9 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
       if (product.salesTaxId) {
         form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
       }
+      
+      // Recalculate totals after product selection
+      recalculateTotals();
     }
   };
 
@@ -407,7 +409,10 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                   <Input
                     type="number"
                     step="0.01"
-                    {...form.register(`lineItems.${index}.quantity`, { valueAsNumber: true })}
+                    {...form.register(`lineItems.${index}.quantity`, { 
+                      valueAsNumber: true,
+                      onChange: recalculateTotals 
+                    })}
                   />
                 </div>
 
@@ -417,7 +422,10 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                   <Input
                     type="number"
                     step="0.01"
-                    {...form.register(`lineItems.${index}.unitPrice`, { valueAsNumber: true })}
+                    {...form.register(`lineItems.${index}.unitPrice`, { 
+                      valueAsNumber: true,
+                      onChange: recalculateTotals 
+                    })}
                   />
                 </div>
 
@@ -426,7 +434,10 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                   <label className="text-sm font-medium">Tax</label>
                   <Select
                     value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || ''}
-                    onValueChange={(value) => form.setValue(`lineItems.${index}.salesTaxId`, value ? Number(value) : undefined)}
+                    onValueChange={(value) => {
+                      form.setValue(`lineItems.${index}.salesTaxId`, value ? Number(value) : undefined);
+                      recalculateTotals();
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select Tax" />
