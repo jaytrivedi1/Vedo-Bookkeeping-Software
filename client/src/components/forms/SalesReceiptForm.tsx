@@ -238,7 +238,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                     items={customerItems}
                     value={field.value?.toString() || ''}
                     onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
-                    placeholder="Cash Customer"
+                    placeholder="Select customer (optional)"
                     searchPlaceholder="Search customers..."
                     emptyText="No customers found."
                     data-testid="select-customer"
