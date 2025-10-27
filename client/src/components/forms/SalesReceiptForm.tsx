@@ -93,10 +93,10 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     queryKey: ['/api/accounts'],
   });
 
-  // Filter for bank and cash accounts only
+  // Filter for bank and cash accounts only (exclude fixed assets, inventory, investments)
   const depositAccounts = accounts.filter((acc: Account) => 
     acc.type === 'bank' || 
-    acc.type === 'current_assets' ||
+    acc.code === '1000' || // Cash account
     acc.name === 'Undeposited Funds'
   );
 
