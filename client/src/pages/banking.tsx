@@ -653,13 +653,22 @@ export default function Banking() {
     <TooltipProvider>
     <div className="py-6">
       <div className="px-4">
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-900">Banking</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Manage bank feeds and reconcile accounts
+          </p>
+        </div>
+        
+        <Tabs defaultValue="bank-feeds" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="bank-feeds" data-testid="tab-bank-feeds">Bank Feeds</TabsTrigger>
+            <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="bank-feeds">
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Banking</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage bank feeds for your Chart of Accounts
-            </p>
-          </div>
+          <h2 className="text-lg font-medium text-gray-900">Bank Feeds</h2>
           <Button
             onClick={() => setShowBankFeedSetup(true)}
             data-testid="button-setup-bank-feed"
@@ -1351,6 +1360,22 @@ export default function Banking() {
                     </div>
                   </>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="reconciliation">
+            <Card>
+              <CardHeader>
+                <CardTitle>Reconciliation</CardTitle>
+                <CardDescription>
+                  Reconcile your accounts with bank statements
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-500">
+                  Reconciliation feature coming soon...
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
