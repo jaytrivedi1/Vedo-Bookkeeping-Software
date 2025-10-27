@@ -1365,19 +1365,103 @@ export default function Banking() {
           </TabsContent>
           
           <TabsContent value="reconciliation">
-            <Card>
-              <CardHeader>
-                <CardTitle>Reconciliation</CardTitle>
-                <CardDescription>
-                  Reconcile your accounts with bank statements
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-500">
-                  Reconciliation feature coming soon...
-                </p>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              {/* Reconciliation Header */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Reconcile Account</CardTitle>
+                  <CardDescription>
+                    Match your book transactions with your bank statement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Account Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Account</label>
+                      <Select>
+                        <SelectTrigger data-testid="select-reconcile-account">
+                          <SelectValue placeholder="Select account to reconcile" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {glAccounts
+                            .filter(acc => ['bank', 'credit_card', 'current_assets'].includes(acc.type))
+                            .map(acc => (
+                              <SelectItem key={acc.id} value={acc.id.toString()}>
+                                {acc.code} - {acc.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Statement Ending Date</label>
+                      <Input 
+                        type="date" 
+                        data-testid="input-statement-date"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Statement Ending Balance</label>
+                      <Input 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00"
+                        data-testid="input-statement-balance"
+                      />
+                    </div>
+                  </div>
+
+                  <Button className="w-full md:w-auto" data-testid="button-start-reconciliation">
+                    Start Reconciliation
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Reconciliation Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Reconciliation Summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Statement Balance</p>
+                      <p className="text-xl font-semibold">{formatCurrency(0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Cleared Balance</p>
+                      <p className="text-xl font-semibold">{formatCurrency(0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Difference</p>
+                      <p className="text-xl font-semibold text-orange-600">{formatCurrency(0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Status</p>
+                      <Badge variant="secondary">Not Started</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Transactions to Reconcile */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Transactions</CardTitle>
+                  <CardDescription>
+                    Check off transactions that appear on your bank statement
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-12 text-gray-500">
+                    <p>Select an account and start a reconciliation to see transactions</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
