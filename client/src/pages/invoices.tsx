@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon, FileText, CreditCard, PiggyBank } from "lucide-react";
+import { PlusIcon, FileText, CreditCard, PiggyBank, Receipt } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import CustomerDialog from "@/components/customers/CustomerDialog";
 import CustomerList from "@/components/customers/CustomerList";
+import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -39,12 +40,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
 
 export default function Invoices() {
 
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   
   // Fetch all transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
@@ -138,6 +147,10 @@ export default function Invoices() {
                   <span>Receive Payment</span>
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
+                <Receipt className="mr-2 h-4 w-4" />
+                <span>Sales Receipt</span>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/deposits">
                   <PiggyBank className="mr-2 h-4 w-4" />
@@ -227,6 +240,25 @@ export default function Invoices() {
           </Tabs>
         </div>
       </div>
+
+      {/* Sales Receipt Dialog */}
+      <Dialog open={salesReceiptDialogOpen} onOpenChange={setSalesReceiptDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>New Sales Receipt</DialogTitle>
+            <DialogDescription>
+              Record immediate cash sales without creating an invoice
+            </DialogDescription>
+          </DialogHeader>
+          <SalesReceiptForm
+            onSuccess={() => {
+              setSalesReceiptDialogOpen(false);
+              refetch();
+            }}
+            onCancel={() => setSalesReceiptDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
