@@ -174,7 +174,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     setSubTotal(roundTo2Decimals(newSubTotal));
     setTaxAmount(roundTo2Decimals(newTaxAmount));
     setTotalAmount(roundTo2Decimals(newSubTotal + newTaxAmount));
-  }, [lineItems, salesTaxes, form]);
+  }, [lineItems, salesTaxes]);
 
   const createSalesReceiptMutation = useMutation({
     mutationFn: async (data: SalesReceiptFormData) => {
