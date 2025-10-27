@@ -430,7 +430,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                     onValueChange={(value) => form.setValue(`lineItems.${index}.salesTaxId`, value === '0' ? undefined : Number(value))}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select Tax" />
                     </SelectTrigger>
                     <SelectContent>
                       {taxItems.map(tax => (
