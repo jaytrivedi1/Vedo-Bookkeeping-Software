@@ -1928,6 +1928,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sales Receipt routes
+  apiRouter.post("/sales-receipts", async (req: Request, res: Response) => {
+    try {
+      const { date, contactId, reference, paymentMethod, depositAccountId, description, memo, lineItems, subTotal, taxAmount, totalAmount } = req.body;
+
+      // Validate required fields
+      if (!reference || !depositAccountId || !lineItems || lineItems.length === 0) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          errors: [{ message: "Reference, deposit account, and at least one line item are required" }] 
+        });
+      }
+
+      // Fetch deposit account
+      const depositAccount = await storage.getAccount(depositAccountId);
+      if (!depositAccount) {
+        return res.status(400).json({ 
+          message: "Invalid deposit account", 
+          errors: [{ message: "Deposit account not found" }] 
+        });
+      }
+
+      // Get revenue and tax payable accounts
+      const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
+      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+
+      if (!revenueAccount || !taxPayableAccount) {
+        return res.status(500).json({ message: "Required accounts do not exist" });
+      }
+
+      const salesDate = new Date(date);
+
+      // Create transaction
+      const transaction: InsertTransaction = {
+        type: 'journal_entry', // Use journal_entry type for sales receipts
+        reference,
+        date: salesDate,
+        description: description || `Sales Receipt ${reference}`,
+        amount: Number(totalAmount),
+        contactId: contactId || null,
+        status: 'completed', // Sales receipts are always completed (payment received immediately)
+      };
+
+      // Create line items for the sales receipt
+      const salesLineItems = lineItems.map((item: any) => ({
+        description: item.description,
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        amount: roundTo2Decimals(item.amount),
+        salesTaxId: item.salesTaxId || null,
+        productId: item.productId ? Number(item.productId) : null,
+        transactionId: 0 // Will be set by createTransaction
+      }));
+
+      // Create ledger entries for double-entry bookkeeping
+      const ledgerEntries: InsertLedgerEntry[] = [
+        // Debit: Deposit Account (Cash/Bank/Undeposited Funds)
+        {
+          accountId: depositAccountId,
+          description: `Sales Receipt ${reference} - ${paymentMethod}`,
+          debit: Number(totalAmount),
+          credit: 0,
+          date: salesDate,
+          transactionId: 0
+        },
+        // Credit: Revenue Account (Subtotal)
+        {
+          accountId: revenueAccount.id,
+          description: `Sales Receipt ${reference} - Revenue`,
+          debit: 0,
+          credit: Number(subTotal),
+          date: salesDate,
+          transactionId: 0
+        }
+      ];
+
+      // Add tax liability entry if there's tax
+      if (taxAmount && Number(taxAmount) > 0) {
+        ledgerEntries.push({
+          accountId: taxPayableAccount.id,
+          description: `Sales Receipt ${reference} - Sales Tax`,
+          debit: 0,
+          credit: Number(taxAmount),
+          date: salesDate,
+          transactionId: 0
+        });
+      }
+
+      // Create the sales receipt transaction
+      const newTransaction = await storage.createTransaction(transaction, salesLineItems, ledgerEntries);
+
+      res.status(201).json({
+        transaction: newTransaction,
+        lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
+        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        subTotal,
+        taxAmount,
+        totalAmount
+      });
+    } catch (error) {
+      console.error("Error creating sales receipt:", error);
+      res.status(500).json({ message: "Failed to create sales receipt", error: error });
+    }
+  });
+
   // Deposit routes
   apiRouter.post("/payments", async (req: Request, res: Response) => {
     const data = req.body;
