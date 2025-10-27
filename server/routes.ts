@@ -7658,6 +7658,486 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/plaid/categorize-transaction/:id - Categorize an imported transaction
+  apiRouter.post("/plaid/categorize-transaction/:id", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { transactionType, accountId, contactName, salesTaxId, productId, transferAccountId, memo } = req.body;
+
+      if (!transactionId || !transactionType || !accountId) {
+        return res.status(400).json({ error: 'Transaction ID, transaction type, and account ID are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      // Get the account
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(400).json({ error: 'Account not found' });
+      }
+
+      const txDate = new Date(importedTx.date);
+      const amount = Math.abs(importedTx.amount);
+      let createdTransaction;
+      let contactId: number | null = null;
+
+      // Find or create contact if contactName is provided
+      if (contactName) {
+        const contacts = await storage.getContacts();
+        const existingContact = contacts.find(c => 
+          c.name.toLowerCase() === contactName.toLowerCase()
+        );
+
+        if (existingContact) {
+          contactId = existingContact.id;
+        } else {
+          // Create new contact
+          const newContact = await storage.createContact({
+            name: contactName,
+            type: importedTx.amount < 0 ? 'vendor' : 'customer',
+          });
+          contactId = newContact.id;
+        }
+      }
+
+      // Create the appropriate transaction based on type
+      switch (transactionType) {
+        case 'expense':
+          {
+            // Create expense transaction
+            const reference = `EXP-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+            
+            const transaction: InsertTransaction = {
+              type: 'expense',
+              reference,
+              date: txDate,
+              description: memo || importedTx.name,
+              amount,
+              subTotal: salesTaxId ? amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100) : amount,
+              taxAmount: salesTaxId ? amount - (amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100)) : 0,
+              contactId,
+              status: 'completed',
+            };
+
+            const lineItem: InsertLineItem = {
+              description: importedTx.merchantName || importedTx.name,
+              quantity: 1,
+              unitPrice: transaction.subTotal!,
+              amount: transaction.subTotal!,
+              accountId,
+              salesTaxId: salesTaxId || null,
+              transactionId: 0,
+            };
+
+            // Ledger entries
+            const ledgerEntries: InsertLedgerEntry[] = [
+              {
+                accountId,
+                description: `Expense - ${importedTx.name}`,
+                debit: transaction.subTotal!,
+                credit: 0,
+                date: txDate,
+                transactionId: 0,
+              },
+            ];
+
+            if (salesTaxId && transaction.taxAmount! > 0) {
+              const salesTax = await storage.getSalesTax(salesTaxId);
+              if (salesTax?.accountId) {
+                ledgerEntries.push({
+                  accountId: salesTax.accountId,
+                  description: `Sales Tax - ${importedTx.name}`,
+                  debit: transaction.taxAmount!,
+                  credit: 0,
+                  date: txDate,
+                  transactionId: 0,
+                });
+              }
+            }
+
+            // Credit the bank account (money out)
+            const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+            if (bankAccountId) {
+              const bankGLAccount = await storage.getAccount(bankAccountId);
+              if (bankGLAccount) {
+                ledgerEntries.push({
+                  accountId: bankGLAccount.id,
+                  description: `Payment - ${importedTx.name}`,
+                  debit: 0,
+                  credit: amount,
+                  date: txDate,
+                  transactionId: 0,
+                });
+              }
+            }
+
+            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+          }
+          break;
+
+        case 'sales_receipt':
+          {
+            // Create sales receipt transaction
+            const reference = `SR-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+            
+            const subTotal = salesTaxId ? amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100) : amount;
+            const taxAmount = salesTaxId ? amount - subTotal : 0;
+
+            const transaction: InsertTransaction = {
+              type: 'sales_receipt',
+              reference,
+              date: txDate,
+              description: memo || importedTx.name,
+              amount,
+              contactId,
+              status: 'completed',
+            };
+
+            const lineItem: InsertLineItem = {
+              description: importedTx.merchantName || importedTx.name,
+              quantity: 1,
+              unitPrice: subTotal,
+              amount: subTotal,
+              salesTaxId: salesTaxId || null,
+              productId: productId || null,
+              transactionId: 0,
+            };
+
+            // Ledger entries - Debit bank account, Credit revenue and tax
+            const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
+            const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+            
+            const ledgerEntries: InsertLedgerEntry[] = [
+              {
+                accountId: accountId,
+                description: `Sales Receipt ${reference}`,
+                debit: amount,
+                credit: 0,
+                date: txDate,
+                transactionId: 0,
+              },
+            ];
+
+            if (revenueAccount) {
+              ledgerEntries.push({
+                accountId: revenueAccount.id,
+                description: `Sales Receipt ${reference} - Revenue`,
+                debit: 0,
+                credit: subTotal,
+                date: txDate,
+                transactionId: 0,
+              });
+            }
+
+            if (salesTaxId && taxAmount > 0 && taxPayableAccount) {
+              ledgerEntries.push({
+                accountId: taxPayableAccount.id,
+                description: `Sales Receipt ${reference} - Tax`,
+                debit: 0,
+                credit: taxAmount,
+                date: txDate,
+                transactionId: 0,
+              });
+            }
+
+            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+          }
+          break;
+
+        case 'transfer':
+          {
+            // Create transfer transaction
+            const reference = `TRF-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+            
+            if (!transferAccountId) {
+              return res.status(400).json({ error: 'Transfer account is required for transfer transactions' });
+            }
+
+            const transferAccount = await storage.getAccount(transferAccountId);
+            if (!transferAccount) {
+              return res.status(400).json({ error: 'Transfer account not found' });
+            }
+
+            const fromAccountId = importedTx.amount < 0 ? accountId : transferAccountId;
+            const toAccountId = importedTx.amount < 0 ? transferAccountId : accountId;
+            const fromAccount = await storage.getAccount(fromAccountId);
+            const toAccount = await storage.getAccount(toAccountId);
+
+            const transaction: InsertTransaction = {
+              type: 'transfer',
+              reference,
+              date: txDate,
+              description: memo || `Transfer from ${fromAccount!.name} to ${toAccount!.name}`,
+              amount,
+              status: 'completed',
+            };
+
+            const ledgerEntries: InsertLedgerEntry[] = [
+              {
+                accountId: toAccountId,
+                description: `Transfer from ${fromAccount!.name}`,
+                debit: amount,
+                credit: 0,
+                date: txDate,
+                transactionId: 0,
+              },
+              {
+                accountId: fromAccountId,
+                description: `Transfer to ${toAccount!.name}`,
+                debit: 0,
+                credit: amount,
+                date: txDate,
+                transactionId: 0,
+              },
+            ];
+
+            createdTransaction = await storage.createTransaction(transaction, [], ledgerEntries);
+          }
+          break;
+
+        case 'cheque':
+        case 'deposit':
+          // Similar to expense but with different transaction type
+          {
+            const reference = transactionType === 'cheque' 
+              ? `CHQ-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`
+              : `DEP-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+            
+            const transaction: InsertTransaction = {
+              type: transactionType,
+              reference,
+              date: txDate,
+              description: memo || importedTx.name,
+              amount,
+              contactId,
+              status: 'completed',
+            };
+
+            const lineItem: InsertLineItem = {
+              description: importedTx.merchantName || importedTx.name,
+              quantity: 1,
+              unitPrice: amount,
+              amount,
+              accountId,
+              transactionId: 0,
+            };
+
+            const ledgerEntries: InsertLedgerEntry[] = [
+              {
+                accountId,
+                description: `${transactionType === 'cheque' ? 'Cheque' : 'Deposit'} - ${importedTx.name}`,
+                debit: transactionType === 'deposit' ? amount : 0,
+                credit: transactionType === 'cheque' ? amount : 0,
+                date: txDate,
+                transactionId: 0,
+              },
+            ];
+
+            // Credit/Debit the bank account
+            const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+            if (bankAccountId) {
+              const bankGLAccount = await storage.getAccount(bankAccountId);
+              if (bankGLAccount) {
+                ledgerEntries.push({
+                  accountId: bankGLAccount.id,
+                  description: `${transactionType === 'cheque' ? 'Cheque Payment' : 'Deposit'} - ${importedTx.name}`,
+                  debit: transactionType === 'cheque' ? 0 : amount,
+                  credit: transactionType === 'deposit' ? 0 : amount,
+                  date: txDate,
+                  transactionId: 0,
+                });
+              }
+            }
+
+            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+          }
+          break;
+
+        default:
+          return res.status(400).json({ error: 'Invalid transaction type' });
+      }
+
+      // Update the imported transaction to mark it as matched
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: createdTransaction.id,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        transaction: createdTransaction,
+      });
+    } catch (error: any) {
+      console.error('Error categorizing transaction:', error);
+      res.status(500).json({ error: error.message || 'Failed to categorize transaction' });
+    }
+  });
+
+  // POST /api/bank-feeds/categorization-suggestions - Get AI-powered categorization suggestions
+  apiRouter.post("/bank-feeds/categorization-suggestions", async (req: Request, res: Response) => {
+    try {
+      const { transactionId } = req.body;
+
+      if (!transactionId) {
+        return res.status(400).json({ error: 'Transaction ID is required' });
+      }
+
+      // Fetch the imported transaction
+      const [transaction] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!transaction) {
+        return res.status(404).json({ error: 'Transaction not found' });
+      }
+
+      // Fetch available accounts, contacts, products, and taxes for context
+      const accountsList = await storage.getAccounts();
+      const contactsList = await storage.getContacts();
+      const productsList = await storage.getProducts();
+      const taxesList = await storage.getSalesTaxes();
+
+      // Prepare context for AI
+      const isDebit = transaction.amount < 0;
+      const transactionDirection = isDebit ? 'payment/debit' : 'deposit/credit';
+      
+      // Filter accounts that are relevant for categorization
+      const relevantAccounts = accountsList
+        .filter(acc => acc.isActive)
+        .map(acc => ({ id: acc.id, code: acc.code, name: acc.name, type: acc.type }));
+      
+      const relevantContacts = contactsList.map(c => ({ 
+        id: c.id, 
+        name: c.name, 
+        type: c.type,
+        email: c.email 
+      }));
+      
+      const relevantProducts = productsList.map(p => ({ 
+        id: p.id, 
+        name: p.name, 
+        price: p.price 
+      }));
+      
+      const relevantTaxes = taxesList.map(t => ({ 
+        id: t.id, 
+        name: t.name, 
+        rate: t.rate 
+      }));
+
+      // Initialize OpenAI with Replit AI Integrations
+      const OpenAI = (await import('openai')).default;
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      // Create the prompt for AI categorization
+      const prompt = `You are a bookkeeping assistant helping categorize a bank transaction. Analyze the transaction and suggest the most appropriate categorization.
+
+Transaction Details:
+- Description: ${transaction.name}
+- Merchant: ${transaction.merchantName || 'N/A'}
+- Amount: $${Math.abs(transaction.amount).toFixed(2)} (${transactionDirection})
+- Date: ${transaction.date}
+- Categories: ${transaction.category?.join(', ') || 'N/A'}
+- Payment Channel: ${transaction.paymentChannel || 'N/A'}
+
+Available Data:
+- Chart of Accounts: ${JSON.stringify(relevantAccounts.slice(0, 30))}
+- Contacts (Vendors/Customers): ${JSON.stringify(relevantContacts.slice(0, 20))}
+- Products/Services: ${JSON.stringify(relevantProducts.slice(0, 15))}
+- Tax Rates: ${JSON.stringify(relevantTaxes)}
+
+Based on this ${isDebit ? 'payment/debit' : 'deposit/credit'} transaction, suggest:
+
+1. **Transaction Type**: Choose the most appropriate type:
+   ${isDebit ? '- Expense (for general business expenses)\n   - Cheque (for check payments)\n   - Transfer (for moving money between accounts)' : '- Deposit (for general deposits)\n   - Sales Receipt (for customer sales/revenue)\n   - Transfer (for moving money between accounts)'}
+
+2. **GL Account**: Select the most relevant account from the Chart of Accounts (provide account ID and name)
+
+3. **Contact**: If applicable, suggest a vendor (for expenses) or customer (for sales). If the merchant doesn't match any existing contact, suggest creating a new one with the merchant name.
+
+4. **Tax**: Suggest the appropriate tax rate (provide tax ID and name)
+
+5. **Product/Service**: If this appears to be a sales transaction, suggest a relevant product/service
+
+6. **Confidence**: Rate your confidence in this categorization (High/Medium/Low)
+
+7. **Reasoning**: Brief explanation of why you made these suggestions
+
+Respond in JSON format:
+{
+  "transactionType": "expense|cheque|transfer|deposit|sales_receipt",
+  "account": { "id": number, "name": "string" },
+  "contact": { "id": number|null, "name": "string", "createNew": boolean },
+  "tax": { "id": number, "name": "string" },
+  "product": { "id": number|null, "name": "string" } | null,
+  "confidence": "High|Medium|Low",
+  "reasoning": "string"
+}`;
+
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4.1-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert bookkeeper who helps categorize bank transactions accurately. Always respond with valid JSON only, no markdown formatting.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 800,
+      });
+
+      const responseText = completion.choices[0].message.content;
+      if (!responseText) {
+        throw new Error('No response from AI');
+      }
+
+      // Parse the AI response
+      let suggestions;
+      try {
+        // Remove markdown code blocks if present
+        const cleanedResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        suggestions = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', responseText);
+        throw new Error('Invalid AI response format');
+      }
+
+      res.json({
+        transaction: {
+          id: transaction.id,
+          name: transaction.name,
+          merchantName: transaction.merchantName,
+          amount: transaction.amount,
+          date: transaction.date,
+        },
+        suggestions,
+      });
+    } catch (error: any) {
+      console.error('Error generating categorization suggestions:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate suggestions' });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

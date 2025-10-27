@@ -57,6 +57,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankAccount, ImportedTransaction } from "@shared/schema";
 import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
+import CategorizeTransactionDialog from "@/components/bank-feed-categorization-dialog";
 
 interface GLAccount {
   id: number;
@@ -116,6 +117,10 @@ export default function Banking() {
   const [currentTransactionId, setCurrentTransactionId] = useState<number | null>(null);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [selectedAttachmentTransactionId, setSelectedAttachmentTransactionId] = useState<number | null>(null);
+  
+  // Categorization dialog state
+  const [selectedTransaction, setSelectedTransaction] = useState<ImportedTransaction | null>(null);
+  const [categorizationDialogOpen, setCategorizationDialogOpen] = useState(false);
   
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -484,8 +489,8 @@ export default function Banking() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesDescription = tx.name.toLowerCase().includes(query);
-      const matchesPayee = tx.payeeName?.toLowerCase().includes(query);
-      if (!matchesDescription && !matchesPayee) return false;
+      const matchesMerchant = tx.merchantName?.toLowerCase().includes(query);
+      if (!matchesDescription && !matchesMerchant) return false;
     }
 
     // Date range filter
@@ -501,9 +506,9 @@ export default function Banking() {
     }
 
     // Amount range filter
-    const absAmount = Math.abs(parseFloat(tx.amount));
-    if (amountMin && absAmount < parseFloat(amountMin)) return false;
-    if (amountMax && absAmount > parseFloat(amountMax)) return false;
+    const absAmount = Math.abs(Number(tx.amount));
+    if (amountMin && absAmount < Number(amountMin)) return false;
+    if (amountMax && absAmount > Number(amountMax)) return false;
 
     return true;
   });
@@ -1049,8 +1054,22 @@ export default function Banking() {
                             <Table style={{ tableLayout: 'fixed', width: `${totalTableWidth}px` }}>
                               <TableBody>
                           {paginatedTransactions.map((tx) => (
-                            <TableRow key={tx.id} className="h-12">
-                              <TableCell style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} className="py-2 overflow-hidden">
+                            <TableRow 
+                              key={tx.id} 
+                              className={`h-12 ${activeTab === 'uncategorized' && !tx.matchedTransactionId ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                              onClick={() => {
+                                if (activeTab === 'uncategorized' && !tx.matchedTransactionId) {
+                                  setSelectedTransaction(tx);
+                                  setCategorizationDialogOpen(true);
+                                }
+                              }}
+                              data-testid={`row-transaction-${tx.id}`}
+                            >
+                              <TableCell 
+                                style={{ width: `${columnWidths.checkbox}px`, minWidth: `${columnWidths.checkbox}px` }} 
+                                className="py-2 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <Checkbox 
                                   checked={selectedTransactions.has(tx.id)}
                                   onCheckedChange={(checked) => handleSelectTransaction(tx.id, checked as boolean)}
@@ -1088,7 +1107,11 @@ export default function Banking() {
                               <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
                                 {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} className="py-2 overflow-hidden">
+                              <TableCell 
+                                style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} 
+                                className="py-2 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {activeTab === 'uncategorized' ? (
                                   <SearchableSelect
                                     items={contactItems}
@@ -1110,7 +1133,11 @@ export default function Banking() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} className="py-2 overflow-hidden">
+                              <TableCell 
+                                style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} 
+                                className="py-2 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {activeTab === 'uncategorized' ? (
                                   <SearchableSelect
                                     items={accountItems}
@@ -1138,7 +1165,11 @@ export default function Banking() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} className="py-2 overflow-hidden">
+                              <TableCell 
+                                style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} 
+                                className="py-2 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {activeTab === 'uncategorized' ? (
                                   <SearchableSelect
                                     items={taxItems}
@@ -1164,7 +1195,11 @@ export default function Banking() {
                               </TableCell>
                               {activeTab === 'uncategorized' && (
                                 <>
-                                  <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
+                                  <TableCell 
+                                    style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} 
+                                    className="py-2 overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <ToggleGroup 
                                       type="single" 
                                       value={getMatchMode(tx.id)}
@@ -1180,7 +1215,11 @@ export default function Banking() {
                                       </ToggleGroupItem>
                                     </ToggleGroup>
                                   </TableCell>
-                                  <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
+                                  <TableCell 
+                                    style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} 
+                                    className="py-2 overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <Button 
                                       variant="ghost" 
                                       size="sm"
@@ -1205,7 +1244,11 @@ export default function Banking() {
                                   </TableCell>
                                 </>
                               )}
-                              <TableCell style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} className="py-2 overflow-hidden">
+                              <TableCell 
+                                style={{ width: `${columnWidths.action}px`, minWidth: `${columnWidths.action}px` }} 
+                                className="py-2 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <div className="flex gap-1">
                                   {activeTab === 'uncategorized' && (
                                     <>
@@ -1341,6 +1384,13 @@ export default function Banking() {
           transactionId={selectedAttachmentTransactionId}
         />
       )}
+
+      {/* Categorization Dialog */}
+      <CategorizeTransactionDialog
+        open={categorizationDialogOpen}
+        onOpenChange={setCategorizationDialogOpen}
+        transaction={selectedTransaction}
+      />
     </div>
     </TooltipProvider>
   );
