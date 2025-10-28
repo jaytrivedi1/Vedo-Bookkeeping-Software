@@ -99,6 +99,35 @@ const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   action: 100,
 };
 
+// Categorization memory helper functions
+const saveCategorization = (merchantName: string, accountId: number, contactName: string | null, salesTaxId: number | null) => {
+  try {
+    const existing = localStorage.getItem('bank_feed_categorizations');
+    const categorizations = existing ? JSON.parse(existing) : {};
+    categorizations[merchantName] = {
+      accountId,
+      contactName,
+      salesTaxId,
+      lastUsed: Date.now()
+    };
+    localStorage.setItem('bank_feed_categorizations', JSON.stringify(categorizations));
+  } catch (error) {
+    console.error('Failed to save categorization:', error);
+  }
+};
+
+const getCategorization = (merchantName: string): { accountId: number, contactName: string | null, salesTaxId: number | null } | null => {
+  try {
+    const existing = localStorage.getItem('bank_feed_categorizations');
+    if (!existing) return null;
+    const categorizations = JSON.parse(existing);
+    return categorizations[merchantName] || null;
+  } catch (error) {
+    console.error('Failed to get categorization:', error);
+    return null;
+  }
+};
+
 export default function Banking() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -689,15 +718,78 @@ export default function Banking() {
   };
 
   const handleNameChange = (txId: number, name: string) => {
-    setTransactionNames(new Map(transactionNames).set(txId, name));
+    const newMap = new Map(transactionNames);
+    newMap.set(txId, name);
+    
+    // Auto-populate if transaction is selected and all selected are same side
+    if (selectedTransactions.has(txId) && selectedTransactions.size > 1) {
+      const currentTx = filteredTransactions.find(tx => tx.id === txId);
+      if (currentTx) {
+        const isPayment = Number(currentTx.amount) < 0;
+        const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+        const allSameSide = selectedTxs.every(tx => 
+          isPayment ? Number(tx.amount) < 0 : Number(tx.amount) > 0
+        );
+        
+        if (allSameSide) {
+          selectedTxs.forEach(tx => {
+            newMap.set(tx.id, name);
+          });
+        }
+      }
+    }
+    
+    setTransactionNames(newMap);
   };
 
   const handleAccountChange = (txId: number, accountId: number | null) => {
-    setTransactionAccounts(new Map(transactionAccounts).set(txId, accountId));
+    const newMap = new Map(transactionAccounts);
+    newMap.set(txId, accountId);
+    
+    // Auto-populate if transaction is selected and all selected are same side
+    if (selectedTransactions.has(txId) && selectedTransactions.size > 1) {
+      const currentTx = filteredTransactions.find(tx => tx.id === txId);
+      if (currentTx) {
+        const isPayment = Number(currentTx.amount) < 0;
+        const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+        const allSameSide = selectedTxs.every(tx => 
+          isPayment ? Number(tx.amount) < 0 : Number(tx.amount) > 0
+        );
+        
+        if (allSameSide) {
+          selectedTxs.forEach(tx => {
+            newMap.set(tx.id, accountId);
+          });
+        }
+      }
+    }
+    
+    setTransactionAccounts(newMap);
   };
 
   const handleTaxChange = (txId: number, taxId: number | null) => {
-    setTransactionTaxes(new Map(transactionTaxes).set(txId, taxId));
+    const newMap = new Map(transactionTaxes);
+    newMap.set(txId, taxId);
+    
+    // Auto-populate if transaction is selected and all selected are same side
+    if (selectedTransactions.has(txId) && selectedTransactions.size > 1) {
+      const currentTx = filteredTransactions.find(tx => tx.id === txId);
+      if (currentTx) {
+        const isPayment = Number(currentTx.amount) < 0;
+        const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+        const allSameSide = selectedTxs.every(tx => 
+          isPayment ? Number(tx.amount) < 0 : Number(tx.amount) > 0
+        );
+        
+        if (allSameSide) {
+          selectedTxs.forEach(tx => {
+            newMap.set(tx.id, taxId);
+          });
+        }
+      }
+    }
+    
+    setTransactionTaxes(newMap);
   };
 
   const getMatchMode = (txId: number): 'match' | 'categorize' => {
@@ -737,6 +829,130 @@ export default function Banking() {
       contactName,
       salesTaxId,
       description: tx.name,
+    }, {
+      onSuccess: () => {
+        // Save categorization to memory
+        const merchantName = tx.merchantName || tx.name;
+        saveCategorization(merchantName, accountId, contactName || null, salesTaxId);
+      }
+    });
+  };
+
+  const handleBulkPost = () => {
+    if (selectedTransactions.size === 0) return;
+    
+    // Only allow bulk post in uncategorized tab
+    if (activeTab !== 'uncategorized') {
+      toast({
+        title: "Error",
+        description: "Bulk post is only available for uncategorized transactions",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get selected transactions
+    const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+    
+    // Validate all have required fields
+    const missingFields: string[] = [];
+    selectedTxs.forEach(tx => {
+      const accountId = transactionAccounts.get(tx.id);
+      if (!accountId) {
+        missingFields.push(`Transaction #${tx.id} (${tx.name}) is missing an account`);
+      }
+    });
+
+    if (missingFields.length > 0) {
+      toast({
+        title: "Missing Required Fields",
+        description: missingFields.join('; '),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Post all selected transactions
+    let successCount = 0;
+    const totalCount = selectedTxs.length;
+
+    selectedTxs.forEach((tx, index) => {
+      const accountId = transactionAccounts.get(tx.id)!;
+      const contactName = transactionNames.get(tx.id) || '';
+      const salesTaxId = transactionTaxes.get(tx.id) || null;
+
+      categorizeTransactionMutation.mutate({
+        transactionId: tx.id,
+        accountId,
+        contactName,
+        salesTaxId,
+        description: tx.name,
+      }, {
+        onSuccess: () => {
+          successCount++;
+          // Save categorization to memory
+          const merchantName = tx.merchantName || tx.name;
+          saveCategorization(merchantName, accountId, contactName || null, salesTaxId);
+          
+          // Clear selection and show success toast after last transaction
+          if (index === totalCount - 1) {
+            setSelectedTransactions(new Set());
+            toast({
+              title: "Success",
+              description: `Successfully posted ${successCount} transaction${successCount !== 1 ? 's' : ''}`,
+            });
+          }
+        },
+        onError: () => {
+          // Show error toast after last transaction
+          if (index === totalCount - 1 && successCount > 0) {
+            setSelectedTransactions(new Set());
+            toast({
+              title: "Partial Success",
+              description: `Posted ${successCount} of ${totalCount} transactions. Some transactions failed.`,
+              variant: "destructive",
+            });
+          }
+        }
+      });
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedTransactions.size === 0) return;
+
+    const confirmed = window.confirm(`Are you sure you want to delete ${selectedTransactions.size} transaction${selectedTransactions.size !== 1 ? 's' : ''}?`);
+    if (!confirmed) return;
+
+    const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+    let successCount = 0;
+    const totalCount = selectedTxs.length;
+
+    selectedTxs.forEach((tx, index) => {
+      deleteTransactionMutation.mutate(tx.id, {
+        onSuccess: () => {
+          successCount++;
+          // Clear selection and show success toast after last transaction
+          if (index === totalCount - 1) {
+            setSelectedTransactions(new Set());
+            toast({
+              title: "Success",
+              description: `Successfully deleted ${successCount} transaction${successCount !== 1 ? 's' : ''}`,
+            });
+          }
+        },
+        onError: () => {
+          // Show error toast after last transaction
+          if (index === totalCount - 1 && successCount > 0) {
+            setSelectedTransactions(new Set());
+            toast({
+              title: "Partial Success",
+              description: `Deleted ${successCount} of ${totalCount} transactions. Some transactions failed.`,
+              variant: "destructive",
+            });
+          }
+        }
+      });
     });
   };
 
@@ -816,6 +1032,42 @@ export default function Banking() {
       setClearedEntries(new Set(clearedIds));
     }
   }, [activeReconciliation]);
+
+  // Auto-suggest categorizations from memory when transactions load
+  useEffect(() => {
+    if (activeTab === 'uncategorized' && importedTransactions.length > 0) {
+      const newAccounts = new Map(transactionAccounts);
+      const newNames = new Map(transactionNames);
+      const newTaxes = new Map(transactionTaxes);
+      let hasChanges = false;
+
+      importedTransactions.forEach(tx => {
+        // Skip if already has values set
+        if (transactionAccounts.has(tx.id)) return;
+        
+        // Try to get categorization from memory
+        const merchantName = tx.merchantName || tx.name;
+        const savedCategorization = getCategorization(merchantName);
+        
+        if (savedCategorization) {
+          newAccounts.set(tx.id, savedCategorization.accountId);
+          if (savedCategorization.contactName) {
+            newNames.set(tx.id, savedCategorization.contactName);
+          }
+          if (savedCategorization.salesTaxId) {
+            newTaxes.set(tx.id, savedCategorization.salesTaxId);
+          }
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        setTransactionAccounts(newAccounts);
+        setTransactionNames(newNames);
+        setTransactionTaxes(newTaxes);
+      }
+    }
+  }, [activeTab, importedTransactions]);
 
   return (
     <TooltipProvider>
@@ -1496,6 +1748,47 @@ export default function Banking() {
                       </div>
                     </div>
                     
+                    {/* Bulk Action Buttons */}
+                    {selectedTransactions.size > 0 && (
+                      <div className="mt-4 mb-2 p-4 bg-primary/5 border border-primary/20 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="font-semibold">
+                            {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''} selected
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedTransactions(new Set())}
+                            data-testid="button-clear-selection"
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Clear Selection
+                          </Button>
+                        </div>
+                        {activeTab === 'uncategorized' && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="default"
+                              onClick={handleBulkPost}
+                              disabled={categorizeTransactionMutation.isPending}
+                              data-testid="button-bulk-post"
+                            >
+                              <Send className="h-4 w-4 mr-2" />
+                              Post Selected
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={handleBulkDelete}
+                              disabled={deleteTransactionMutation.isPending}
+                              data-testid="button-bulk-delete"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Selected
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     
                     {/* Pagination Controls */}
                     <div className="mt-4 flex items-center justify-between sticky bottom-0 bg-white py-3 border-t -mx-6 px-6 shadow-[0_-2px_8px_rgba(0,0,0,0.05)]">
