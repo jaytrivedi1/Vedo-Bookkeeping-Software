@@ -1346,6 +1346,48 @@ export default function Banking() {
                   </Alert>
                 ) : (
                   <>
+                    {/* Bulk Action Buttons */}
+                    {selectedTransactions.size > 0 && (
+                      <div className="mb-4 p-4 bg-primary/5 border border-primary/20 rounded-lg flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="font-semibold">
+                            {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''} selected
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSelectedTransactions(new Set())}
+                            data-testid="button-clear-selection"
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            Clear Selection
+                          </Button>
+                        </div>
+                        {activeTab === 'uncategorized' && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="default"
+                              onClick={handleBulkPost}
+                              disabled={categorizeTransactionMutation.isPending}
+                              data-testid="button-bulk-post"
+                            >
+                              <Send className="h-4 w-4 mr-2" />
+                              Post Selected
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={handleBulkDelete}
+                              disabled={deleteTransactionMutation.isPending}
+                              data-testid="button-bulk-delete"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Selected
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     {/* Table container with fixed height and bottom scrollbar always visible */}
                     <div 
                       className="relative"
@@ -1747,48 +1789,6 @@ export default function Banking() {
                         </div>
                       </div>
                     </div>
-                    
-                    {/* Bulk Action Buttons */}
-                    {selectedTransactions.size > 0 && (
-                      <div className="mt-4 mb-2 p-4 bg-primary/5 border border-primary/20 rounded-lg flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="font-semibold">
-                            {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''} selected
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedTransactions(new Set())}
-                            data-testid="button-clear-selection"
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Clear Selection
-                          </Button>
-                        </div>
-                        {activeTab === 'uncategorized' && (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="default"
-                              onClick={handleBulkPost}
-                              disabled={categorizeTransactionMutation.isPending}
-                              data-testid="button-bulk-post"
-                            >
-                              <Send className="h-4 w-4 mr-2" />
-                              Post Selected
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={handleBulkDelete}
-                              disabled={deleteTransactionMutation.isPending}
-                              data-testid="button-bulk-delete"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Selected
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    )}
                     
                     {/* Pagination Controls */}
                     <div className="mt-4 flex items-center justify-between sticky bottom-0 bg-white py-3 border-t -mx-6 px-6 shadow-[0_-2px_8px_rgba(0,0,0,0.05)]">
