@@ -467,6 +467,29 @@ export default function Banking() {
     },
   });
 
+  // Restore deleted transaction mutation
+  const restoreTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return await apiRequest(`/api/plaid/imported-transactions/${transactionId}/restore`, 'POST');
+    },
+    onSuccess: () => {
+      // Invalidate both tab-filtered and all-transactions queries
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      toast({
+        title: "Success",
+        description: "Transaction restored to uncategorized",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to restore transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Undo transaction categorization mutation
   const undoCategorizationMutation = useMutation({
     mutationFn: async (transactionId: number) => {
@@ -971,6 +994,55 @@ export default function Banking() {
     setDeleteConfirmationOpen(false);
   };
 
+  const handleBulkRestore = async () => {
+    if (selectedTransactions.size === 0) return;
+
+    const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
+    const totalCount = selectedTxs.length;
+
+    // Create array of promises for all restore operations
+    const restorePromises = selectedTxs.map(tx => 
+      apiRequest(`/api/plaid/imported-transactions/${tx.id}/restore`, 'POST')
+        .then(() => ({ success: true, id: tx.id }))
+        .catch(() => ({ success: false, id: tx.id }))
+    );
+
+    // Wait for all operations to complete
+    const results = await Promise.allSettled(restorePromises);
+    
+    // Count successes
+    const successCount = results.filter(
+      r => r.status === 'fulfilled' && r.value.success
+    ).length;
+
+    // Invalidate queries after all operations complete
+    queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+
+    // Clear selection
+    setSelectedTransactions(new Set());
+
+    // Show appropriate toast based on results
+    if (successCount === totalCount) {
+      toast({
+        title: "Success",
+        description: `Successfully restored ${successCount} transaction${successCount !== 1 ? 's' : ''}`,
+      });
+    } else if (successCount > 0) {
+      toast({
+        title: "Partial Success",
+        description: `Restored ${successCount} of ${totalCount} transactions. Some transactions failed.`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Error",
+        description: "Failed to restore transactions",
+        variant: "destructive",
+      });
+    }
+  };
+
   const allSelected = paginatedTransactions.length > 0 && 
     paginatedTransactions.every(tx => selectedTransactions.has(tx.id));
 
@@ -1428,6 +1500,19 @@ export default function Banking() {
                             </Button>
                           </div>
                         )}
+                        {activeTab === 'deleted' && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="default"
+                              onClick={handleBulkRestore}
+                              disabled={restoreTransactionMutation.isPending}
+                              data-testid="button-bulk-restore"
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Restore Selected
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
                     
@@ -1820,7 +1905,16 @@ export default function Banking() {
                                     </>
                                   )}
                                   {activeTab === 'deleted' && (
-                                    <span className="text-sm text-gray-500">-</span>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      onClick={() => restoreTransactionMutation.mutate(tx.id)}
+                                      disabled={restoreTransactionMutation.isPending}
+                                      data-testid={`button-restore-${tx.id}`}
+                                    >
+                                      <RefreshCw className="h-4 w-4 mr-1" />
+                                      Restore
+                                    </Button>
                                   )}
                                 </div>
                               </TableCell>
@@ -2121,7 +2215,7 @@ export default function Banking() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Transactions</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''}? This action cannot be undone.
+              Are you sure you want to delete {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''}? You can restore deleted transactions from the Deleted tab.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -7175,6 +7175,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Restore deleted transaction - move from deleted back to uncategorized
+  apiRouter.post("/plaid/imported-transactions/:id/restore", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Restore by marking status as 'unmatched' (uncategorized)
+      await storage.updateImportedTransaction(id, { status: 'unmatched' });
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error restoring imported transaction:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Undo categorization - move transaction back to uncategorized
   apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, async (req: Request, res: Response) => {
     try {
