@@ -101,6 +101,21 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Updates (October 28, 2025)
 
+### Session Persistence Fix
+- **Problem**: Sessions were stored in-memory and lost on server restart, making "Remember me" ineffective
+- **Solution**: Replaced MemoryStore with PostgreSQL-backed session storage using connect-pg-simple
+- **Impact**: Login sessions now persist across server restarts when "Remember me" is checked
+- **Configuration**: Sessions stored in PostgreSQL 'session' table with automatic table creation
+
+### Account Balance Calculation Fix
+- **Problem**: /api/accounts endpoint returned raw account data without calculated balances
+- **Solution**: Updated endpoint to use getAccountBalances() which calculates balances from ledger entries
+- **Balance Logic**: 
+  - Asset/Expense accounts: Balance = Σ(debits - credits)
+  - Liability/Equity/Income accounts: Balance = Σ(credits - debits)
+- **Account Types Covered**: All account types properly classified for correct balance calculations
+- **Impact**: Bank account tiles and other components now show correct books balance
+
 ### Reconciliation Feature
 - **Database Schema**: Added `reconciliations` and `reconciliation_items` tables to track account reconciliation sessions
 - **Backend API**: Implemented complete reconciliation workflow endpoints

@@ -2,9 +2,10 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
 import { User as SchemaUser } from "@shared/schema";
-import createMemoryStore from "memorystore";
+import { pool } from "./db";
 
 declare global {
   namespace Express {
@@ -13,20 +14,22 @@ declare global {
   }
 }
 
-// Create MemoryStore for sessions
-const MemoryStore = createMemoryStore(session);
+// Create PostgreSQL session store
+const PgSession = connectPgSimple(session);
 
 export function setupAuth(app: Express): void {
-  // Configure session
+  // Configure session with PostgreSQL store
   const sessionSettings: session.SessionOptions = {
     secret: process.env.SESSION_SECRET || 'finledger-secret-key',
     resave: false,
     saveUninitialized: false,
-    store: new MemoryStore({
-      checkPeriod: 86400000 // Prune expired entries every 24h
+    store: new PgSession({
+      pool: pool as any, // Use the existing database pool
+      tableName: 'session', // Table name for sessions
+      createTableIfMissing: true // Automatically create session table
     }),
     cookie: {
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours default
       secure: process.env.NODE_ENV === 'production'
     }
   };
