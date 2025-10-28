@@ -212,8 +212,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Accounts routes
   apiRouter.get("/accounts", async (req: Request, res: Response) => {
     try {
-      const accounts = await storage.getAccounts();
-      res.json(accounts);
+      const accountBalances = await storage.getAccountBalances();
+      // Transform to include balance property directly on account
+      const accountsWithBalances = accountBalances.map(({ account, balance }) => ({
+        ...account,
+        balance
+      }));
+      res.json(accountsWithBalances);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch accounts" });
     }

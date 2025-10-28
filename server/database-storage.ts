@@ -1265,7 +1265,18 @@ export class DatabaseStorage implements IStorage {
       let newBalance = currentBalance;
       
       // Apply debits and credits according to account type's normal balance
-      if (['asset', 'expense', 'cost_of_goods_sold'].includes(account.type)) {
+      const assetAndExpenseTypes = [
+        'accounts_receivable',
+        'current_assets',
+        'bank',
+        'property_plant_equipment',
+        'long_term_assets',
+        'cost_of_goods_sold',
+        'expenses',
+        'other_expense'
+      ];
+      
+      if (assetAndExpenseTypes.includes(account.type)) {
         // Debit increases (positive), credit decreases (negative)
         newBalance += entry.debit - entry.credit;
       } else {
