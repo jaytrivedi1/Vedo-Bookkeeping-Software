@@ -365,6 +365,8 @@ export default function Banking() {
       // Invalidate both tab-filtered and all-transactions queries
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       toast({
         title: "Success",
         description: `Synced ${data.synced} new transactions`,
