@@ -352,110 +352,114 @@ export default function CategorizeTransactionDialog({
         {/* Categorization Form */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Transaction Type */}
-            <FormField
-              control={form.control}
-              name="transactionType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Transaction Type *</FormLabel>
-                  <FormControl>
-                    <Select
-                      value={field.value}
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        setSelectedType(value as TransactionType);
-                      }}
-                      data-testid="select-transaction-type"
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select transaction type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {getTypeLabel(type)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Account (required for all types) */}
-            <FormField
-              control={form.control}
-              name="accountId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Account *</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      value={field.value?.toString() || ""}
-                      onValueChange={(value) => field.onChange(parseInt(value))}
-                      items={accountItems}
-                      placeholder="Select account"
-                      emptyText="No accounts found"
-                      data-testid="select-account"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Tax (required for all types) */}
-            <FormField
-              control={form.control}
-              name="salesTaxId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tax</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      value={field.value?.toString() || "0"}
-                      onValueChange={(value) => field.onChange(value === "0" ? null : parseInt(value))}
-                      items={taxItems}
-                      placeholder="Select tax"
-                      emptyText="No taxes found"
-                      data-testid="select-tax"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Vendor (for Expense/Cheque) */}
-            {selectedType && (selectedType === "expense" || selectedType === "cheque") && (
+            {/* Main Form Fields - Horizontal Layout */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Transaction Type */}
               <FormField
                 control={form.control}
-                name="contactName"
+                name="transactionType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor</FormLabel>
+                    <FormLabel>Transaction Type *</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          setSelectedType(value as TransactionType);
+                        }}
+                        data-testid="select-transaction-type"
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select transaction type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {getTypeLabel(type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Account (required for all types) */}
+              <FormField
+                control={form.control}
+                name="accountId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account *</FormLabel>
                     <FormControl>
                       <SearchableSelect
-                        value={field.value || ""}
-                        onValueChange={field.onChange}
-                        items={contactItems.filter(c => c.subtitle?.includes('vendor'))}
-                        placeholder="Select vendor"
-                        emptyText="No vendors found"
-                        data-testid="select-vendor"
+                        value={field.value?.toString() || ""}
+                        onValueChange={(value) => field.onChange(parseInt(value))}
+                        items={accountItems}
+                        placeholder="Select account"
+                        emptyText="No accounts found"
+                        data-testid="select-account"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Tax (required for all types) */}
+              <FormField
+                control={form.control}
+                name="salesTaxId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tax</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value?.toString() || "0"}
+                        onValueChange={(value) => field.onChange(value === "0" ? null : parseInt(value))}
+                        items={taxItems}
+                        placeholder="Select tax"
+                        emptyText="No taxes found"
+                        data-testid="select-tax"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Conditional Fields - Horizontal Layout */}
+            {selectedType && (selectedType === "expense" || selectedType === "cheque") && (
+              <div className="grid grid-cols-1">
+                <FormField
+                  control={form.control}
+                  name="contactName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendor</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || ""}
+                          onValueChange={field.onChange}
+                          items={contactItems.filter(c => c.subtitle?.includes('vendor'))}
+                          placeholder="Select vendor"
+                          emptyText="No vendors found"
+                          data-testid="select-vendor"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             )}
 
-            {/* Customer (for Sales Receipt) */}
             {selectedType === "sales_receipt" && (
-              <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="contactName"
@@ -496,31 +500,32 @@ export default function CategorizeTransactionDialog({
                     </FormItem>
                   )}
                 />
-              </>
+              </div>
             )}
 
-            {/* Transfer Account (for Transfer) */}
             {selectedType === "transfer" && (
-              <FormField
-                control={form.control}
-                name="transferAccountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{isDebit ? "To Account" : "From Account"}</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        value={field.value?.toString() || ""}
-                        onValueChange={(value) => field.onChange(parseInt(value))}
-                        items={accountItems}
-                        placeholder={`Select ${isDebit ? 'destination' : 'source'} account`}
-                        emptyText="No accounts found"
-                        data-testid="select-transfer-account"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-1">
+                <FormField
+                  control={form.control}
+                  name="transferAccountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{isDebit ? "To Account" : "From Account"}</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value?.toString() || ""}
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          items={accountItems}
+                          placeholder={`Select ${isDebit ? 'destination' : 'source'} account`}
+                          emptyText="No accounts found"
+                          data-testid="select-transfer-account"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             )}
 
             {/* Memo (for all types) */}
