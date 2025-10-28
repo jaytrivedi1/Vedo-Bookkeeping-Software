@@ -1177,35 +1177,33 @@ export default function Banking() {
 
                           <div className="mt-3 pt-3 border-t">
                             {account.bankAccount ? (
-                              <div className="space-y-2">
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      syncTransactionsMutation.mutate(account.bankAccount!.id);
-                                    }}
-                                    disabled={syncTransactionsMutation.isPending}
-                                    className="flex-1"
-                                    data-testid={`button-sync-${account.id}`}
-                                  >
-                                    <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteBankAccountMutation.mutate(account.bankAccount!.id);
-                                    }}
-                                    disabled={deleteBankAccountMutation.isPending}
-                                    className="flex-1"
-                                    data-testid={`button-disconnect-${account.id}`}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                  }}
+                                  disabled={syncTransactionsMutation.isPending}
+                                  className="flex-1"
+                                  data-testid={`button-sync-${account.id}`}
+                                >
+                                  <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteBankAccountMutation.mutate(account.bankAccount!.id);
+                                  }}
+                                  disabled={deleteBankAccountMutation.isPending}
+                                  className="flex-1"
+                                  data-testid={`button-disconnect-${account.id}`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -1213,11 +1211,10 @@ export default function Banking() {
                                     e.stopPropagation();
                                     setShowBankFeedSetup(true);
                                   }}
-                                  className="w-full"
+                                  className="flex-1"
                                   data-testid={`button-upload-csv-${account.id}`}
                                 >
-                                  <Upload className="h-3 w-3 mr-1" />
-                                  Upload CSV
+                                  <Upload className="h-3 w-3" />
                                 </Button>
                               </div>
                             ) : (
