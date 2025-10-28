@@ -50,13 +50,25 @@ type TransactionType = "expense" | "cheque" | "deposit" | "sales_receipt" | "tra
 
 const formSchema = z.object({
   transactionType: z.enum(["expense", "cheque", "deposit", "sales_receipt", "transfer"]),
-  accountId: z.number({ required_error: "Account is required" }),
+  accountId: z.number({ required_error: "Account is required" }).optional(),
   salesTaxId: z.number().nullable().optional(),
   memo: z.string().optional(),
   contactName: z.string().optional(),
   productId: z.number().nullable().optional(),
   transferAccountId: z.number().nullable().optional(),
-});
+}).refine(
+  (data) => {
+    // For non-transfer transactions, accountId is required
+    if (data.transactionType !== "transfer") {
+      return data.accountId !== undefined;
+    }
+    return true;
+  },
+  {
+    message: "Account is required",
+    path: ["accountId"],
+  }
+);
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -78,7 +90,6 @@ export default function CategorizeTransactionDialog({
   const { toast } = useToast();
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [selectedType, setSelectedType] = useState<TransactionType | null>(null);
 
   // Fetch all GL accounts
   const { data: accounts = [] } = useQuery<Account[]>({
@@ -149,6 +160,9 @@ export default function CategorizeTransactionDialog({
     },
   });
 
+  // Watch the transaction type to show/hide conditional fields
+  const selectedType = form.watch("transactionType");
+
   // Fetch AI suggestions when dialog opens with a transaction
   useEffect(() => {
     if (open && transaction) {
@@ -164,7 +178,6 @@ export default function CategorizeTransactionDialog({
             form.setValue("accountId", data.accountId);
             if (data.contactName) form.setValue("contactName", data.contactName);
             if (data.salesTaxId) form.setValue("salesTaxId", data.salesTaxId);
-            setSelectedType(data.transactionType);
           }
         })
         .catch((error) => {
@@ -176,7 +189,6 @@ export default function CategorizeTransactionDialog({
     } else if (!open) {
       // Reset when dialog closes
       setAiSuggestions(null);
-      setSelectedType(null);
       form.reset();
     }
   }, [open, transaction]);
@@ -352,9 +364,8 @@ export default function CategorizeTransactionDialog({
         {/* Categorization Form */}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Main Form Fields - Horizontal Layout */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Transaction Type */}
+            {/* Transaction Type - Always Shown */}
+            {selectedType === "transfer" ? (
               <FormField
                 control={form.control}
                 name="transactionType"
@@ -364,10 +375,7 @@ export default function CategorizeTransactionDialog({
                     <FormControl>
                       <Select
                         value={field.value}
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          setSelectedType(value as TransactionType);
-                        }}
+                        onValueChange={field.onChange}
                         data-testid="select-transaction-type"
                       >
                         <SelectTrigger>
@@ -386,51 +394,83 @@ export default function CategorizeTransactionDialog({
                   </FormItem>
                 )}
               />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Transaction Type */}
+                <FormField
+                  control={form.control}
+                  name="transactionType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Transaction Type *</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          data-testid="select-transaction-type"
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select transaction type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {getTypeLabel(type)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              {/* Account (required for all types) */}
-              <FormField
-                control={form.control}
-                name="accountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Account *</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        value={field.value?.toString() || ""}
-                        onValueChange={(value) => field.onChange(parseInt(value))}
-                        items={accountItems}
-                        placeholder="Select account"
-                        emptyText="No accounts found"
-                        data-testid="select-account"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                {/* Account (hidden for transfer) */}
+                <FormField
+                  control={form.control}
+                  name="accountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Account *</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value?.toString() || ""}
+                          onValueChange={(value) => field.onChange(parseInt(value))}
+                          items={accountItems}
+                          placeholder="Select account"
+                          emptyText="No accounts found"
+                          data-testid="select-account"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              {/* Tax (required for all types) */}
-              <FormField
-                control={form.control}
-                name="salesTaxId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tax</FormLabel>
-                    <FormControl>
-                      <SearchableSelect
-                        value={field.value?.toString() || "0"}
-                        onValueChange={(value) => field.onChange(value === "0" ? null : parseInt(value))}
-                        items={taxItems}
-                        placeholder="Select tax"
-                        emptyText="No taxes found"
-                        data-testid="select-tax"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                {/* Tax (hidden for transfer) */}
+                <FormField
+                  control={form.control}
+                  name="salesTaxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tax</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value?.toString() || "0"}
+                          onValueChange={(value) => field.onChange(value === "0" ? null : parseInt(value))}
+                          items={taxItems}
+                          placeholder="Select tax"
+                          emptyText="No taxes found"
+                          data-testid="select-tax"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
 
             {/* Conditional Fields - Horizontal Layout */}
             {selectedType && (selectedType === "expense" || selectedType === "cheque") && (
