@@ -3,14 +3,17 @@ import {
   Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
+  Reconciliation, ReconciliationItem,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
+  InsertReconciliation, InsertReconciliationItem,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
-  permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema
+  permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
+  reconciliations, reconciliationItems
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -2061,5 +2064,118 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return newTransactions;
+  }
+
+  // Reconciliations
+  async getReconciliations(): Promise<Reconciliation[]> {
+    return await db.select()
+      .from(reconciliations)
+      .orderBy(desc(reconciliations.createdAt));
+  }
+
+  async getReconciliation(id: number): Promise<Reconciliation | undefined> {
+    const result = await db.select()
+      .from(reconciliations)
+      .where(eq(reconciliations.id, id));
+    return result[0];
+  }
+
+  async getReconciliationsByAccount(accountId: number): Promise<Reconciliation[]> {
+    return await db.select()
+      .from(reconciliations)
+      .where(eq(reconciliations.accountId, accountId))
+      .orderBy(desc(reconciliations.createdAt));
+  }
+
+  async createReconciliation(reconciliation: InsertReconciliation): Promise<Reconciliation> {
+    const [newReconciliation] = await db.insert(reconciliations)
+      .values(reconciliation)
+      .returning();
+    return newReconciliation;
+  }
+
+  async updateReconciliation(id: number, reconciliationUpdate: Partial<Reconciliation>): Promise<Reconciliation | undefined> {
+    const [updatedReconciliation] = await db.update(reconciliations)
+      .set(reconciliationUpdate)
+      .where(eq(reconciliations.id, id))
+      .returning();
+    return updatedReconciliation;
+  }
+
+  async deleteReconciliation(id: number): Promise<boolean> {
+    try {
+      return await db.transaction(async (tx) => {
+        // First, delete all related reconciliation items
+        await tx.delete(reconciliationItems)
+          .where(eq(reconciliationItems.reconciliationId, id));
+        
+        // Then delete the reconciliation itself
+        const result = await tx.delete(reconciliations)
+          .where(eq(reconciliations.id, id));
+        
+        return result.rowCount !== null && result.rowCount > 0;
+      });
+    } catch (error) {
+      console.error(`Error deleting reconciliation with ID ${id}:`, error);
+      return false;
+    }
+  }
+
+  async getLedgerEntriesForReconciliation(accountId: number, statementDate: Date): Promise<LedgerEntry[]> {
+    return await db.select()
+      .from(ledgerEntries)
+      .where(
+        and(
+          eq(ledgerEntries.accountId, accountId),
+          lte(ledgerEntries.date, statementDate)
+        )
+      )
+      .orderBy(ledgerEntries.date);
+  }
+
+  // Reconciliation Items
+  async getReconciliationItems(reconciliationId: number): Promise<ReconciliationItem[]> {
+    return await db.select()
+      .from(reconciliationItems)
+      .where(eq(reconciliationItems.reconciliationId, reconciliationId));
+  }
+
+  async createReconciliationItem(item: InsertReconciliationItem): Promise<ReconciliationItem> {
+    const [newItem] = await db.insert(reconciliationItems)
+      .values(item)
+      .returning();
+    return newItem;
+  }
+
+  async updateReconciliationItem(id: number, itemUpdate: Partial<ReconciliationItem>): Promise<ReconciliationItem | undefined> {
+    const [updatedItem] = await db.update(reconciliationItems)
+      .set(itemUpdate)
+      .where(eq(reconciliationItems.id, id))
+      .returning();
+    return updatedItem;
+  }
+
+  async bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Delete existing reconciliation items for these ledger entries
+      if (ledgerEntryIds.length > 0) {
+        await tx.delete(reconciliationItems)
+          .where(
+            and(
+              eq(reconciliationItems.reconciliationId, reconciliationId),
+              inArray(reconciliationItems.ledgerEntryId, ledgerEntryIds)
+            )
+          );
+        
+        // Insert new reconciliation items
+        const items = ledgerEntryIds.map(ledgerEntryId => ({
+          reconciliationId,
+          ledgerEntryId,
+          isCleared
+        }));
+        
+        await tx.insert(reconciliationItems).values(items);
+      }
+    });
   }
 }

@@ -8138,6 +8138,164 @@ Respond in JSON format:
     }
   });
 
+  // Reconciliation routes
+  apiRouter.post("/reconciliations", async (req: Request, res: Response) => {
+    try {
+      const { accountId, statementDate, statementEndingBalance } = req.body;
+      
+      if (!accountId || !statementDate || statementEndingBalance === undefined) {
+        return res.status(400).json({ message: "Account ID, statement date, and statement ending balance are required" });
+      }
+      
+      const reconciliation = await storage.createReconciliation({
+        accountId: Number(accountId),
+        statementDate: new Date(statementDate),
+        statementEndingBalance: Number(statementEndingBalance),
+        status: 'in_progress',
+      });
+      
+      res.json(reconciliation);
+    } catch (error) {
+      console.error("Error creating reconciliation:", error);
+      res.status(500).json({ message: "Failed to create reconciliation" });
+    }
+  });
+
+  apiRouter.get("/reconciliations/:id", async (req: Request, res: Response) => {
+    try {
+      const reconciliation = await storage.getReconciliation(Number(req.params.id));
+      
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+      
+      res.json(reconciliation);
+    } catch (error) {
+      console.error("Error fetching reconciliation:", error);
+      res.status(500).json({ message: "Failed to fetch reconciliation" });
+    }
+  });
+
+  apiRouter.get("/reconciliations/:id/ledger-entries", async (req: Request, res: Response) => {
+    try {
+      const reconciliation = await storage.getReconciliation(Number(req.params.id));
+      
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+      
+      // Get ledger entries for this account up to the statement date
+      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+        reconciliation.accountId,
+        reconciliation.statementDate
+      );
+      
+      // Get existing reconciliation items
+      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const clearedEntryIds = new Set(
+        reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
+      );
+      
+      // Enrich ledger entries with cleared status and transaction details
+      const transactions = await storage.getTransactions();
+      const transactionMap = new Map(transactions.map(t => [t.id, t]));
+      
+      const enrichedEntries = ledgerEntries.map(entry => ({
+        ...entry,
+        isCleared: clearedEntryIds.has(entry.id),
+        transaction: transactionMap.get(entry.transactionId),
+      }));
+      
+      res.json(enrichedEntries);
+    } catch (error) {
+      console.error("Error fetching ledger entries for reconciliation:", error);
+      res.status(500).json({ message: "Failed to fetch ledger entries" });
+    }
+  });
+
+  apiRouter.patch("/reconciliations/:id/items", async (req: Request, res: Response) => {
+    try {
+      const { ledgerEntryIds, isCleared } = req.body;
+      
+      if (!Array.isArray(ledgerEntryIds)) {
+        return res.status(400).json({ message: "ledgerEntryIds must be an array" });
+      }
+      
+      const reconciliationId = Number(req.params.id);
+      
+      // Bulk upsert reconciliation items
+      await storage.bulkUpsertReconciliationItems(
+        reconciliationId,
+        ledgerEntryIds,
+        isCleared
+      );
+      
+      // Recalculate cleared balance
+      const reconciliationItems = await storage.getReconciliationItems(reconciliationId);
+      const ledgerEntries = await storage.getAllLedgerEntries();
+      const ledgerEntryMap = new Map(ledgerEntries.map(e => [e.id, e]));
+      
+      let clearedBalance = 0;
+      for (const item of reconciliationItems) {
+        if (item.isCleared) {
+          const entry = ledgerEntryMap.get(item.ledgerEntryId);
+          if (entry) {
+            clearedBalance += entry.debit - entry.credit;
+          }
+        }
+      }
+      
+      // Get reconciliation to calculate difference
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+      
+      const difference = roundTo2Decimals(reconciliation.statementEndingBalance - clearedBalance);
+      
+      // Update reconciliation with new balances
+      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+        clearedBalance: roundTo2Decimals(clearedBalance),
+        difference,
+      });
+      
+      res.json(updatedReconciliation);
+    } catch (error) {
+      console.error("Error updating reconciliation items:", error);
+      res.status(500).json({ message: "Failed to update reconciliation items" });
+    }
+  });
+
+  apiRouter.patch("/reconciliations/:id/complete", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+      
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+      
+      // Check if difference is zero
+      if (Math.abs(reconciliation.difference) > 0.01) {
+        return res.status(400).json({ 
+          message: "Cannot complete reconciliation with a non-zero difference",
+          difference: reconciliation.difference
+        });
+      }
+      
+      // Mark as completed
+      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+        status: 'completed',
+        completedAt: new Date(),
+      });
+      
+      res.json(updatedReconciliation);
+    } catch (error) {
+      console.error("Error completing reconciliation:", error);
+      res.status(500).json({ message: "Failed to complete reconciliation" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

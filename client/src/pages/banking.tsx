@@ -58,6 +58,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankAccount, ImportedTransaction } from "@shared/schema";
 import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
 import CategorizeTransactionDialog from "@/components/bank-feed-categorization-dialog";
+import { formatCurrency as formatCurrencyUtil } from "@shared/utils";
 
 interface GLAccount {
   id: number;
@@ -128,6 +129,13 @@ export default function Banking() {
   const [dateTo, setDateTo] = useState('');
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
+
+  // Reconciliation state
+  const [reconcileAccountId, setReconcileAccountId] = useState<number | null>(null);
+  const [reconcileStatementDate, setReconcileStatementDate] = useState('');
+  const [reconcileStatementBalance, setReconcileStatementBalance] = useState('');
+  const [activeReconciliationId, setActiveReconciliationId] = useState<number | null>(null);
+  const [clearedEntries, setClearedEntries] = useState<Set<number>>(new Set());
 
   // Column widths state with localStorage persistence
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
@@ -443,6 +451,95 @@ export default function Banking() {
     },
   });
 
+  // Create reconciliation mutation
+  const createReconciliationMutation = useMutation({
+    mutationFn: async (data: { accountId: number; statementDate: string; statementEndingBalance: number }) => {
+      return await apiRequest('/api/reconciliations', 'POST', data);
+    },
+    onSuccess: (data) => {
+      setActiveReconciliationId(data.id);
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations'] });
+      toast({
+        title: "Success",
+        description: "Reconciliation started",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start reconciliation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Fetch active reconciliation details
+  const { data: activeReconciliation, isLoading: reconciliationLoading } = useQuery({
+    queryKey: ['/api/reconciliations', activeReconciliationId],
+    queryFn: async () => {
+      if (!activeReconciliationId) return null;
+      const response = await fetch(`/api/reconciliations/${activeReconciliationId}`);
+      if (!response.ok) throw new Error('Failed to fetch reconciliation');
+      return response.json();
+    },
+    enabled: !!activeReconciliationId,
+  });
+
+  // Fetch ledger entries for reconciliation
+  const { data: reconciliationLedgerEntries = [], isLoading: ledgerEntriesLoading } = useQuery({
+    queryKey: ['/api/reconciliations', activeReconciliationId, 'ledger-entries'],
+    queryFn: async () => {
+      if (!activeReconciliationId) return [];
+      const response = await fetch(`/api/reconciliations/${activeReconciliationId}/ledger-entries`);
+      if (!response.ok) throw new Error('Failed to fetch ledger entries');
+      return response.json();
+    },
+    enabled: !!activeReconciliationId,
+  });
+
+  // Update reconciliation items mutation
+  const updateReconciliationItemsMutation = useMutation({
+    mutationFn: async ({ reconciliationId, clearedEntryIds }: { reconciliationId: number; clearedEntryIds: number[] }) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/items`, 'PATCH', { clearedEntryIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update reconciliation items",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Complete reconciliation mutation
+  const completeReconciliationMutation = useMutation({
+    mutationFn: async (reconciliationId: number) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/complete`, 'PATCH');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations'] });
+      setActiveReconciliationId(null);
+      setReconcileAccountId(null);
+      setReconcileStatementDate('');
+      setReconcileStatementBalance('');
+      setClearedEntries(new Set());
+      toast({
+        title: "Success",
+        description: "Reconciliation completed",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to complete reconciliation",
+        variant: "destructive",
+      });
+    },
+  });
+
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) return '-';
     return new Intl.NumberFormat('en-US', {
@@ -648,6 +745,77 @@ export default function Banking() {
 
   // Determine if the selected account is AP or AR type
   const selectedAccount = accountsWithFeedStatus.find(a => a.id === selectedAccountId);
+
+  // Handle starting reconciliation
+  const handleStartReconciliation = () => {
+    if (!reconcileAccountId) {
+      toast({
+        title: "Error",
+        description: "Please select an account to reconcile",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!reconcileStatementDate) {
+      toast({
+        title: "Error",
+        description: "Please enter the statement ending date",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!reconcileStatementBalance) {
+      toast({
+        title: "Error",
+        description: "Please enter the statement ending balance",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createReconciliationMutation.mutate({
+      accountId: reconcileAccountId,
+      statementDate: reconcileStatementDate,
+      statementEndingBalance: parseFloat(reconcileStatementBalance),
+    });
+  };
+
+  // Handle toggling cleared status of a ledger entry
+  const handleToggleCleared = (entryId: number, isCleared: boolean) => {
+    const newClearedEntries = new Set(clearedEntries);
+    if (isCleared) {
+      newClearedEntries.add(entryId);
+    } else {
+      newClearedEntries.delete(entryId);
+    }
+    setClearedEntries(newClearedEntries);
+    
+    if (activeReconciliationId) {
+      updateReconciliationItemsMutation.mutate({
+        reconciliationId: activeReconciliationId,
+        clearedEntryIds: Array.from(newClearedEntries),
+      });
+    }
+  };
+
+  // Handle canceling reconciliation
+  const handleCancelReconciliation = () => {
+    setActiveReconciliationId(null);
+    setReconcileAccountId(null);
+    setReconcileStatementDate('');
+    setReconcileStatementBalance('');
+    setClearedEntries(new Set());
+  };
+
+  // Sync cleared entries from reconciliation data
+  useEffect(() => {
+    if (activeReconciliation && activeReconciliation.items) {
+      const clearedIds = activeReconciliation.items
+        .filter((item: any) => item.isCleared)
+        .map((item: any) => item.ledgerEntryId);
+      setClearedEntries(new Set(clearedIds));
+    }
+  }, [activeReconciliation]);
 
   return (
     <TooltipProvider>
@@ -1369,100 +1537,208 @@ export default function Banking() {
           <TabsContent value="reconciliation">
             <div className="space-y-6">
               {/* Reconciliation Header */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reconcile Account</CardTitle>
-                  <CardDescription>
-                    Match your book transactions with your bank statement
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Account Selection */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Account</label>
-                      <Select>
-                        <SelectTrigger data-testid="select-reconcile-account">
-                          <SelectValue placeholder="Select account to reconcile" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {glAccounts
-                            .filter(acc => ['bank', 'credit_card', 'current_assets'].includes(acc.type))
-                            .map(acc => (
-                              <SelectItem key={acc.id} value={acc.id.toString()}>
-                                {acc.code} - {acc.name}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
+              {!activeReconciliationId && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Reconcile Account</CardTitle>
+                    <CardDescription>
+                      Match your book transactions with your bank statement
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Account Selection */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Account</label>
+                        <Select value={reconcileAccountId?.toString() || ''} onValueChange={(value) => setReconcileAccountId(Number(value))}>
+                          <SelectTrigger data-testid="select-reconcile-account">
+                            <SelectValue placeholder="Select account to reconcile" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {glAccounts
+                              .filter(acc => ['bank', 'credit_card', 'current_assets'].includes(acc.type))
+                              .map(acc => (
+                                <SelectItem key={acc.id} value={acc.id.toString()}>
+                                  {acc.code} - {acc.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Statement Ending Date</label>
+                        <Input 
+                          type="date" 
+                          value={reconcileStatementDate}
+                          onChange={(e) => setReconcileStatementDate(e.target.value)}
+                          data-testid="input-statement-date"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Statement Ending Balance</label>
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          placeholder="0.00"
+                          value={reconcileStatementBalance}
+                          onChange={(e) => setReconcileStatementBalance(e.target.value)}
+                          data-testid="input-statement-balance"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Statement Ending Date</label>
-                      <Input 
-                        type="date" 
-                        data-testid="input-statement-date"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Statement Ending Balance</label>
-                      <Input 
-                        type="number" 
-                        step="0.01" 
-                        placeholder="0.00"
-                        data-testid="input-statement-balance"
-                      />
-                    </div>
-                  </div>
-
-                  <Button className="w-full md:w-auto" data-testid="button-start-reconciliation">
-                    Start Reconciliation
-                  </Button>
-                </CardContent>
-              </Card>
+                    <Button 
+                      className="w-full md:w-auto" 
+                      onClick={handleStartReconciliation}
+                      disabled={createReconciliationMutation.isPending}
+                      data-testid="button-start-reconciliation"
+                    >
+                      {createReconciliationMutation.isPending ? 'Starting...' : 'Start Reconciliation'}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Reconciliation Summary */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Reconciliation Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-500">Statement Balance</p>
-                      <p className="text-xl font-semibold">{formatCurrency(0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Cleared Balance</p>
-                      <p className="text-xl font-semibold">{formatCurrency(0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Difference</p>
-                      <p className="text-xl font-semibold text-orange-600">{formatCurrency(0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-500">Status</p>
-                      <Badge variant="secondary">Not Started</Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {activeReconciliationId && activeReconciliation && (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Reconciliation Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {reconciliationLoading ? (
+                        <div className="text-center py-8 text-gray-500">Loading...</div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Statement Balance</p>
+                            <p className="text-xl font-semibold">${formatCurrencyUtil(activeReconciliation.statementEndingBalance)}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Cleared Balance</p>
+                            <p className="text-xl font-semibold">${formatCurrencyUtil(activeReconciliation.clearedBalance || 0)}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Difference</p>
+                            <p className={`text-xl font-semibold ${activeReconciliation.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ${formatCurrencyUtil(activeReconciliation.difference || 0)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Status</p>
+                            <Badge variant={activeReconciliation.status === 'completed' ? 'default' : 'secondary'}>
+                              {activeReconciliation.status === 'in_progress' ? 'In Progress' : activeReconciliation.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              {/* Transactions to Reconcile */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Transactions</CardTitle>
-                  <CardDescription>
-                    Check off transactions that appear on your bank statement
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-12 text-gray-500">
-                    <p>Select an account and start a reconciliation to see transactions</p>
-                  </div>
-                </CardContent>
-              </Card>
+                  {/* Transactions to Reconcile */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Transactions</CardTitle>
+                      <CardDescription>
+                        Check off transactions that appear on your bank statement
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {ledgerEntriesLoading ? (
+                        <div className="text-center py-12 text-gray-500">Loading transactions...</div>
+                      ) : reconciliationLedgerEntries.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <p>No transactions found for this reconciliation period</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-12">Cleared</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Reference</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="text-right">Debit</TableHead>
+                                <TableHead className="text-right">Credit</TableHead>
+                                <TableHead className="text-right">Balance</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {reconciliationLedgerEntries.map((entry: any, index: number) => {
+                                const runningBalance = reconciliationLedgerEntries
+                                  .slice(0, index + 1)
+                                  .reduce((sum: number, e: any) => sum + (e.debit || 0) - (e.credit || 0), 0);
+                                
+                                return (
+                                  <TableRow key={entry.id}>
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={clearedEntries.has(entry.id)}
+                                        onCheckedChange={(checked) => handleToggleCleared(entry.id, checked as boolean)}
+                                        data-testid={`checkbox-entry-${entry.id}`}
+                                      />
+                                    </TableCell>
+                                    <TableCell>{format(new Date(entry.date), 'MMM dd, yyyy')}</TableCell>
+                                    <TableCell className="capitalize">{entry.transactionType?.replace('_', ' ')}</TableCell>
+                                    <TableCell>{entry.reference || '-'}</TableCell>
+                                    <TableCell>{entry.description || '-'}</TableCell>
+                                    <TableCell className="text-right">
+                                      {entry.debit ? `$${formatCurrencyUtil(entry.debit)}` : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      {entry.credit ? `$${formatCurrencyUtil(entry.credit)}` : '-'}
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                      ${formatCurrencyUtil(runningBalance)}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      {reconciliationLedgerEntries.length > 0 && (
+                        <div className="mt-6 flex gap-3 justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={handleCancelReconciliation}
+                            data-testid="button-cancel-reconciliation"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              toast({
+                                title: "Saved",
+                                description: "Your reconciliation progress has been saved",
+                              });
+                            }}
+                            data-testid="button-save-reconciliation"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={() => completeReconciliationMutation.mutate(activeReconciliationId)}
+                            disabled={activeReconciliation?.difference !== 0 || completeReconciliationMutation.isPending}
+                            data-testid="button-complete-reconciliation"
+                          >
+                            {completeReconciliationMutation.isPending ? 'Completing...' : 'Complete'}
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
           </TabsContent>
         </Tabs>

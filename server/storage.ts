@@ -52,6 +52,12 @@ import {
   type InsertImportedTransaction,
   type CsvMappingPreference,
   type InsertCsvMappingPreference,
+  reconciliations,
+  reconciliationItems,
+  type Reconciliation,
+  type InsertReconciliation,
+  type ReconciliationItem,
+  type InsertReconciliationItem,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -193,6 +199,21 @@ export interface IStorage {
   createCsvMappingPreference(preference: InsertCsvMappingPreference): Promise<CsvMappingPreference>;
   updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference>;
   bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]>;
+  
+  // Reconciliations
+  getReconciliations(): Promise<Reconciliation[]>;
+  getReconciliation(id: number): Promise<Reconciliation | undefined>;
+  getReconciliationsByAccount(accountId: number): Promise<Reconciliation[]>;
+  createReconciliation(reconciliation: InsertReconciliation): Promise<Reconciliation>;
+  updateReconciliation(id: number, reconciliation: Partial<Reconciliation>): Promise<Reconciliation | undefined>;
+  deleteReconciliation(id: number): Promise<boolean>;
+  getLedgerEntriesForReconciliation(accountId: number, statementDate: Date): Promise<LedgerEntry[]>;
+  
+  // Reconciliation Items
+  getReconciliationItems(reconciliationId: number): Promise<ReconciliationItem[]>;
+  createReconciliationItem(item: InsertReconciliationItem): Promise<ReconciliationItem>;
+  updateReconciliationItem(id: number, item: Partial<ReconciliationItem>): Promise<ReconciliationItem | undefined>;
+  bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -1162,6 +1183,52 @@ export class MemStorage implements IStorage {
 
   async bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]> {
     throw new Error("Bulk import not supported in MemStorage");
+  }
+
+  // Reconciliations
+  async getReconciliations(): Promise<Reconciliation[]> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async getReconciliation(id: number): Promise<Reconciliation | undefined> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async getReconciliationsByAccount(accountId: number): Promise<Reconciliation[]> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async createReconciliation(reconciliation: InsertReconciliation): Promise<Reconciliation> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async updateReconciliation(id: number, reconciliation: Partial<Reconciliation>): Promise<Reconciliation | undefined> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async deleteReconciliation(id: number): Promise<boolean> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  async getLedgerEntriesForReconciliation(accountId: number, statementDate: Date): Promise<LedgerEntry[]> {
+    throw new Error("Reconciliations not supported in MemStorage");
+  }
+
+  // Reconciliation Items
+  async getReconciliationItems(reconciliationId: number): Promise<ReconciliationItem[]> {
+    throw new Error("Reconciliation items not supported in MemStorage");
+  }
+
+  async createReconciliationItem(item: InsertReconciliationItem): Promise<ReconciliationItem> {
+    throw new Error("Reconciliation items not supported in MemStorage");
+  }
+
+  async updateReconciliationItem(id: number, item: Partial<ReconciliationItem>): Promise<ReconciliationItem | undefined> {
+    throw new Error("Reconciliation items not supported in MemStorage");
+  }
+
+  async bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void> {
+    throw new Error("Reconciliation items not supported in MemStorage");
   }
 }
 
