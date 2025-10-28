@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
 import { useLocation } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -25,6 +25,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Popover,
   PopoverContent,
@@ -66,9 +71,202 @@ import {
   Pie,
   Cell
 } from "recharts";
-import { Account, LedgerEntry } from "@shared/schema";
+import { Account, LedgerEntry, Company } from "@shared/schema";
 import { getFiscalYearBounds, getFiscalYearLabel, getFiscalYear } from "@shared/fiscalYear";
 import { queryClient } from "@/lib/queryClient";
+
+// Helper function to format currency
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
+};
+
+// Collapsible Balance Sheet Section Component
+function BalanceSheetSection({ 
+  title, 
+  accounts, 
+  subtotal,
+  defaultOpen = true 
+}: { 
+  title: string; 
+  accounts: any[]; 
+  subtotal: number;
+  defaultOpen?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  if (accounts.length === 0) return null;
+  
+  return (
+    <>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between py-2 hover:bg-gray-50 px-2 rounded">
+            <div className="flex items-center gap-2">
+              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <span className="font-medium text-sm text-gray-700">{title}</span>
+            </div>
+            <span className="font-semibold text-sm">{formatCurrency(subtotal)}</span>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-6 space-y-1">
+            {accounts.map((account) => (
+              <div key={account.id} className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
+                <span className="text-sm text-gray-600">{account.name}</span>
+                <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </>
+  );
+}
+
+// Main Balance Sheet Report Component
+function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
+  if (!balanceSheet) {
+    return <div className="text-center py-6 text-gray-500">No balance sheet data available</div>;
+  }
+
+  // Group asset accounts by type
+  const currentAssetAccounts = balanceSheet.assets?.accounts?.filter((acc: any) => 
+    acc.type === 'bank' || acc.type === 'accounts_receivable' || acc.type === 'current_assets'
+  ) || [];
+  
+  const fixedAssetAccounts = balanceSheet.assets?.accounts?.filter((acc: any) => 
+    acc.type === 'property_plant_equipment' || acc.type === 'long_term_assets'
+  ) || [];
+  
+  // Calculate subtotals
+  const currentAssetsTotal = currentAssetAccounts.reduce((sum: number, acc: any) => sum + Math.abs(acc.balance), 0);
+  const fixedAssetsTotal = fixedAssetAccounts.reduce((sum: number, acc: any) => sum + Math.abs(acc.balance), 0);
+  const totalAssets = balanceSheet.totalAssets || balanceSheet.assets?.total || 0;
+  
+  // Group liability accounts by type
+  const currentLiabilityAccounts = balanceSheet.liabilities?.accounts?.filter((acc: any) => 
+    acc.type === 'accounts_payable' || 
+    acc.type === 'credit_card' || 
+    acc.type === 'sales_tax_payable' || 
+    acc.type === 'current_liabilities'
+  ) || [];
+  
+  const longTermLiabilityAccounts = balanceSheet.liabilities?.accounts?.filter((acc: any) => 
+    acc.type === 'long_term_liabilities' || acc.type === 'loan'
+  ) || [];
+  
+  // Calculate liability subtotals
+  const currentLiabilitiesTotal = currentLiabilityAccounts.reduce((sum: number, acc: any) => sum + Math.abs(acc.balance), 0);
+  const longTermLiabilitiesTotal = longTermLiabilityAccounts.reduce((sum: number, acc: any) => sum + Math.abs(acc.balance), 0);
+  const totalLiabilities = balanceSheet.totalLiabilities || balanceSheet.liabilities?.total || 0;
+  
+  // Equity
+  const equityAccounts = balanceSheet.equity?.accounts || [];
+  const retainedEarnings = balanceSheet.equity?.retainedEarnings || 0;
+  const currentYearNetIncome = balanceSheet.equity?.currentYearNetIncome || 0;
+  const totalEquity = balanceSheet.totalEquity || balanceSheet.equity?.total || 0;
+  
+  const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
+
+  return (
+    <div className="space-y-6">
+      {/* ASSETS SECTION */}
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">ASSETS</h3>
+        
+        {/* Current Assets */}
+        <BalanceSheetSection
+          title="Current Assets"
+          accounts={currentAssetAccounts}
+          subtotal={currentAssetsTotal}
+          defaultOpen={true}
+        />
+        
+        {/* Fixed Assets */}
+        <BalanceSheetSection
+          title="Fixed Assets"
+          accounts={fixedAssetAccounts}
+          subtotal={fixedAssetsTotal}
+          defaultOpen={true}
+        />
+        
+        {/* Total Assets */}
+        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
+          <span className="font-bold text-gray-900">Total Assets</span>
+          <span className="font-bold text-gray-900">{formatCurrency(totalAssets)}</span>
+        </div>
+      </div>
+      
+      {/* LIABILITIES SECTION */}
+      <div className="space-y-2 pt-4 border-t border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">LIABILITIES</h3>
+        
+        {/* Current Liabilities */}
+        <BalanceSheetSection
+          title="Current Liabilities"
+          accounts={currentLiabilityAccounts}
+          subtotal={currentLiabilitiesTotal}
+          defaultOpen={true}
+        />
+        
+        {/* Long-term Liabilities */}
+        <BalanceSheetSection
+          title="Long-term Liabilities"
+          accounts={longTermLiabilityAccounts}
+          subtotal={longTermLiabilitiesTotal}
+          defaultOpen={true}
+        />
+        
+        {/* Total Liabilities */}
+        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
+          <span className="font-bold text-gray-900">Total Liabilities</span>
+          <span className="font-bold text-gray-900">{formatCurrency(totalLiabilities)}</span>
+        </div>
+      </div>
+      
+      {/* EQUITY SECTION */}
+      <div className="space-y-2 pt-4 border-t border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">EQUITY</h3>
+        
+        {/* Other Equity Accounts */}
+        {equityAccounts.length > 0 && (
+          <div className="space-y-1">
+            {equityAccounts.map((account: any) => (
+              <div key={account.id} className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
+                <span className="text-sm text-gray-600">{account.name}</span>
+                <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Retained Earnings */}
+        <div className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
+          <span className="text-sm text-gray-600">Retained Earnings</span>
+          <span className="text-sm text-right">{formatCurrency(retainedEarnings)}</span>
+        </div>
+        
+        {/* Current Year Net Income */}
+        <div className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
+          <span className="text-sm text-gray-600">Net Income (Current Year)</span>
+          <span className="text-sm text-right">{formatCurrency(currentYearNetIncome)}</span>
+        </div>
+        
+        {/* Total Equity */}
+        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
+          <span className="font-bold text-gray-900">Total Equity</span>
+          <span className="font-bold text-gray-900" data-testid="balance-sheet-equity-total">{formatCurrency(totalEquity)}</span>
+        </div>
+      </div>
+      
+      {/* TOTAL LIABILITIES & EQUITY */}
+      <div className="flex justify-between py-3 px-2 border-t-4 border-double border-gray-400 mt-4">
+        <span className="font-bold text-lg text-gray-900">Total Liabilities & Equity</span>
+        <span className="font-bold text-lg text-gray-900" data-testid="balance-sheet-liabilities-equity-total">{formatCurrency(totalLiabilitiesAndEquity)}</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<string>('');
@@ -84,7 +282,7 @@ export default function Reports() {
   const currentDateISORef = useRef(new Date().toISOString());
   
   // Fetch company settings to get fiscal year start month
-  const { data: company } = useQuery({
+  const { data: company } = useQuery<Company>({
     queryKey: ['/api/companies/default'],
   });
   
@@ -472,51 +670,51 @@ export default function Reports() {
   if (accountBalances) {
     // Group accounts by their types
     // Asset accounts
-    accountsByType['asset'] = accountBalances.filter(({ account }) => 
+    accountsByType['asset'] = accountBalances.filter(({ account }: { account: Account; balance: number }) => 
       account.type === 'accounts_receivable' || 
       account.type === 'current_assets' || 
       account.type === 'bank' || 
       account.type === 'property_plant_equipment' || 
       account.type === 'long_term_assets'
-    ).map(({ account, balance }) => ({
+    ).map(({ account, balance }: { account: Account; balance: number }) => ({
       ...account,
       balance: Math.abs(balance)
     }));
     
     // Liability accounts
-    accountsByType['liability'] = accountBalances.filter(({ account }) => 
+    accountsByType['liability'] = accountBalances.filter(({ account }: { account: Account; balance: number }) => 
       account.type === 'accounts_payable' || 
       account.type === 'credit_card' || 
       account.type === 'other_current_liabilities' ||
       account.type === 'long_term_liabilities'
-    ).map(({ account, balance }) => ({
+    ).map(({ account, balance }: { account: Account; balance: number }) => ({
       ...account,
       balance: Math.abs(balance)
     }));
     
     // Equity accounts
-    accountsByType['equity'] = accountBalances.filter(({ account }) => 
+    accountsByType['equity'] = accountBalances.filter(({ account }: { account: Account; balance: number }) => 
       account.type === 'equity'
-    ).map(({ account, balance }) => ({
+    ).map(({ account, balance }: { account: Account; balance: number }) => ({
       ...account,
       balance: Math.abs(balance)
     }));
     
     // Income accounts
-    accountsByType['income'] = accountBalances.filter(({ account }) => 
+    accountsByType['income'] = accountBalances.filter(({ account }: { account: Account; balance: number }) => 
       account.type === 'income' || 
       account.type === 'other_income'
-    ).map(({ account, balance }) => ({
+    ).map(({ account, balance }: { account: Account; balance: number }) => ({
       ...account, 
       balance: Math.abs(balance)
     }));
     
     // Expense accounts
-    accountsByType['expense'] = accountBalances.filter(({ account }) => 
+    accountsByType['expense'] = accountBalances.filter(({ account }: { account: Account; balance: number }) => 
       account.type === 'expenses' || 
       account.type === 'cost_of_goods_sold' ||
       account.type === 'other_expense'
-    ).map(({ account, balance }) => ({
+    ).map(({ account, balance }: { account: Account; balance: number }) => ({
       ...account,
       balance: Math.abs(balance)
     }));
@@ -735,16 +933,16 @@ export default function Reports() {
                         For the period {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}
                       </CardDescription>
                     </div>
-                    {incomeStatement && !incomeLoading && (
+                    {incomeStatement && !incomeLoading && accountBalances && (
                       <div className="mt-2 sm:mt-0">
                         <ExportMenu
                           onExportCSV={() => {
-                            const filename = generateFilename('income_statement', fiscalYearBounds.fiscalYearStart, fiscalYearBounds.fiscalYearEnd);
-                            exportIncomeStatementToCSV(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.csv`);
+                            const filename = generateFilename('income_statement', company?.name);
+                            exportIncomeStatementToCSV(incomeStatement, accountBalances, `${filename}.csv`);
                           }}
                           onExportPDF={() => {
-                            const filename = generateFilename('income_statement', fiscalYearBounds.fiscalYearStart, fiscalYearBounds.fiscalYearEnd);
-                            exportIncomeStatementToPDF(incomeStatement, accountsByType['income'], accountsByType['expense'], `${filename}.pdf`);
+                            const filename = generateFilename('income_statement', company?.name);
+                            exportIncomeStatementToPDF(incomeStatement, accountBalances, `${filename}.pdf`);
                           }}
                           label="Export"
                         />
@@ -981,273 +1179,46 @@ export default function Reports() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="lg:col-span-2">
-                  <CardHeader className="flex flex-col sm:flex-row justify-between">
-                    <div>
-                      <CardTitle>Balance Sheet</CardTitle>
-                      <CardDescription>
-                        As of {format(selectedFiscalYear === 'current' ? new Date() : fiscalYearBounds.fiscalYearEnd, 'MMMM d, yyyy')}
-                      </CardDescription>
+              <Card className="lg:col-span-3">
+                <CardHeader className="flex flex-col sm:flex-row justify-between">
+                  <div>
+                    <CardTitle>Balance Sheet</CardTitle>
+                    <CardDescription>
+                      As of {format(selectedFiscalYear === 'current' ? new Date() : fiscalYearBounds.fiscalYearEnd, 'MMMM d, yyyy')}
+                    </CardDescription>
+                  </div>
+                  {balanceSheet && !balanceLoading && accountBalances && (
+                    <div className="mt-2 sm:mt-0">
+                      <ExportMenu
+                        onExportCSV={() => {
+                          const filename = generateFilename('balance_sheet', company?.name);
+                          exportBalanceSheetToCSV(
+                            balanceSheet, 
+                            accountBalances, 
+                            `${filename}.csv`
+                          );
+                        }}
+                        onExportPDF={() => {
+                          const filename = generateFilename('balance_sheet', company?.name);
+                          exportBalanceSheetToPDF(
+                            balanceSheet, 
+                            accountBalances, 
+                            `${filename}.pdf`
+                          );
+                        }}
+                        label="Export"
+                      />
                     </div>
-                    {balanceSheet && !balanceLoading && (
-                      <div className="mt-2 sm:mt-0">
-                        <ExportMenu
-                          onExportCSV={() => {
-                            const filename = generateFilename('balance_sheet');
-                            exportBalanceSheetToCSV(
-                              balanceSheet, 
-                              accountsByType['asset'], 
-                              accountsByType['liability'], 
-                              accountsByType['equity'], 
-                              `${filename}.csv`
-                            );
-                          }}
-                          onExportPDF={() => {
-                            const filename = generateFilename('balance_sheet');
-                            exportBalanceSheetToPDF(
-                              balanceSheet, 
-                              accountsByType['asset'], 
-                              accountsByType['liability'], 
-                              accountsByType['equity'], 
-                              `${filename}.pdf`
-                            );
-                          }}
-                          label="Export"
-                        />
-                      </div>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    {balanceLoading ? (
-                      <div className="text-center py-6">Loading balance sheet...</div>
-                    ) : (
-                      <div>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-[50%]">Item</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            <TableRow>
-                              <TableCell className="font-medium">Assets</TableCell>
-                              <TableCell className="text-right">
-                                {balanceSheet?.assets ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.assets) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                            <TableRow>
-                              <TableCell className="font-medium">Liabilities</TableCell>
-                              <TableCell className="text-right">
-                                {balanceSheet?.liabilities ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.liabilities) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                            <TableRow>
-                              <TableCell className="font-medium">Equity</TableCell>
-                              <TableCell className="text-right" data-testid="balance-sheet-equity-total">
-                                {balanceSheet?.equity ? 
-                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-                                    typeof balanceSheet.equity === 'number' ? balanceSheet.equity : balanceSheet.equity?.total || 0
-                                  ) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                            <TableRow>
-                              <TableCell className="font-bold">Liabilities + Equity</TableCell>
-                              <TableCell className="text-right font-bold" data-testid="balance-sheet-liabilities-equity-total">
-                                {balanceSheet?.liabilities && balanceSheet?.equity ? 
-                                  new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-                                    balanceSheet.liabilities + (typeof balanceSheet.equity === 'number' ? balanceSheet.equity : balanceSheet.equity?.total || 0)
-                                  ) : '0.00'}
-                              </TableCell>
-                            </TableRow>
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Balance Sheet Visualization</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-60">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={balanceData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            outerRadius={80}
-                            fill="#8884d8"
-                            dataKey="value"
-                            label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
-                          >
-                            {balanceData.map((entry: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(value: any) => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))} />
-                          <Legend />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                {/* Detailed balance sheet breakdown */}
-                <Card className="lg:col-span-3">
-                  <CardHeader>
-                    <CardTitle>Detailed Balance Sheet Breakdown</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {/* Assets */}
-                      <div>
-                        <h3 className="text-lg font-medium mb-3">Assets</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Account</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {accountsLoading ? (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">Loading...</TableCell>
-                              </TableRow>
-                            ) : accountsByType['asset'] && accountsByType['asset'].length > 0 ? (
-                              accountsByType['asset'].map((account: any) => (
-                                <TableRow key={account.id}>
-                                  <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">No asset accounts found</TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      
-                      {/* Liabilities */}
-                      <div>
-                        <h3 className="text-lg font-medium mb-3">Liabilities</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Account</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {accountsLoading ? (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">Loading...</TableCell>
-                              </TableRow>
-                            ) : accountsByType['liability'] && accountsByType['liability'].length > 0 ? (
-                              accountsByType['liability'].map((account: any) => (
-                                <TableRow key={account.id}>
-                                  <TableCell>{account.name}</TableCell>
-                                  <TableCell className="text-right">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">No liability accounts found</TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      
-                      {/* Equity */}
-                      <div>
-                        <h3 className="text-lg font-medium mb-3">Equity</h3>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Account</TableHead>
-                              <TableHead className="text-right">Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {accountsLoading || balanceLoading ? (
-                              <TableRow>
-                                <TableCell colSpan={2} className="text-center">Loading...</TableCell>
-                              </TableRow>
-                            ) : balanceSheet?.equity && typeof balanceSheet.equity === 'object' && balanceSheet.equity.accounts ? (
-                              <>
-                                {/* Display equity accounts from the new structure */}
-                                {balanceSheet.equity.accounts.map((account: any) => (
-                                  <TableRow key={account.id} data-testid={`equity-account-${account.id}`}>
-                                    <TableCell>{account.name}</TableCell>
-                                    <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(account.balance))}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                                
-                                {/* Retained Earnings (prior years) */}
-                                <TableRow data-testid="equity-retained-earnings-row">
-                                  <TableCell className="font-medium">Retained Earnings</TableCell>
-                                  <TableCell className="text-right" data-testid="equity-retained-earnings">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.retainedEarnings || 0)}
-                                  </TableCell>
-                                </TableRow>
-                                
-                                {/* Current Year Net Income */}
-                                <TableRow data-testid="equity-current-year-net-income-row">
-                                  <TableCell className="font-medium">Net Income (Current Year)</TableCell>
-                                  <TableCell className="text-right" data-testid="equity-current-year-net-income">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.currentYearNetIncome || 0)}
-                                  </TableCell>
-                                </TableRow>
-                                
-                                {/* Total Equity */}
-                                <TableRow className="border-t-2" data-testid="equity-total-row">
-                                  <TableCell className="font-bold">Total Equity</TableCell>
-                                  <TableCell className="text-right font-bold" data-testid="equity-total">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(balanceSheet.equity.total || 0)}
-                                  </TableCell>
-                                </TableRow>
-                              </>
-                            ) : (
-                              <>
-                                {/* Fallback: Show equity accounts from accountsByType for backward compatibility */}
-                                {accountsByType['equity'] && accountsByType['equity'].length > 0 ? (
-                                  accountsByType['equity'].map((account: any) => (
-                                    <TableRow key={account.id} data-testid={`equity-account-${account.id}`}>
-                                      <TableCell>{account.name}</TableCell>
-                                      <TableCell className="text-right">
-                                        {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))
-                                ) : (
-                                  <TableRow>
-                                    <TableCell colSpan={2} className="text-center">No equity accounts found</TableCell>
-                                  </TableRow>
-                                )}
-                              </>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  {balanceLoading ? (
+                    <div className="text-center py-6">Loading balance sheet...</div>
+                  ) : (
+                    <BalanceSheetReport balanceSheet={balanceSheet} />
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
             
             {/* General Ledger */}

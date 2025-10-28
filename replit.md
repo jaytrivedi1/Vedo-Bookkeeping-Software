@@ -98,3 +98,33 @@ Preferred communication style: Simple, everyday language.
 - **CSV Processing**: PapaParse for data import/export functionality
 - **Date Handling**: date-fns for consistent date manipulation
 - **Validation**: Zod for runtime type validation and schema enforcement
+
+## Recent Updates (October 28, 2025)
+
+### Reconciliation Feature
+- **Database Schema**: Added `reconciliations` and `reconciliation_items` tables to track account reconciliation sessions
+- **Backend API**: Implemented complete reconciliation workflow endpoints
+  - POST /api/reconciliations - Start new reconciliation
+  - GET /api/reconciliations/:id/ledger-entries - Fetch transactions for reconciliation
+  - PATCH /api/reconciliations/:id/items - Mark transactions as cleared
+  - PATCH /api/reconciliations/:id/complete - Complete reconciliation (validates difference = $0)
+- **Frontend UI**: Built reconciliation interface in Banking > Reconciliation tab
+  - Account selector for bank/credit card/cash accounts
+  - Statement date and ending balance inputs
+  - Transaction list with checkboxes to mark as cleared
+  - Real-time balance calculation (statement balance vs cleared balance)
+  - Save and Complete buttons with validation
+- **Business Logic**: Cleared balance calculated as sum of (debit - credit) for marked transactions
+
+### Enhanced Balance Sheet Report
+- **Detailed Breakdown**: Replaced simple 3-row summary with comprehensive account-level detail
+- **Account Categorization**: Organized accounts into proper QuickBooks-style categories
+  - Current Assets: Bank, Accounts Receivable, Other Current Assets
+  - Fixed Assets: Property/Plant/Equipment, Long-term Assets
+  - Current Liabilities: Accounts Payable, Credit Cards, Sales Tax Payable, Other
+  - Long-term Liabilities: Loans
+  - Equity: Retained Earnings, Current Year Net Income, Other Equity accounts
+- **Collapsible Sections**: Each category can be expanded/collapsed for easier viewing
+- **Professional Design**: Proper indentation, borders, font weights, and right-aligned numbers
+- **Subtotals**: Shows subtotal for each category plus grand totals (Total Assets, Total Liabilities, Total Equity)
+- **Export Support**: CSV and PDF export maintained with updated format
