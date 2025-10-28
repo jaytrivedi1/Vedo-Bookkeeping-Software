@@ -160,8 +160,14 @@ export default function CategorizeTransactionDialog({
     },
   });
 
-  // Watch the transaction type to show/hide conditional fields
-  const selectedType = form.watch("transactionType");
+  // Use stable state for transaction type to prevent flashing during transitions
+  const [selectedType, setSelectedType] = useState<TransactionType | undefined>(undefined);
+  const watchedType = form.watch("transactionType");
+
+  // Update stable state when form value changes
+  useEffect(() => {
+    setSelectedType(watchedType);
+  }, [watchedType]);
 
   // Fetch AI suggestions when dialog opens with a transaction
   useEffect(() => {
@@ -472,8 +478,8 @@ export default function CategorizeTransactionDialog({
               </div>
             )}
 
-            {/* Conditional Fields - Horizontal Layout */}
-            {selectedType && (selectedType === "expense" || selectedType === "cheque") && (
+            {/* Conditional Fields - Use stable state to prevent flashing */}
+            {(selectedType === "expense" || selectedType === "cheque") && (
               <div className="grid grid-cols-1">
                 <FormField
                   control={form.control}
