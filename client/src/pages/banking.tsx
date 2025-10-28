@@ -12,6 +12,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -151,6 +161,9 @@ export default function Banking() {
   // Categorization dialog state
   const [selectedTransaction, setSelectedTransaction] = useState<ImportedTransaction | null>(null);
   const [categorizationDialogOpen, setCategorizationDialogOpen] = useState(false);
+  
+  // Delete confirmation dialog state
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -920,10 +933,10 @@ export default function Banking() {
 
   const handleBulkDelete = () => {
     if (selectedTransactions.size === 0) return;
+    setDeleteConfirmationOpen(true);
+  };
 
-    const confirmed = window.confirm(`Are you sure you want to delete ${selectedTransactions.size} transaction${selectedTransactions.size !== 1 ? 's' : ''}?`);
-    if (!confirmed) return;
-
+  const confirmBulkDelete = () => {
     const selectedTxs = filteredTransactions.filter(tx => selectedTransactions.has(tx.id));
     let successCount = 0;
     const totalCount = selectedTxs.length;
@@ -954,6 +967,8 @@ export default function Banking() {
         }
       });
     });
+    
+    setDeleteConfirmationOpen(false);
   };
 
   const allSelected = paginatedTransactions.length > 0 && 
@@ -2099,6 +2114,24 @@ export default function Banking() {
         onOpenChange={setCategorizationDialogOpen}
         transaction={selectedTransaction}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmationOpen} onOpenChange={setDeleteConfirmationOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transactions</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </TooltipProvider>
   );
