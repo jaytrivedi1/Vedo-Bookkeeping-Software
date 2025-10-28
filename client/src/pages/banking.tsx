@@ -1138,9 +1138,25 @@ export default function Banking() {
                                 <h3 className="font-semibold text-sm truncate">{account.name}</h3>
                               </div>
                               <p className="text-xs text-gray-500 mt-0.5">({account.code})</p>
-                              <p className="text-sm font-medium mt-2">
-                                {formatCurrency(account.balance)}
-                              </p>
+                              
+                              {/* Balance Display */}
+                              <div className="mt-2 space-y-1">
+                                {account.bankAccount && (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs text-gray-500">Bank:</span>
+                                    <span className="text-sm font-medium">
+                                      {formatCurrency(account.bankAccount.currentBalance || 0)}
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs text-gray-500">Books:</span>
+                                  <span className="text-sm font-medium">
+                                    {formatCurrency(account.balance)}
+                                  </span>
+                                </div>
+                              </div>
+                              
                               {account.feedType && (
                                 <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="mt-2">
                                   {account.feedType === 'plaid' ? (
@@ -1159,36 +1175,51 @@ export default function Banking() {
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-3 border-t flex gap-2">
+                          <div className="mt-3 pt-3 border-t">
                             {account.bankAccount ? (
-                              <>
+                              <div className="space-y-2">
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                    }}
+                                    disabled={syncTransactionsMutation.isPending}
+                                    className="flex-1"
+                                    data-testid={`button-sync-${account.id}`}
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteBankAccountMutation.mutate(account.bankAccount!.id);
+                                    }}
+                                    disabled={deleteBankAccountMutation.isPending}
+                                    className="flex-1"
+                                    data-testid={`button-disconnect-${account.id}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                    setShowBankFeedSetup(true);
                                   }}
-                                  disabled={syncTransactionsMutation.isPending}
-                                  className="flex-1"
-                                  data-testid={`button-sync-${account.id}`}
+                                  className="w-full"
+                                  data-testid={`button-upload-csv-${account.id}`}
                                 >
-                                  <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                                  <Upload className="h-3 w-3 mr-1" />
+                                  Upload CSV
                                 </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteBankAccountMutation.mutate(account.bankAccount!.id);
-                                  }}
-                                  disabled={deleteBankAccountMutation.isPending}
-                                  className="flex-1"
-                                  data-testid={`button-disconnect-${account.id}`}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </>
+                              </div>
                             ) : (
                               <Button
                                 variant="outline"
