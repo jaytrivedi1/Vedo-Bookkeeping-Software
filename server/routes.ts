@@ -6873,6 +6873,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastSync: new Date(),
       });
 
+      // Update bank account last synced time
+      await storage.updateBankAccount(bankAccount.id!, {
+        lastSyncedAt: new Date(),
+      });
+
       res.json({
         synced: importedTransactions.length,
         total: transactions.length,

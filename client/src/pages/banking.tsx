@@ -62,7 +62,7 @@ import {
   Filter,
   X
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankAccount, ImportedTransaction } from "@shared/schema";
@@ -1245,19 +1245,26 @@ export default function Banking() {
                               </div>
                               
                               {account.feedType && (
-                                <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="mt-2">
-                                  {account.feedType === 'plaid' ? (
-                                    <>
-                                      <LinkIcon className="h-3 w-3 mr-1" />
-                                      Plaid
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="h-3 w-3 mr-1" />
-                                      CSV
-                                    </>
+                                <div className="mt-2">
+                                  <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'}>
+                                    {account.feedType === 'plaid' ? (
+                                      <>
+                                        <LinkIcon className="h-3 w-3 mr-1" />
+                                        Plaid
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Upload className="h-3 w-3 mr-1" />
+                                        CSV
+                                      </>
+                                    )}
+                                  </Badge>
+                                  {account.bankAccount?.lastSyncedAt && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Last refreshed {formatDistanceToNow(new Date(account.bankAccount.lastSyncedAt), { addSuffix: true })}
+                                    </p>
                                   )}
-                                </Badge>
+                                </div>
                               )}
                             </div>
                           </div>

@@ -558,6 +558,7 @@ export const bankAccountsSchema = pgTable('bank_accounts', {
   availableBalance: doublePrecision('available_balance'),
   linkedAccountId: integer('linked_account_id').references(() => accounts.id), // Link to chart of accounts
   isActive: boolean('is_active').notNull().default(true),
+  lastSyncedAt: timestamp('last_synced_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
