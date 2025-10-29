@@ -440,6 +440,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
       };
       
+      // If reference is changing, check it's not already used
+      if (body.reference && body.reference !== existingTransaction.reference) {
+        const transactions = await storage.getTransactions();
+        const duplicateReference = transactions.find(t => 
+          t.reference === body.reference && 
+          t.type === 'invoice' &&
+          t.id !== invoiceId // Exclude the current invoice
+        );
+        
+        if (duplicateReference) {
+          return res.status(400).json({ 
+            message: "Invoice reference must be unique", 
+            errors: [{ 
+              path: ["reference"], 
+              message: "An invoice with this reference number already exists" 
+            }] 
+          });
+        }
+      }
+      
       // Get existing line items and ledger entries
       const existingLineItems = await storage.getLineItemsByTransaction(invoiceId);
       const existingLedgerEntries = await storage.getLedgerEntriesByTransaction(invoiceId);
