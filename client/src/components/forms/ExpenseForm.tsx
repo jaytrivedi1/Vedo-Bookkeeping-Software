@@ -207,6 +207,29 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     }
   }, [isEditing, lineItems, expense]);
 
+  // Reset form when expense data loads (fixes empty form on navigation)
+  useEffect(() => {
+    if (isEditing && expense && lineItems) {
+      form.reset({
+        date: new Date(expense.date),
+        contactId: expense.contactId || undefined,
+        reference: expense.reference || '',
+        description: expense.description || '',
+        status: 'completed' as const,
+        paymentMethod: (expense.paymentMethod as "cash" | "check" | "credit_card" | "bank_transfer" | "other") || 'cash',
+        paymentAccountId: expense.paymentAccountId || undefined,
+        paymentDate: expense.paymentDate ? new Date(expense.paymentDate) : new Date(expense.date),
+        memo: expense.memo || '',
+        lineItems: lineItems.length ? lineItems.map(item => ({
+          accountId: item.accountId || undefined,
+          description: item.description,
+          amount: item.amount,
+          salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
+        })) : [{ accountId: undefined, description: '', amount: 0, salesTaxId: undefined }],
+      });
+    }
+  }, [expense, lineItems, isEditing, form]);
+
   const saveExpense = useMutation({
     mutationFn: async (data: any) => {
       if (isEditing) {
