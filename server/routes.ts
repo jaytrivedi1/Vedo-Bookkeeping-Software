@@ -779,6 +779,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body.reference = nextInvoiceNumber.toString();
       }
       
+      // Check if invoice reference already exists
+      const existingInvoice = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'invoice'
+      );
+      
+      if (existingInvoice) {
+        return res.status(400).json({ 
+          message: "Invoice reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "An invoice with this reference number already exists" 
+          }] 
+        });
+      }
+      
       // Validate invoice data - with detailed logging
       console.log("Validating invoice data:", JSON.stringify(body));
       const result = invoiceSchema.safeParse(body);
@@ -6173,6 +6189,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: new Date(req.body.date),
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
       };
+      
+      // Check if bill reference already exists
+      const transactions = await storage.getTransactions();
+      const existingBill = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'bill'
+      );
+      
+      if (existingBill) {
+        return res.status(400).json({ 
+          message: "Bill reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A bill with this reference number already exists" 
+          }] 
+        });
+      }
       
       // Validate bill data
       const billData = billSchema.parse(body);
