@@ -440,26 +440,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined,
       };
       
-      // If reference is changing, check it's not already used
-      if (body.reference && body.reference !== existingTransaction.reference) {
-        const transactions = await storage.getTransactions();
-        const duplicateReference = transactions.find(t => 
-          t.reference === body.reference && 
-          t.type === 'invoice' &&
-          t.id !== invoiceId // Exclude the current invoice
-        );
-        
-        if (duplicateReference) {
-          return res.status(400).json({ 
-            message: "Invoice reference must be unique", 
-            errors: [{ 
-              path: ["reference"], 
-              message: "An invoice with this reference number already exists" 
-            }] 
-          });
-        }
-      }
-      
       // Get existing line items and ledger entries
       const existingLineItems = await storage.getLineItemsByTransaction(invoiceId);
       const existingLedgerEntries = await storage.getLedgerEntriesByTransaction(invoiceId);
@@ -777,22 +757,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Set the reference to the next invoice number
         body.reference = nextInvoiceNumber.toString();
-      }
-      
-      // Check if invoice reference already exists
-      const existingInvoice = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'invoice'
-      );
-      
-      if (existingInvoice) {
-        return res.status(400).json({ 
-          message: "Invoice reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "An invoice with this reference number already exists" 
-          }] 
-        });
       }
       
       // Validate invoice data - with detailed logging
@@ -1725,23 +1689,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         date: new Date(req.body.date)
       };
-      
-      // Check if journal entry reference already exists
-      const transactions = await storage.getTransactions();
-      const existingJournal = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'journal_entry'
-      );
-      
-      if (existingJournal) {
-        return res.status(400).json({ 
-          message: "Journal entry reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "A journal entry with this reference number already exists" 
-          }] 
-        });
-      }
       
       const journalData = journalEntrySchema.parse(body);
       
@@ -2690,26 +2637,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         date: new Date(req.body.date)
       };
-      
-      // Only check references if the reference is not empty
-      if (body.reference && body.reference.trim() !== '') {
-        // Check if deposit reference already exists
-        const transactions = await storage.getTransactions();
-        const existingDeposit = transactions.find(t => 
-          t.reference === body.reference && 
-          t.type === 'deposit'
-        );
-        
-        if (existingDeposit) {
-          return res.status(400).json({ 
-            message: "Deposit reference must be unique", 
-            errors: [{ 
-              path: ["reference"], 
-              message: "A deposit with this reference number already exists" 
-            }] 
-          });
-        }
-      }
       
       // Check if using Accounts Receivable without a customer
       if (body.sourceAccountId === 2 && !body.contactId) {
@@ -6226,23 +6153,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: new Date(req.body.date),
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
       };
-      
-      // Check if bill reference already exists
-      const transactions = await storage.getTransactions();
-      const existingBill = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'bill'
-      );
-      
-      if (existingBill) {
-        return res.status(400).json({ 
-          message: "Bill reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "A bill with this reference number already exists" 
-          }] 
-        });
-      }
       
       // Validate bill data
       const billData = billSchema.parse(body);
