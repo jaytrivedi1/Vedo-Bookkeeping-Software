@@ -1461,22 +1461,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body.reference = `CHQ-${nextChequeNumber}`;
       }
       
-      // Check if cheque reference already exists
-      const existingCheque = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'cheque'
-      );
-      
-      if (existingCheque) {
-        return res.status(400).json({ 
-          message: "Cheque reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "A cheque with this reference number already exists" 
-          }] 
-        });
-      }
-      
       // Validate cheque data
       console.log("Validating cheque data:", JSON.stringify(body));
       const result = chequeSchema.safeParse(body);
