@@ -222,6 +222,28 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     }
   }, [isEditing, lineItems, cheque, contacts]);
 
+  // Reset form when cheque data loads (fixes empty form on navigation)
+  useEffect(() => {
+    if (isEditing && cheque && lineItems) {
+      form.reset({
+        date: new Date(cheque.date),
+        contactId: cheque.contactId || 0,
+        reference: cheque.reference || '',
+        description: cheque.description || '',
+        status: 'completed' as const,
+        paymentAccountId: cheque.paymentAccountId || 0,
+        paymentDate: cheque.paymentDate ? new Date(cheque.paymentDate) : new Date(cheque.date),
+        memo: cheque.memo || '',
+        lineItems: lineItems.length ? lineItems.map(item => ({
+          accountId: item.accountId || undefined,
+          description: item.description,
+          amount: item.amount,
+          salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
+        })) : [{ accountId: undefined, description: '', amount: 0, salesTaxId: undefined }],
+      });
+    }
+  }, [cheque, lineItems, isEditing, form]);
+
   const saveCheque = useMutation({
     mutationFn: async (data: any) => {
       if (isEditing) {

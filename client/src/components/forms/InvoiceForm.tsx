@@ -257,6 +257,27 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     }
   }, [isEditing, invoice?.contactId, contacts, selectedContact]);
 
+  // Reset form when invoice data loads (fixes empty form on navigation)
+  useEffect(() => {
+    if (isEditing && invoice && lineItems) {
+      form.reset({
+        date: new Date(invoice.date),
+        contactId: invoice.contactId,
+        reference: invoice.reference,
+        description: invoice.description || '',
+        status: invoice.status as "open" | "paid" | "overdue" | "partial",
+        lineItems: lineItems.length ? lineItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          salesTaxId: item.salesTaxId !== null ? item.salesTaxId : undefined,
+          productId: item.productId !== null && item.productId !== undefined ? String(item.productId) : undefined
+        })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
+      });
+    }
+  }, [invoice, lineItems, isEditing, form]);
+
   // Credit management functions
   const addCredit = (credit: Transaction) => {
     // Don't add if already applied
