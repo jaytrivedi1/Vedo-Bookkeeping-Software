@@ -99,7 +99,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const { toast } = useToast();
 
-  const defaultExpenseNumber = isEditing ? expense?.reference : `EXP-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`;
+  const defaultExpenseNumber = isEditing ? expense?.reference : "";  // Allow blank reference numbers
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],

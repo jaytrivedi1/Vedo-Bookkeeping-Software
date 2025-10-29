@@ -90,7 +90,7 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
     resolver: zodResolver(journalEntrySchema),
     defaultValues: {
       date: new Date(),
-      reference: `JE-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}`,
+      reference: '',  // Allow blank reference numbers
       description: '',
       attachments: '',
       entries: [
