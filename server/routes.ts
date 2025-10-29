@@ -6784,6 +6784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const imported = await storage.createImportedTransaction({
             bankAccountId: bankAccount.id!,
             plaidTransactionId: tx.transaction_id,
+            accountId: bankAccount.linkedAccountId, // Link to Chart of Accounts
             date: new Date(tx.date),
             authorizedDate: tx.authorized_date ? new Date(tx.authorized_date) : null,
             name: tx.name,
@@ -6795,6 +6796,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             paymentChannel: tx.payment_channel || null,
             matchedTransactionId: null,
             status: 'unmatched',
+            source: 'plaid', // Mark source as Plaid
           });
           importedTransactions.push(imported);
         }
