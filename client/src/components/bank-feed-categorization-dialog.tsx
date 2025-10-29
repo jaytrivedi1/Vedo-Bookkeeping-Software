@@ -172,13 +172,7 @@ export default function CategorizeTransactionDialog({
       })
         .then((data) => {
           setAiSuggestions(data);
-          // Auto-populate form with AI suggestions
-          if (data) {
-            form.setValue("transactionType", data.transactionType);
-            form.setValue("accountId", data.accountId);
-            if (data.contactName) form.setValue("contactName", data.contactName);
-            if (data.salesTaxId) form.setValue("salesTaxId", data.salesTaxId);
-          }
+          // Don't auto-populate form - let user decide what to use from suggestions
         })
         .catch((error) => {
           console.error("Failed to fetch AI suggestions:", error);
