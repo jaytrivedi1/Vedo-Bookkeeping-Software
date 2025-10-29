@@ -5064,12 +5064,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const newTransaction = await storage.createTransaction(
           {
             type: isPayment ? 'expense' : 'deposit',
-            reference: transaction.chequeNo ? `Cheque #${transaction.chequeNo}` : `Banking import: ${transaction.description}`,
+            reference: transaction.chequeNo ? `Cheque #${transaction.chequeNo}` : null,  // Allow blank reference
             amount: transactionAmount,
             date: new Date(transaction.date),
             description: transaction.description,
             status: 'completed',
-            contactId: null
+            contactId: null,
+            // Set payment fields for expenses
+            paymentAccountId: isPayment ? bankAccountId : null,
+            paymentMethod: isPayment ? (transaction.chequeNo ? 'cheque' : 'eft') : null,
+            paymentDate: isPayment ? new Date(transaction.date) : null
           },
           [], // No line items for bank transactions
           [
@@ -7031,13 +7035,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const transaction = await storage.createTransaction(
           {
             type: 'expense',
-            reference: '',
+            reference: null, // Allow blank reference
             date: importedTx.date,
             description: description || importedTx.name,
             amount: totalWithTax,
             contactId,
             status: 'completed',
             paymentAccountId: glAccountId,
+            paymentMethod: 'eft', // Default to EFT for bank feed transactions
             paymentDate: importedTx.date,
           },
           lineItems,
