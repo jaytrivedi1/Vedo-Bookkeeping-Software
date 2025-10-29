@@ -21,6 +21,7 @@ import { recalculateBillBalances } from "./recalculate-bill-balances";
 import { seedAdminUser } from "./migrations/seed-admin-user";
 import { addCsvSupport } from "./migrations/add-csv-support";
 import migrateAddSalesReceiptTransfer from "./migrate-add-sales-receipt-transfer";
+import { migrateImportedTransactionsAccountId } from "./migrate-imported-transactions-account-id";
 
 const app = express();
 app.use(express.json());
@@ -113,6 +114,9 @@ app.use((req, res, next) => {
     
     // Add 'sales_receipt' and 'transfer' transaction types to enum
     await migrateAddSalesReceiptTransfer();
+    
+    // Fix imported transactions missing account_id link to Chart of Accounts
+    await migrateImportedTransactionsAccountId();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
