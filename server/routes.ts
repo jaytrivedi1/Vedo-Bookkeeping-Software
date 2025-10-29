@@ -1171,25 +1171,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
       
-      // Get all transactions for reference check
-      const transactions = await storage.getTransactions();
-      
-      // Check if expense reference already exists
-      const existingExpense = transactions.find(t => 
-        t.reference === body.reference && 
-        t.type === 'expense'
-      );
-      
-      if (existingExpense) {
-        return res.status(400).json({ 
-          message: "Expense reference must be unique", 
-          errors: [{ 
-            path: ["reference"], 
-            message: "An expense with this reference number already exists" 
-          }] 
-        });
-      }
-      
       // Validate expense data
       console.log("Validating expense data:", JSON.stringify(body));
       const result = expenseSchema.safeParse(body);
