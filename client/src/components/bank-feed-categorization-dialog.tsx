@@ -160,14 +160,8 @@ export default function CategorizeTransactionDialog({
     },
   });
 
-  // Use stable state for transaction type to prevent flashing during transitions
-  const [selectedType, setSelectedType] = useState<TransactionType | undefined>(undefined);
-  const watchedType = form.watch("transactionType");
-
-  // Update stable state when form value changes
-  useEffect(() => {
-    setSelectedType(watchedType);
-  }, [watchedType]);
+  // Watch the transaction type directly - no need for separate state
+  const selectedType = form.watch("transactionType");
 
   // Fetch AI suggestions when dialog opens with a transaction
   useEffect(() => {
@@ -478,8 +472,8 @@ export default function CategorizeTransactionDialog({
               </div>
             )}
 
-            {/* Conditional Fields - Use stable state to prevent flashing */}
-            {(selectedType === "expense" || selectedType === "cheque") && (
+            {/* Conditional Fields - Keep mounted but use display:none to preserve values */}
+            <div style={{ display: (selectedType === "expense" || selectedType === "cheque") ? "block" : "none" }}>
               <div className="grid grid-cols-1">
                 <FormField
                   control={form.control}
@@ -502,9 +496,9 @@ export default function CategorizeTransactionDialog({
                   )}
                 />
               </div>
-            )}
+            </div>
 
-            {selectedType === "sales_receipt" && (
+            <div style={{ display: selectedType === "sales_receipt" ? "block" : "none" }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -547,9 +541,9 @@ export default function CategorizeTransactionDialog({
                   )}
                 />
               </div>
-            )}
+            </div>
 
-            {selectedType === "transfer" && (
+            <div style={{ display: selectedType === "transfer" ? "block" : "none" }}>
               <div className="grid grid-cols-1">
                 <FormField
                   control={form.control}
@@ -572,7 +566,7 @@ export default function CategorizeTransactionDialog({
                   )}
                 />
               </div>
-            )}
+            </div>
 
             {/* Memo (for all types) */}
             <FormField
