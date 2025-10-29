@@ -74,7 +74,7 @@ export const contacts = pgTable('contacts', {
 // Transaction Headers
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
-  reference: text('reference').notNull(),
+  reference: text('reference'),  // Made optional - can be left blank
   type: transactionTypeEnum('type').notNull(),
   date: timestamp('date').notNull().defaultNow(),
   description: text('description'),
