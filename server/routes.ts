@@ -7130,6 +7130,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cleanup unmatched Plaid transactions (for fixing double-negation issues)
+  apiRouter.post("/plaid/cleanup-unmatched", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Get all unmatched Plaid transactions
+      const allTransactions = await storage.getImportedTransactions();
+      const unmatchedPlaidTransactions = allTransactions.filter(
+        tx => tx.source === 'plaid' && tx.status === 'unmatched'
+      );
+      
+      // Delete them permanently so they can be re-imported with correct signs
+      let deletedCount = 0;
+      for (const tx of unmatchedPlaidTransactions) {
+        await storage.deleteImportedTransaction(tx.id);
+        deletedCount++;
+      }
+      
+      res.json({ 
+        success: true, 
+        deletedCount,
+        message: `Deleted ${deletedCount} unmatched Plaid transactions. Re-sync to import them with correct amounts.`
+      });
+    } catch (error: any) {
+      console.error('Error cleaning up transactions:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Undo categorization - move transaction back to uncategorized
   apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, async (req: Request, res: Response) => {
     try {
