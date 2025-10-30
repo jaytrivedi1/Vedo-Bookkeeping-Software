@@ -68,6 +68,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
 
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
+      // Force rebuild: Fixed parameter order issue - v2
       return await apiRequest('/api/accounts', 'POST', data);
     },
     onSuccess: (response) => {
