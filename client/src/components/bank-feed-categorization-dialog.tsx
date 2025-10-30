@@ -129,14 +129,11 @@ export default function CategorizeTransactionDialog({
     subtitle: `· ${contact.type}`,
   }));
 
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'None', subtitle: undefined },
-    ...salesTaxes.map(tax => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined,
-    })),
-  ];
+  const taxItems: SearchableSelectItem[] = salesTaxes.map(tax => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined,
+  }));
 
   const productItems: SearchableSelectItem[] = [
     { value: '0', label: 'None', subtitle: undefined },
