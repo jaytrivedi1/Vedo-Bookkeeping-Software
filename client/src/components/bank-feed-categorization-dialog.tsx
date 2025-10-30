@@ -187,8 +187,23 @@ export default function CategorizeTransactionDialog({
         transactionId: transaction.id,
       })
         .then((data) => {
-          setAiSuggestions(data);
-          // Don't auto-populate form - let user decide what to use from suggestions
+          // Transform the nested API response to match the frontend interface
+          const suggestions = data?.suggestions;
+          if (suggestions) {
+            const transformed: AISuggestion = {
+              transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
+              accountId: suggestions.account?.id || 0,
+              accountName: suggestions.account?.name || "Unknown Account",
+              contactName: suggestions.contact?.name,
+              salesTaxId: suggestions.tax?.id,
+              confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
+              reasoning: suggestions.reasoning || "No reasoning provided",
+            };
+            console.log("Transformed AI suggestions:", transformed);
+            setAiSuggestions(transformed);
+          } else {
+            console.warn("No suggestions in API response:", data);
+          }
         })
         .catch((error) => {
           console.error("Failed to fetch AI suggestions:", error);
