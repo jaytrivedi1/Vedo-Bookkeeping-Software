@@ -68,7 +68,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
 
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
-      return await apiRequest('POST', '/api/accounts', data);
+      return await apiRequest('/api/accounts', 'POST', data);
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
