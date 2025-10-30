@@ -489,6 +489,31 @@ export default function CategorizeTransactionDialog({
               </div>
             </div>
 
+            <div style={{ display: selectedType === "deposit" ? "block" : "none" }}>
+              <div className="grid grid-cols-1">
+                <FormField
+                  control={form.control}
+                  name="contactName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Customer</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value || ""}
+                          onValueChange={field.onChange}
+                          items={contactItems.filter(c => c.subtitle?.includes('customer'))}
+                          placeholder="Select customer"
+                          emptyText="No customers found"
+                          data-testid="select-customer"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
             <div style={{ display: selectedType === "sales_receipt" ? "block" : "none" }}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
