@@ -143,3 +143,16 @@ Preferred communication style: Simple, everyday language.
 - **Professional Design**: Proper indentation, borders, font weights, and right-aligned numbers
 - **Subtotals**: Shows subtotal for each category plus grand totals (Total Assets, Total Liabilities, Total Equity)
 - **Export Support**: CSV and PDF export maintained with updated format
+
+### Dashboard Modernization (October 30, 2025)
+- **Real Data Calculations**: Replaced mock chart data with actual monthly revenue/expense calculations from transaction history (last 6 months)
+- **Intelligent Trend Analysis**: Implemented accurate month-over-month trend calculations
+  - Handles negative values correctly using Math.abs() to avoid sign issues
+  - Special logic for profit trends transitioning from negative to positive
+  - Displays actual percentage changes (e.g., +15.3%, -8.2%)
+- **Improved Data Accuracy**: Updated summary cards to use proper API response properties
+  - Revenue from `incomeStatement.revenue.total`
+  - Expenses from `incomeStatement.operatingExpenses.total`
+  - Net Profit from `incomeStatement.netIncome`
+- **TypeScript Type Safety**: Added comprehensive IncomeStatementData interface for better code maintainability
+- **Enhanced UX**: Trend arrows now accurately represent business performance without manual inversions
