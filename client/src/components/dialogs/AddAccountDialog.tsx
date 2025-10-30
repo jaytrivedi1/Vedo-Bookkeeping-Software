@@ -93,6 +93,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
   });
 
   const onSubmit = (data: any) => {
+    console.log("Form onSubmit called with data:", data);
     // Convert "none" to empty string for salesTaxType
     if (data.salesTaxType === "none") {
       data.salesTaxType = "";
@@ -275,6 +276,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
                 type="submit" 
                 disabled={createAccount.isPending}
                 data-testid="button-create-account"
+                onClick={() => console.log("Create Account button clicked!")}
               >
                 {createAccount.isPending ? "Creating..." : "Create Account"}
               </Button>
