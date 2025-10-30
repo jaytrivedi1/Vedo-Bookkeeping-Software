@@ -111,7 +111,7 @@ export default function Dashboard() {
       
       // Filter transactions for this month
       const monthTransactions = transactions.filter(t => {
-        const txDate = parseISO(t.date);
+        const txDate = typeof t.date === 'string' ? parseISO(t.date) : new Date(t.date);
         return txDate >= monthStart && txDate <= monthEnd;
       });
       
@@ -169,11 +169,19 @@ export default function Dashboard() {
     if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
     const current = incomeStatement.revenue.total;
     const previous = previousIncomeStatement.revenue.total;
-    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
-    const change = ((current - previous) / previous) * 100;
+    
+    // Handle edge cases
+    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
+    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
+    
+    // Calculate change using absolute value of previous to avoid sign issues
+    const change = ((current - previous) / Math.abs(previous)) * 100;
+    const absChange = Math.abs(Math.round(change * 10) / 10);
+    
+    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
     return {
-      percentage: Math.abs(Math.round(change * 10) / 10),
-      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+      percentage: absChange,
+      direction: change > 0 ? 'up' as const : 'down' as const,
     };
   }, [incomeStatement, previousIncomeStatement]);
 
@@ -181,11 +189,19 @@ export default function Dashboard() {
     if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
     const current = incomeStatement.operatingExpenses.total;
     const previous = previousIncomeStatement.operatingExpenses.total;
-    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
-    const change = ((current - previous) / previous) * 100;
+    
+    // Handle edge cases
+    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
+    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
+    
+    // Calculate change using absolute value of previous to avoid sign issues
+    const change = ((current - previous) / Math.abs(previous)) * 100;
+    const absChange = Math.abs(Math.round(change * 10) / 10);
+    
+    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
     return {
-      percentage: Math.abs(Math.round(change * 10) / 10),
-      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+      percentage: absChange,
+      direction: change > 0 ? 'up' as const : 'down' as const,
     };
   }, [incomeStatement, previousIncomeStatement]);
 
@@ -193,11 +209,28 @@ export default function Dashboard() {
     if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
     const current = incomeStatement.netIncome;
     const previous = previousIncomeStatement.netIncome;
-    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
-    const change = ((current - previous) / previous) * 100;
+    
+    // Special handling for profit trends (can be negative)
+    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
+    
+    // If transitioning from negative to positive or vice versa
+    if (previous < 0 && current > 0) {
+      return { percentage: 100, direction: 'up' as const };
+    }
+    if (previous > 0 && current < 0) {
+      return { percentage: 100, direction: 'down' as const };
+    }
+    
+    // Both same sign, calculate normal percentage
+    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
+    
+    const change = ((current - previous) / Math.abs(previous)) * 100;
+    const absChange = Math.abs(Math.round(change * 10) / 10);
+    
+    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
     return {
-      percentage: Math.abs(Math.round(change * 10) / 10),
-      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+      percentage: absChange,
+      direction: change > 0 ? 'up' as const : 'down' as const,
     };
   }, [incomeStatement, previousIncomeStatement]);
 
@@ -343,7 +376,7 @@ export default function Dashboard() {
               icon={<DollarSign />}
               trend={revenueTrend.percentage > 0 ? `${revenueTrend.direction === 'up' ? '+' : '-'}${revenueTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection={revenueTrend.direction}
+              trendDirection={revenueTrend.direction === 'neutral' ? undefined : revenueTrend.direction}
               iconBgColor="bg-primary-100"
               iconTextColor="text-primary"
             />
@@ -356,7 +389,7 @@ export default function Dashboard() {
               icon={<ShoppingCart />}
               trend={expensesTrend.percentage > 0 ? `${expensesTrend.direction === 'up' ? '+' : '-'}${expensesTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection={expensesTrend.direction === 'up' ? 'down' : 'up'}
+              trendDirection={expensesTrend.direction === 'neutral' ? undefined : expensesTrend.direction}
               iconBgColor="bg-red-100"
               iconTextColor="text-red-600"
             />
@@ -369,7 +402,7 @@ export default function Dashboard() {
               icon={<TrendingUp />}
               trend={profitTrend.percentage > 0 ? `${profitTrend.direction === 'up' ? '+' : '-'}${profitTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection={profitTrend.direction}
+              trendDirection={profitTrend.direction === 'neutral' ? undefined : profitTrend.direction}
               iconBgColor="bg-green-100"
               iconTextColor="text-green-600"
             />
