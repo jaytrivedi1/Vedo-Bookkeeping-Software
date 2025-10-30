@@ -6616,7 +6616,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user: {
           client_user_id: `user_${req.user?.id || 'default'}`,
         },
-        client_name: 'FinLedger',
+        client_name: 'Vedo',
         products: PLAID_PRODUCTS,
         country_codes: PLAID_COUNTRY_CODES,
         language: 'en',

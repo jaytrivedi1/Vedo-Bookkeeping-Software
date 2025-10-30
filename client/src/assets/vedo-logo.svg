@@ -9,7 +9,7 @@
   
   <!-- Text elements -->
   <text x="10" y="35" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="url(#gradient)">
-    FinLedger
+    Vedo
   </text>
 
   <!-- Dollar symbol icon -->

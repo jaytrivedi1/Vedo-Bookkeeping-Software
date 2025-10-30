@@ -96,7 +96,7 @@ export default function Login() {
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">FinLedger</h1>
+            <h1 className="text-3xl font-bold">Vedo</h1>
           </div>
           <p className="text-gray-500">Professional Bookkeeping Application</p>
         </div>

@@ -20,7 +20,7 @@ const PgSession = connectPgSimple(session);
 export function setupAuth(app: Express): void {
   // Configure session with PostgreSQL store
   const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || 'finledger-secret-key',
+    secret: process.env.SESSION_SECRET || 'vedo-secret-key',
     resave: false,
     saveUninitialized: false,
     store: new PgSession({

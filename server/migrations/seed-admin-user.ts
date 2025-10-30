@@ -34,7 +34,7 @@ export async function seedAdminUser() {
     // Create admin user
     const [admin] = await db.insert(usersSchema).values({
       username: 'admin',
-      email: 'admin@finledger.com',
+      email: 'admin@vedo.com',
       password: hashedPassword,
       firstName: 'System',
       lastName: 'Administrator',

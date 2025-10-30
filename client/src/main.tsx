@@ -5,7 +5,7 @@ import "./index.css";
 const root = document.getElementById("root");
 
 if (root) {
-  document.title = "FinLedger - Bookkeeping Application";
+  document.title = "Vedo - Bookkeeping Application";
   
   // Create meta description
   let metaDescription = document.querySelector('meta[name="description"]');

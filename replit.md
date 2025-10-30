@@ -1,8 +1,8 @@
-# FinLedger - Bookkeeping Application
+# Vedo - Bookkeeping Application
 
 ## Overview
 
-FinLedger is a comprehensive full-stack bookkeeping application built with a React frontend and Express.js backend. It provides professional accounting features including double-entry bookkeeping, invoicing, expense tracking, payment processing, and financial reporting. The application supports multi-user environments with role-based permissions and integrates with external services like Shopify and Stripe.
+Vedo is a comprehensive full-stack bookkeeping application built with a React frontend and Express.js backend. It provides professional accounting features including double-entry bookkeeping, invoicing, expense tracking, payment processing, and financial reporting. The application supports multi-user environments with role-based permissions and integrates with external services like Shopify and Stripe.
 
 ## User Preferences
 

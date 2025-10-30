@@ -692,13 +692,13 @@ export class MemStorage implements IStorage {
   // Company Methods
   private initializeDefaultCompany() {
     const defaultCompany: InsertCompany = {
-      name: 'FinLedger, Inc.',
+      name: 'Vedo, Inc.',
       address: '123 Financial Way, Suite 100',
       phone: '(555) 123-4567',
-      email: 'info@finledger.com',
-      website: 'www.finledger.com',
+      email: 'info@vedo.com',
+      website: 'www.vedo.com',
       taxId: '12-3456789',
-      logoUrl: '/assets/finledger-logo.svg',
+      logoUrl: '/assets/vedo-logo.svg',
       isActive: true
     };
     
