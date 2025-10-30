@@ -8125,6 +8125,367 @@ Respond in JSON format:
     }
   });
 
+  // Bank Feed Matching Routes
+  // GET /api/bank-feeds/:id/suggestions - Get match suggestions for a bank transaction
+  apiRouter.get("/bank-feeds/:id/suggestions", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      
+      if (!transactionId) {
+        return res.status(400).json({ error: 'Transaction ID is required' });
+      }
+
+      const { matchingService } = await import('./matching-service');
+      const suggestions = await matchingService.findMatchesForBankTransaction(transactionId);
+      
+      res.json({
+        suggestions,
+        count: suggestions.length,
+      });
+    } catch (error: any) {
+      console.error('Error finding match suggestions:', error);
+      res.status(500).json({ error: error.message || 'Failed to find match suggestions' });
+    }
+  });
+
+  // POST /api/bank-feeds/:id/match-invoice - Match bank deposit to invoice (creates payment)
+  apiRouter.post("/bank-feeds/:id/match-invoice", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { invoiceId } = req.body;
+
+      if (!transactionId || !invoiceId) {
+        return res.status(400).json({ error: 'Transaction ID and Invoice ID are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status === 'matched') {
+        return res.status(400).json({ error: 'Transaction is already matched' });
+      }
+
+      // Fetch the invoice
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      // Create a payment transaction
+      const txDate = new Date(importedTx.date);
+      const amount = Math.abs(importedTx.amount);
+      
+      const paymentTransaction: InsertTransaction = {
+        type: 'payment',
+        reference: `PAY-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+        date: txDate,
+        description: `Payment for Invoice ${invoice.reference || invoice.id}`,
+        amount,
+        contactId: invoice.contactId,
+        status: 'completed',
+        paymentDate: txDate,
+      };
+
+      // Create ledger entries for the payment
+      const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+      const ledgerEntries: InsertLedgerEntry[] = [];
+
+      // Debit bank account (money in)
+      if (bankAccountId) {
+        ledgerEntries.push({
+          accountId: bankAccountId,
+          description: `Payment received - ${invoice.reference || invoice.id}`,
+          debit: amount,
+          credit: 0,
+          date: txDate,
+          transactionId: 0,
+        });
+      }
+
+      // Credit Accounts Receivable
+      const arAccount = await storage.getAccountByCode('1200');
+      if (arAccount) {
+        ledgerEntries.push({
+          accountId: arAccount.id,
+          description: `Payment applied - ${invoice.reference || invoice.id}`,
+          debit: 0,
+          credit: amount,
+          date: txDate,
+          transactionId: 0,
+        });
+      }
+
+      const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+
+      // Apply payment to invoice
+      await storage.applyPaymentToInvoice(createdPayment.id, invoiceId, amount);
+
+      // Update imported transaction to mark it as matched
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: createdPayment.id,
+          matchedTransactionType: 'payment',
+          isManualMatch: false,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        payment: createdPayment,
+        message: 'Payment created and applied to invoice',
+      });
+    } catch (error: any) {
+      console.error('Error matching to invoice:', error);
+      res.status(500).json({ error: error.message || 'Failed to match to invoice' });
+    }
+  });
+
+  // POST /api/bank-feeds/:id/match-bill - Match bank payment to bill (creates bill payment)
+  apiRouter.post("/bank-feeds/:id/match-bill", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { billId } = req.body;
+
+      if (!transactionId || !billId) {
+        return res.status(400).json({ error: 'Transaction ID and Bill ID are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status === 'matched') {
+        return res.status(400).json({ error: 'Transaction is already matched' });
+      }
+
+      // Fetch the bill
+      const bill = await storage.getTransaction(billId);
+      if (!bill || bill.type !== 'bill') {
+        return res.status(404).json({ error: 'Bill not found' });
+      }
+
+      // Create a payment transaction
+      const txDate = new Date(importedTx.date);
+      const amount = Math.abs(importedTx.amount);
+      
+      const paymentTransaction: InsertTransaction = {
+        type: 'payment',
+        reference: `BILLPAY-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+        date: txDate,
+        description: `Payment for Bill ${bill.reference || bill.id}`,
+        amount,
+        contactId: bill.contactId,
+        status: 'completed',
+        paymentDate: txDate,
+      };
+
+      // Create ledger entries for the payment
+      const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+      const ledgerEntries: InsertLedgerEntry[] = [];
+
+      // Credit bank account (money out)
+      if (bankAccountId) {
+        ledgerEntries.push({
+          accountId: bankAccountId,
+          description: `Bill payment - ${bill.reference || bill.id}`,
+          debit: 0,
+          credit: amount,
+          date: txDate,
+          transactionId: 0,
+        });
+      }
+
+      // Debit Accounts Payable
+      const apAccount = await storage.getAccountByCode('2000');
+      if (apAccount) {
+        ledgerEntries.push({
+          accountId: apAccount.id,
+          description: `Bill payment applied - ${bill.reference || bill.id}`,
+          debit: amount,
+          credit: 0,
+          date: txDate,
+          transactionId: 0,
+        });
+      }
+
+      const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+
+      // Apply payment to bill
+      await storage.applyPaymentToBill(createdPayment.id, billId, amount);
+
+      // Update imported transaction to mark it as matched
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: createdPayment.id,
+          matchedTransactionType: 'payment',
+          isManualMatch: false,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        payment: createdPayment,
+        message: 'Payment created and applied to bill',
+      });
+    } catch (error: any) {
+      console.error('Error matching to bill:', error);
+      res.status(500).json({ error: error.message || 'Failed to match to bill' });
+    }
+  });
+
+  // POST /api/bank-feeds/:id/link-manual - Link to existing manual entry (no new transaction)
+  apiRouter.post("/bank-feeds/:id/link-manual", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { manualTransactionId } = req.body;
+
+      if (!transactionId || !manualTransactionId) {
+        return res.status(400).json({ error: 'Transaction ID and Manual Transaction ID are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status === 'matched') {
+        return res.status(400).json({ error: 'Transaction is already matched' });
+      }
+
+      // Fetch the manual transaction
+      const manualTx = await storage.getTransaction(manualTransactionId);
+      if (!manualTx) {
+        return res.status(404).json({ error: 'Manual transaction not found' });
+      }
+
+      // Update imported transaction to link it to the manual entry
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: manualTransactionId,
+          matchedTransactionType: manualTx.type,
+          isManualMatch: true,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        manualTransaction: manualTx,
+        message: 'Bank transaction linked to existing entry',
+      });
+    } catch (error: any) {
+      console.error('Error linking to manual entry:', error);
+      res.status(500).json({ error: error.message || 'Failed to link to manual entry' });
+    }
+  });
+
+  // DELETE /api/bank-feeds/:id/unmatch - Undo a match
+  apiRouter.delete("/bank-feeds/:id/unmatch", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+
+      if (!transactionId) {
+        return res.status(400).json({ error: 'Transaction ID is required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status !== 'matched') {
+        return res.status(400).json({ error: 'Transaction is not matched' });
+      }
+
+      // If it's a manual match, just unlink (don't delete the transaction)
+      if (importedTx.isManualMatch) {
+        await db
+          .update(importedTransactionsSchema)
+          .set({
+            matchedTransactionId: null,
+            matchedTransactionType: null,
+            isManualMatch: false,
+            matchConfidence: null,
+            status: 'unmatched',
+            updatedAt: new Date(),
+          })
+          .where(eq(importedTransactionsSchema.id, transactionId));
+
+        return res.json({
+          success: true,
+          message: 'Bank transaction unlinked from manual entry',
+        });
+      }
+
+      // If it's an auto-created match, we need to reverse the transaction and payment applications
+      if (importedTx.matchedTransactionId) {
+        const matchedTx = await storage.getTransaction(importedTx.matchedTransactionId);
+        
+        if (matchedTx && matchedTx.type === 'payment') {
+          // Remove payment applications
+          await db
+            .delete(paymentApplications)
+            .where(eq(paymentApplications.paymentId, matchedTx.id));
+
+          // Delete the payment transaction
+          await storage.deleteTransaction(matchedTx.id);
+        }
+      }
+
+      // Reset imported transaction
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: null,
+          matchedTransactionType: null,
+          isManualMatch: false,
+          matchConfidence: null,
+          status: 'unmatched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        message: 'Match undone successfully',
+      });
+    } catch (error: any) {
+      console.error('Error unmatching transaction:', error);
+      res.status(500).json({ error: error.message || 'Failed to unmatch transaction' });
+    }
+  });
+
   // Reconciliation routes
   apiRouter.post("/reconciliations", async (req: Request, res: Response) => {
     try {
