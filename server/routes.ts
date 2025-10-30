@@ -1268,17 +1268,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For expenses: DEBIT expense accounts (from line items) + tax, CREDIT payment account
       const ledgerEntries: any[] = [];
       
+      // Calculate base amounts for each line item (excluding tax)
+      // The frontend sends subTotal which is the sum of all line items excluding tax
+      // We need to distribute this proportionally across line items
+      const totalLineItemAmount = expenseData.lineItems.reduce((sum, item) => sum + item.amount, 0);
+      let remainingSubTotal = subTotal;
+      
       // Add debit entries for each expense line item
-      for (const item of expenseData.lineItems) {
+      for (let i = 0; i < expenseData.lineItems.length; i++) {
+        const item = expenseData.lineItems[i];
         const expenseAccount = await storage.getAccount(item.accountId);
         if (!expenseAccount) {
           return res.status(400).json({ message: `Invalid expense account for line item` });
         }
         
+        // Calculate base amount (excluding tax) for this line item
+        let baseAmount: number;
+        if (i === expenseData.lineItems.length - 1) {
+          // Last item gets the remainder to avoid rounding errors
+          baseAmount = remainingSubTotal;
+        } else if (taxAmount > 0 && totalLineItemAmount > 0) {
+          // Distribute subTotal proportionally based on line item amounts
+          baseAmount = roundTo2Decimals((item.amount / totalLineItemAmount) * subTotal);
+          remainingSubTotal = roundTo2Decimals(remainingSubTotal - baseAmount);
+        } else {
+          // No tax, use full amount
+          baseAmount = roundTo2Decimals(item.amount);
+        }
+        
         ledgerEntries.push({
           accountId: item.accountId,
           description: `${item.description}`,
-          debit: roundTo2Decimals(item.amount),
+          debit: baseAmount,
           credit: 0,
           date: transaction.date,
           transactionId: 0
