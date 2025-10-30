@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, parseISO, isSameMonth } from "date-fns";
 import {
   DollarSign,
   ShoppingCart,
@@ -38,6 +38,33 @@ import { Transaction } from "@shared/schema";
 import TransferForm from "@/components/forms/TransferForm";
 import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
 
+// Type definition for income statement API response
+interface IncomeStatementData {
+  revenue: {
+    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+    total: number;
+  };
+  costOfGoodsSold: {
+    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+    total: number;
+  };
+  grossProfit: number;
+  operatingExpenses: {
+    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+    total: number;
+  };
+  operatingIncome: number;
+  otherIncome: {
+    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+    total: number;
+  };
+  otherExpense: {
+    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+    total: number;
+  };
+  netIncome: number;
+}
+
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
@@ -48,24 +75,65 @@ export default function Dashboard() {
     queryKey: ['/api/transactions'],
   });
 
-  // Fetch income statement for summary cards
-  const { data: incomeStatement } = useQuery({
+  // Fetch current month income statement
+  const { data: incomeStatement } = useQuery<IncomeStatementData>({
     queryKey: ['/api/reports/income-statement'],
   });
 
-  // Prepare data for chart
-  const currentDate = new Date();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const currentMonth = currentDate.getMonth();
+  // Fetch previous month income statement for trend calculation
+  const previousMonthStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+  const previousMonthEnd = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
   
-  const chartData = [
-    { month: months[(currentMonth - 5 + 12) % 12], income: 18350, expenses: 12450 },
-    { month: months[(currentMonth - 4 + 12) % 12], income: 21500, expenses: 16200 },
-    { month: months[(currentMonth - 3 + 12) % 12], income: 19800, expenses: 15300 },
-    { month: months[(currentMonth - 2 + 12) % 12], income: 22400, expenses: 17100 },
-    { month: months[(currentMonth - 1 + 12) % 12], income: 23600, expenses: 16450 },
-    { month: months[currentMonth], income: 24567.80, expenses: 18230.45 },
-  ];
+  const { data: previousIncomeStatement } = useQuery<IncomeStatementData>({
+    queryKey: ['/api/reports/income-statement', previousMonthStart, previousMonthEnd],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/reports/income-statement?startDate=${previousMonthStart}&endDate=${previousMonthEnd}`
+      );
+      if (!response.ok) throw new Error('Failed to fetch previous month data');
+      return response.json();
+    },
+  });
+
+  // Calculate monthly chart data from actual transactions
+  const chartData = useMemo(() => {
+    if (!transactions) return [];
+    
+    const currentDate = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const data = [];
+    
+    // Generate data for last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const monthDate = subMonths(currentDate, i);
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+      
+      // Filter transactions for this month
+      const monthTransactions = transactions.filter(t => {
+        const txDate = parseISO(t.date);
+        return txDate >= monthStart && txDate <= monthEnd;
+      });
+      
+      // Calculate income (invoices and deposits)
+      const income = monthTransactions
+        .filter(t => ['invoice', 'deposit', 'sales_receipt'].includes(t.type))
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      // Calculate expenses (expenses, bills, cheques)
+      const expenses = monthTransactions
+        .filter(t => ['expense', 'bill', 'cheque'].includes(t.type))
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      
+      data.push({
+        month: months[monthDate.getMonth()],
+        income: Math.round(income * 100) / 100,
+        expenses: Math.round(expenses * 100) / 100,
+      });
+    }
+    
+    return data;
+  }, [transactions]);
 
   // Filter transactions based on active tab
   const filteredTransactions = transactions
@@ -95,6 +163,43 @@ export default function Dashboard() {
     }, 
     0
   );
+
+  // Calculate trends (month-over-month comparison)
+  const revenueTrend = useMemo(() => {
+    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
+    const current = incomeStatement.revenue.total;
+    const previous = previousIncomeStatement.revenue.total;
+    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
+    const change = ((current - previous) / previous) * 100;
+    return {
+      percentage: Math.abs(Math.round(change * 10) / 10),
+      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+    };
+  }, [incomeStatement, previousIncomeStatement]);
+
+  const expensesTrend = useMemo(() => {
+    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
+    const current = incomeStatement.operatingExpenses.total;
+    const previous = previousIncomeStatement.operatingExpenses.total;
+    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
+    const change = ((current - previous) / previous) * 100;
+    return {
+      percentage: Math.abs(Math.round(change * 10) / 10),
+      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+    };
+  }, [incomeStatement, previousIncomeStatement]);
+
+  const profitTrend = useMemo(() => {
+    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
+    const current = incomeStatement.netIncome;
+    const previous = previousIncomeStatement.netIncome;
+    if (previous === 0) return { percentage: current > 0 ? 100 : 0, direction: 'up' as const };
+    const change = ((current - previous) / previous) * 100;
+    return {
+      percentage: Math.abs(Math.round(change * 10) / 10),
+      direction: change > 0 ? 'up' as const : change < 0 ? 'down' as const : 'neutral' as const,
+    };
+  }, [incomeStatement, previousIncomeStatement]);
 
   return (
     <div className="py-6 min-h-screen">
@@ -232,26 +337,26 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <SummaryCard
               title="Total Revenue"
-              amount={incomeStatement?.revenues 
-                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenues)
+              amount={incomeStatement?.revenue.total 
+                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenue.total)
                 : '0.00'}
               icon={<DollarSign />}
-              trend="+12.5%"
+              trend={revenueTrend.percentage > 0 ? `${revenueTrend.direction === 'up' ? '+' : '-'}${revenueTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection="up"
+              trendDirection={revenueTrend.direction}
               iconBgColor="bg-primary-100"
               iconTextColor="text-primary"
             />
             
             <SummaryCard
               title="Total Expenses"
-              amount={incomeStatement?.expenses 
-                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.expenses)
+              amount={incomeStatement?.operatingExpenses.total 
+                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingExpenses.total)
                 : '0.00'}
               icon={<ShoppingCart />}
-              trend="+4.3%"
+              trend={expensesTrend.percentage > 0 ? `${expensesTrend.direction === 'up' ? '+' : '-'}${expensesTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection="down"
+              trendDirection={expensesTrend.direction === 'up' ? 'down' : 'up'}
               iconBgColor="bg-red-100"
               iconTextColor="text-red-600"
             />
@@ -262,9 +367,9 @@ export default function Dashboard() {
                 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)
                 : '0.00'}
               icon={<TrendingUp />}
-              trend="+8.2%"
+              trend={profitTrend.percentage > 0 ? `${profitTrend.direction === 'up' ? '+' : '-'}${profitTrend.percentage}%` : '0%'}
               change="from last month"
-              trendDirection="up"
+              trendDirection={profitTrend.direction}
               iconBgColor="bg-green-100"
               iconTextColor="text-green-600"
             />
@@ -273,7 +378,7 @@ export default function Dashboard() {
               title="Unpaid Invoices"
               amount={new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unpaidInvoicesAmount)}
               icon={<FileText />}
-              trend={`${unpaidInvoices.length} invoices`}
+              trend={`${unpaidInvoices.length} ${unpaidInvoices.length === 1 ? 'invoice' : 'invoices'}`}
               change="awaiting payment"
               iconBgColor="bg-yellow-100"
               iconTextColor="text-yellow-600"
