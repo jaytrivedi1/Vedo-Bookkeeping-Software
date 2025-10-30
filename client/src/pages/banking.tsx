@@ -566,8 +566,8 @@ export default function Banking() {
 
   // Update reconciliation items mutation
   const updateReconciliationItemsMutation = useMutation({
-    mutationFn: async ({ reconciliationId, clearedEntryIds }: { reconciliationId: number; clearedEntryIds: number[] }) => {
-      return await apiRequest(`/api/reconciliations/${reconciliationId}/items`, 'PATCH', { clearedEntryIds });
+    mutationFn: async ({ reconciliationId, ledgerEntryIds, isCleared }: { reconciliationId: number; ledgerEntryIds: number[]; isCleared: boolean }) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/items`, 'PATCH', { ledgerEntryIds, isCleared });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId] });
@@ -1098,7 +1098,8 @@ export default function Banking() {
     if (activeReconciliationId) {
       updateReconciliationItemsMutation.mutate({
         reconciliationId: activeReconciliationId,
-        clearedEntryIds: Array.from(newClearedEntries),
+        ledgerEntryIds: [entryId],
+        isCleared,
       });
     }
   };
