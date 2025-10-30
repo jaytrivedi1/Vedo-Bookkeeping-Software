@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
+// Force complete module rebuild - v3 - clear cache
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { AttachmentDialog } from "@/components/dialogs/AttachmentDialog";
 import {

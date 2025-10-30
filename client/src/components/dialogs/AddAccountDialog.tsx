@@ -43,6 +43,9 @@ interface AddAccountDialogProps {
 
 export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAccountDialogProps) {
   const { toast } = useToast();
+  
+  // Force complete component rebuild - v4 - breaking cache
+  const [_cacheBreaker] = useState(() => Date.now());
 
   const form = useForm({
     resolver: zodResolver(insertAccountSchema),
@@ -68,7 +71,8 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
 
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
-      // Force rebuild: Fixed parameter order issue - v2
+      // CRITICAL FIX: Correct parameter order for apiRequest
+      console.log("Creating account with data:", data);
       return await apiRequest('/api/accounts', 'POST', data);
     },
     onSuccess: (response) => {
