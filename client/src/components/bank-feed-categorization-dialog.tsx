@@ -144,10 +144,18 @@ export default function CategorizeTransactionDialog({
     })),
   ];
 
+  // Determine default transaction type based on amount
+  const getDefaultTransactionType = (): TransactionType | undefined => {
+    if (!transaction) return undefined;
+    // Negative amount = money going out = expense
+    // Positive amount = money coming in = deposit
+    return transaction.amount < 0 ? "expense" : "deposit";
+  };
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      transactionType: undefined,
+      transactionType: getDefaultTransactionType(),
       accountId: undefined,
       salesTaxId: null,
       memo: "",
@@ -163,6 +171,17 @@ export default function CategorizeTransactionDialog({
   // Fetch AI suggestions when dialog opens with a transaction
   useEffect(() => {
     if (open && transaction) {
+      // Reset form with intelligent defaults based on transaction amount
+      form.reset({
+        transactionType: transaction.amount < 0 ? "expense" : "deposit",
+        accountId: undefined,
+        salesTaxId: null,
+        memo: "",
+        contactName: "",
+        productId: null,
+        transferAccountId: null,
+      });
+      
       setLoadingSuggestions(true);
       apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
         transactionId: transaction.id,
