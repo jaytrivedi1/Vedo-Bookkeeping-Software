@@ -518,6 +518,28 @@ export default function Banking() {
     },
   });
 
+  // Cleanup unmatched Plaid transactions mutation
+  const cleanupUnmatchedMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/plaid/cleanup-unmatched', 'POST');
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      toast({
+        title: "Success",
+        description: data.message || "Unmatched transactions cleaned up",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cleanup transactions",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Create reconciliation mutation
   const createReconciliationMutation = useMutation({
     mutationFn: async (data: { accountId: number; statementDate: string; statementEndingBalance: number }) => {
