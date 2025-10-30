@@ -22,6 +22,7 @@ import { seedAdminUser } from "./migrations/seed-admin-user";
 import { addCsvSupport } from "./migrations/add-csv-support";
 import migrateAddSalesReceiptTransfer from "./migrate-add-sales-receipt-transfer";
 import { migrateImportedTransactionsAccountId } from "./migrate-imported-transactions-account-id";
+import { fixPlaidTransactionAmounts } from "./migrate-fix-plaid-amounts";
 
 const app = express();
 app.use(express.json());
@@ -117,6 +118,9 @@ app.use((req, res, next) => {
     
     // Fix imported transactions missing account_id link to Chart of Accounts
     await migrateImportedTransactionsAccountId();
+    
+    // Fix Plaid transaction amount signs (Plaid uses positive for expenses, we use positive for deposits)
+    await fixPlaidTransactionAmounts();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
