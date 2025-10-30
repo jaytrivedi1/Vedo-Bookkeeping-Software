@@ -78,6 +78,24 @@ interface GLAccount {
   balance: number;
 }
 
+interface MatchSuggestion {
+  type: 'invoice' | 'bill' | 'manual_entry';
+  transactionId: number;
+  transactionType: string;
+  confidence: number;
+  amount: number;
+  date: string;
+  description: string;
+  contactName?: string;
+  referenceNumber?: string;
+}
+
+interface TransactionMatch {
+  transactionId: number;
+  suggestions: MatchSuggestion[];
+  topMatch: MatchSuggestion | null;
+}
+
 type SortField = 'date' | 'description' | null;
 type SortDirection = 'asc' | 'desc';
 
@@ -150,7 +168,6 @@ export default function Banking() {
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
-  const [transactionMatchModes, setTransactionMatchModes] = useState<Map<number, 'match' | 'categorize'>>(new Map());
   const [transactionNames, setTransactionNames] = useState<Map<number, string>>(new Map());
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
@@ -161,6 +178,10 @@ export default function Banking() {
   // Categorization dialog state
   const [selectedTransaction, setSelectedTransaction] = useState<ImportedTransaction | null>(null);
   const [categorizationDialogOpen, setCategorizationDialogOpen] = useState(false);
+  
+  // Match suggestions state
+  const [matchSuggestions, setMatchSuggestions] = useState<Map<number, TransactionMatch>>(new Map());
+  const [loadingMatches, setLoadingMatches] = useState(false);
   
   // Delete confirmation dialog state
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -518,6 +539,107 @@ export default function Banking() {
     },
   });
 
+  // Match to invoice mutation
+  const matchToInvoiceMutation = useMutation({
+    mutationFn: async ({ transactionId, invoiceId }: { transactionId: number, invoiceId: number }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-invoice`, 'POST', { invoiceId });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      toast({
+        title: "Success",
+        description: `Matched to invoice and created payment`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to match to invoice",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Match to bill mutation
+  const matchToBillMutation = useMutation({
+    mutationFn: async ({ transactionId, billId }: { transactionId: number, billId: number }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-bill`, 'POST', { billId });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bills'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      toast({
+        title: "Success",
+        description: `Matched to bill and created payment`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to match to bill",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Link to manual entry mutation
+  const linkToManualEntryMutation = useMutation({
+    mutationFn: async ({ transactionId, manualTransactionId }: { transactionId: number, manualTransactionId: number }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/link-manual`, 'POST', { manualTransactionId });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      toast({
+        title: "Success",
+        description: `Linked to existing entry`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to link to manual entry",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Unmatch transaction mutation
+  const unmatchTransactionMutation = useMutation({
+    mutationFn: async (transactionId: number) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/unmatch`, 'DELETE');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/bills'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      toast({
+        title: "Success",
+        description: `Unmatched and ${data.deleted ? 'deleted auto-created transaction' : 'unlinked manual entry'}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to unmatch transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Cleanup unmatched Plaid transactions mutation
   const cleanupUnmatchedMutation = useMutation({
     mutationFn: async () => {
@@ -647,6 +769,49 @@ export default function Banking() {
     return matchedTransactions.find((mt: any) => mt?.transaction?.id === importedTx.matchedTransactionId);
   };
 
+  // Fetch match suggestions for uncategorized transactions
+  useEffect(() => {
+    if (activeTab !== 'uncategorized' || importedTransactions.length === 0) {
+      setMatchSuggestions(new Map());
+      return;
+    }
+
+    const fetchMatchSuggestions = async () => {
+      setLoadingMatches(true);
+      const newSuggestions = new Map<number, TransactionMatch>();
+
+      try {
+        await Promise.all(
+          importedTransactions.map(async (tx) => {
+            try {
+              const response = await fetch(`/api/bank-feeds/${tx.id}/suggestions`);
+              if (!response.ok) return;
+              
+              const suggestions: MatchSuggestion[] = await response.json();
+              const topMatch = suggestions.length > 0 ? suggestions[0] : null;
+              
+              newSuggestions.set(tx.id, {
+                transactionId: tx.id,
+                suggestions,
+                topMatch
+              });
+            } catch (error) {
+              console.error(`Failed to fetch suggestions for transaction ${tx.id}:`, error);
+            }
+          })
+        );
+
+        setMatchSuggestions(newSuggestions);
+      } catch (error) {
+        console.error('Failed to fetch match suggestions:', error);
+      } finally {
+        setLoadingMatches(false);
+      }
+    };
+
+    fetchMatchSuggestions();
+  }, [importedTransactions, activeTab]);
+
   // Group GL accounts with their bank feed status - only show accounts with feeds
   const accountsWithFeedStatus = glAccounts
     .map(glAccount => {
@@ -774,10 +939,6 @@ export default function Banking() {
     setSelectedTransactions(newSelected);
   };
 
-  const handleToggleMatchMode = (txId: number, mode: 'match' | 'categorize') => {
-    setTransactionMatchModes(new Map(transactionMatchModes).set(txId, mode));
-  };
-
   const handleNameChange = (txId: number, name: string) => {
     const newMap = new Map(transactionNames);
     newMap.set(txId, name);
@@ -853,12 +1014,7 @@ export default function Banking() {
     setTransactionTaxes(newMap);
   };
 
-  const getMatchMode = (txId: number): 'match' | 'categorize' => {
-    return transactionMatchModes.get(txId) || 'categorize'; // Default to categorize
-  };
-
   const handlePostTransaction = (tx: any) => {
-    const mode = getMatchMode(tx.id);
     const accountId = transactionAccounts.get(tx.id);
     const contactName = transactionNames.get(tx.id) || '';
     const salesTaxId = transactionTaxes.get(tx.id) || null;
@@ -868,16 +1024,6 @@ export default function Banking() {
       toast({
         title: "Error",
         description: "Please select an account to categorize this transaction",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // For now, only categorize mode is supported
-    if (mode === 'match') {
-      toast({
-        title: "Not implemented",
-        description: "Transaction matching is not yet implemented. Please use Categorize mode.",
         variant: "destructive",
       });
       return;
@@ -1832,20 +1978,60 @@ export default function Banking() {
                                     className="py-2 overflow-hidden"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <ToggleGroup 
-                                      type="single" 
-                                      value={getMatchMode(tx.id)}
-                                      onValueChange={(value) => value && handleToggleMatchMode(tx.id, value as 'match' | 'categorize')}
-                                      className="justify-start"
-                                      data-testid={`toggle-match-categorize-${tx.id}`}
-                                    >
-                                      <ToggleGroupItem value="match" className="text-xs px-3">
-                                        Match
-                                      </ToggleGroupItem>
-                                      <ToggleGroupItem value="categorize" className="text-xs px-3">
-                                        Categorize
-                                      </ToggleGroupItem>
-                                    </ToggleGroup>
+                                    {(() => {
+                                      const matchData = matchSuggestions.get(tx.id);
+                                      const topMatch = matchData?.topMatch;
+                                      
+                                      if (loadingMatches) {
+                                        return <span className="text-xs text-gray-400">Checking...</span>;
+                                      }
+                                      
+                                      if (topMatch && topMatch.confidence > 80) {
+                                        return (
+                                          <div className="flex flex-col gap-1">
+                                            <Button
+                                              variant="default"
+                                              size="sm"
+                                              className="text-xs px-2 h-7"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (topMatch.type === 'invoice') {
+                                                  matchToInvoiceMutation.mutate({ transactionId: tx.id, invoiceId: topMatch.transactionId });
+                                                } else if (topMatch.type === 'bill') {
+                                                  matchToBillMutation.mutate({ transactionId: tx.id, billId: topMatch.transactionId });
+                                                } else {
+                                                  linkToManualEntryMutation.mutate({ transactionId: tx.id, manualTransactionId: topMatch.transactionId });
+                                                }
+                                              }}
+                                              data-testid={`button-match-${tx.id}`}
+                                            >
+                                              {topMatch.type === 'invoice' && `Match Invoice`}
+                                              {topMatch.type === 'bill' && `Match Bill`}
+                                              {topMatch.type === 'manual_entry' && `Link Entry`}
+                                            </Button>
+                                            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 justify-center">
+                                              {topMatch.confidence}% confident
+                                            </Badge>
+                                          </div>
+                                        );
+                                      }
+                                      
+                                      return (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="text-xs px-3 h-7"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedTransaction(tx);
+                                            setCategorizationDialogOpen(true);
+                                          }}
+                                          data-testid={`button-categorize-${tx.id}`}
+                                        >
+                                          Categorize
+                                        </Button>
+                                      );
+                                    })()}
                                   </TableCell>
                                   <TableCell 
                                     style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} 
@@ -1866,7 +2052,29 @@ export default function Banking() {
                                   </TableCell>
                                 </>
                               )}
-                              {activeTab !== 'uncategorized' && (
+                              {activeTab === 'categorized' && (
+                                <>
+                                  <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
+                                    {tx.matchedTransactionType ? (
+                                      <Badge variant="outline" className="text-xs">
+                                        {tx.matchedTransactionType === 'invoice' && '📄 Invoice Match'}
+                                        {tx.matchedTransactionType === 'bill' && '📄 Bill Match'}
+                                        {tx.matchedTransactionType === 'payment' && '💰 Payment'}
+                                        {tx.matchedTransactionType === 'deposit' && '💰 Deposit'}
+                                        {tx.matchedTransactionType === 'expense' && '💸 Expense'}
+                                        {tx.matchedTransactionType === 'manual_entry' && '✏️ Manual Entry'}
+                                        {!['invoice', 'bill', 'payment', 'deposit', 'expense', 'manual_entry'].includes(tx.matchedTransactionType) && '✓ Categorized'}
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="secondary" className="text-xs">✓ Categorized</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} className="py-2 overflow-hidden">
+                                    <span className="text-sm text-gray-500">-</span>
+                                  </TableCell>
+                                </>
+                              )}
+                              {activeTab === 'deleted' && (
                                 <>
                                   <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
                                     <span className="text-sm text-gray-500">-</span>
@@ -1926,15 +2134,34 @@ export default function Banking() {
                                           View
                                         </Button>
                                       )}
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={() => undoCategorizationMutation.mutate(tx.id)}
-                                        disabled={undoCategorizationMutation.isPending}
-                                        data-testid={`button-undo-${tx.id}`}
-                                      >
-                                        Undo
-                                      </Button>
+                                      {tx.matchedTransactionType && ['invoice', 'bill', 'manual_entry'].includes(tx.matchedTransactionType) ? (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="ghost" 
+                                              size="sm"
+                                              onClick={() => unmatchTransactionMutation.mutate(tx.id)}
+                                              disabled={unmatchTransactionMutation.isPending}
+                                              data-testid={`button-unmatch-${tx.id}`}
+                                            >
+                                              <X className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Unmatch</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      ) : (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={() => undoCategorizationMutation.mutate(tx.id)}
+                                          disabled={undoCategorizationMutation.isPending}
+                                          data-testid={`button-undo-${tx.id}`}
+                                        >
+                                          Undo
+                                        </Button>
+                                      )}
                                     </>
                                   )}
                                   {activeTab === 'deleted' && (
