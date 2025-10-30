@@ -571,8 +571,9 @@ export default function Banking() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId, 'ledger-entries'] });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
       toast({
         title: "Error",
         description: error.message || "Failed to update reconciliation items",
