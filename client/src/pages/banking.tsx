@@ -80,15 +80,19 @@ interface GLAccount {
 }
 
 interface MatchSuggestion {
-  type: 'invoice' | 'bill' | 'manual_entry';
   transactionId: number;
-  transactionType: string;
+  transactionType: string; // 'invoice', 'bill', 'expense', 'deposit', 'payment', 'cheque'
   confidence: number;
   amount: number;
   date: string;
-  description: string;
+  description?: string;
   contactName?: string;
   referenceNumber?: string;
+  reference?: string | null;
+  contactId?: number | null;
+  balance?: number | null;
+  matchType?: string;
+  matchReason?: string;
 }
 
 interface TransactionMatch {
@@ -2002,19 +2006,24 @@ export default function Banking() {
                                               className="text-xs px-2 h-7"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (topMatch.type === 'invoice') {
+                                                // Use transactionType instead of type
+                                                if (topMatch.transactionType === 'invoice') {
                                                   matchToInvoiceMutation.mutate({ transactionId: tx.id, invoiceId: topMatch.transactionId });
-                                                } else if (topMatch.type === 'bill') {
+                                                } else if (topMatch.transactionType === 'bill') {
                                                   matchToBillMutation.mutate({ transactionId: tx.id, billId: topMatch.transactionId });
                                                 } else {
+                                                  // Handle expense, deposit, cheque, payment, etc. as manual entries
                                                   linkToManualEntryMutation.mutate({ transactionId: tx.id, manualTransactionId: topMatch.transactionId });
                                                 }
                                               }}
                                               data-testid={`button-match-${tx.id}`}
                                             >
-                                              {topMatch.type === 'invoice' && `Match Invoice`}
-                                              {topMatch.type === 'bill' && `Match Bill`}
-                                              {topMatch.type === 'manual_entry' && `Link Entry`}
+                                              {topMatch.transactionType === 'invoice' && `Match Invoice`}
+                                              {topMatch.transactionType === 'bill' && `Match Bill`}
+                                              {(topMatch.transactionType === 'expense' || 
+                                                topMatch.transactionType === 'deposit' || 
+                                                topMatch.transactionType === 'payment' ||
+                                                topMatch.transactionType === 'cheque') && `Link Entry`}
                                             </Button>
                                             <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 justify-center">
                                               {topMatch.confidence}% confident
