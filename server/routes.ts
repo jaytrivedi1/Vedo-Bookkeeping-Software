@@ -6789,7 +6789,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             authorizedDate: tx.authorized_date ? new Date(tx.authorized_date) : null,
             name: tx.name,
             merchantName: tx.merchant_name || null,
-            amount: tx.amount,
+            amount: -tx.amount, // Negate amount: Plaid uses positive for expenses, we use positive for deposits
             isoCurrencyCode: tx.iso_currency_code || null,
             category: tx.category || [],
             pending: tx.pending,
