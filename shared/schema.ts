@@ -595,7 +595,10 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
   category: text('category').array(), // Plaid categories
   pending: boolean('pending').notNull().default(false),
   paymentChannel: text('payment_channel'), // online, in store, etc.
-  matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created transaction
+  matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created or existing transaction
+  matchedTransactionType: text('matched_transaction_type'), // Type of matched transaction: 'invoice', 'bill', 'payment', 'expense', etc.
+  matchConfidence: doublePrecision('match_confidence'), // Confidence score (0-100) for suggested matches
+  isManualMatch: boolean('is_manual_match').default(false), // true = linked to existing entry (no new transaction), false = new transaction created
   status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored, deleted
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
