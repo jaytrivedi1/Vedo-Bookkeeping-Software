@@ -276,13 +276,15 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
 
   const calculateTotals = (manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
-    const subtotal = roundTo2Decimals(lineItems.reduce((sum, item) => sum + (item.amount || 0), 0));
     
+    let calculatedSubtotal = 0;
     let totalTaxAmount = 0;
     const taxComponents = new Map<number, TaxComponentInfo>();
     const usedTaxes = new Map<number, SalesTax>();
     
     lineItems.forEach((item) => {
+      const itemAmount = item.amount || 0;
+      
       if (item.salesTaxId) {
         const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
         if (salesTax) {
@@ -290,13 +292,15 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
             
             if (components.length > 0) {
+              let itemTotalTax = 0;
               components.forEach(component => {
                 let componentTaxAmount: number;
                 if (isExclusiveOfTax) {
-                  componentTaxAmount = roundTo2Decimals((item.amount || 0) * (component.rate / 100));
+                  componentTaxAmount = roundTo2Decimals(itemAmount * (component.rate / 100));
                 } else {
-                  componentTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + component.rate));
+                  componentTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + component.rate));
                 }
+                itemTotalTax = roundTo2Decimals(itemTotalTax + componentTaxAmount);
                 totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
                 
                 const existingComponent = taxComponents.get(component.id);
@@ -315,15 +319,30 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                 }
               });
               
+              // Calculate subtotal for this line item
+              if (isExclusiveOfTax) {
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+              } else {
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTotalTax));
+              }
+              
               usedTaxes.set(salesTax.id, salesTax);
             } else {
               let itemTaxAmount: number;
               if (isExclusiveOfTax) {
-                itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+                itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
               } else {
-                itemTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + salesTax.rate));
+                itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
               }
               totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+              
+              // Calculate subtotal for this line item
+              if (isExclusiveOfTax) {
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+              } else {
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
+              }
+              
               usedTaxes.set(salesTax.id, salesTax);
               
               const existingTax = taxComponents.get(salesTax.id);
@@ -343,11 +362,19 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
           } else {
             let itemTaxAmount: number;
             if (isExclusiveOfTax) {
-              itemTaxAmount = roundTo2Decimals((item.amount || 0) * (salesTax.rate / 100));
+              itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
             } else {
-              itemTaxAmount = roundTo2Decimals((item.amount || 0) - ((item.amount || 0) * 100) / (100 + salesTax.rate));
+              itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
             }
             totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+            
+            // Calculate subtotal for this line item
+            if (isExclusiveOfTax) {
+              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+            } else {
+              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
+            }
+            
             usedTaxes.set(salesTax.id, salesTax);
             
             const existingTax = taxComponents.get(salesTax.id);
@@ -365,19 +392,23 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             }
           }
         }
+      } else {
+        // No tax on this line item - add full amount to subtotal
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
       }
     });
     
     const finalTaxAmount = manualTaxOverride !== undefined 
       ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
       : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
-    const total = isExclusiveOfTax ? roundTo2Decimals(subtotal + finalTaxAmount) : roundTo2Decimals(subtotal);
+    // Total is always subtotal + tax
+    const total = roundTo2Decimals(calculatedSubtotal + finalTaxAmount);
     
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
     const taxComponentsArray = Array.from(taxComponents.values());
     form.taxComponentsInfo = taxComponentsArray;
     
-    setSubTotal(subtotal);
+    setSubTotal(calculatedSubtotal);
     setTaxAmount(finalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);

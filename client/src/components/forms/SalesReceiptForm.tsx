@@ -70,6 +70,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   const [subTotal, setSubTotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(false);
   const { toast } = useToast();
 
   // Generate default receipt number
@@ -147,33 +148,46 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   // Function to recalculate totals
   const recalculateTotals = useCallback(() => {
     const currentLineItems = form.getValues("lineItems");
-    let newSubTotal = 0;
-    let newTaxAmount = 0;
+    let calculatedSubtotal = 0;
+    let totalTaxAmount = 0;
 
     currentLineItems.forEach((item, index) => {
       const quantity = item.quantity || 0;
       const unitPrice = item.unitPrice || 0;
-      const lineTotal = roundTo2Decimals(quantity * unitPrice);
+      const itemAmount = roundTo2Decimals(quantity * unitPrice);
       
       // Update the amount in the form
-      form.setValue(`lineItems.${index}.amount`, lineTotal, { shouldValidate: false });
-      
-      newSubTotal += lineTotal;
+      form.setValue(`lineItems.${index}.amount`, itemAmount, { shouldValidate: false });
 
       // Calculate tax for this line item
       if (item.salesTaxId) {
         const tax = salesTaxes.find((t: SalesTax) => t.id === item.salesTaxId);
         if (tax) {
-          const lineTax = roundTo2Decimals((lineTotal * (tax.rate || 0)) / 100);
-          newTaxAmount += lineTax;
+          let itemTaxAmount: number;
+          if (isExclusiveOfTax) {
+            // Tax-exclusive: tax is added on top of the item amount
+            itemTaxAmount = roundTo2Decimals(itemAmount * (tax.rate / 100));
+            calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+          } else {
+            // Tax-inclusive: item amount includes tax, need to extract it
+            itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + tax.rate));
+            calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
+          }
+          totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
         }
+      } else {
+        // No tax on this line item - add full amount to subtotal
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
       }
     });
 
-    setSubTotal(roundTo2Decimals(newSubTotal));
-    setTaxAmount(roundTo2Decimals(newTaxAmount));
-    setTotalAmount(roundTo2Decimals(newSubTotal + newTaxAmount));
-  }, [form, salesTaxes]);
+    // Total is always subtotal + tax
+    const total = roundTo2Decimals(calculatedSubtotal + totalTaxAmount);
+
+    setSubTotal(calculatedSubtotal);
+    setTaxAmount(totalTaxAmount);
+    setTotalAmount(total);
+  }, [form, salesTaxes, isExclusiveOfTax]);
 
   const createSalesReceiptMutation = useMutation({
     mutationFn: async (data: SalesReceiptFormData) => {
