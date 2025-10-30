@@ -798,7 +798,8 @@ export default function Banking() {
               });
               if (!response.ok) return;
               
-              const suggestions: MatchSuggestion[] = await response.json();
+              const data = await response.json();
+              const suggestions: MatchSuggestion[] = data.suggestions || [];
               const topMatch = suggestions.length > 0 ? suggestions[0] : null;
               
               newSuggestions.set(tx.id, {
