@@ -396,6 +396,16 @@ export class MatchingService {
     const dateTo = new Date(bankTx.date);
     dateTo.setDate(dateTo.getDate() + this.DEFAULT_DATE_TOLERANCE_DAYS);
 
+    console.log(`[MATCH] Searching for manual payment matches for bank tx:`, {
+      id: bankTx.id,
+      name: bankTx.name,
+      amount: bankTx.amount,
+      txAmount,
+      date: bankTx.date,
+      dateFrom,
+      dateTo
+    });
+
     const manualPayments = await db
       .select({
         id: transactions.id,
@@ -422,6 +432,8 @@ export class MatchingService {
         )
       );
 
+    console.log(`[MATCH] Found ${manualPayments.length} potential manual payments in date range`);
+
     const matches: MatchSuggestion[] = [];
 
     for (const payment of manualPayments) {
@@ -431,6 +443,17 @@ export class MatchingService {
 
       const amountDiff = Math.abs(txAmount - Math.abs(payment.amount));
       const amountDiffPercent = payment.amount !== 0 ? amountDiff / Math.abs(payment.amount) : 1;
+
+      console.log(`[MATCH] Evaluating payment:`, {
+        id: payment.id,
+        type: payment.type,
+        contactName: payment.contactName,
+        amount: payment.amount,
+        date: payment.date,
+        txAmount,
+        amountDiff,
+        amountDiffPercent: (amountDiffPercent * 100).toFixed(2) + '%'
+      });
 
       if (amountDiff <= 0.01) {
         confidence += 50;
@@ -473,6 +496,8 @@ export class MatchingService {
           matchReasons.push('Vendor name match');
         }
       }
+
+      console.log(`[MATCH] Payment ${payment.id} confidence: ${confidence}, reasons: ${matchReasons.join(', ')}`);
 
       if (confidence >= 50) {
         matches.push({
