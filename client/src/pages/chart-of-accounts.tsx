@@ -90,7 +90,8 @@ export default function ChartOfAccounts() {
   const createAccount = useMutation({
     mutationFn: async (data: any) => {
       console.log("Creating account with data:", data);
-      return await apiRequest('POST', '/api/accounts', data);
+      // FIXED: Correct parameter order for apiRequest
+      return await apiRequest('/api/accounts', 'POST', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
@@ -108,7 +109,8 @@ export default function ChartOfAccounts() {
   const updateAccount = useMutation({
     mutationFn: async (data: any) => {
       console.log("Updating account with data:", data);
-      return await apiRequest('PATCH', `/api/accounts/${currentAccount?.id}`, data);
+      // FIXED: Correct parameter order for apiRequest
+      return await apiRequest(`/api/accounts/${currentAccount?.id}`, 'PATCH', data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
