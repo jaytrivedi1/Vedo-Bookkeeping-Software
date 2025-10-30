@@ -176,6 +176,7 @@ export default function Banking() {
   const [transactionNames, setTransactionNames] = useState<Map<number, string>>(new Map());
   const [transactionAccounts, setTransactionAccounts] = useState<Map<number, number | null>>(new Map());
   const [transactionTaxes, setTransactionTaxes] = useState<Map<number, number | null>>(new Map());
+  const [transactionMode, setTransactionMode] = useState<Map<number, 'match' | 'categorize'>>(new Map());
   const [currentTransactionId, setCurrentTransactionId] = useState<number | null>(null);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const [selectedAttachmentTransactionId, setSelectedAttachmentTransactionId] = useState<number | null>(null);
@@ -814,6 +815,25 @@ export default function Banking() {
         );
 
         setMatchSuggestions(newSuggestions);
+        
+        // Automatically set transaction mode based on match confidence (only update if changed)
+        setTransactionMode(prevModes => {
+          const newModes = new Map(prevModes);
+          let hasChanges = false;
+          
+          newSuggestions.forEach((matchData, txId) => {
+            const hasHighConfidenceMatch = matchData.topMatch && matchData.topMatch.confidence > 80;
+            const newMode = hasHighConfidenceMatch ? 'match' : 'categorize';
+            const currentMode = newModes.get(txId);
+            
+            if (currentMode !== newMode) {
+              newModes.set(txId, newMode);
+              hasChanges = true;
+            }
+          });
+          
+          return hasChanges ? newModes : prevModes;
+        });
       } catch (error) {
         console.error('Failed to fetch match suggestions:', error);
       } finally {
@@ -823,6 +843,16 @@ export default function Banking() {
 
     fetchMatchSuggestions();
   }, [importedTransactions, activeTab]);
+
+  // Toggle transaction mode between match and categorize
+  const handleModeToggle = (txId: number) => {
+    setTransactionMode(prev => {
+      const newModes = new Map(prev);
+      const currentMode = newModes.get(txId) || 'categorize';
+      newModes.set(txId, currentMode === 'match' ? 'categorize' : 'match');
+      return newModes;
+    });
+  };
 
   // Group GL accounts with their bank feed status - only show accounts with feeds
   const accountsWithFeedStatus = glAccounts
@@ -1902,7 +1932,7 @@ export default function Banking() {
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {activeTab === 'uncategorized' ? (
+                                {activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'categorize' ? (
                                   <SearchableSelect
                                     items={contactItems}
                                     value={transactionNames.get(tx.id) || ''}
@@ -1912,6 +1942,8 @@ export default function Banking() {
                                     emptyText="No contacts found."
                                     data-testid={`select-name-${tx.id}`}
                                   />
+                                ) : activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'match' ? (
+                                  <span className="text-sm text-gray-500">-</span>
                                 ) : (
                                   <span className="text-sm text-gray-700">
                                     {(() => {
@@ -1928,7 +1960,7 @@ export default function Banking() {
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {activeTab === 'uncategorized' ? (
+                                {activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'categorize' ? (
                                   <SearchableSelect
                                     items={accountItems}
                                     value={transactionAccounts.get(tx.id)?.toString() || ''}
@@ -1943,6 +1975,8 @@ export default function Banking() {
                                     }}
                                     addNewText="Add New Account"
                                   />
+                                ) : activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'match' ? (
+                                  <span className="text-sm text-gray-500">-</span>
                                 ) : (
                                   <span className="text-sm text-gray-700">
                                     {(() => {
@@ -1960,7 +1994,7 @@ export default function Banking() {
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                {activeTab === 'uncategorized' ? (
+                                {activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'categorize' ? (
                                   <SearchableSelect
                                     items={taxItems}
                                     value={transactionTaxes.get(tx.id)?.toString() || ''}
@@ -1970,6 +2004,8 @@ export default function Banking() {
                                     emptyText="No taxes found."
                                     data-testid={`select-tax-${tx.id}`}
                                   />
+                                ) : activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'match' ? (
+                                  <span className="text-sm text-gray-500">-</span>
                                 ) : (
                                   <span className="text-sm text-gray-700">
                                     {(() => {
@@ -1993,60 +2029,56 @@ export default function Banking() {
                                     {(() => {
                                       const matchData = matchSuggestions.get(tx.id);
                                       const topMatch = matchData?.topMatch;
+                                      const mode = transactionMode.get(tx.id) || 'categorize';
+                                      const hasHighConfidenceMatch = topMatch && topMatch.confidence > 80;
                                       
                                       if (loadingMatches) {
                                         return <span className="text-xs text-gray-400">Checking...</span>;
                                       }
                                       
-                                      if (topMatch && topMatch.confidence > 80) {
-                                        return (
-                                          <div className="flex flex-col gap-1">
+                                      return (
+                                        <div className="flex flex-col gap-1.5">
+                                          <div className="flex items-center gap-1.5 bg-gray-100 rounded-md p-0.5">
                                             <Button
-                                              variant="default"
+                                              variant={mode === 'match' ? 'default' : 'ghost'}
                                               size="sm"
-                                              className="text-xs px-2 h-7"
+                                              className="text-[11px] px-2 h-6 flex-1"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                // Use transactionType instead of type
-                                                if (topMatch.transactionType === 'invoice') {
-                                                  matchToInvoiceMutation.mutate({ transactionId: tx.id, invoiceId: topMatch.transactionId });
-                                                } else if (topMatch.transactionType === 'bill') {
-                                                  matchToBillMutation.mutate({ transactionId: tx.id, billId: topMatch.transactionId });
-                                                } else {
-                                                  // Handle expense, deposit, cheque, payment, etc. as manual entries
-                                                  linkToManualEntryMutation.mutate({ transactionId: tx.id, manualTransactionId: topMatch.transactionId });
-                                                }
+                                                if (mode !== 'match') handleModeToggle(tx.id);
                                               }}
-                                              data-testid={`button-match-${tx.id}`}
+                                              disabled={!hasHighConfidenceMatch}
+                                              data-testid={`button-mode-match-${tx.id}`}
                                             >
-                                              {topMatch.transactionType === 'invoice' && `Match Invoice`}
-                                              {topMatch.transactionType === 'bill' && `Match Bill`}
-                                              {(topMatch.transactionType === 'expense' || 
-                                                topMatch.transactionType === 'deposit' || 
-                                                topMatch.transactionType === 'payment' ||
-                                                topMatch.transactionType === 'cheque') && `Link Entry`}
+                                              Match
                                             </Button>
-                                            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 justify-center">
-                                              {topMatch.confidence}% confident
-                                            </Badge>
+                                            <Button
+                                              variant={mode === 'categorize' ? 'default' : 'ghost'}
+                                              size="sm"
+                                              className="text-[11px] px-2 h-6 flex-1"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (mode !== 'categorize') handleModeToggle(tx.id);
+                                              }}
+                                              data-testid={`button-mode-categorize-${tx.id}`}
+                                            >
+                                              Categorize
+                                            </Button>
                                           </div>
-                                        );
-                                      }
-                                      
-                                      return (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="text-xs px-3 h-7"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedTransaction(tx);
-                                            setCategorizationDialogOpen(true);
-                                          }}
-                                          data-testid={`button-categorize-${tx.id}`}
-                                        >
-                                          Categorize
-                                        </Button>
+                                          {mode === 'match' && hasHighConfidenceMatch && (
+                                            <div className="text-[10px] text-gray-600 space-y-0.5">
+                                              <div className="flex items-center gap-1">
+                                                <span className="font-medium">{topMatch.contactName || 'Unknown'}</span>
+                                                <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                                                  {topMatch.confidence}%
+                                                </Badge>
+                                              </div>
+                                              <div className="text-gray-500">
+                                                {formatCurrency(topMatch.amount)} • {format(new Date(topMatch.date), 'PP')}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
                                       );
                                     })()}
                                   </TableCell>
@@ -2109,22 +2141,55 @@ export default function Banking() {
                                 <div className="flex gap-1">
                                   {activeTab === 'uncategorized' && (
                                     <>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button 
-                                            variant="outline" 
-                                            size="sm"
-                                            onClick={() => handlePostTransaction(tx)}
-                                            disabled={categorizeTransactionMutation.isPending}
-                                            data-testid={`button-post-${tx.id}`}
-                                          >
-                                            <Send className="h-4 w-4" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p>Post</p>
-                                        </TooltipContent>
-                                      </Tooltip>
+                                      {transactionMode.get(tx.id) === 'match' && matchSuggestions.get(tx.id)?.topMatch && matchSuggestions.get(tx.id)!.topMatch!.confidence > 80 ? (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="default" 
+                                              size="sm"
+                                              className="gap-1"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                const topMatch = matchSuggestions.get(tx.id)!.topMatch!;
+                                                if (topMatch.transactionType === 'invoice') {
+                                                  matchToInvoiceMutation.mutate({ transactionId: tx.id, invoiceId: topMatch.transactionId });
+                                                } else if (topMatch.transactionType === 'bill') {
+                                                  matchToBillMutation.mutate({ transactionId: tx.id, billId: topMatch.transactionId });
+                                                } else {
+                                                  linkToManualEntryMutation.mutate({ transactionId: tx.id, manualTransactionId: topMatch.transactionId });
+                                                }
+                                              }}
+                                              disabled={linkToManualEntryMutation.isPending || matchToInvoiceMutation.isPending || matchToBillMutation.isPending}
+                                              data-testid={`button-link-entry-${tx.id}`}
+                                            >
+                                              <Send className="h-4 w-4" />
+                                              {matchSuggestions.get(tx.id)!.topMatch!.transactionType === 'invoice' && 'Match Invoice'}
+                                              {matchSuggestions.get(tx.id)!.topMatch!.transactionType === 'bill' && 'Match Bill'}
+                                              {(['expense', 'deposit', 'payment', 'cheque'].includes(matchSuggestions.get(tx.id)!.topMatch!.transactionType)) && 'Link Entry'}
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Link to existing entry</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      ) : (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm"
+                                              onClick={() => handlePostTransaction(tx)}
+                                              disabled={categorizeTransactionMutation.isPending}
+                                              data-testid={`button-post-${tx.id}`}
+                                            >
+                                              <Send className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>Post</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
