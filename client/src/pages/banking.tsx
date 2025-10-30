@@ -785,7 +785,13 @@ export default function Banking() {
         await Promise.all(
           importedTransactions.map(async (tx) => {
             try {
-              const response = await fetch(`/api/bank-feeds/${tx.id}/suggestions`);
+              const response = await fetch(`/api/bank-feeds/${tx.id}/suggestions`, {
+                cache: 'no-cache',
+                headers: {
+                  'Cache-Control': 'no-cache',
+                  'Pragma': 'no-cache'
+                }
+              });
               if (!response.ok) return;
               
               const suggestions: MatchSuggestion[] = await response.json();
