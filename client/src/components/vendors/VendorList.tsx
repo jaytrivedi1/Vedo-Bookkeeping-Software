@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Contact, Transaction } from "@shared/schema";
-import { format } from "date-fns";
-import { Search, Building, ChevronRight, X, Edit, Eye, Trash2 } from "lucide-react";
+import { format, startOfMonth, isSameMonth, parseISO } from "date-fns";
+import { Search, Building, ChevronRight, X, Edit, Eye, Trash2, FileText, DollarSign, Receipt, ArrowDownCircle, ArrowUpCircle, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -123,12 +123,9 @@ export default function VendorList({ className }: VendorListProps) {
     
   // Format currency
   const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
-    // For bill transactions, display as positive since they represent expenses owed
-    // For payment and deposit transactions, display as negative
-    let displayAmount = amount;
-    if (transactionType === 'deposit' || transactionType === 'payment') {
-      displayAmount = -Math.abs(amount); // Ensure it's negative
-    }
+    // In the activity feed, all amounts display as positive for clarity
+    // Color coding handles visual distinction (green for payments out, orange/gray for expenses)
+    const displayAmount = Math.abs(amount);
     
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -317,151 +314,202 @@ export default function VendorList({ className }: VendorListProps) {
                 
                 <TabsContent value="expenses">
                   <div className="mt-4">
-                    <ScrollArea className="h-[400px]">
-                      {vendorExpenses.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          No expenses found for this vendor.
-                        </div>
-                      ) : (
-                        <Table className="min-w-full">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="whitespace-nowrap">Date</TableHead>
-                              <TableHead className="whitespace-nowrap">Type</TableHead>
-                              <TableHead className="whitespace-nowrap">Reference</TableHead>
-                              <TableHead className="whitespace-nowrap">Amount</TableHead>
-                              <TableHead className="whitespace-nowrap">Balance</TableHead>
-                              <TableHead className="whitespace-nowrap">Status</TableHead>
-                              <TableHead className="w-[200px]">Notes</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {vendorExpenses
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((transaction) => {
+                    {vendorExpenses.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No expenses found for this vendor.
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {(() => {
+                          // Sort transactions by date (newest first)
+                          const sortedTransactions = vendorExpenses
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                          
+                          // Group by month
+                          const groupedByMonth = sortedTransactions.reduce((acc, transaction) => {
+                            const monthKey = format(new Date(transaction.date), "MMMM yyyy");
+                            if (!acc[monthKey]) {
+                              acc[monthKey] = [];
+                            }
+                            acc[monthKey].push(transaction);
+                            return acc;
+                          }, {} as Record<string, Transaction[]>);
+                          
+                          return Object.entries(groupedByMonth).map(([monthKey, monthTransactions]) => (
+                            <div key={monthKey}>
+                              <h4 className="text-sm font-medium text-gray-500 mb-3">{monthKey}</h4>
+                              <div className="space-y-2">
+                                {monthTransactions.map((transaction) => {
                                 const typeDisplay = transaction.type === 'bill' 
                                   ? 'Bill'
                                   : transaction.type === 'expense'
                                     ? 'Expense'
                                     : transaction.type === 'payment'
                                       ? 'Payment'
-                                      : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
+                                      : transaction.type === 'cheque'
+                                        ? 'Cheque'
+                                        : transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1);
                                 
                                 const showBalance = transaction.type === 'bill' || transaction.type === 'cheque';
-                                const notes = transaction.type === 'bill' 
-                                  ? 'Vendor bill' 
-                                  : transaction.type === 'payment'
-                                    ? 'Payment to vendor'
-                                    : 'Direct expense';
-                                
                                 const statusBadge = getStatusBadge(transaction.status);
                                 
+                                // Get icon for transaction type
+                                const getTransactionIcon = () => {
+                                  switch (transaction.type) {
+                                    case 'bill':
+                                      return <FileText className="h-5 w-5" />;
+                                    case 'payment':
+                                    case 'cheque':
+                                      return <DollarSign className="h-5 w-5" />;
+                                    case 'expense':
+                                      return <Receipt className="h-5 w-5" />;
+                                    default:
+                                      return <CreditCard className="h-5 w-5" />;
+                                  }
+                                };
+                                
+                                // Get icon color
+                                const iconColor = transaction.type === 'bill' 
+                                  ? 'text-orange-600 bg-orange-50'
+                                  : transaction.type === 'payment' || transaction.type === 'cheque'
+                                    ? 'text-green-600 bg-green-50'
+                                    : 'text-gray-600 bg-gray-50';
+                                
                                 return (
-                                  <TableRow key={transaction.id}>
-                                    <TableCell>
-                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                      {typeDisplay}
-                                    </TableCell>
-                                    <TableCell>
-                                      {transaction.reference || '—'}
-                                    </TableCell>
-                                    <TableCell className="font-semibold">
-                                      {formatCurrency(transaction.amount, transaction.type, transaction.status)}
-                                    </TableCell>
-                                    <TableCell className={
-                                      transaction.balance !== null && transaction.balance > 0 
-                                        ? 'font-semibold text-blue-700' 
-                                        : ''
-                                    }>
-                                      {showBalance && transaction.balance !== null 
-                                        ? formatCurrency(Math.abs(transaction.balance)) 
-                                        : '—'}
-                                    </TableCell>
-                                    <TableCell>{statusBadge}</TableCell>
-                                    <TableCell className="text-sm text-gray-600">
-                                      <div className="max-w-[200px] overflow-hidden text-ellipsis">
-                                        {notes}
+                                  <div 
+                                    key={transaction.id} 
+                                    className="group relative bg-white border rounded-lg p-4 hover:shadow-md transition-shadow"
+                                    data-testid={`transaction-card-${transaction.id}`}
+                                  >
+                                    <div className="flex items-start gap-4">
+                                      {/* Icon */}
+                                      <div className={`flex-shrink-0 w-10 h-10 rounded-full ${iconColor} flex items-center justify-center`}>
+                                        {getTransactionIcon()}
                                       </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex justify-end gap-2">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Route to appropriate page based on transaction type
-                                            const routeMap: Record<string, string> = {
-                                              'bill': `/bills/${transaction.id}`,
-                                              'payment': `/payments/${transaction.id}`,
-                                              'expense': `/expenses/${transaction.id}`,
-                                              'cheque': `/expenses/${transaction.id}`,
-                                              'deposit': `/deposits/${transaction.id}`,
-                                              'invoice': `/invoices/${transaction.id}`
-                                            };
-                                            const route = routeMap[transaction.type] || `/expenses/${transaction.id}`;
-                                            navigate(route);
-                                          }}
-                                        >
-                                          <Eye className="h-4 w-4 mr-1" />
-                                          View
-                                        </Button>
-                                        
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteTransaction(transaction);
-                                          }}
-                                        >
-                                          <Trash2 className="h-4 w-4 mr-1" />
-                                          Delete
-                                        </Button>
+                                      
+                                      {/* Content */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-4">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <h4 className="font-semibold text-gray-900">{typeDisplay}</h4>
+                                              {statusBadge}
+                                            </div>
+                                            <div className="flex items-center gap-3 text-sm text-gray-500">
+                                              <span>{format(new Date(transaction.date), "MMM dd, yyyy")}</span>
+                                              {transaction.reference && (
+                                                <>
+                                                  <span>•</span>
+                                                  <span className="font-medium">#{transaction.reference}</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Amount */}
+                                          <div className="text-right">
+                                            <div className={`text-lg font-semibold ${
+                                              transaction.type === 'payment' || transaction.type === 'cheque'
+                                                ? 'text-green-600'
+                                                : transaction.type === 'bill'
+                                                  ? 'text-orange-700'
+                                                  : transaction.type === 'expense'
+                                                    ? 'text-gray-900'
+                                                    : 'text-gray-900'
+                                            }`}>
+                                              {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                            </div>
+                                            {showBalance && transaction.balance !== null && (
+                                              <div className="text-sm text-gray-500 mt-1">
+                                                Balance: {formatCurrency(Math.abs(transaction.balance))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
                                       </div>
-                                    </TableCell>
-                                  </TableRow>
+                                    </div>
+                                    
+                                    {/* Actions - visible on hover */}
+                                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Route to appropriate page based on transaction type
+                                          const routeMap: Record<string, string> = {
+                                            'bill': `/bills/${transaction.id}`,
+                                            'payment': `/payments/${transaction.id}`,
+                                            'expense': `/expenses/${transaction.id}`,
+                                            'cheque': `/expenses/${transaction.id}`,
+                                            'deposit': `/deposits/${transaction.id}`,
+                                            'invoice': `/invoices/${transaction.id}`
+                                          };
+                                          const route = routeMap[transaction.type] || `/expenses/${transaction.id}`;
+                                          navigate(route);
+                                        }}
+                                        data-testid={`view-transaction-${transaction.id}`}
+                                      >
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        View
+                                      </Button>
+                                      
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteTransaction(transaction);
+                                        }}
+                                        data-testid={`delete-transaction-${transaction.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
                                 );
                               })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </ScrollArea>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
-                </TabsContent>
+                )}
+              </div>
+            </TabsContent>
                 
                 <TabsContent value="invoices">
                   <div className="mt-4">
-                    <ScrollArea className="h-[400px]">
-                      {vendorInvoices.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          No invoices found for this vendor.
-                        </div>
-                      ) : (
-                        <Table className="min-w-full">
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="whitespace-nowrap">Date</TableHead>
-                              <TableHead className="whitespace-nowrap">Type</TableHead>
-                              <TableHead className="whitespace-nowrap">Reference</TableHead>
-                              <TableHead className="whitespace-nowrap">Amount</TableHead>
-                              <TableHead className="whitespace-nowrap">Balance</TableHead>
-                              <TableHead className="whitespace-nowrap">Status</TableHead>
-                              <TableHead className="w-[200px]">Notes</TableHead>
-                              <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {vendorInvoices
-                              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                              .map((transaction) => {
+                    {vendorInvoices.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No invoices found for this vendor.
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {(() => {
+                          // Sort transactions by date (newest first)
+                          const sortedTransactions = vendorInvoices
+                            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                          
+                          // Group by month
+                          const groupedByMonth = sortedTransactions.reduce((acc, transaction) => {
+                            const monthKey = format(new Date(transaction.date), "MMMM yyyy");
+                            if (!acc[monthKey]) {
+                              acc[monthKey] = [];
+                            }
+                            acc[monthKey].push(transaction);
+                            return acc;
+                          }, {} as Record<string, Transaction[]>);
+                          
+                          return Object.entries(groupedByMonth).map(([monthKey, monthTransactions]) => (
+                            <div key={monthKey}>
+                              <h4 className="text-sm font-medium text-gray-500 mb-3">{monthKey}</h4>
+                              <div className="space-y-2">
+                                {monthTransactions.map((transaction) => {
                                 const typeDisplay = 'Invoice';
                                 const showBalance = true;
-                                const notes = 'Invoice from vendor';
                                 
                                 const statusBadge = transaction.balance === 0 || transaction.status === 'completed'
                                   ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Completed</Badge>
@@ -470,79 +518,99 @@ export default function VendorList({ className }: VendorListProps) {
                                     : getStatusBadge(transaction.status);
                                 
                                 return (
-                                  <TableRow key={transaction.id}>
-                                    <TableCell>
-                                      {format(new Date(transaction.date), "MMM dd, yyyy")}
-                                    </TableCell>
-                                    <TableCell className="font-medium">
-                                      {typeDisplay}
-                                    </TableCell>
-                                    <TableCell>
-                                      {transaction.reference || '—'}
-                                    </TableCell>
-                                    <TableCell className="font-semibold">
-                                      {formatCurrency(transaction.amount, transaction.type, transaction.status)}
-                                    </TableCell>
-                                    <TableCell className={
-                                      transaction.balance !== null && transaction.balance > 0 
-                                        ? 'font-semibold text-blue-700' 
-                                        : ''
-                                    }>
-                                      {showBalance && transaction.balance !== null 
-                                        ? formatCurrency(Math.abs(transaction.balance)) 
-                                        : '—'}
-                                    </TableCell>
-                                    <TableCell>{statusBadge}</TableCell>
-                                    <TableCell className="text-sm text-gray-600">
-                                      <div className="max-w-[200px] overflow-hidden text-ellipsis">
-                                        {notes}
+                                  <div 
+                                    key={transaction.id} 
+                                    className="group relative bg-white border rounded-lg p-4 hover:shadow-md transition-shadow"
+                                    data-testid={`transaction-card-${transaction.id}`}
+                                  >
+                                    <div className="flex items-start gap-4">
+                                      {/* Icon */}
+                                      <div className="flex-shrink-0 w-10 h-10 rounded-full text-blue-600 bg-blue-50 flex items-center justify-center">
+                                        <FileText className="h-5 w-5" />
                                       </div>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                      <div className="flex justify-end gap-2">
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Route to appropriate page based on transaction type
-                                            const routeMap: Record<string, string> = {
-                                              'invoice': `/invoices/${transaction.id}`,
-                                              'payment': `/payments/${transaction.id}`,
-                                              'expense': `/expenses/${transaction.id}`,
-                                              'deposit': `/deposits/${transaction.id}`
-                                            };
-                                            const route = routeMap[transaction.type] || `/invoices/${transaction.id}`;
-                                            navigate(route);
-                                          }}
-                                        >
-                                          <Eye className="h-4 w-4 mr-1" />
-                                          View
-                                        </Button>
-                                        
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm"
-                                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteTransaction(transaction);
-                                          }}
-                                        >
-                                          <Trash2 className="h-4 w-4 mr-1" />
-                                          Delete
-                                        </Button>
+                                      
+                                      {/* Content */}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start justify-between gap-4">
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <h4 className="font-semibold text-gray-900">{typeDisplay}</h4>
+                                              {statusBadge}
+                                            </div>
+                                            <div className="flex items-center gap-3 text-sm text-gray-500">
+                                              <span>{format(new Date(transaction.date), "MMM dd, yyyy")}</span>
+                                              {transaction.reference && (
+                                                <>
+                                                  <span>•</span>
+                                                  <span className="font-medium">#{transaction.reference}</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Amount */}
+                                          <div className="text-right">
+                                            <div className="text-lg font-semibold text-blue-900">
+                                              {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                            </div>
+                                            {showBalance && transaction.balance !== null && (
+                                              <div className="text-sm text-gray-500 mt-1">
+                                                Balance: {formatCurrency(Math.abs(transaction.balance))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
                                       </div>
-                                    </TableCell>
-                                  </TableRow>
+                                    </div>
+                                    
+                                    {/* Actions - visible on hover */}
+                                    <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Route to appropriate page based on transaction type
+                                          const routeMap: Record<string, string> = {
+                                            'invoice': `/invoices/${transaction.id}`,
+                                            'payment': `/payments/${transaction.id}`,
+                                            'expense': `/expenses/${transaction.id}`,
+                                            'deposit': `/deposits/${transaction.id}`
+                                          };
+                                          const route = routeMap[transaction.type] || `/invoices/${transaction.id}`;
+                                          navigate(route);
+                                        }}
+                                        data-testid={`view-transaction-${transaction.id}`}
+                                      >
+                                        <Eye className="h-4 w-4 mr-1" />
+                                        View
+                                      </Button>
+                                      
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteTransaction(transaction);
+                                        }}
+                                        data-testid={`delete-transaction-${transaction.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        Delete
+                                      </Button>
+                                    </div>
+                                  </div>
                                 );
                               })}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </ScrollArea>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
-                </TabsContent>
+                )}
+              </div>
+            </TabsContent>
               </Tabs>
               
               {/* Summary */}
