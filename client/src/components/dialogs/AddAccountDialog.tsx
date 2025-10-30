@@ -41,11 +41,9 @@ interface AddAccountDialogProps {
   onAccountCreated?: (accountId: number) => void;
 }
 
+// FORCE REBUILD v5 - Breaking module cache completely
 export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAccountDialogProps) {
   const { toast } = useToast();
-  
-  // Force complete component rebuild - v4 - breaking cache
-  const [_cacheBreaker] = useState(() => Date.now());
 
   const form = useForm({
     resolver: zodResolver(insertAccountSchema),
