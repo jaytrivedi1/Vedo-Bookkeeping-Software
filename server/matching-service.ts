@@ -358,7 +358,17 @@ export class MatchingService {
         }
       }
 
-      if (confidence >= 65) {
+      // Check if contact name matches bank transaction name
+      if (deposit.contactName && bankTx.name) {
+        const nameMatch = bankTx.name.toLowerCase().includes(deposit.contactName.toLowerCase()) ||
+                         deposit.contactName.toLowerCase().includes(bankTx.name.toLowerCase());
+        if (nameMatch) {
+          confidence += 15;
+          matchReasons.push('Customer name match');
+        }
+      }
+
+      if (confidence >= 50) {
         matches.push({
           transactionId: deposit.id,
           transactionType: deposit.type,
@@ -454,7 +464,17 @@ export class MatchingService {
         }
       }
 
-      if (confidence >= 65) {
+      // Check if contact name matches bank transaction name
+      if (payment.contactName && bankTx.name) {
+        const nameMatch = bankTx.name.toLowerCase().includes(payment.contactName.toLowerCase()) ||
+                         payment.contactName.toLowerCase().includes(bankTx.name.toLowerCase());
+        if (nameMatch) {
+          confidence += 15;
+          matchReasons.push('Vendor name match');
+        }
+      }
+
+      if (confidence >= 50) {
         matches.push({
           transactionId: payment.id,
           transactionType: payment.type,
