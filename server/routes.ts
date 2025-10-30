@@ -1297,9 +1297,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(500).json({ message: "Tax account not found" });
         }
         
-        // Calculate tax components for proper allocation
-        const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
-        let totalCalculatedTax = 0;
+        // Determine tax account allocation based on line items
+        // We use the taxAmount from frontend (already correctly calculated for inclusive/exclusive)
+        // and distribute it proportionally to the tax components
+        const taxComponents = new Map<number, { accountId: number, rate: number }>();
+        let totalTaxRate = 0;
         
         // Process each line item to determine tax account allocation
         for (const item of expenseData.lineItems) {
@@ -1317,39 +1319,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   
                 if (componentTaxes.length > 0) {
                   for (const component of componentTaxes) {
-                    const componentTaxAmount = roundTo2Decimals(item.amount * (component.rate / 100));
-                    totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + componentTaxAmount);
-                    
                     const accountId = component.accountId || taxAccount.id;
                     
                     if (taxComponents.has(accountId)) {
                       const entry = taxComponents.get(accountId)!;
-                      entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + componentTaxAmount);
+                      entry.rate = roundTo2Decimals(entry.rate + component.rate);
                     } else {
-                      taxComponents.set(accountId, { accountId, calculatedAmount: componentTaxAmount });
+                      taxComponents.set(accountId, { accountId, rate: component.rate });
                     }
+                    totalTaxRate = roundTo2Decimals(totalTaxRate + component.rate);
                   }
                 }
               } else {
                 // Regular non-composite tax
-                const itemTaxAmount = roundTo2Decimals(item.amount * (salesTax.rate / 100));
-                totalCalculatedTax = roundTo2Decimals(totalCalculatedTax + itemTaxAmount);
-                
                 const accountId = salesTax.accountId || taxAccount.id;
                 
                 if (taxComponents.has(accountId)) {
                   const entry = taxComponents.get(accountId)!;
-                  entry.calculatedAmount = roundTo2Decimals(entry.calculatedAmount + itemTaxAmount);
+                  entry.rate = roundTo2Decimals(entry.rate + salesTax.rate);
                 } else {
-                  taxComponents.set(accountId, { accountId, calculatedAmount: itemTaxAmount });
+                  taxComponents.set(accountId, { accountId, rate: salesTax.rate });
                 }
+                totalTaxRate = roundTo2Decimals(totalTaxRate + salesTax.rate);
               }
             }
           }
         }
         
-        // Distribute the tax amount proportionally across the tax accounts
-        if (taxComponents.size > 0 && totalCalculatedTax > 0) {
+        // Distribute the tax amount proportionally based on rates (not recalculated amounts)
+        if (taxComponents.size > 0 && totalTaxRate > 0) {
           let remainingTax = taxAmount;
           const componentArray = Array.from(taxComponents.values());
           
@@ -1357,10 +1355,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let proportionalAmount: number;
             
             if (index === componentArray.length - 1) {
-              // Last component gets the remainder
+              // Last component gets the remainder to avoid rounding errors
               proportionalAmount = remainingTax;
             } else {
-              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
+              proportionalAmount = roundTo2Decimals((component.rate / totalTaxRate) * taxAmount);
               remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
             }
             
