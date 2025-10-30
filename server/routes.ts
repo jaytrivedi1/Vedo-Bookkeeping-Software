@@ -8224,8 +8224,24 @@ Respond in JSON format:
 
       const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-      // Apply payment to invoice
-      await storage.applyPaymentToInvoice(createdPayment.id, invoiceId, amount);
+      // Apply payment to invoice by creating payment application
+      await db.insert(paymentApplications).values({
+        paymentId: createdPayment.id,
+        invoiceId: invoiceId,
+        amountApplied: amount,
+      });
+
+      // Update invoice balance
+      const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
+        ? invoice.balance 
+        : invoice.amount;
+      const newBalance = currentBalance - amount;
+      await db.update(transactions)
+        .set({ 
+          balance: newBalance,
+          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+        })
+        .where(eq(transactions.id, invoiceId));
 
       // Update imported transaction to mark it as matched
       await db
@@ -8326,8 +8342,24 @@ Respond in JSON format:
 
       const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-      // Apply payment to bill
-      await storage.applyPaymentToBill(createdPayment.id, billId, amount);
+      // Apply payment to bill by creating payment application
+      await db.insert(paymentApplications).values({
+        paymentId: createdPayment.id,
+        invoiceId: billId,
+        amountApplied: amount,
+      });
+
+      // Update bill balance
+      const currentBalance = bill.balance !== null && bill.balance !== undefined 
+        ? bill.balance 
+        : bill.amount;
+      const newBalance = currentBalance - amount;
+      await db.update(transactions)
+        .set({ 
+          balance: newBalance,
+          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+        })
+        .where(eq(transactions.id, billId));
 
       // Update imported transaction to mark it as matched
       await db

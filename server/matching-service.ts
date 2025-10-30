@@ -91,7 +91,8 @@ export class MatchingService {
           eq(transactions.type, 'invoice'),
           or(
             eq(transactions.status, 'open'),
-            eq(transactions.status, 'overdue')
+            eq(transactions.status, 'overdue'),
+            eq(transactions.status, 'partial')
           ),
           gte(transactions.date, dateFrom),
           lte(transactions.date, dateTo)
@@ -199,7 +200,8 @@ export class MatchingService {
           eq(transactions.type, 'bill'),
           or(
             eq(transactions.status, 'open'),
-            eq(transactions.status, 'overdue')
+            eq(transactions.status, 'overdue'),
+            eq(transactions.status, 'partial')
           ),
           gte(transactions.date, dateFrom),
           lte(transactions.date, dateTo)

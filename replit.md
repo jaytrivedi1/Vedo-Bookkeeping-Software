@@ -156,3 +156,37 @@ Preferred communication style: Simple, everyday language.
   - Net Profit from `incomeStatement.netIncome`
 - **TypeScript Type Safety**: Added comprehensive IncomeStatementData interface for better code maintainability
 - **Enhanced UX**: Trend arrows now accurately represent business performance without manual inversions
+
+### Bank Transaction Matching System (October 30, 2025)
+- **Industry Standard Approach**: Rule-based matching algorithm following QuickBooks/Xero patterns
+  - Exact amount matching (±$0.01 tolerance)
+  - Date proximity matching (30-day window)
+  - Fuzzy amount matching for processing fees (2% tolerance)
+  - Customer/vendor name matching in transaction descriptions
+  - Invoice/bill reference number matching
+  - Confidence scoring (0-100%) for match quality
+- **Database Schema Updates**: Enhanced imported_transactions table
+  - `matchedTransactionType`: Tracks type of matched transaction (invoice, bill, payment, etc.)
+  - `matchConfidence`: Stores confidence score for suggested matches
+  - `isManualMatch`: Distinguishes between linked existing entries (true) and newly created transactions (false)
+- **Matching Service** (`server/matching-service.ts`):
+  - `findMatchesForBankTransaction()`: Scans for potential matches across all transaction types
+  - Invoice matching: Finds open invoices that match bank deposits
+  - Bill matching: Finds open bills that match bank payments/debits
+  - Manual entry matching: Finds existing deposit/payment/expense entries
+  - Multi-criteria scoring: Amount + date + description + contact name
+- **API Endpoints**:
+  - GET `/api/bank-feeds/:id/suggestions` - Returns ranked match suggestions with confidence scores
+  - POST `/api/bank-feeds/:id/match-invoice` - Creates payment and applies to invoice
+  - POST `/api/bank-feeds/:id/match-bill` - Creates bill payment and applies to bill
+  - POST `/api/bank-feeds/:id/link-manual` - Links to existing manual entry (no new transaction)
+  - DELETE `/api/bank-feeds/:id/unmatch` - Reverses match and deletes auto-created transaction
+- **Three Match Types**:
+  1. **Invoice/Bill Match**: Creates new payment transaction and applies to outstanding invoice/bill
+  2. **Manual Entry Link**: Links bank transaction to existing manual entry without creating duplicate
+  3. **Manual Override**: Always allows manual categorization via dialog if user disagrees with AI suggestion
+- **Button Logic**: 
+  - High confidence match (>80%): Shows "Match to Invoice #X" button
+  - Low/no confidence: Shows "Post" button for manual categorization
+  - Manual categorization dialog always accessible as alternative
+- **Status**: Backend complete (matching service + API endpoints). UI implementation pending.
