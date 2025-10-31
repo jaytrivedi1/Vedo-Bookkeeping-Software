@@ -163,6 +163,253 @@ const getCategorization = (merchantName: string): { accountId: number, contactNa
   }
 };
 
+// Rules Management Tab Component
+function RulesManagementTab() {
+  const { toast } = useToast();
+  const [editingRule, setEditingRule] = useState<any | null>(null);
+  const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+
+  // Fetch rules
+  const { data: rules = [], isLoading: rulesLoading } = useQuery({
+    queryKey: ['/api/categorization-rules'],
+  });
+
+  // Fetch accounts for display
+  const { data: accounts = [] } = useQuery<GLAccount[]>({
+    queryKey: ['/api/accounts'],
+  });
+
+  // Toggle rule enabled/disabled
+  const toggleRuleMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
+      return await apiRequest(`/api/categorization-rules/${id}`, 'PATCH', { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      toast({
+        title: "Success",
+        description: "Rule updated",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update rule",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete rule
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest(`/api/categorization-rules/${id}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      toast({
+        title: "Success",
+        description: "Rule deleted",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete rule",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Update rule priority
+  const updatePriorityMutation = useMutation({
+    mutationFn: async ({ id, priority }: { id: number; priority: number }) => {
+      return await apiRequest(`/api/categorization-rules/${id}`, 'PATCH', { priority });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update priority",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getAccountName = (accountId: number | null) => {
+    if (!accountId) return 'None';
+    const account = accounts.find(a => a.id === accountId);
+    return account ? `${account.code} - ${account.name}` : 'Unknown';
+  };
+
+  const formatConditions = (conditions: any) => {
+    const parts = [];
+    if (conditions.descriptionContains) {
+      parts.push(`Description contains "${conditions.descriptionContains}"`);
+    }
+    if (conditions.amountMin !== null || conditions.amountMax !== null) {
+      if (conditions.amountMin !== null && conditions.amountMax !== null) {
+        parts.push(`Amount between ${formatCurrencyUtil(conditions.amountMin)} and ${formatCurrencyUtil(conditions.amountMax)}`);
+      } else if (conditions.amountMin !== null) {
+        parts.push(`Amount ≥ ${formatCurrencyUtil(conditions.amountMin)}`);
+      } else {
+        parts.push(`Amount ≤ ${formatCurrencyUtil(conditions.amountMax)}`);
+      }
+    }
+    return parts.join(' AND ');
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
+          <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
+        </div>
+        <Button 
+          onClick={() => {
+            setEditingRule(null);
+            setRuleDialogOpen(true);
+          }}
+          data-testid="button-create-rule"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Create Rule
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          {rulesLoading ? (
+            <div className="text-center py-12 text-gray-500">Loading rules...</div>
+          ) : rules.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Rules Created Yet</h3>
+              <p className="text-sm mb-4">
+                Create rules to automatically categorize transactions based on description, amount, or other criteria.
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setEditingRule(null);
+                  setRuleDialogOpen(true);
+                }}
+                data-testid="button-create-first-rule"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Create Your First Rule
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12"></TableHead>
+                  <TableHead>Rule Name</TableHead>
+                  <TableHead>Conditions</TableHead>
+                  <TableHead>Account</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead className="w-20">Enabled</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rules.map((rule: any, index: number) => (
+                  <TableRow key={rule.id}>
+                    <TableCell>
+                      <GripVertical className="h-4 w-4 text-gray-400" />
+                    </TableCell>
+                    <TableCell className="font-medium">{rule.name}</TableCell>
+                    <TableCell className="text-sm text-gray-600">
+                      {formatConditions(rule.conditions)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {getAccountName(rule.actions?.accountId)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (index > 0) {
+                              updatePriorityMutation.mutate({
+                                id: rule.id,
+                                priority: rule.priority - 1
+                              });
+                            }
+                          }}
+                          disabled={index === 0}
+                        >
+                          <ArrowUp className="h-4 w-4" />
+                        </Button>
+                        <span className="text-sm">{rule.priority}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (index < rules.length - 1) {
+                              updatePriorityMutation.mutate({
+                                id: rule.id,
+                                priority: rule.priority + 1
+                              });
+                            }
+                          }}
+                          disabled={index === rules.length - 1}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Checkbox
+                        checked={rule.enabled}
+                        onCheckedChange={(checked) => {
+                          toggleRuleMutation.mutate({
+                            id: rule.id,
+                            enabled: !!checked
+                          });
+                        }}
+                        data-testid={`checkbox-rule-enabled-${rule.id}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingRule(rule);
+                            setRuleDialogOpen(true);
+                          }}
+                          data-testid={`button-edit-rule-${rule.id}`}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteRuleMutation.mutate(rule.id)}
+                          data-testid={`button-delete-rule-${rule.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Banking() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -2632,42 +2879,7 @@ export default function Banking() {
           </TabsContent>
 
           <TabsContent value="rules">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
-                <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
-              </div>
-              <Button onClick={() => {
-                toast({
-                  title: "Coming soon",
-                  description: "Rule creation dialog will be available shortly",
-                });
-              }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Rule
-              </Button>
-            </div>
-
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-12 text-gray-500">
-                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Rules Created Yet</h3>
-                  <p className="text-sm mb-4">
-                    Create rules to automatically categorize transactions based on description, amount, or other criteria.
-                  </p>
-                  <Button variant="outline" onClick={() => {
-                    toast({
-                      title: "Coming soon",
-                      description: "Rule creation dialog will be available shortly",
-                    });
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Your First Rule
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <RulesManagementTab />
           </TabsContent>
         </Tabs>
       </div>
