@@ -59,6 +59,62 @@ import Papa from 'papaparse';
 import path from 'path';
 import fs from 'fs';
 
+// Helper function to apply categorization rules to an imported transaction
+async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string } | null> {
+  try {
+    // Get all enabled rules ordered by priority
+    const rules = await storage.getCategorizationRules();
+    const enabledRules = rules
+      .filter(rule => rule.enabled)
+      .sort((a, b) => a.priority - b.priority);
+
+    // Test each rule against the transaction
+    for (const rule of enabledRules) {
+      let matches = true;
+      const conditions = rule.conditions as any;
+
+      // Check description condition
+      if (conditions.descriptionContains) {
+        const searchTerm = conditions.descriptionContains.toLowerCase();
+        const description = (importedTx.name || '').toLowerCase();
+        const merchantName = (importedTx.merchantName || '').toLowerCase();
+        
+        if (!description.includes(searchTerm) && !merchantName.includes(searchTerm)) {
+          matches = false;
+        }
+      }
+
+      // Check amount range conditions
+      const txAmount = Math.abs(importedTx.amount);
+      if (conditions.amountMin !== null && conditions.amountMin !== undefined) {
+        if (txAmount < conditions.amountMin) {
+          matches = false;
+        }
+      }
+      if (conditions.amountMax !== null && conditions.amountMax !== undefined) {
+        if (txAmount > conditions.amountMax) {
+          matches = false;
+        }
+      }
+
+      // If all conditions match, return the actions
+      if (matches) {
+        const actions = rule.actions as any;
+        return {
+          accountId: actions.accountId || undefined,
+          contactName: actions.contactName || undefined,
+          memo: actions.memo || undefined,
+        };
+      }
+    }
+
+    return null; // No matching rules
+  } catch (error) {
+    console.error('Error applying rules:', error);
+    return null;
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint - responds immediately for deployment health checks
   app.get("/health", (req: Request, res: Response) => {
@@ -6806,7 +6862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const transactions = transactionsResponse.data.transactions;
       
-      // Save transactions to database
+      // Save transactions to database and apply rules
       const importedTransactions = [];
       for (const tx of transactions) {
         // Check if transaction already exists
@@ -6831,6 +6887,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             source: 'plaid', // Mark source as Plaid
           });
           importedTransactions.push(imported);
+
+          // Try to apply categorization rules
+          const ruleMatch = await applyRulesToTransaction(imported);
+          if (ruleMatch && ruleMatch.accountId) {
+            // Auto-categorize using the matched rule
+            try {
+              // Update the imported transaction with categorization info
+              await storage.updateImportedTransaction(imported.id!, {
+                categoryAccountId: ruleMatch.accountId,
+                categoryContactName: ruleMatch.contactName || null,
+                categoryMemo: ruleMatch.memo || null,
+              });
+            } catch (error) {
+              console.error('Error auto-categorizing transaction:', error);
+            }
+          }
         }
       }
 
@@ -7437,6 +7509,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Bulk create imported transactions
       const created = await storage.bulkCreateImportedTransactions(importedTransactions);
+
+      // Apply categorization rules to newly imported transactions
+      for (const tx of created) {
+        const ruleMatch = await applyRulesToTransaction(tx);
+        if (ruleMatch && ruleMatch.accountId) {
+          try {
+            await storage.updateImportedTransaction(tx.id!, {
+              categoryAccountId: ruleMatch.accountId,
+              categoryContactName: ruleMatch.contactName || null,
+              categoryMemo: ruleMatch.memo || null,
+            });
+          } catch (error) {
+            console.error('Error auto-categorizing CSV transaction:', error);
+          }
+        }
+      }
 
       // Save or update mapping preference
       const existingPreference = await storage.getCsvMappingPreference(userId, parsedAccountId);
@@ -9267,6 +9355,45 @@ Respond in JSON format:
     } catch (error) {
       console.error("Error deleting categorization rule:", error);
       res.status(500).json({ message: "Failed to delete categorization rule" });
+    }
+  });
+
+  // Apply categorization rules to uncategorized transactions
+  apiRouter.post("/categorization-rules/apply", async (req: Request, res: Response) => {
+    try {
+      // Get all uncategorized/unmatched transactions
+      const allTransactions = await storage.getImportedTransactions();
+      const uncategorizedTransactions = allTransactions.filter(tx => 
+        tx.status === 'unmatched' && !tx.matchedTransactionId && !tx.categoryAccountId
+      );
+
+      let categorizedCount = 0;
+      
+      // Apply rules to each uncategorized transaction
+      for (const tx of uncategorizedTransactions) {
+        const ruleMatch = await applyRulesToTransaction(tx);
+        if (ruleMatch && ruleMatch.accountId) {
+          try {
+            await storage.updateImportedTransaction(tx.id!, {
+              categoryAccountId: ruleMatch.accountId,
+              categoryContactName: ruleMatch.contactName || null,
+              categoryMemo: ruleMatch.memo || null,
+            });
+            categorizedCount++;
+          } catch (error) {
+            console.error(`Error categorizing transaction ${tx.id}:`, error);
+          }
+        }
+      }
+
+      res.json({ 
+        success: true,
+        categorizedCount,
+        totalUncategorized: uncategorizedTransactions.length 
+      });
+    } catch (error) {
+      console.error("Error applying categorization rules:", error);
+      res.status(500).json({ message: "Failed to apply categorization rules" });
     }
   });
 

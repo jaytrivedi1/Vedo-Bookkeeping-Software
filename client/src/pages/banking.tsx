@@ -180,6 +180,27 @@ function RulesManagementTab() {
     queryKey: ['/api/accounts'],
   });
 
+  // Apply rules mutation
+  const applyRulesMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/apply', 'POST');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      toast({
+        title: "Rules Applied",
+        description: `Categorized ${data.categorizedCount} of ${data.totalUncategorized} uncategorized transactions`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to apply rules",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Toggle rule enabled/disabled
   const toggleRuleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
@@ -269,16 +290,26 @@ function RulesManagementTab() {
           <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
           <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
         </div>
-        <Button 
-          onClick={() => {
-            setEditingRule(null);
-            setRuleDialogOpen(true);
-          }}
-          data-testid="button-create-rule"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Rule
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => applyRulesMutation.mutate()}
+            disabled={applyRulesMutation.isPending || rules.length === 0}
+            data-testid="button-apply-rules"
+          >
+            {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
+          </Button>
+          <Button 
+            onClick={() => {
+              setEditingRule(null);
+              setRuleDialogOpen(true);
+            }}
+            data-testid="button-create-rule"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Rule
+          </Button>
+        </div>
       </div>
 
       <Card>
