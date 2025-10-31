@@ -132,14 +132,11 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   ) || [];
 
   // Transform contacts into SearchableSelectItem format
-  const contactItems: SearchableSelectItem[] = [
-    { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
-    ...(contacts?.map(contact => ({
-      value: contact.id.toString(),
-      label: contact.name,
-      subtitle: `· ${contact.type}`
-    })) || [])
-  ];
+  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
+    value: contact.id.toString(),
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  })) || [];
 
   // Transform payment accounts into SearchableSelectItem format
   const paymentAccountItems: SearchableSelectItem[] = paymentAccounts.map(account => ({
@@ -513,16 +510,14 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                       items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
                       value={field.value?.toString() || ""}
                       onValueChange={(value) => {
-                        if (value === 'ADD_NEW_VENDOR') {
-                          setShowAddVendorDialog(true);
-                          return;
-                        }
                         if (value === "") {
                           field.onChange(undefined);
                         } else {
                           field.onChange(parseInt(value));
                         }
                       }}
+                      onAddNew={() => setShowAddVendorDialog(true)}
+                      addNewText="Add New Vendor"
                       placeholder="Select a payee"
                       emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
                       searchPlaceholder="Search contacts..."

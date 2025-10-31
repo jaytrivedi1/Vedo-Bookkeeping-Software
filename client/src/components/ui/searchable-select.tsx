@@ -107,6 +107,9 @@ export function SearchableSelect({
             <CommandGroup>
               {items
                 .filter((item) => {
+                  // Always show items that start with "+" (add new actions)
+                  if (item.label.startsWith('+')) return true;
+                  
                   if (!searchQuery) return true;
                   const query = searchQuery.toLowerCase();
                   return (

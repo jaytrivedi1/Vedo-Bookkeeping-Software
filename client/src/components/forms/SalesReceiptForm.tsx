@@ -106,16 +106,13 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   );
 
   // Transform data for SearchableSelect
-  const customerItems: SearchableSelectItem[] = [
-    { value: 'ADD_NEW_CUSTOMER', label: '+ Add New Customer', subtitle: undefined },
-    ...contacts
-      .filter((contact: Contact) => contact.type === 'customer' || contact.type === 'both')
-      .map((contact: Contact) => ({
-        value: contact.id.toString(),
-        label: contact.name,
-        subtitle: `· ${contact.type}`
-      }))
-  ];
+  const customerItems: SearchableSelectItem[] = contacts
+    .filter((contact: Contact) => contact.type === 'customer' || contact.type === 'both')
+    .map((contact: Contact) => ({
+      value: contact.id.toString(),
+      label: contact.name,
+      subtitle: `· ${contact.type}`
+    }));
 
   const taxItems: SearchableSelectItem[] = salesTaxes
     .filter((tax: SalesTax) => !tax.parentId)
@@ -260,12 +257,10 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                     items={customerItems}
                     value={field.value?.toString() || ''}
                     onValueChange={(value) => {
-                      if (value === 'ADD_NEW_CUSTOMER') {
-                        setShowAddCustomerDialog(true);
-                        return;
-                      }
                       field.onChange(value ? Number(value) : undefined);
                     }}
+                    onAddNew={() => setShowAddCustomerDialog(true)}
+                    addNewText="Add New Customer"
                     placeholder="Select customer (optional)"
                     searchPlaceholder="Search customers..."
                     emptyText="No customers found."

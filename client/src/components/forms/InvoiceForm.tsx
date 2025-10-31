@@ -183,16 +183,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   })) || [];
 
   // Transform contacts into SearchableSelectItem format for customer dropdown (filtered)
-  const customerItems: SearchableSelectItem[] = [
-    { value: 'ADD_NEW_CUSTOMER', label: '+ Add New Customer', subtitle: undefined },
-    ...(contacts
-      ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
-      .map(contact => ({
-        value: contact.id.toString(),
-        label: contact.name,
-        subtitle: `· ${contact.type}`
-      })) || [])
-  ];
+  const customerItems: SearchableSelectItem[] = contacts
+    ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
+    .map(contact => ({
+      value: contact.id.toString(),
+      label: contact.name,
+      subtitle: `· ${contact.type}`
+    })) || [];
 
   // Use our custom form type that includes taxComponentsInfo
   const form = useForm<Invoice>({
@@ -788,10 +785,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                               items={customerItems}
                               value={field.value?.toString() || ""}
                               onValueChange={(value) => {
-                                if (value === 'ADD_NEW_CUSTOMER') {
-                                  setShowAddCustomerDialog(true);
-                                  return;
-                                }
                                 const contactId = parseInt(value);
                                 field.onChange(contactId);
                                 handleContactChange(contactId);
@@ -801,6 +794,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                               searchPlaceholder="Search customers..."
                               className="bg-white border-gray-300 h-10"
                               disabled={contactsLoading}
+                              onAddNew={() => setShowAddCustomerDialog(true)}
+                              addNewText="Add New Customer"
                             />
                           </FormControl>
                           <FormMessage />

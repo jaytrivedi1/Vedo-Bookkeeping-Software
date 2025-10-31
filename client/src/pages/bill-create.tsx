@@ -83,15 +83,12 @@ export default function BillCreate() {
     subtitle: undefined
   }));
 
-  // Transform vendors for SearchableSelect with add new option
-  const vendorItems: SearchableSelectItem[] = [
-    { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
-    ...vendors.map((vendor) => ({
-      value: vendor.id.toString(),
-      label: vendor.name,
-      subtitle: undefined
-    }))
-  ];
+  // Transform vendors for SearchableSelect
+  const vendorItems: SearchableSelectItem[] = vendors.map((vendor) => ({
+    value: vendor.id.toString(),
+    label: vendor.name,
+    subtitle: undefined
+  }));
 
   // Use a simple hardcoded pattern for bill numbers until the API is fixed
   const { data: nextBillNumber, isLoading: isLoadingBillNumber } = useQuery({
@@ -348,16 +345,14 @@ export default function BillCreate() {
                         items={vendorItems}
                         value={form.watch("contactId") > 0 ? form.watch("contactId").toString() : ""}
                         onValueChange={(value) => {
-                          if (value === 'ADD_NEW_VENDOR') {
-                            setShowAddVendorDialog(true);
-                            return;
-                          }
                           const contactId = parseInt(value, 10);
                           if (!isNaN(contactId)) {
                             form.setValue("contactId", contactId);
                             form.trigger("contactId");
                           }
                         }}
+                        onAddNew={() => setShowAddVendorDialog(true)}
+                        addNewText="Add New Vendor"
                         placeholder="Select vendor"
                         searchPlaceholder="Search vendors..."
                         emptyText="No vendors found"
