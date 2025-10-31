@@ -47,10 +47,19 @@ Preferred communication style: Simple, everyday language.
 - **Bank Transaction Matching**: Rule-based matching (amount, date, description, reference) with confidence scoring. Supports matching to single/multiple invoices/bills and allocating differences.
   - **Match Types**: Invoice/Bill Match (creates payment), Manual Entry Link (links to existing), Manual Override (user categorization).
   - **Multi-Match with Difference**: Allows splitting a bank transaction across multiple invoices/bills and allocating remaining amounts to specific income/expense accounts.
+- **Transaction Categorization Rules**: Automated rule-based categorization for imported bank transactions.
+  - Rules define conditions (description matching, amount ranges) and actions (assign account, contact, memo).
+  - Priority-based execution: rules are evaluated in order until first match.
+  - Auto-apply on import: rules automatically categorize transactions when synced via Plaid or uploaded via CSV.
+  - Manual application: "Apply Rules" button to categorize existing uncategorized transactions.
+  - Full CRUD: create, edit, enable/disable, delete, and reorder rules via UI.
 - **Inline Contact Creation**: All major forms (Invoice, Bill, Expense, Sales Receipt, Journal Entry) support creating customers and vendors on-the-fly through inline dialogs.
   - **AddCustomerDialog** and **AddVendorDialog** components reuse existing form validation.
   - New contacts are automatically selected after creation.
   - Journal Entry forms show both customer and vendor creation options since the Name field can be either type.
+- **Inline Product Creation**: Invoice and Sales Receipt forms support creating products on-the-fly with automatic field population.
+  - Product dialog returns full product object to avoid stale closure issues.
+  - Newly created products are automatically selected in the form.
 
 ## External Dependencies
 

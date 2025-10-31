@@ -53,7 +53,15 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
 
   // Filter accounts to only expense/income accounts for categorization
   const categorizeableAccounts = accounts.filter(
-    acc => acc.type === 'Expense' || acc.type === 'Revenue' || acc.type === 'Other Expense' || acc.type === 'Other Revenue'
+    acc => {
+      const type = acc.type.toLowerCase();
+      return type === 'expense' || 
+             type === 'expenses' ||
+             type === 'revenue' || 
+             type === 'income' ||
+             type === 'other_expense' || 
+             type === 'other_income';
+    }
   );
 
   // Initialize form when editing
