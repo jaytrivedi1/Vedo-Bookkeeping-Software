@@ -2139,7 +2139,6 @@ export default function Banking() {
                                                 e.stopPropagation();
                                                 if (mode !== 'match') handleModeToggle(tx.id);
                                               }}
-                                              disabled={!hasHighConfidenceMatch}
                                               data-testid={`button-mode-match-${tx.id}`}
                                             >
                                               Match
