@@ -366,36 +366,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return tx;
           }
           
-          // If balance is already set (from creation), use it
-          if (tx.balance !== null && tx.balance !== undefined) {
-            // But double-check it by calculating from payment applications
-            const applications = await db
-              .select()
-              .from(paymentApplications)
-              .where(
-                tx.type === 'invoice' 
-                  ? eq(paymentApplications.invoiceId, tx.id)
-                  : eq(paymentApplications.billId, tx.id)
-              );
-            
-            const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
-            const calculatedBalance = tx.amount - totalApplied;
-            
-            return {
-              ...tx,
-              balance: calculatedBalance
-            };
-          }
-          
           // Calculate balance from payment applications
+          const whereClause = tx.type === 'invoice' 
+            ? eq(paymentApplications.invoiceId, tx.id)
+            : eq(paymentApplications.billId, tx.id);
+          
           const applications = await db
             .select()
             .from(paymentApplications)
-            .where(
-              tx.type === 'invoice' 
-                ? eq(paymentApplications.invoiceId, tx.id)
-                : eq(paymentApplications.billId, tx.id)
-            );
+            .where(whereClause);
           
           const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
           const balance = tx.amount - totalApplied;
