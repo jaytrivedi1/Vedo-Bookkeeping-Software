@@ -1,192 +1,73 @@
 # Vedo - Bookkeeping Application
 
 ## Overview
-
-Vedo is a comprehensive full-stack bookkeeping application built with a React frontend and Express.js backend. It provides professional accounting features including double-entry bookkeeping, invoicing, expense tracking, payment processing, and financial reporting. The application supports multi-user environments with role-based permissions and integrates with external services like Shopify and Stripe.
+Vedo is a comprehensive full-stack bookkeeping application offering professional accounting features such as double-entry bookkeeping, invoicing, expense tracking, payment processing, and financial reporting. It supports multi-user environments with role-based permissions and integrates with external services like Shopify and Stripe. The project aims to provide a robust and scalable solution for managing business finances.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
-- **Framework**: React with TypeScript using Vite as the build tool
-- **Routing**: wouter for client-side routing
-- **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom theme configuration
-- **State Management**: TanStack React Query for server state management
+### Frontend
+- **Framework**: React with TypeScript using Vite
+- **Routing**: wouter
+- **UI Components**: shadcn/ui (Radix UI primitives)
+- **Styling**: Tailwind CSS
+- **State Management**: TanStack React Query
 - **Forms**: React Hook Form with Zod validation
 
-### Backend Architecture
+### Backend
 - **Framework**: Express.js with TypeScript
-- **API Design**: RESTful API with structured route organization
-- **Authentication**: Passport.js with local strategy and session-based authentication
-- **Database Layer**: Drizzle ORM with PostgreSQL dialect
-- **File Structure**: Modular approach with separate route handlers and storage abstraction
+- **API Design**: RESTful API
+- **Authentication**: Passport.js (local strategy, session-based)
+- **Database Layer**: Drizzle ORM with PostgreSQL
+- **File Structure**: Modular, with route handlers and storage abstraction
 
 ### Database Design
-- **Primary Database**: PostgreSQL with Neon serverless hosting
-- **ORM**: Drizzle ORM for type-safe database operations
-- **Schema**: Double-entry accounting structure with accounts, transactions, ledger entries, and line items
-- **Migrations**: Automated migration system with versioned schema updates
-- **Data Integrity**: Foreign key constraints and proper normalization
+- **Primary Database**: PostgreSQL (Neon serverless)
+- **ORM**: Drizzle ORM
+- **Schema**: Double-entry accounting structure (accounts, transactions, ledger entries)
+- **Migrations**: Automated system
+- **Session Storage**: PostgreSQL-backed using `connect-pg-simple` for persistence
+- **Reconciliation**: Tables `reconciliations` and `reconciliation_items` to track sessions and cleared transactions.
 
 ### Authentication & Authorization
-- **Session Management**: Express sessions with memory store
+- **Session Management**: Express sessions
 - **User Roles**: Multi-company support with role-based permissions
-- **Security**: Password hashing with scrypt and timing-safe comparison
-- **Access Control**: Route-level authentication middleware with permission checks
+- **Security**: Password hashing (scrypt)
+- **Access Control**: Route-level authentication
 
 ### Key Business Logic
-- **Double-Entry Accounting**: Automatic ledger entry generation for all transactions
-- **Invoice Management**: Complete invoice lifecycle with balance tracking and payment application
-- **Payment Processing**: Support for multiple payment methods with unified credit tracking
-  - Unapplied credits stored in payment transaction's balance field (not separate transactions)
-  - Payment status changes to 'unapplied_credit' when balance > 0
-  - Payment/deposit deletion automatically restores invoice balances via payment_applications table
-  - payment_applications table is the single source of truth for tracking credit applications
-  - When credits are applied during invoice creation or editing, records are created in payment_applications
-  - Deletion handlers query payment_applications to find and restore affected invoices
-- **Financial Reporting**: Real-time balance calculations and account books
-- **Tax Management**: Configurable sales tax rates with component support
+- **Double-Entry Accounting**: Automatic ledger entry generation.
+- **Invoice Management**: Full lifecycle with balance and payment application.
+- **Payment Processing**: Multiple methods, unified credit tracking, and `payment_applications` as a source of truth.
+- **Financial Reporting**: Real-time balance calculations and account books, including detailed, categorized Balance Sheets.
+- **Tax Management**: Configurable sales tax rates.
+- **Account Balance Calculation**: Real-time calculation based on ledger entries, differentiating between account types.
+- **Bank Transaction Matching**: Rule-based matching (amount, date, description, reference) with confidence scoring. Supports matching to single/multiple invoices/bills and allocating differences.
+  - **Match Types**: Invoice/Bill Match (creates payment), Manual Entry Link (links to existing), Manual Override (user categorization).
+  - **Multi-Match with Difference**: Allows splitting a bank transaction across multiple invoices/bills and allocating remaining amounts to specific income/expense accounts.
 
 ## External Dependencies
 
 ### Core Infrastructure
-- **Database**: Neon PostgreSQL serverless database
-- **File Storage**: Local file system for attachments and exports
-- **Session Storage**: In-memory session store (MemoryStore)
+- **Database**: Neon PostgreSQL
+- **File Storage**: Local file system
 
 ### Payment Processing
-- **Stripe**: Payment processing with React Stripe.js integration
-- **Payment Methods**: Credit card processing and payment intent management
+- **Stripe**: Payment processing via React Stripe.js.
 
 ### Bank Integration
-- **Bank Feed Setup**: Account-first approach where users select a Chart of Accounts bank/cash account first, then choose connection method
-- **Plaid Integration**: Secure bank account connection and transaction import
-  - Bank account linking via OAuth through Plaid Link
-  - Automatic transaction syncing (last 30 days)
-  - Real-time balance updates
-  - Support for checking, savings, and credit card accounts
-  - One-to-one mapping: Each GL account can link to one Plaid account (only first account linked if multiple authorized)
-- **CSV Upload Support**: Manual bank statement import as alternative to Plaid
-  - Flexible column mapping with user preferences saved per GL account
-  - Support for multiple date formats (YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, DD-MM-YYYY)
-  - Handles both single amount column and separate debit/credit columns
-  - Comprehensive validation with row-level error reporting
-  - CSV mapping preferences stored in csv_mapping_preferences table
-- **Database Schema**:
-  - bank_connections: Stores Plaid item_id, access_token, and institution details
-  - bank_accounts: Individual Plaid account details with balances and linkedAccountId to Chart of Accounts
-  - imported_transactions: Raw transaction data from both Plaid and CSV with source tracking (accountId links to GL account)
-  - csv_mapping_preferences: Stores user's column mapping preferences per GL account
-- **Transaction Workflow**:
-  - Set up bank feed from Chart of Accounts page (select account → choose Plaid or CSV)
-  - Connect via Plaid Link (Sandbox/Development/Production) or upload CSV statement
-  - Sync/import transactions on demand or automatically
-  - Imported transactions stored with status: unmatched, matched, or ignored
-  - Future: Transaction matching UI to categorize and create bookkeeping entries
+- **Plaid Integration**: Secure bank account connection, transaction import, and real-time balance updates.
+- **CSV Upload Support**: Manual bank statement import with flexible column mapping and validation.
 
 ### Development Tools
-- **Build System**: Vite with hot module replacement
-- **Code Quality**: TypeScript for type safety and ESLint for code standards
-- **Database Tools**: Drizzle Kit for migrations and schema management
+- **Build System**: Vite
+- **Code Quality**: TypeScript, ESLint
+- **Database Tools**: Drizzle Kit
 
 ### Third-Party Libraries
-- **PDF Generation**: jsPDF for financial reports and invoice PDFs
-- **CSV Processing**: PapaParse for data import/export functionality
-- **Date Handling**: date-fns for consistent date manipulation
-- **Validation**: Zod for runtime type validation and schema enforcement
-
-## Recent Updates (October 28, 2025)
-
-### Session Persistence Fix
-- **Problem**: Sessions were stored in-memory and lost on server restart, making "Remember me" ineffective
-- **Solution**: Replaced MemoryStore with PostgreSQL-backed session storage using connect-pg-simple
-- **Impact**: Login sessions now persist across server restarts when "Remember me" is checked
-- **Configuration**: Sessions stored in PostgreSQL 'session' table with automatic table creation
-
-### Account Balance Calculation Fix
-- **Problem**: /api/accounts endpoint returned raw account data without calculated balances
-- **Solution**: Updated endpoint to use getAccountBalances() which calculates balances from ledger entries
-- **Balance Logic**: 
-  - Asset/Expense accounts: Balance = Σ(debits - credits)
-  - Liability/Equity/Income accounts: Balance = Σ(credits - debits)
-- **Account Types Covered**: All account types properly classified for correct balance calculations
-- **Impact**: Bank account tiles and other components now show correct books balance
-
-### Reconciliation Feature
-- **Database Schema**: Added `reconciliations` and `reconciliation_items` tables to track account reconciliation sessions
-- **Backend API**: Implemented complete reconciliation workflow endpoints
-  - POST /api/reconciliations - Start new reconciliation
-  - GET /api/reconciliations/:id/ledger-entries - Fetch transactions for reconciliation
-  - PATCH /api/reconciliations/:id/items - Mark transactions as cleared
-  - PATCH /api/reconciliations/:id/complete - Complete reconciliation (validates difference = $0)
-- **Frontend UI**: Built reconciliation interface in Banking > Reconciliation tab
-  - Account selector for bank/credit card/cash accounts
-  - Statement date and ending balance inputs
-  - Transaction list with checkboxes to mark as cleared
-  - Real-time balance calculation (statement balance vs cleared balance)
-  - Save and Complete buttons with validation
-- **Business Logic**: Cleared balance calculated as sum of (debit - credit) for marked transactions
-
-### Enhanced Balance Sheet Report
-- **Detailed Breakdown**: Replaced simple 3-row summary with comprehensive account-level detail
-- **Account Categorization**: Organized accounts into proper QuickBooks-style categories
-  - Current Assets: Bank, Accounts Receivable, Other Current Assets
-  - Fixed Assets: Property/Plant/Equipment, Long-term Assets
-  - Current Liabilities: Accounts Payable, Credit Cards, Sales Tax Payable, Other
-  - Long-term Liabilities: Loans
-  - Equity: Retained Earnings, Current Year Net Income, Other Equity accounts
-- **Collapsible Sections**: Each category can be expanded/collapsed for easier viewing
-- **Professional Design**: Proper indentation, borders, font weights, and right-aligned numbers
-- **Subtotals**: Shows subtotal for each category plus grand totals (Total Assets, Total Liabilities, Total Equity)
-- **Export Support**: CSV and PDF export maintained with updated format
-
-### Dashboard Modernization (October 30, 2025)
-- **Real Data Calculations**: Replaced mock chart data with actual monthly revenue/expense calculations from transaction history (last 6 months)
-- **Intelligent Trend Analysis**: Implemented accurate month-over-month trend calculations
-  - Handles negative values correctly using Math.abs() to avoid sign issues
-  - Special logic for profit trends transitioning from negative to positive
-  - Displays actual percentage changes (e.g., +15.3%, -8.2%)
-- **Improved Data Accuracy**: Updated summary cards to use proper API response properties
-  - Revenue from `incomeStatement.revenue.total`
-  - Expenses from `incomeStatement.operatingExpenses.total`
-  - Net Profit from `incomeStatement.netIncome`
-- **TypeScript Type Safety**: Added comprehensive IncomeStatementData interface for better code maintainability
-- **Enhanced UX**: Trend arrows now accurately represent business performance without manual inversions
-
-### Bank Transaction Matching System (October 30, 2025)
-- **Industry Standard Approach**: Rule-based matching algorithm following QuickBooks/Xero patterns
-  - Exact amount matching (±$0.01 tolerance)
-  - Date proximity matching (30-day window)
-  - Fuzzy amount matching for processing fees (2% tolerance)
-  - Customer/vendor name matching in transaction descriptions
-  - Invoice/bill reference number matching
-  - Confidence scoring (0-100%) for match quality
-- **Database Schema Updates**: Enhanced imported_transactions table
-  - `matchedTransactionType`: Tracks type of matched transaction (invoice, bill, payment, etc.)
-  - `matchConfidence`: Stores confidence score for suggested matches
-  - `isManualMatch`: Distinguishes between linked existing entries (true) and newly created transactions (false)
-- **Matching Service** (`server/matching-service.ts`):
-  - `findMatchesForBankTransaction()`: Scans for potential matches across all transaction types
-  - Invoice matching: Finds open invoices that match bank deposits
-  - Bill matching: Finds open bills that match bank payments/debits
-  - Manual entry matching: Finds existing deposit/payment/expense entries
-  - Multi-criteria scoring: Amount + date + description + contact name
-- **API Endpoints**:
-  - GET `/api/bank-feeds/:id/suggestions` - Returns ranked match suggestions with confidence scores
-  - POST `/api/bank-feeds/:id/match-invoice` - Creates payment and applies to invoice
-  - POST `/api/bank-feeds/:id/match-bill` - Creates bill payment and applies to bill
-  - POST `/api/bank-feeds/:id/link-manual` - Links to existing manual entry (no new transaction)
-  - DELETE `/api/bank-feeds/:id/unmatch` - Reverses match and deletes auto-created transaction
-- **Three Match Types**:
-  1. **Invoice/Bill Match**: Creates new payment transaction and applies to outstanding invoice/bill
-  2. **Manual Entry Link**: Links bank transaction to existing manual entry without creating duplicate
-  3. **Manual Override**: Always allows manual categorization via dialog if user disagrees with AI suggestion
-- **Button Logic**: 
-  - High confidence match (>80%): Shows "Match to Invoice #X" button
-  - Low/no confidence: Shows "Post" button for manual categorization
-  - Manual categorization dialog always accessible as alternative
-- **Status**: Backend complete (matching service + API endpoints). UI implementation pending.
+- **PDF Generation**: jsPDF
+- **CSV Processing**: PapaParse
+- **Date Handling**: date-fns
+- **Validation**: Zod
