@@ -357,8 +357,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.get("/transactions", async (req: Request, res: Response) => {
     try {
       const transactions = await storage.getTransactions();
-      res.json(transactions);
+      
+      // Calculate balances for bills and invoices by subtracting payment applications
+      const transactionsWithBalances = await Promise.all(
+        transactions.map(async (tx) => {
+          // Only calculate balance for bills and invoices
+          if (tx.type !== 'bill' && tx.type !== 'invoice') {
+            return tx;
+          }
+          
+          // If balance is already set (from creation), use it
+          if (tx.balance !== null && tx.balance !== undefined) {
+            // But double-check it by calculating from payment applications
+            const applications = await db
+              .select()
+              .from(paymentApplications)
+              .where(
+                tx.type === 'invoice' 
+                  ? eq(paymentApplications.invoiceId, tx.id)
+                  : eq(paymentApplications.billId, tx.id)
+              );
+            
+            const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
+            const calculatedBalance = tx.amount - totalApplied;
+            
+            return {
+              ...tx,
+              balance: calculatedBalance
+            };
+          }
+          
+          // Calculate balance from payment applications
+          const applications = await db
+            .select()
+            .from(paymentApplications)
+            .where(
+              tx.type === 'invoice' 
+                ? eq(paymentApplications.invoiceId, tx.id)
+                : eq(paymentApplications.billId, tx.id)
+            );
+          
+          const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
+          const balance = tx.amount - totalApplied;
+          
+          return {
+            ...tx,
+            balance
+          };
+        })
+      );
+      
+      res.json(transactionsWithBalances);
     } catch (error) {
+      console.error("Error fetching transactions:", error);
       res.status(500).json({ message: "Failed to fetch transactions" });
     }
   });

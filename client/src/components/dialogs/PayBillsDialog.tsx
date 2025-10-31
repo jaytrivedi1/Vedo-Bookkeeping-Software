@@ -59,12 +59,11 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     enabled: open,
   });
 
-  // Get bills with contact names and ensure balance is calculated
+  // Get bills with contact names
   const billsWithContacts = useMemo(() => {
     return bills.map(bill => ({
       ...bill,
-      contactName: contacts.find(c => c.id === bill.contactId)?.name || 'Unknown Vendor',
-      balance: bill.balance ?? bill.amount // If balance is null, use the full amount
+      contactName: contacts.find(c => c.id === bill.contactId)?.name || 'Unknown Vendor'
     }));
   }, [bills, contacts]);
 
