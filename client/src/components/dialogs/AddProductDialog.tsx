@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertProductSchema } from "@shared/schema";
+import { insertProductSchema, Product } from "@shared/schema";
 
 // Simplified schema for quick product creation
 const addProductSchema = insertProductSchema.extend({
@@ -27,7 +27,7 @@ type AddProductFormData = z.infer<typeof addProductSchema>;
 interface AddProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (productId: number) => void;
+  onSuccess: (product: Product) => void;
   defaultType?: "product" | "service";
 }
 
@@ -106,14 +106,14 @@ export default function AddProductDialog({
         salesTaxId: data.salesTaxId === 0 ? null : Number(data.salesTaxId),
       };
 
-      const response = await apiRequest('/api/products', 'POST', formattedData);
+      const product = await apiRequest('/api/products', 'POST', formattedData);
       
       toast({
         title: "Product created",
         description: `${data.name} has been created successfully.`,
       });
 
-      onSuccess(response.id);
+      onSuccess(product);
       onOpenChange(false);
       form.reset();
     } catch (error) {

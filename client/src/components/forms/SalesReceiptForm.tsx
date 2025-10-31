@@ -8,6 +8,7 @@ import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
+import AddProductDialog from "@/components/dialogs/AddProductDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,8 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   const [totalAmount, setTotalAmount] = useState(0);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(false);
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
+  const [showAddProductDialog, setShowAddProductDialog] = useState(false);
+  const [currentLineItemIndex, setCurrentLineItemIndex] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Generate default receipt number
@@ -121,6 +124,12 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
       label: tax.name,
       subtitle: tax.rate ? `· ${tax.rate}%` : undefined
     }));
+
+  const productItems: SearchableSelectItem[] = products.map((product: Product) => ({
+    value: product.id.toString(),
+    label: `${product.name} (${formatCurrency(product.price)})`,
+    subtitle: undefined
+  }));
 
   const depositAccountItems: SearchableSelectItem[] = depositAccounts.map((acc: Account) => ({
     value: acc.id.toString(),
@@ -397,21 +406,19 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                 {/* Product/Service */}
                 <div className="col-span-12 md:col-span-3">
                   <label className="text-sm font-medium">Product/Service</label>
-                  <Select
+                  <SearchableSelect
+                    items={[{ value: '', label: 'None', subtitle: undefined }, ...productItems]}
                     value={form.watch(`lineItems.${index}.productId`) || ''}
                     onValueChange={(value) => handleProductSelect(index, value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select product" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((product: Product) => (
-                        <SelectItem key={product.id} value={product.id.toString()}>
-                          {product.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onAddNew={() => {
+                      setCurrentLineItemIndex(index);
+                      setShowAddProductDialog(true);
+                    }}
+                    addNewText="Add New Product/Service"
+                    placeholder="Select product"
+                    searchPlaceholder="Search products..."
+                    emptyText="No products found"
+                  />
                 </div>
 
                 {/* Description */}
@@ -566,6 +573,28 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
         onSuccess={(customerId) => {
           form.setValue('contactId', customerId);
           queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
+
+      <AddProductDialog
+        open={showAddProductDialog}
+        onOpenChange={setShowAddProductDialog}
+        onSuccess={(product) => {
+          if (currentLineItemIndex !== null) {
+            // Set the product ID and populate the line item with the new product data
+            form.setValue(`lineItems.${currentLineItemIndex}.productId`, product.id.toString());
+            form.setValue(`lineItems.${currentLineItemIndex}.description`, product.name);
+            form.setValue(`lineItems.${currentLineItemIndex}.unitPrice`, parseFloat(product.price.toString()));
+            
+            if (product.salesTaxId) {
+              form.setValue(`lineItems.${currentLineItemIndex}.salesTaxId`, product.salesTaxId);
+            }
+            
+            recalculateTotals();
+            
+            // Invalidate products query to refresh the list
+            queryClient.invalidateQueries({ queryKey: ['/api/products'] });
+          }
         }}
       />
     </Form>

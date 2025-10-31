@@ -1513,26 +1513,21 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       <AddProductDialog
         open={showAddProductDialog}
         onOpenChange={setShowAddProductDialog}
-        onSuccess={(productId) => {
+        onSuccess={(product) => {
           if (currentLineItemIndex !== null) {
-            // Set the product ID
-            form.setValue(`lineItems.${currentLineItemIndex}.productId`, productId.toString());
+            // Set the product ID and populate the line item with the new product data
+            form.setValue(`lineItems.${currentLineItemIndex}.productId`, product.id.toString());
+            form.setValue(`lineItems.${currentLineItemIndex}.description`, product.name);
+            form.setValue(`lineItems.${currentLineItemIndex}.unitPrice`, parseFloat(product.price.toString()));
             
-            // Find the newly created product and populate the line item
-            queryClient.invalidateQueries({ queryKey: ['/api/products'] }).then(() => {
-              // After products are refreshed, find the new product and populate fields
-              const product = typedProducts.find(p => p.id === productId);
-              if (product) {
-                form.setValue(`lineItems.${currentLineItemIndex}.description`, product.name);
-                form.setValue(`lineItems.${currentLineItemIndex}.unitPrice`, parseFloat(product.price.toString()));
-                
-                if (product.salesTaxId) {
-                  form.setValue(`lineItems.${currentLineItemIndex}.salesTaxId`, product.salesTaxId);
-                }
-                
-                updateLineItemAmount(currentLineItemIndex);
-              }
-            });
+            if (product.salesTaxId) {
+              form.setValue(`lineItems.${currentLineItemIndex}.salesTaxId`, product.salesTaxId);
+            }
+            
+            updateLineItemAmount(currentLineItemIndex);
+            
+            // Invalidate products query to refresh the list
+            queryClient.invalidateQueries({ queryKey: ['/api/products'] });
           }
         }}
       />
