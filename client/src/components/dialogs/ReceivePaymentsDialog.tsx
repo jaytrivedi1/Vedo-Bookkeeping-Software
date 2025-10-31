@@ -59,11 +59,12 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
     enabled: open,
   });
 
-  // Get invoices with contact names
+  // Get invoices with contact names and ensure balance is calculated
   const invoicesWithContacts = useMemo(() => {
     return invoices.map(invoice => ({
       ...invoice,
-      contactName: contacts.find(c => c.id === invoice.contactId)?.name || 'Unknown Customer'
+      contactName: contacts.find(c => c.id === invoice.contactId)?.name || 'Unknown Customer',
+      balance: invoice.balance ?? invoice.amount // If balance is null, use the full amount
     }));
   }, [invoices, contacts]);
 
