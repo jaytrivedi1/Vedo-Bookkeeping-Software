@@ -630,8 +630,14 @@ export default function Banking() {
 
   // Match multiple bills mutation
   const matchMultipleBillsMutation = useMutation({
-    mutationFn: async ({ transactionId, bills }: { transactionId: number, bills: { billId: number; amountToApply: number }[] }) => {
-      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-bills`, 'POST', { bills });
+    mutationFn: async ({ transactionId, data }: { 
+      transactionId: number, 
+      data: { 
+        selectedBills: { billId: number; amountToApply: number }[];
+        difference?: { accountId: number; amount: number; description: string };
+      } 
+    }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-bills`, 'POST', data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
@@ -657,8 +663,14 @@ export default function Banking() {
 
   // Match multiple invoices mutation
   const matchMultipleInvoicesMutation = useMutation({
-    mutationFn: async ({ transactionId, invoices }: { transactionId: number, invoices: { invoiceId: number; amountToApply: number }[] }) => {
-      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-invoices`, 'POST', { invoices });
+    mutationFn: async ({ transactionId, data }: { 
+      transactionId: number, 
+      data: { 
+        selectedInvoices: { invoiceId: number; amountToApply: number }[];
+        difference?: { accountId: number; amount: number; description: string };
+      } 
+    }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-invoices`, 'POST', data);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
@@ -2661,10 +2673,10 @@ export default function Banking() {
           open={payBillsDialogOpen}
           onOpenChange={setPayBillsDialogOpen}
           bankTransactionAmount={Math.abs(Number(matchingTransaction.amount))}
-          onConfirm={(selectedBills) => {
+          onConfirm={(data) => {
             matchMultipleBillsMutation.mutate({
               transactionId: matchingTransaction.id,
-              bills: selectedBills,
+              data,
             });
           }}
         />
@@ -2676,10 +2688,10 @@ export default function Banking() {
           open={receivePaymentsDialogOpen}
           onOpenChange={setReceivePaymentsDialogOpen}
           bankTransactionAmount={Number(matchingTransaction.amount)}
-          onConfirm={(selectedInvoices) => {
+          onConfirm={(data) => {
             matchMultipleInvoicesMutation.mutate({
               transactionId: matchingTransaction.id,
-              invoices: selectedInvoices,
+              data,
             });
           }}
         />

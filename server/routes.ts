@@ -8554,10 +8554,10 @@ Respond in JSON format:
   apiRouter.post("/bank-feeds/:id/match-multiple-bills", async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
-      const { bills } = req.body; // Array of { billId, amountToApply }
+      const { selectedBills, difference } = req.body;
 
-      if (!transactionId || !bills || !Array.isArray(bills) || bills.length === 0) {
-        return res.status(400).json({ error: 'Transaction ID and bills array are required' });
+      if (!transactionId || !selectedBills || !Array.isArray(selectedBills) || selectedBills.length === 0) {
+        return res.status(400).json({ error: 'Transaction ID and selectedBills array are required' });
       }
 
       // Fetch the imported transaction
@@ -8574,13 +8574,15 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is already matched' });
       }
 
-      // Validate total amount matches bank transaction
-      const totalAmount = bills.reduce((sum: number, b: any) => sum + b.amountToApply, 0);
+      // Validate total amount matches bank transaction (including difference if provided)
+      const billsTotal = selectedBills.reduce((sum: number, b: any) => sum + b.amountToApply, 0);
+      const differenceAmount = difference ? difference.amount : 0;
+      const totalAmount = billsTotal + differenceAmount;
       const bankAmount = Math.abs(importedTx.amount);
       
       if (Math.abs(totalAmount - bankAmount) > 0.01) {
         return res.status(400).json({ 
-          error: `Total amount ${totalAmount} does not match bank transaction amount ${bankAmount}` 
+          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}` 
         });
       }
 
@@ -8589,7 +8591,7 @@ Respond in JSON format:
       const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
 
       // Create a payment transaction for each bill
-      for (const billItem of bills) {
+      for (const billItem of selectedBills) {
         const { billId, amountToApply } = billItem;
 
         // Fetch the bill
@@ -8673,6 +8675,55 @@ Respond in JSON format:
         });
 
         createdPayments.push(createdPayment);
+      }
+
+      // Create expense transaction for difference if provided
+      if (difference && difference.accountId && difference.amount > 0) {
+        const expenseTransaction: InsertTransaction = {
+          type: 'expense',
+          reference: `BANKEXP-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+          date: txDate,
+          description: difference.description || 'Bank payment difference',
+          amount: difference.amount,
+          status: 'completed',
+          balance: 0,
+        };
+
+        // Create ledger entries for the expense
+        const expenseLedgerEntries: InsertLedgerEntry[] = [];
+
+        // Credit bank account (money out)
+        if (bankAccountId) {
+          expenseLedgerEntries.push({
+            accountId: bankAccountId,
+            description: difference.description || 'Bank payment difference',
+            debit: 0,
+            credit: difference.amount,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        // Debit expense account
+        expenseLedgerEntries.push({
+          accountId: difference.accountId,
+          description: difference.description || 'Bank payment difference',
+          debit: difference.amount,
+          credit: 0,
+          date: txDate,
+          transactionId: 0,
+        });
+
+        const createdExpense = await storage.createTransaction(expenseTransaction, [], expenseLedgerEntries);
+
+        // Record the match in bank_transaction_matches
+        await db.insert(bankTransactionMatchesSchema).values({
+          importedTransactionId: transactionId,
+          matchedTransactionId: createdExpense.id,
+          amountApplied: difference.amount,
+        });
+
+        createdPayments.push(createdExpense);
       }
 
       // Update imported transaction to mark as multi-matched
