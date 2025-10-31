@@ -130,19 +130,20 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
   // Calculate remaining amount
   const remainingAmount = bankTransactionAmount - totalSelected;
 
-  // Auto-fill difference amount when remaining changes
+  // Auto-fill difference amount when remaining changes (only for positive remainders)
   useEffect(() => {
-    if (Math.abs(remainingAmount) > 0.01) {
-      setDifferenceAmount(Math.abs(remainingAmount).toFixed(2));
+    if (remainingAmount > 0.01) {
+      setDifferenceAmount(remainingAmount.toFixed(2));
     } else {
       setDifferenceAmount("");
     }
   }, [remainingAmount]);
 
   // Check if totals match (either exact match or difference is accounted for)
+  // For deposits: only allow positive remainingAmount (under-allocation), never negative (over-allocation)
   const diffAmount = parseFloat(differenceAmount) || 0;
   const totalsMatch = Math.abs(remainingAmount) < 0.01 || 
-    (differenceAccountId && Math.abs(Math.abs(remainingAmount) - diffAmount) < 0.01);
+    (remainingAmount > 0 && differenceAccountId && Math.abs(remainingAmount - diffAmount) < 0.01);
 
   const handleToggleInvoice = (invoiceId: number, invoiceBalance: number) => {
     const newSelected = new Map(selectedInvoices);
@@ -181,6 +182,11 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
       return;
     }
 
+    // Prevent over-allocation: reject if remainingAmount is negative
+    if (remainingAmount < -0.01) {
+      return; // User has allocated more than the bank transaction
+    }
+
     // Final validation: ensure no amount exceeds invoice balance
     for (const [invoiceId, amountToApply] of selectedInvoices.entries()) {
       const invoice = filteredInvoices.find(inv => inv.id === invoiceId);
@@ -194,10 +200,10 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
       amountToApply,
     }));
 
-    // Include difference data if applicable
+    // Include difference data if applicable (only for positive remainders)
     const data: any = { selectedInvoices: invoicesToMatch };
     
-    if (Math.abs(remainingAmount) > 0.01 && differenceAccountId && diffAmount > 0) {
+    if (remainingAmount > 0.01 && differenceAccountId && diffAmount > 0) {
       data.difference = {
         accountId: parseInt(differenceAccountId),
         amount: diffAmount,
