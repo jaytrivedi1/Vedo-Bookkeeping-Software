@@ -51,6 +51,15 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
   const { data: bills = [], isLoading } = useQuery<Bill[]>({
     queryKey: ['/api/transactions', { type: 'bill', status: 'open' }],
     enabled: open,
+    queryFn: async () => {
+      const res = await fetch('/api/transactions?type=bill&status=open', {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch bills');
+      }
+      return res.json();
+    },
   });
 
   // Fetch all contacts for filtering

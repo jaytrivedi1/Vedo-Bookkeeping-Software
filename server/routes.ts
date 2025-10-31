@@ -356,7 +356,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Transactions routes
   apiRouter.get("/transactions", async (req: Request, res: Response) => {
     try {
-      const transactions = await storage.getTransactions();
+      let transactions = await storage.getTransactions();
+      
+      // Filter by type if provided
+      if (req.query.type) {
+        transactions = transactions.filter(t => t.type === req.query.type);
+      }
+      
+      // Filter by status if provided
+      if (req.query.status) {
+        transactions = transactions.filter(t => t.status === req.query.status);
+      }
+      
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch transactions" });

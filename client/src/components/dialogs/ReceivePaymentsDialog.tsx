@@ -51,6 +51,15 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['/api/transactions', { type: 'invoice', status: 'open' }],
     enabled: open,
+    queryFn: async () => {
+      const res = await fetch('/api/transactions?type=invoice&status=open', {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        throw new Error('Failed to fetch invoices');
+      }
+      return res.json();
+    },
   });
 
   // Fetch all contacts for filtering
