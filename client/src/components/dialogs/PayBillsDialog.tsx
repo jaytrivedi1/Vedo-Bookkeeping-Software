@@ -49,6 +49,11 @@ interface PayBillsDialogProps {
   }) => void;
 }
 
+// Utility function to round to 2 decimal places
+const roundTo2Decimals = (num: number): number => {
+  return Math.round(num * 100) / 100;
+};
+
 export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onConfirm }: PayBillsDialogProps) {
   const [selectedBills, setSelectedBills] = useState<Map<number, number>>(new Map());
   const [vendorFilter, setVendorFilter] = useState<string>("all");
@@ -124,11 +129,11 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     selectedBills.forEach(amount => {
       total += amount;
     });
-    return total;
+    return roundTo2Decimals(total);
   }, [selectedBills]);
 
-  // Calculate remaining amount
-  const remainingAmount = bankTransactionAmount - totalSelected;
+  // Calculate remaining amount (rounded to 2 decimals)
+  const remainingAmount = roundTo2Decimals(bankTransactionAmount - totalSelected);
 
   // Auto-fill difference amount when remaining changes (only for positive remainders)
   useEffect(() => {
@@ -151,8 +156,8 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     if (newSelected.has(billId)) {
       newSelected.delete(billId);
     } else {
-      // Auto-fill with available amount
-      const amountToApply = Math.min(billBalance, remainingAmount);
+      // Auto-fill with available amount (rounded to 2 decimals)
+      const amountToApply = roundTo2Decimals(Math.min(billBalance, remainingAmount));
       if (amountToApply > 0) {
         newSelected.set(billId, amountToApply);
       }
@@ -165,8 +170,8 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     const amount = parseFloat(value) || 0;
     const newSelected = new Map(selectedBills);
     
-    // Enforce max amount (bill balance)
-    const validAmount = Math.min(amount, maxAmount);
+    // Enforce max amount (bill balance) and round to 2 decimals
+    const validAmount = roundTo2Decimals(Math.min(amount, maxAmount));
     
     if (validAmount > 0) {
       newSelected.set(billId, validAmount);

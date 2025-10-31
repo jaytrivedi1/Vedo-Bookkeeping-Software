@@ -49,6 +49,11 @@ interface ReceivePaymentsDialogProps {
   }) => void;
 }
 
+// Utility function to round to 2 decimal places
+const roundTo2Decimals = (num: number): number => {
+  return Math.round(num * 100) / 100;
+};
+
 export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmount, onConfirm }: ReceivePaymentsDialogProps) {
   const [selectedInvoices, setSelectedInvoices] = useState<Map<number, number>>(new Map());
   const [customerFilter, setCustomerFilter] = useState<string>("all");
@@ -124,11 +129,11 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
     selectedInvoices.forEach(amount => {
       total += amount;
     });
-    return total;
+    return roundTo2Decimals(total);
   }, [selectedInvoices]);
 
-  // Calculate remaining amount
-  const remainingAmount = bankTransactionAmount - totalSelected;
+  // Calculate remaining amount (rounded to 2 decimals)
+  const remainingAmount = roundTo2Decimals(bankTransactionAmount - totalSelected);
 
   // Auto-fill difference amount when remaining changes (only for positive remainders)
   useEffect(() => {
@@ -151,8 +156,8 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
     if (newSelected.has(invoiceId)) {
       newSelected.delete(invoiceId);
     } else {
-      // Auto-fill with available amount
-      const amountToApply = Math.min(invoiceBalance, remainingAmount);
+      // Auto-fill with available amount (rounded to 2 decimals)
+      const amountToApply = roundTo2Decimals(Math.min(invoiceBalance, remainingAmount));
       if (amountToApply > 0) {
         newSelected.set(invoiceId, amountToApply);
       }
@@ -165,8 +170,8 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
     const amount = parseFloat(value) || 0;
     const newSelected = new Map(selectedInvoices);
     
-    // Enforce max amount (invoice balance)
-    const validAmount = Math.min(amount, maxAmount);
+    // Enforce max amount (invoice balance) and round to 2 decimals
+    const validAmount = roundTo2Decimals(Math.min(amount, maxAmount));
     
     if (validAmount > 0) {
       newSelected.set(invoiceId, validAmount);
