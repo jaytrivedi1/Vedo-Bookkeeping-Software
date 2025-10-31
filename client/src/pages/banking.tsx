@@ -40,6 +40,7 @@ import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { AttachmentDialog } from "@/components/dialogs/AttachmentDialog";
 import { PayBillsDialog } from "@/components/dialogs/PayBillsDialog";
 import { ReceivePaymentsDialog } from "@/components/dialogs/ReceivePaymentsDialog";
+import { RuleDialog } from "@/components/dialogs/RuleDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -406,6 +407,13 @@ function RulesManagementTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Rule Dialog */}
+      <RuleDialog
+        open={ruleDialogOpen}
+        onOpenChange={setRuleDialogOpen}
+        rule={editingRule}
+      />
     </div>
   );
 }
