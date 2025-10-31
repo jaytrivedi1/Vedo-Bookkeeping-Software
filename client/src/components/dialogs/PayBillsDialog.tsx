@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -39,13 +39,23 @@ interface PayBillsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bankTransactionAmount: number;
-  onConfirm: (selectedBills: { billId: number; amountToApply: number }[]) => void;
+  onConfirm: (data: {
+    selectedBills: { billId: number; amountToApply: number }[];
+    difference?: {
+      accountId: number;
+      amount: number;
+      description: string;
+    };
+  }) => void;
 }
 
 export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onConfirm }: PayBillsDialogProps) {
   const [selectedBills, setSelectedBills] = useState<Map<number, number>>(new Map());
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [differenceAccountId, setDifferenceAccountId] = useState<string>("");
+  const [differenceAmount, setDifferenceAmount] = useState<string>("");
+  const [differenceDescription, setDifferenceDescription] = useState<string>("");
 
   // Fetch all open bills
   const { data: bills = [], isLoading } = useQuery<Bill[]>({
@@ -67,6 +77,16 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     queryKey: ['/api/contacts'],
     enabled: open,
   });
+
+  // Fetch expense accounts for difference dropdown
+  const { data: accounts = [] } = useQuery<any[]>({
+    queryKey: ['/api/accounts'],
+    enabled: open,
+  });
+
+  const expenseAccounts = useMemo(() => {
+    return accounts.filter(a => a.type === 'expense' || a.type === 'other_expense' || a.type === 'cost_of_goods_sold');
+  }, [accounts]);
 
   // Get bills with contact names
   const billsWithContacts = useMemo(() => {
@@ -110,8 +130,19 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
   // Calculate remaining amount
   const remainingAmount = bankTransactionAmount - totalSelected;
 
-  // Check if totals match
-  const totalsMatch = Math.abs(remainingAmount) < 0.01;
+  // Auto-fill difference amount when remaining changes
+  useEffect(() => {
+    if (Math.abs(remainingAmount) > 0.01) {
+      setDifferenceAmount(Math.abs(remainingAmount).toFixed(2));
+    } else {
+      setDifferenceAmount("");
+    }
+  }, [remainingAmount]);
+
+  // Check if totals match (either exact match or difference is accounted for)
+  const diffAmount = parseFloat(differenceAmount) || 0;
+  const totalsMatch = Math.abs(remainingAmount) < 0.01 || 
+    (differenceAccountId && Math.abs(Math.abs(remainingAmount) - diffAmount) < 0.01);
 
   const handleToggleBill = (billId: number, billBalance: number) => {
     const newSelected = new Map(selectedBills);
@@ -163,8 +194,22 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
       amountToApply,
     }));
 
-    onConfirm(billsToMatch);
+    // Include difference data if applicable
+    const data: any = { selectedBills: billsToMatch };
+    
+    if (Math.abs(remainingAmount) > 0.01 && differenceAccountId && diffAmount > 0) {
+      data.difference = {
+        accountId: parseInt(differenceAccountId),
+        amount: diffAmount,
+        description: differenceDescription || `Bank payment difference - ${format(new Date(), 'PP')}`,
+      };
+    }
+
+    onConfirm(data);
     setSelectedBills(new Map());
+    setDifferenceAccountId("");
+    setDifferenceAmount("");
+    setDifferenceDescription("");
   };
 
   const handleCancel = () => {
@@ -277,6 +322,53 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
             </div>
           </ScrollArea>
 
+          {/* Difference Section */}
+          {Math.abs(remainingAmount) > 0.01 && (
+            <div className="space-y-3 border rounded-md p-4 bg-blue-50">
+              <div className="font-medium text-sm">Record Difference</div>
+              <div className="text-xs text-muted-foreground mb-2">
+                Allocate the remaining ${Math.abs(remainingAmount).toFixed(2)} to an expense account
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Account</Label>
+                  <Select value={differenceAccountId} onValueChange={setDifferenceAccountId}>
+                    <SelectTrigger data-testid="select-difference-account">
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {expenseAccounts.map(account => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Amount</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={differenceAmount}
+                    onChange={(e) => setDifferenceAmount(e.target.value)}
+                    data-testid="input-difference-amount"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Description</Label>
+                  <Input
+                    type="text"
+                    placeholder="e.g., Bank fees"
+                    value={differenceDescription}
+                    onChange={(e) => setDifferenceDescription(e.target.value)}
+                    data-testid="input-difference-description"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Summary */}
           <div className="space-y-2 border-t pt-4">
             <div className="flex justify-between text-sm">
@@ -294,10 +386,12 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
               </span>
             </div>
 
-            {!totalsMatch && selectedBills.size > 0 && (
-              <Alert variant="destructive">
+            {!totalsMatch && Math.abs(remainingAmount) > 0.01 && (
+              <Alert>
                 <AlertDescription>
-                  Total selected bills must equal the bank payment amount
+                  {Math.abs(remainingAmount) > 0.01 && !differenceAccountId
+                    ? "Please select an account to record the difference or adjust your selections"
+                    : "The difference amount must match the remaining amount"}
                 </AlertDescription>
               </Alert>
             )}
