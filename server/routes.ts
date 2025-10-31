@@ -367,14 +367,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Calculate balance from payment applications
-          const whereClause = tx.type === 'invoice' 
-            ? eq(paymentApplications.invoiceId, tx.id)
-            : eq(paymentApplications.billId, tx.id);
-          
-          const applications = await db
-            .select()
-            .from(paymentApplications)
-            .where(whereClause);
+          let applications;
+          if (tx.type === 'invoice') {
+            applications = await db
+              .select()
+              .from(paymentApplications)
+              .where(eq(paymentApplications.invoiceId, tx.id));
+          } else {
+            applications = await db
+              .select()
+              .from(paymentApplications)
+              .where(eq(paymentApplications.billId, tx.id));
+          }
           
           const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
           const balance = tx.amount - totalApplied;
