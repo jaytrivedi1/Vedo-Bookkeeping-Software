@@ -29,6 +29,13 @@ interface Contact {
   contactType: string;
 }
 
+interface SalesTax {
+  id: number;
+  name: string;
+  rate: number;
+  isActive: boolean;
+}
+
 export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
   const { toast } = useToast();
   
@@ -38,6 +45,7 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
   const [accountId, setAccountId] = useState<string>("");
+  const [salesTaxId, setSalesTaxId] = useState<string>("");
   const [contactName, setContactName] = useState("");
   const [memo, setMemo] = useState("");
 
@@ -49,6 +57,11 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
   // Fetch contacts
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
+  });
+
+  // Fetch sales taxes
+  const { data: salesTaxes = [] } = useQuery<SalesTax[]>({
+    queryKey: ['/api/sales-taxes'],
   });
 
   // Filter accounts to only expense/income accounts for categorization
@@ -72,6 +85,7 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setAmountMin(rule.conditions?.amountMin?.toString() || "");
       setAmountMax(rule.conditions?.amountMax?.toString() || "");
       setAccountId(rule.actions?.accountId?.toString() || "");
+      setSalesTaxId(rule.salesTaxId?.toString() || "");
       setContactName(rule.actions?.contactName || "");
       setMemo(rule.actions?.memo || "");
     } else {
@@ -81,6 +95,7 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setAmountMin("");
       setAmountMax("");
       setAccountId("");
+      setSalesTaxId("");
       setContactName("");
       setMemo("");
     }
@@ -164,11 +179,18 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       actions.memo = memo.trim();
     }
 
-    saveRuleMutation.mutate({
+    const ruleData: any = {
       name: name.trim(),
       conditions,
       actions,
-    });
+    };
+
+    // Add salesTaxId if selected
+    if (salesTaxId) {
+      ruleData.salesTaxId = parseInt(salesTaxId);
+    }
+
+    saveRuleMutation.mutate(ruleData);
   };
 
   return (
@@ -257,6 +279,28 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
                     placeholder="Select account..."
                     data-testid="select-account"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sales Tax (Optional)</Label>
+                  <SearchableSelect
+                    items={[
+                      { value: "", label: "+ None" },
+                      ...salesTaxes
+                        .filter(tax => tax.isActive)
+                        .map((tax) => ({
+                          value: tax.id.toString(),
+                          label: `${tax.name} (${tax.rate}%)`,
+                        }))
+                    ]}
+                    value={salesTaxId}
+                    onValueChange={setSalesTaxId}
+                    placeholder="Select sales tax..."
+                    data-testid="select-sales-tax"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Automatically apply this tax to categorized transactions
+                  </p>
                 </div>
 
                 <div className="space-y-2">

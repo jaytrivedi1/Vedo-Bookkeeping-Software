@@ -60,7 +60,7 @@ import path from 'path';
 import fs from 'fs';
 
 // Helper function to apply categorization rules to an imported transaction
-async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string } | null> {
+async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number } | null> {
   try {
     // Get all enabled rules ordered by priority
     const rules = await storage.getCategorizationRules();
@@ -104,6 +104,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
           accountId: actions.accountId || undefined,
           contactName: actions.contactName || undefined,
           memo: actions.memo || undefined,
+          salesTaxId: rule.salesTaxId || undefined,
         };
       }
     }
@@ -6893,11 +6894,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (ruleMatch && ruleMatch.accountId) {
             // Auto-categorize using the matched rule
             try {
-              // Update the imported transaction with categorization info
+              // Update the imported transaction with suggested categorization info
               await storage.updateImportedTransaction(imported.id!, {
-                categoryAccountId: ruleMatch.accountId,
-                categoryContactName: ruleMatch.contactName || null,
-                categoryMemo: ruleMatch.memo || null,
+                suggestedAccountId: ruleMatch.accountId,
+                suggestedSalesTaxId: ruleMatch.salesTaxId || null,
+                suggestedContactName: ruleMatch.contactName || null,
+                suggestedMemo: ruleMatch.memo || null,
               });
             } catch (error) {
               console.error('Error auto-categorizing transaction:', error);
@@ -7516,9 +7518,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (ruleMatch && ruleMatch.accountId) {
           try {
             await storage.updateImportedTransaction(tx.id!, {
-              categoryAccountId: ruleMatch.accountId,
-              categoryContactName: ruleMatch.contactName || null,
-              categoryMemo: ruleMatch.memo || null,
+              suggestedAccountId: ruleMatch.accountId,
+              suggestedSalesTaxId: ruleMatch.salesTaxId || null,
+              suggestedContactName: ruleMatch.contactName || null,
+              suggestedMemo: ruleMatch.memo || null,
             });
           } catch (error) {
             console.error('Error auto-categorizing CSV transaction:', error);
@@ -9307,7 +9310,7 @@ Respond in JSON format:
 
   apiRouter.post("/categorization-rules", async (req: Request, res: Response) => {
     try {
-      const { name, conditions, actions, isEnabled = true, priority = 0 } = req.body;
+      const { name, conditions, actions, salesTaxId, isEnabled = true, priority = 0 } = req.body;
       
       if (!name || !conditions || !actions) {
         return res.status(400).json({ message: "Name, conditions, and actions are required" });
@@ -9317,6 +9320,7 @@ Respond in JSON format:
         name,
         conditions,
         actions,
+        salesTaxId: salesTaxId || null,
         isEnabled,
         priority
       });
@@ -9364,7 +9368,7 @@ Respond in JSON format:
       // Get all uncategorized/unmatched transactions
       const allTransactions = await storage.getImportedTransactions();
       const uncategorizedTransactions = allTransactions.filter(tx => 
-        tx.status === 'unmatched' && !tx.matchedTransactionId && !tx.categoryAccountId
+        tx.status === 'unmatched' && !tx.matchedTransactionId && !tx.suggestedAccountId
       );
 
       let categorizedCount = 0;
@@ -9375,9 +9379,10 @@ Respond in JSON format:
         if (ruleMatch && ruleMatch.accountId) {
           try {
             await storage.updateImportedTransaction(tx.id!, {
-              categoryAccountId: ruleMatch.accountId,
-              categoryContactName: ruleMatch.contactName || null,
-              categoryMemo: ruleMatch.memo || null,
+              suggestedAccountId: ruleMatch.accountId,
+              suggestedSalesTaxId: ruleMatch.salesTaxId || null,
+              suggestedContactName: ruleMatch.contactName || null,
+              suggestedMemo: ruleMatch.memo || null,
             });
             categorizedCount++;
           } catch (error) {

@@ -601,6 +601,11 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
   isManualMatch: boolean('is_manual_match').default(false), // true = linked to existing entry (no new transaction), false = new transaction created
   isMultiMatch: boolean('is_multi_match').default(false), // true = matched to multiple transactions
   status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored, deleted
+  // Suggested categorization from rules
+  suggestedAccountId: integer('suggested_account_id').references(() => accounts.id),
+  suggestedSalesTaxId: integer('suggested_sales_tax_id').references(() => salesTaxSchema.id),
+  suggestedContactName: text('suggested_contact_name'),
+  suggestedMemo: text('suggested_memo'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -687,6 +692,7 @@ export const categorizationRulesSchema = pgTable('categorization_rules', {
   priority: integer('priority').notNull().default(0), // Lower number = higher priority
   conditions: json('conditions').notNull(), // Array of {field, operator, value}
   actions: json('actions').notNull(), // {accountId, contactId, description, memo}
+  salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id), // Optional sales tax to apply
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
