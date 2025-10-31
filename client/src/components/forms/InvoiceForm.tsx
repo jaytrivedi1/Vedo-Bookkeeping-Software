@@ -60,6 +60,7 @@ import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
+import AddProductDialog from "@/components/dialogs/AddProductDialog";
 
 interface InvoiceFormProps {
   invoice?: any; // Transaction object from database
@@ -90,6 +91,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
+  const [showAddProductDialog, setShowAddProductDialog] = useState(false);
+  const [currentLineItemIndex, setCurrentLineItemIndex] = useState<number | null>(null);
   
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
@@ -181,6 +184,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     ...product,
     price: typeof product.price === 'number' ? product.price : 0
   })) || [];
+
+  // Transform products into SearchableSelectItem format
+  const productItems: SearchableSelectItem[] = typedProducts.map(product => ({
+    value: product.id.toString(),
+    label: `${product.name} (${formatCurrency(product.price)})`,
+    subtitle: undefined
+  }));
 
   // Transform contacts into SearchableSelectItem format for customer dropdown (filtered)
   const customerItems: SearchableSelectItem[] = contacts
@@ -980,12 +990,11 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           render={({ field }) => (
                             <FormItem>
                               <FormControl>
-                                <Select
-                                  value={field.value ? field.value.toString() : 'none'}
+                                <SearchableSelect
+                                  items={[{ value: '', label: 'None', subtitle: undefined }, ...productItems]}
+                                  value={field.value ? field.value.toString() : ''}
                                   onValueChange={(value) => {
-                                    // Handle product selection change
-                                    if (value === 'none') {
-                                      // Handle no selection
+                                    if (value === '') {
                                       field.onChange(undefined);
                                       form.setValue(`lineItems.${index}.description`, '');
                                       form.setValue(`lineItems.${index}.unitPrice`, 0);
@@ -995,55 +1004,29 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                                       const productId = parseInt(value);
                                       const product = typedProducts.find(p => p.id === productId);
                                       if (product) {
-                                        // Set the product ID as string for form state
                                         field.onChange(value);
-                                        // Set the product name as the description
                                         form.setValue(`lineItems.${index}.description`, product.name);
                                         form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
                                         
-                                        // When a product with tax is selected, set the line item tax
                                         if (product.salesTaxId) {
                                           form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
                                         }
                                         
-                                        // Update the amount calculations
                                         updateLineItemAmount(index);
                                       }
                                     }
                                   }}
-                                >
-                                  <SelectTrigger className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50">
-                                    <SelectValue placeholder="Select a product/service">
-                                      {field.value && field.value !== null ? (
-                                        (() => {
-                                          // Convert field.value to number for comparison since product IDs are numbers
-                                          const productId = typeof field.value === 'string' ? parseInt(field.value) : field.value;
-                                          const selectedProduct = typedProducts?.find(p => p.id === productId);
-                                          return selectedProduct ? `${selectedProduct.name} ($${formatCurrency(selectedProduct.price)})` : "Select a product/service";
-                                        })()
-                                      ) : "Select a product/service"}
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {productsLoading ? (
-                                      <SelectItem value="loading" disabled>Loading products...</SelectItem>
-                                    ) : typedProducts && typedProducts.length > 0 ? (
-                                      <>
-                                        <SelectItem value="none">Select a product/service</SelectItem>
-                                        {typedProducts.map((product) => (
-                                          <SelectItem key={product.id} value={product.id.toString()}>
-                                            {product.name} (${formatCurrency(product.price)})
-                                          </SelectItem>
-                                        ))}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <SelectItem value="none">Select a product/service</SelectItem>
-                                        <SelectItem value="loading" disabled>No products available</SelectItem>
-                                      </>
-                                    )}
-                                  </SelectContent>
-                                </Select>
+                                  onAddNew={() => {
+                                    setCurrentLineItemIndex(index);
+                                    setShowAddProductDialog(true);
+                                  }}
+                                  addNewText="Add New Product/Service"
+                                  placeholder="Select product/service"
+                                  searchPlaceholder="Search products..."
+                                  emptyText={productsLoading ? "Loading..." : "No products found"}
+                                  disabled={productsLoading}
+                                  className="bg-transparent border-0 border-b border-gray-200 rounded-none"
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -1524,6 +1507,33 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
           form.setValue('contactId', customerId);
           handleContactChange(customerId);
           queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
+
+      <AddProductDialog
+        open={showAddProductDialog}
+        onOpenChange={setShowAddProductDialog}
+        onSuccess={(productId) => {
+          if (currentLineItemIndex !== null) {
+            // Set the product ID
+            form.setValue(`lineItems.${currentLineItemIndex}.productId`, productId.toString());
+            
+            // Find the newly created product and populate the line item
+            queryClient.invalidateQueries({ queryKey: ['/api/products'] }).then(() => {
+              // After products are refreshed, find the new product and populate fields
+              const product = typedProducts.find(p => p.id === productId);
+              if (product) {
+                form.setValue(`lineItems.${currentLineItemIndex}.description`, product.name);
+                form.setValue(`lineItems.${currentLineItemIndex}.unitPrice`, parseFloat(product.price.toString()));
+                
+                if (product.salesTaxId) {
+                  form.setValue(`lineItems.${currentLineItemIndex}.salesTaxId`, product.salesTaxId);
+                }
+                
+                updateLineItemAmount(currentLineItemIndex);
+              }
+            });
+          }
         }}
       />
     </Form>
