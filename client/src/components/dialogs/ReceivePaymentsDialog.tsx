@@ -214,7 +214,8 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
               ) : (
                 filteredInvoices.map(invoice => {
                   const isSelected = selectedInvoices.has(invoice.id);
-                  const amountToApply = selectedInvoices.get(invoice.id) || invoice.balance;
+                  const invoiceBalance = invoice.balance ?? 0;
+                  const amountToApply = selectedInvoices.get(invoice.id) || invoiceBalance;
 
                   return (
                     <div
@@ -225,7 +226,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => handleToggleInvoice(invoice.id, invoice.balance)}
+                        onCheckedChange={() => handleToggleInvoice(invoice.id, invoiceBalance)}
                         data-testid={`checkbox-invoice-${invoice.id}`}
                       />
                       
@@ -240,7 +241,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                         </div>
                         <div className="text-sm">
                           <div className="text-gray-500">Balance Due</div>
-                          <div className="font-medium">${invoice.balance.toFixed(2)}</div>
+                          <div className="font-medium">${invoiceBalance.toFixed(2)}</div>
                         </div>
                         <div className="text-sm">
                           {isSelected ? (
@@ -250,9 +251,9 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                max={invoice.balance}
+                                max={invoiceBalance}
                                 value={amountToApply}
-                                onChange={(e) => handleAmountChange(invoice.id, e.target.value, invoice.balance)}
+                                onChange={(e) => handleAmountChange(invoice.id, e.target.value, invoiceBalance)}
                                 className="h-8 w-32"
                                 data-testid={`input-amount-${invoice.id}`}
                               />

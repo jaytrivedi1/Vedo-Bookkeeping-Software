@@ -214,7 +214,8 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
               ) : (
                 filteredBills.map(bill => {
                   const isSelected = selectedBills.has(bill.id);
-                  const amountToApply = selectedBills.get(bill.id) || bill.balance;
+                  const billBalance = bill.balance ?? 0;
+                  const amountToApply = selectedBills.get(bill.id) || billBalance;
 
                   return (
                     <div
@@ -225,7 +226,7 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => handleToggleBill(bill.id, bill.balance)}
+                        onCheckedChange={() => handleToggleBill(bill.id, billBalance)}
                         data-testid={`checkbox-bill-${bill.id}`}
                       />
                       
@@ -240,7 +241,7 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
                         </div>
                         <div className="text-sm">
                           <div className="text-gray-500">Balance Due</div>
-                          <div className="font-medium">${bill.balance.toFixed(2)}</div>
+                          <div className="font-medium">${billBalance.toFixed(2)}</div>
                         </div>
                         <div className="text-sm">
                           {isSelected ? (
@@ -250,9 +251,9 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
                                 type="number"
                                 step="0.01"
                                 min="0"
-                                max={bill.balance}
+                                max={billBalance}
                                 value={amountToApply}
-                                onChange={(e) => handleAmountChange(bill.id, e.target.value, bill.balance)}
+                                onChange={(e) => handleAmountChange(bill.id, e.target.value, billBalance)}
                                 className="h-8 w-32"
                                 data-testid={`input-amount-${bill.id}`}
                               />
