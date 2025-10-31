@@ -357,42 +357,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.get("/transactions", async (req: Request, res: Response) => {
     try {
       const transactions = await storage.getTransactions();
-      
-      // Calculate balances for bills and invoices by subtracting payment applications
-      const transactionsWithBalances = await Promise.all(
-        transactions.map(async (tx) => {
-          // Only calculate balance for bills and invoices
-          if (tx.type !== 'bill' && tx.type !== 'invoice') {
-            return tx;
-          }
-          
-          // Calculate balance from payment applications
-          let applications;
-          if (tx.type === 'invoice') {
-            applications = await db
-              .select()
-              .from(paymentApplications)
-              .where(eq(paymentApplications.invoiceId, tx.id));
-          } else {
-            applications = await db
-              .select()
-              .from(paymentApplications)
-              .where(eq(paymentApplications.billId, tx.id));
-          }
-          
-          const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
-          const balance = tx.amount - totalApplied;
-          
-          return {
-            ...tx,
-            balance
-          };
-        })
-      );
-      
-      res.json(transactionsWithBalances);
+      res.json(transactions);
     } catch (error) {
-      console.error("Error fetching transactions:", error);
       res.status(500).json({ message: "Failed to fetch transactions" });
     }
   });
