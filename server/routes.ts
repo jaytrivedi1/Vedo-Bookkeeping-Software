@@ -8754,10 +8754,10 @@ Respond in JSON format:
   apiRouter.post("/bank-feeds/:id/match-multiple-invoices", async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
-      const { invoices } = req.body; // Array of { invoiceId, amountToApply }
+      const { selectedInvoices, difference } = req.body;
 
-      if (!transactionId || !invoices || !Array.isArray(invoices) || invoices.length === 0) {
-        return res.status(400).json({ error: 'Transaction ID and invoices array are required' });
+      if (!transactionId || !selectedInvoices || !Array.isArray(selectedInvoices) || selectedInvoices.length === 0) {
+        return res.status(400).json({ error: 'Transaction ID and selectedInvoices array are required' });
       }
 
       // Fetch the imported transaction
@@ -8774,13 +8774,15 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is already matched' });
       }
 
-      // Validate total amount matches bank transaction
-      const totalAmount = invoices.reduce((sum: number, inv: any) => sum + inv.amountToApply, 0);
+      // Validate total amount matches bank transaction (including difference if provided)
+      const invoicesTotal = selectedInvoices.reduce((sum: number, inv: any) => sum + inv.amountToApply, 0);
+      const differenceAmount = difference ? difference.amount : 0;
+      const totalAmount = invoicesTotal + differenceAmount;
       const bankAmount = Math.abs(importedTx.amount);
       
       if (Math.abs(totalAmount - bankAmount) > 0.01) {
         return res.status(400).json({ 
-          error: `Total amount ${totalAmount} does not match bank transaction amount ${bankAmount}` 
+          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}` 
         });
       }
 
@@ -8789,7 +8791,7 @@ Respond in JSON format:
       const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
 
       // Create a payment transaction for each invoice
-      for (const invoiceItem of invoices) {
+      for (const invoiceItem of selectedInvoices) {
         const { invoiceId, amountToApply } = invoiceItem;
 
         // Fetch the invoice
@@ -8873,6 +8875,55 @@ Respond in JSON format:
         });
 
         createdPayments.push(createdPayment);
+      }
+
+      // Create deposit transaction for difference if provided
+      if (difference && difference.accountId && difference.amount > 0) {
+        const depositTransaction: InsertTransaction = {
+          type: 'deposit',
+          reference: `BANKDEP-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+          date: txDate,
+          description: difference.description || 'Bank deposit difference',
+          amount: difference.amount,
+          status: 'completed',
+          balance: 0,
+        };
+
+        // Create ledger entries for the deposit
+        const depositLedgerEntries: InsertLedgerEntry[] = [];
+
+        // Debit bank account (money in)
+        if (bankAccountId) {
+          depositLedgerEntries.push({
+            accountId: bankAccountId,
+            description: difference.description || 'Bank deposit difference',
+            debit: difference.amount,
+            credit: 0,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        // Credit income account
+        depositLedgerEntries.push({
+          accountId: difference.accountId,
+          description: difference.description || 'Bank deposit difference',
+          debit: 0,
+          credit: difference.amount,
+          date: txDate,
+          transactionId: 0,
+        });
+
+        const createdDeposit = await storage.createTransaction(depositTransaction, [], depositLedgerEntries);
+
+        // Record the match in bank_transaction_matches
+        await db.insert(bankTransactionMatchesSchema).values({
+          importedTransactionId: transactionId,
+          matchedTransactionId: createdDeposit.id,
+          amountApplied: difference.amount,
+        });
+
+        createdPayments.push(createdDeposit);
       }
 
       // Update imported transaction to mark as multi-matched
