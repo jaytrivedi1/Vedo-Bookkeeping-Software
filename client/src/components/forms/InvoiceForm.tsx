@@ -59,6 +59,7 @@ import {
 import { format, addDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 
 interface InvoiceFormProps {
   invoice?: any; // Transaction object from database
@@ -88,6 +89,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
+  const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
   
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
@@ -181,13 +183,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   })) || [];
 
   // Transform contacts into SearchableSelectItem format for customer dropdown (filtered)
-  const customerItems: SearchableSelectItem[] = contacts
-    ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
-    .map(contact => ({
-      value: contact.id.toString(),
-      label: contact.name,
-      subtitle: `· ${contact.type}`
-    })) || [];
+  const customerItems: SearchableSelectItem[] = [
+    { value: 'ADD_NEW_CUSTOMER', label: '+ Add New Customer', subtitle: undefined },
+    ...(contacts
+      ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
+      .map(contact => ({
+        value: contact.id.toString(),
+        label: contact.name,
+        subtitle: `· ${contact.type}`
+      })) || [])
+  ];
 
   // Use our custom form type that includes taxComponentsInfo
   const form = useForm<Invoice>({
@@ -783,6 +788,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                               items={customerItems}
                               value={field.value?.toString() || ""}
                               onValueChange={(value) => {
+                                if (value === 'ADD_NEW_CUSTOMER') {
+                                  setShowAddCustomerDialog(true);
+                                  return;
+                                }
                                 const contactId = parseInt(value);
                                 field.onChange(contactId);
                                 handleContactChange(contactId);
@@ -1512,6 +1521,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
           </div>
         </div>
       </form>
+      
+      <AddCustomerDialog
+        open={showAddCustomerDialog}
+        onOpenChange={setShowAddCustomerDialog}
+        onSuccess={(customerId) => {
+          form.setValue('contactId', customerId);
+          handleContactChange(customerId);
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
     </Form>
   );
 }

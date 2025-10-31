@@ -8,6 +8,7 @@ import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [manualComponentAmounts, setManualComponentAmounts] = useState<Record<number, number>>({});
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
   const [accountDialogContext, setAccountDialogContext] = useState<{type: 'payment' | 'lineItem', index?: number} | null>(null);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const { toast } = useToast();
@@ -130,11 +132,14 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   ) || [];
 
   // Transform contacts into SearchableSelectItem format
-  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
-    value: contact.id.toString(),
-    label: contact.name,
-    subtitle: `· ${contact.type}`
-  })) || [];
+  const contactItems: SearchableSelectItem[] = [
+    { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
+    ...(contacts?.map(contact => ({
+      value: contact.id.toString(),
+      label: contact.name,
+      subtitle: `· ${contact.type}`
+    })) || [])
+  ];
 
   // Transform payment accounts into SearchableSelectItem format
   const paymentAccountItems: SearchableSelectItem[] = paymentAccounts.map(account => ({
@@ -508,6 +513,10 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                       items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
                       value={field.value?.toString() || ""}
                       onValueChange={(value) => {
+                        if (value === 'ADD_NEW_VENDOR') {
+                          setShowAddVendorDialog(true);
+                          return;
+                        }
                         if (value === "") {
                           field.onChange(undefined);
                         } else {
@@ -987,6 +996,15 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
             form.setValue(`lineItems.${accountDialogContext.index}.accountId`, accountId);
           }
           setAccountDialogContext(null);
+        }}
+      />
+
+      <AddVendorDialog
+        open={showAddVendorDialog}
+        onOpenChange={setShowAddVendorDialog}
+        onSuccess={(vendorId) => {
+          form.setValue('contactId', vendorId);
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
         }}
       />
     </Form>

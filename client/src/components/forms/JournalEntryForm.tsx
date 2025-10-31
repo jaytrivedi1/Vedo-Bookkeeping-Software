@@ -6,6 +6,8 @@ import { queryClient } from "@/lib/queryClient";
 import { JournalEntry, journalEntrySchema, Account, Contact, SalesTax } from "@shared/schema";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
+import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
 import { CalendarIcon, Plus, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -48,6 +50,8 @@ interface JournalEntryFormProps {
 export default function JournalEntryForm({ journalEntry, ledgerEntries, onSuccess, onCancel }: JournalEntryFormProps) {
   const { toast } = useToast();
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
+  const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
+  const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
   const [currentEntryIndex, setCurrentEntryIndex] = useState<number | null>(null);
   
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
@@ -63,11 +67,15 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
   });
 
   // Transform contacts into SearchableSelectItem format
-  const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
-    value: contact.id.toString(),
-    label: contact.name,
-    subtitle: `· ${contact.type}`
-  })) || [];
+  const contactItems: SearchableSelectItem[] = [
+    { value: 'ADD_NEW_CUSTOMER', label: '+ Add New Customer', subtitle: undefined },
+    { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
+    ...(contacts?.map(contact => ({
+      value: contact.id.toString(),
+      label: contact.name,
+      subtitle: `· ${contact.type}`
+    })) || [])
+  ];
 
   // Transform accounts into SearchableSelectItem format
   const accountItems: SearchableSelectItem[] = accounts?.map(account => ({
@@ -329,7 +337,19 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
                           <SearchableSelect
                             items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
                             value={field.value?.toString() || ""}
-                            onValueChange={(value) => field.onChange(value === "" ? undefined : parseInt(value))}
+                            onValueChange={(value) => {
+                              if (value === 'ADD_NEW_CUSTOMER') {
+                                setCurrentEntryIndex(index);
+                                setShowAddCustomerDialog(true);
+                                return;
+                              }
+                              if (value === 'ADD_NEW_VENDOR') {
+                                setCurrentEntryIndex(index);
+                                setShowAddVendorDialog(true);
+                                return;
+                              }
+                              field.onChange(value === "" ? undefined : parseInt(value));
+                            }}
                             placeholder="None"
                             emptyText={contactsLoading ? "Loading..." : "No contacts found"}
                             searchPlaceholder="Search contacts..."
@@ -522,6 +542,28 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
           if (currentEntryIndex !== null) {
             form.setValue(`entries.${currentEntryIndex}.accountId`, accountId);
           }
+        }}
+      />
+
+      <AddCustomerDialog
+        open={showAddCustomerDialog}
+        onOpenChange={setShowAddCustomerDialog}
+        onSuccess={(customerId) => {
+          if (currentEntryIndex !== null) {
+            form.setValue(`entries.${currentEntryIndex}.contactId`, customerId);
+          }
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
+
+      <AddVendorDialog
+        open={showAddVendorDialog}
+        onOpenChange={setShowAddVendorDialog}
+        onSuccess={(vendorId) => {
+          if (currentEntryIndex !== null) {
+            form.setValue(`entries.${currentEntryIndex}.contactId`, vendorId);
+          }
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
         }}
       />
     </Form>

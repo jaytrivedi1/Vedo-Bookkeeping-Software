@@ -7,6 +7,7 @@ import { Contact, SalesTax, Product, Account } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
+import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +72,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   const [taxAmount, setTaxAmount] = useState(0);
   const [totalAmount, setTotalAmount] = useState(0);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(false);
+  const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
   const { toast } = useToast();
 
   // Generate default receipt number
@@ -104,13 +106,16 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   );
 
   // Transform data for SearchableSelect
-  const customerItems: SearchableSelectItem[] = contacts
-    .filter((contact: Contact) => contact.type === 'customer' || contact.type === 'both')
-    .map((contact: Contact) => ({
-      value: contact.id.toString(),
-      label: contact.name,
-      subtitle: `· ${contact.type}`
-    }));
+  const customerItems: SearchableSelectItem[] = [
+    { value: 'ADD_NEW_CUSTOMER', label: '+ Add New Customer', subtitle: undefined },
+    ...contacts
+      .filter((contact: Contact) => contact.type === 'customer' || contact.type === 'both')
+      .map((contact: Contact) => ({
+        value: contact.id.toString(),
+        label: contact.name,
+        subtitle: `· ${contact.type}`
+      }))
+  ];
 
   const taxItems: SearchableSelectItem[] = salesTaxes
     .filter((tax: SalesTax) => !tax.parentId)
@@ -254,7 +259,13 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                   <SearchableSelect
                     items={customerItems}
                     value={field.value?.toString() || ''}
-                    onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
+                    onValueChange={(value) => {
+                      if (value === 'ADD_NEW_CUSTOMER') {
+                        setShowAddCustomerDialog(true);
+                        return;
+                      }
+                      field.onChange(value ? Number(value) : undefined);
+                    }}
                     placeholder="Select customer (optional)"
                     searchPlaceholder="Search customers..."
                     emptyText="No customers found."
@@ -553,6 +564,15 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
           </Button>
         </div>
       </form>
+
+      <AddCustomerDialog
+        open={showAddCustomerDialog}
+        onOpenChange={setShowAddCustomerDialog}
+        onSuccess={(customerId) => {
+          form.setValue('contactId', customerId);
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
     </Form>
   );
 }

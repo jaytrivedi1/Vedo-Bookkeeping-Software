@@ -28,6 +28,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
 
 export default function BillCreate() {
   const { toast } = useToast();
@@ -36,6 +37,7 @@ export default function BillCreate() {
   const [vendors, setVendors] = useState<Contact[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+  const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -80,6 +82,16 @@ export default function BillCreate() {
     label: account.name,
     subtitle: undefined
   }));
+
+  // Transform vendors for SearchableSelect with add new option
+  const vendorItems: SearchableSelectItem[] = [
+    { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
+    ...vendors.map((vendor) => ({
+      value: vendor.id.toString(),
+      label: vendor.name,
+      subtitle: undefined
+    }))
+  ];
 
   // Use a simple hardcoded pattern for bill numbers until the API is fixed
   const { data: nextBillNumber, isLoading: isLoadingBillNumber } = useQuery({
@@ -332,30 +344,25 @@ export default function BillCreate() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <Label htmlFor="vendor">Vendor</Label>
-                      <Select
+                      <SearchableSelect
+                        items={vendorItems}
                         value={form.watch("contactId") > 0 ? form.watch("contactId").toString() : ""}
                         onValueChange={(value) => {
+                          if (value === 'ADD_NEW_VENDOR') {
+                            setShowAddVendorDialog(true);
+                            return;
+                          }
                           const contactId = parseInt(value, 10);
                           if (!isNaN(contactId)) {
                             form.setValue("contactId", contactId);
                             form.trigger("contactId");
                           }
                         }}
-                      >
-                        <SelectTrigger 
-                          id="vendor" 
-                          className={form.formState.errors.contactId ? "border-destructive" : ""}
-                        >
-                          <SelectValue placeholder="Select vendor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vendors.map((vendor) => (
-                            <SelectItem key={vendor.id} value={vendor.id.toString()}>
-                              {vendor.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        placeholder="Select vendor"
+                        searchPlaceholder="Search vendors..."
+                        emptyText="No vendors found"
+                        className={form.formState.errors.contactId ? "border-destructive" : ""}
+                      />
                       {form.formState.errors.contactId && (
                         <p className="text-sm text-destructive mt-1">
                           {form.formState.errors.contactId.message}
@@ -698,6 +705,16 @@ export default function BillCreate() {
           </Tabs>
         </form>
       </Form>
+
+      <AddVendorDialog
+        open={showAddVendorDialog}
+        onOpenChange={setShowAddVendorDialog}
+        onSuccess={(vendorId) => {
+          form.setValue('contactId', vendorId);
+          form.trigger('contactId');
+          queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+        }}
+      />
     </div>
   );
 }
