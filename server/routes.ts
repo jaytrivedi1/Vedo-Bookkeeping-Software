@@ -45,7 +45,9 @@ import {
   RolePermission,
   transactionAttachmentsSchema,
   insertTransactionAttachmentSchema,
-  importedTransactionsSchema
+  importedTransactionsSchema,
+  bankTransactionMatchesSchema,
+  insertBankTransactionMatchSchema
 } from "@shared/schema";
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
@@ -8534,6 +8536,387 @@ Respond in JSON format:
     } catch (error: any) {
       console.error('Error unmatching transaction:', error);
       res.status(500).json({ error: error.message || 'Failed to unmatch transaction' });
+    }
+  });
+
+  // POST /api/bank-feeds/:id/match-multiple-bills - Match bank payment to multiple bills
+  apiRouter.post("/bank-feeds/:id/match-multiple-bills", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { bills } = req.body; // Array of { billId, amountToApply }
+
+      if (!transactionId || !bills || !Array.isArray(bills) || bills.length === 0) {
+        return res.status(400).json({ error: 'Transaction ID and bills array are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status === 'matched') {
+        return res.status(400).json({ error: 'Transaction is already matched' });
+      }
+
+      // Validate total amount matches bank transaction
+      const totalAmount = bills.reduce((sum: number, b: any) => sum + b.amountToApply, 0);
+      const bankAmount = Math.abs(importedTx.amount);
+      
+      if (Math.abs(totalAmount - bankAmount) > 0.01) {
+        return res.status(400).json({ 
+          error: `Total amount ${totalAmount} does not match bank transaction amount ${bankAmount}` 
+        });
+      }
+
+      const createdPayments: any[] = [];
+      const txDate = new Date(importedTx.date);
+      const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+
+      // Create a payment transaction for each bill
+      for (const billItem of bills) {
+        const { billId, amountToApply } = billItem;
+
+        // Fetch the bill
+        const bill = await storage.getTransaction(billId);
+        if (!bill || bill.type !== 'bill') {
+          throw new Error(`Bill ${billId} not found`);
+        }
+
+        // Validate amount doesn't exceed bill balance
+        const billBalance = bill.balance !== null && bill.balance !== undefined ? bill.balance : bill.amount;
+        if (amountToApply > billBalance + 0.01) {
+          throw new Error(`Amount ${amountToApply} exceeds bill ${bill.reference || billId} balance ${billBalance}`);
+        }
+
+        // Create payment transaction
+        const paymentTransaction: InsertTransaction = {
+          type: 'payment',
+          reference: `BILLPAY-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+          date: txDate,
+          description: `Payment for Bill ${bill.reference || bill.id}`,
+          amount: amountToApply,
+          contactId: bill.contactId,
+          status: 'completed',
+          paymentDate: txDate,
+        };
+
+        // Create ledger entries for the payment
+        const ledgerEntries: InsertLedgerEntry[] = [];
+
+        // Credit bank account (money out)
+        if (bankAccountId) {
+          ledgerEntries.push({
+            accountId: bankAccountId,
+            description: `Bill payment - ${bill.reference || bill.id}`,
+            debit: 0,
+            credit: amountToApply,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        // Debit Accounts Payable
+        const apAccount = await storage.getAccountByCode('2000');
+        if (apAccount) {
+          ledgerEntries.push({
+            accountId: apAccount.id,
+            description: `Bill payment applied - ${bill.reference || bill.id}`,
+            debit: amountToApply,
+            credit: 0,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+
+        // Apply payment to bill
+        await db.insert(paymentApplications).values({
+          paymentId: createdPayment.id,
+          invoiceId: billId,
+          amountApplied: amountToApply,
+        });
+
+        // Update bill balance
+        const currentBalance = bill.balance !== null && bill.balance !== undefined 
+          ? bill.balance 
+          : bill.amount;
+        const newBalance = currentBalance - amountToApply;
+        await db.update(transactions)
+          .set({ 
+            balance: newBalance,
+            status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+          })
+          .where(eq(transactions.id, billId));
+
+        // Record the match in bank_transaction_matches
+        await db.insert(bankTransactionMatchesSchema).values({
+          importedTransactionId: transactionId,
+          matchedTransactionId: createdPayment.id,
+          amountApplied: amountToApply,
+        });
+
+        createdPayments.push(createdPayment);
+      }
+
+      // Update imported transaction to mark as multi-matched
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: null, // null for multi-match
+          matchedTransactionType: 'payment',
+          isManualMatch: false,
+          isMultiMatch: true,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        payments: createdPayments,
+        message: `Created ${createdPayments.length} bill payments`,
+      });
+    } catch (error: any) {
+      console.error('Error matching to multiple bills:', error);
+      res.status(500).json({ error: error.message || 'Failed to match to multiple bills' });
+    }
+  });
+
+  // POST /api/bank-feeds/:id/match-multiple-invoices - Match bank deposit to multiple invoices
+  apiRouter.post("/bank-feeds/:id/match-multiple-invoices", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+      const { invoices } = req.body; // Array of { invoiceId, amountToApply }
+
+      if (!transactionId || !invoices || !Array.isArray(invoices) || invoices.length === 0) {
+        return res.status(400).json({ error: 'Transaction ID and invoices array are required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (importedTx.status === 'matched') {
+        return res.status(400).json({ error: 'Transaction is already matched' });
+      }
+
+      // Validate total amount matches bank transaction
+      const totalAmount = invoices.reduce((sum: number, inv: any) => sum + inv.amountToApply, 0);
+      const bankAmount = Math.abs(importedTx.amount);
+      
+      if (Math.abs(totalAmount - bankAmount) > 0.01) {
+        return res.status(400).json({ 
+          error: `Total amount ${totalAmount} does not match bank transaction amount ${bankAmount}` 
+        });
+      }
+
+      const createdPayments: any[] = [];
+      const txDate = new Date(importedTx.date);
+      const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
+
+      // Create a payment transaction for each invoice
+      for (const invoiceItem of invoices) {
+        const { invoiceId, amountToApply } = invoiceItem;
+
+        // Fetch the invoice
+        const invoice = await storage.getTransaction(invoiceId);
+        if (!invoice || invoice.type !== 'invoice') {
+          throw new Error(`Invoice ${invoiceId} not found`);
+        }
+
+        // Validate amount doesn't exceed invoice balance
+        const invoiceBalance = invoice.balance !== null && invoice.balance !== undefined ? invoice.balance : invoice.amount;
+        if (amountToApply > invoiceBalance + 0.01) {
+          throw new Error(`Amount ${amountToApply} exceeds invoice ${invoice.reference || invoiceId} balance ${invoiceBalance}`);
+        }
+
+        // Create payment transaction
+        const paymentTransaction: InsertTransaction = {
+          type: 'payment',
+          reference: `PMT-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+          date: txDate,
+          description: `Payment for Invoice ${invoice.reference || invoice.id}`,
+          amount: amountToApply,
+          contactId: invoice.contactId,
+          status: 'completed',
+          paymentDate: txDate,
+        };
+
+        // Create ledger entries for the payment
+        const ledgerEntries: InsertLedgerEntry[] = [];
+
+        // Debit bank account (money in)
+        if (bankAccountId) {
+          ledgerEntries.push({
+            accountId: bankAccountId,
+            description: `Payment received - ${invoice.reference || invoice.id}`,
+            debit: amountToApply,
+            credit: 0,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        // Credit Accounts Receivable
+        const arAccount = await storage.getAccountByCode('1200');
+        if (arAccount) {
+          ledgerEntries.push({
+            accountId: arAccount.id,
+            description: `Payment applied - ${invoice.reference || invoice.id}`,
+            debit: 0,
+            credit: amountToApply,
+            date: txDate,
+            transactionId: 0,
+          });
+        }
+
+        const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+
+        // Apply payment to invoice
+        await db.insert(paymentApplications).values({
+          paymentId: createdPayment.id,
+          invoiceId: invoiceId,
+          amountApplied: amountToApply,
+        });
+
+        // Update invoice balance
+        const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
+          ? invoice.balance 
+          : invoice.amount;
+        const newBalance = currentBalance - amountToApply;
+        await db.update(transactions)
+          .set({ 
+            balance: newBalance,
+            status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+          })
+          .where(eq(transactions.id, invoiceId));
+
+        // Record the match in bank_transaction_matches
+        await db.insert(bankTransactionMatchesSchema).values({
+          importedTransactionId: transactionId,
+          matchedTransactionId: createdPayment.id,
+          amountApplied: amountToApply,
+        });
+
+        createdPayments.push(createdPayment);
+      }
+
+      // Update imported transaction to mark as multi-matched
+      await db
+        .update(importedTransactionsSchema)
+        .set({
+          matchedTransactionId: null, // null for multi-match
+          matchedTransactionType: 'payment',
+          isManualMatch: false,
+          isMultiMatch: true,
+          status: 'matched',
+          updatedAt: new Date(),
+        })
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      res.json({
+        success: true,
+        payments: createdPayments,
+        message: `Created ${createdPayments.length} invoice payments`,
+      });
+    } catch (error: any) {
+      console.error('Error matching to multiple invoices:', error);
+      res.status(500).json({ error: error.message || 'Failed to match to multiple invoices' });
+    }
+  });
+
+  // GET /api/bank-feeds/:id/matched-breakdown - Get breakdown of multi-match transactions
+  apiRouter.get("/bank-feeds/:id/matched-breakdown", async (req: Request, res: Response) => {
+    try {
+      const transactionId = parseInt(req.params.id);
+
+      if (!transactionId) {
+        return res.status(400).json({ error: 'Transaction ID is required' });
+      }
+
+      // Fetch the imported transaction
+      const [importedTx] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.id, transactionId));
+
+      if (!importedTx) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
+
+      if (!importedTx.isMultiMatch) {
+        return res.status(400).json({ error: 'Transaction is not a multi-match' });
+      }
+
+      // Get all matched transactions
+      const matches = await db
+        .select({
+          matchId: bankTransactionMatchesSchema.id,
+          transactionId: bankTransactionMatchesSchema.matchedTransactionId,
+          amountApplied: bankTransactionMatchesSchema.amountApplied,
+          transaction: transactions,
+        })
+        .from(bankTransactionMatchesSchema)
+        .leftJoin(transactions, eq(bankTransactionMatchesSchema.matchedTransactionId, transactions.id))
+        .where(eq(bankTransactionMatchesSchema.importedTransactionId, transactionId));
+
+      // Fetch related details for each match (contact name, bill/invoice reference)
+      const breakdown = [];
+      for (const match of matches) {
+        const tx = match.transaction;
+        if (!tx) continue;
+
+        let contactName = '';
+        if (tx.contactId) {
+          const contact = await storage.getContact(tx.contactId);
+          contactName = contact?.name || '';
+        }
+
+        // Get the applied invoice/bill reference
+        const [application] = await db
+          .select()
+          .from(paymentApplications)
+          .where(eq(paymentApplications.paymentId, tx.id))
+          .limit(1);
+
+        let appliedToReference = '';
+        if (application) {
+          const appliedTx = await storage.getTransaction(application.invoiceId);
+          appliedToReference = appliedTx?.reference || `#${appliedTx?.id}`;
+        }
+
+        breakdown.push({
+          matchId: match.matchId,
+          paymentId: match.transactionId,
+          paymentReference: tx.reference,
+          contactName,
+          appliedToReference,
+          amountApplied: match.amountApplied,
+          date: tx.date,
+          type: tx.type,
+        });
+      }
+
+      res.json({
+        importedTransactionId: transactionId,
+        breakdown,
+        totalMatches: breakdown.length,
+      });
+    } catch (error: any) {
+      console.error('Error fetching matched breakdown:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch matched breakdown' });
     }
   });
 

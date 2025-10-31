@@ -38,6 +38,8 @@ import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchab
 // Force complete module rebuild - v3 - clear cache
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import { AttachmentDialog } from "@/components/dialogs/AttachmentDialog";
+import { PayBillsDialog } from "@/components/dialogs/PayBillsDialog";
+import { ReceivePaymentsDialog } from "@/components/dialogs/ReceivePaymentsDialog";
 import {
   Tooltip,
   TooltipContent,
@@ -184,6 +186,13 @@ export default function Banking() {
   // Categorization dialog state
   const [selectedTransaction, setSelectedTransaction] = useState<ImportedTransaction | null>(null);
   const [categorizationDialogOpen, setCategorizationDialogOpen] = useState(false);
+  
+  // Multi-match dialogs state
+  const [payBillsDialogOpen, setPayBillsDialogOpen] = useState(false);
+  const [receivePaymentsDialogOpen, setReceivePaymentsDialogOpen] = useState(false);
+  const [matchingTransaction, setMatchingTransaction] = useState<ImportedTransaction | null>(null);
+  const [expandedMultiMatches, setExpandedMultiMatches] = useState<Set<number>>(new Set());
+  const [multiMatchBreakdowns, setMultiMatchBreakdowns] = useState<Map<number, any[]>>(new Map());
   
   // Match suggestions state
   const [matchSuggestions, setMatchSuggestions] = useState<Map<number, TransactionMatch>>(new Map());
@@ -619,6 +628,60 @@ export default function Banking() {
     },
   });
 
+  // Match multiple bills mutation
+  const matchMultipleBillsMutation = useMutation({
+    mutationFn: async ({ transactionId, bills }: { transactionId: number, bills: { billId: number; amountToApply: number }[] }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-bills`, 'POST', { bills });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      setPayBillsDialogOpen(false);
+      setMatchingTransaction(null);
+      toast({
+        title: "Success",
+        description: `Matched to ${data.matchCount || 0} bill(s) and created payment(s)`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to match to bills",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Match multiple invoices mutation
+  const matchMultipleInvoicesMutation = useMutation({
+    mutationFn: async ({ transactionId, invoices }: { transactionId: number, invoices: { invoiceId: number; amountToApply: number }[] }) => {
+      return await apiRequest(`/api/bank-feeds/${transactionId}/match-multiple-invoices`, 'POST', { invoices });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/plaid/imported-transactions/all'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      setReceivePaymentsDialogOpen(false);
+      setMatchingTransaction(null);
+      toast({
+        title: "Success",
+        description: `Matched to ${data.matchCount || 0} invoice(s) and created payment(s)`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to match to invoices",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Unmatch transaction mutation
   const unmatchTransactionMutation = useMutation({
     mutationFn: async (transactionId: number) => {
@@ -852,6 +915,35 @@ export default function Banking() {
       newModes.set(txId, currentMode === 'match' ? 'categorize' : 'match');
       return newModes;
     });
+  };
+
+  // Toggle multi-match breakdown expansion
+  const handleToggleMultiMatchBreakdown = async (txId: number) => {
+    const isExpanded = expandedMultiMatches.has(txId);
+    
+    if (isExpanded) {
+      // Collapse
+      setExpandedMultiMatches(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(txId);
+        return newSet;
+      });
+    } else {
+      // Expand and fetch breakdown if not already loaded
+      setExpandedMultiMatches(prev => new Set(prev).add(txId));
+      
+      if (!multiMatchBreakdowns.has(txId)) {
+        try {
+          const response = await fetch(`/api/bank-feeds/${txId}/matched-breakdown`);
+          if (response.ok) {
+            const data = await response.json();
+            setMultiMatchBreakdowns(prev => new Map(prev).set(txId, data.matches || []));
+          }
+        } catch (error) {
+          console.error('Failed to fetch multi-match breakdown:', error);
+        }
+      }
+    }
   };
 
   // Group GL accounts with their bank feed status - only show accounts with feeds
@@ -2104,7 +2196,32 @@ export default function Banking() {
                               {activeTab === 'categorized' && (
                                 <>
                                   <TableCell style={{ width: `${columnWidths.matchCategorize}px`, minWidth: `${columnWidths.matchCategorize}px` }} className="py-2 overflow-hidden">
-                                    {tx.matchedTransactionType ? (
+                                    {tx.isMultiMatch ? (
+                                      <div className="space-y-1">
+                                        <Badge 
+                                          variant="outline" 
+                                          className="text-xs cursor-pointer hover:bg-gray-100"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleMultiMatchBreakdown(tx.id);
+                                          }}
+                                          data-testid={`badge-multi-match-${tx.id}`}
+                                        >
+                                          🔀 Various {expandedMultiMatches.has(tx.id) ? '▼' : '▶'}
+                                        </Badge>
+                                        {expandedMultiMatches.has(tx.id) && (
+                                          <div className="text-[10px] text-gray-600 space-y-0.5 mt-1 pl-2 border-l-2 border-gray-300">
+                                            {multiMatchBreakdowns.get(tx.id)?.map((match: any, idx: number) => (
+                                              <div key={idx} className="flex items-center gap-1">
+                                                <span className="font-medium">{match.transactionType === 'bill' ? '📄' : '💰'}</span>
+                                                <span>{match.reference || match.description}</span>
+                                                <span className="text-gray-500">• ${match.amount.toFixed(2)}</span>
+                                              </div>
+                                            )) || <span className="text-gray-400">Loading...</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : tx.matchedTransactionType ? (
                                       <Badge variant="outline" className="text-xs">
                                         {tx.matchedTransactionType === 'invoice' && '📄 Invoice Match'}
                                         {tx.matchedTransactionType === 'bill' && '📄 Bill Match'}
@@ -2141,37 +2258,25 @@ export default function Banking() {
                                 <div className="flex gap-1">
                                   {activeTab === 'uncategorized' && (
                                     <>
-                                      {transactionMode.get(tx.id) === 'match' && matchSuggestions.get(tx.id)?.topMatch && matchSuggestions.get(tx.id)!.topMatch!.confidence > 80 ? (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button 
-                                              variant="default" 
-                                              size="sm"
-                                              className="gap-1"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                const topMatch = matchSuggestions.get(tx.id)!.topMatch!;
-                                                if (topMatch.transactionType === 'invoice') {
-                                                  matchToInvoiceMutation.mutate({ transactionId: tx.id, invoiceId: topMatch.transactionId });
-                                                } else if (topMatch.transactionType === 'bill') {
-                                                  matchToBillMutation.mutate({ transactionId: tx.id, billId: topMatch.transactionId });
-                                                } else {
-                                                  linkToManualEntryMutation.mutate({ transactionId: tx.id, manualTransactionId: topMatch.transactionId });
-                                                }
-                                              }}
-                                              disabled={linkToManualEntryMutation.isPending || matchToInvoiceMutation.isPending || matchToBillMutation.isPending}
-                                              data-testid={`button-link-entry-${tx.id}`}
-                                            >
-                                              <Send className="h-4 w-4" />
-                                              {matchSuggestions.get(tx.id)!.topMatch!.transactionType === 'invoice' && 'Match Invoice'}
-                                              {matchSuggestions.get(tx.id)!.topMatch!.transactionType === 'bill' && 'Match Bill'}
-                                              {(['expense', 'deposit', 'payment', 'cheque'].includes(matchSuggestions.get(tx.id)!.topMatch!.transactionType)) && 'Link Entry'}
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p>Link to existing entry</p>
-                                          </TooltipContent>
-                                        </Tooltip>
+                                      {transactionMode.get(tx.id) === 'match' ? (
+                                        <Button 
+                                          variant="default" 
+                                          size="sm"
+                                          className="gap-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMatchingTransaction(tx);
+                                            if (Number(tx.amount) < 0) {
+                                              setPayBillsDialogOpen(true);
+                                            } else {
+                                              setReceivePaymentsDialogOpen(true);
+                                            }
+                                          }}
+                                          data-testid={`button-match-${tx.id}`}
+                                        >
+                                          <Send className="h-4 w-4" />
+                                          {Number(tx.amount) < 0 ? 'Pay Bills' : 'Receive Payments'}
+                                        </Button>
                                       ) : (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
@@ -2550,6 +2655,36 @@ export default function Banking() {
         onOpenChange={setCategorizationDialogOpen}
         transaction={selectedTransaction}
       />
+
+      {/* Pay Bills Dialog */}
+      {matchingTransaction && (
+        <PayBillsDialog
+          open={payBillsDialogOpen}
+          onOpenChange={setPayBillsDialogOpen}
+          bankTransactionAmount={Math.abs(Number(matchingTransaction.amount))}
+          onConfirm={(selectedBills) => {
+            matchMultipleBillsMutation.mutate({
+              transactionId: matchingTransaction.id,
+              bills: selectedBills,
+            });
+          }}
+        />
+      )}
+
+      {/* Receive Payments Dialog */}
+      {matchingTransaction && (
+        <ReceivePaymentsDialog
+          open={receivePaymentsDialogOpen}
+          onOpenChange={setReceivePaymentsDialogOpen}
+          bankTransactionAmount={Number(matchingTransaction.amount)}
+          onConfirm={(selectedInvoices) => {
+            matchMultipleInvoicesMutation.mutate({
+              transactionId: matchingTransaction.id,
+              invoices: selectedInvoices,
+            });
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteConfirmationOpen} onOpenChange={setDeleteConfirmationOpen}>

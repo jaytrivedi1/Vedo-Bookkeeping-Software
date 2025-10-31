@@ -595,10 +595,11 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
   category: text('category').array(), // Plaid categories
   pending: boolean('pending').notNull().default(false),
   paymentChannel: text('payment_channel'), // online, in store, etc.
-  matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created or existing transaction
+  matchedTransactionId: integer('matched_transaction_id').references(() => transactions.id), // Link to created or existing transaction (null for multi-match)
   matchedTransactionType: text('matched_transaction_type'), // Type of matched transaction: 'invoice', 'bill', 'payment', 'expense', etc.
   matchConfidence: doublePrecision('match_confidence'), // Confidence score (0-100) for suggested matches
   isManualMatch: boolean('is_manual_match').default(false), // true = linked to existing entry (no new transaction), false = new transaction created
+  isMultiMatch: boolean('is_multi_match').default(false), // true = matched to multiple transactions
   status: text('status').notNull().default('unmatched'), // unmatched, matched, ignored, deleted
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -612,6 +613,15 @@ export const transactionAttachmentsSchema = pgTable('transaction_attachments', {
   filePath: text('file_path').notNull(),
   fileSize: integer('file_size').notNull(), // in bytes
   mimeType: text('mime_type').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Bank Transaction Matches (tracks one-to-many relationship between bank transactions and accounting transactions)
+export const bankTransactionMatchesSchema = pgTable('bank_transaction_matches', {
+  id: serial('id').primaryKey(),
+  importedTransactionId: integer('imported_transaction_id').notNull().references(() => importedTransactionsSchema.id),
+  matchedTransactionId: integer('matched_transaction_id').notNull().references(() => transactions.id),
+  amountApplied: doublePrecision('amount_applied').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -645,6 +655,11 @@ export const insertTransactionAttachmentSchema = createInsertSchema(transactionA
   createdAt: true
 });
 
+export const insertBankTransactionMatchSchema = createInsertSchema(bankTransactionMatchesSchema).omit({
+  id: true,
+  createdAt: true
+});
+
 // Types
 export type BankConnection = typeof bankConnectionsSchema.$inferSelect;
 export type InsertBankConnection = z.infer<typeof insertBankConnectionSchema>;
@@ -660,3 +675,6 @@ export type InsertCsvMappingPreference = z.infer<typeof insertCsvMappingPreferen
 
 export type TransactionAttachment = typeof transactionAttachmentsSchema.$inferSelect;
 export type InsertTransactionAttachment = z.infer<typeof insertTransactionAttachmentSchema>;
+
+export type BankTransactionMatch = typeof bankTransactionMatchesSchema.$inferSelect;
+export type InsertBankTransactionMatch = z.infer<typeof insertBankTransactionMatchSchema>;
