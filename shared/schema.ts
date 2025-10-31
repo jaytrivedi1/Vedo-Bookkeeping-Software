@@ -678,3 +678,24 @@ export type InsertTransactionAttachment = z.infer<typeof insertTransactionAttach
 
 export type BankTransactionMatch = typeof bankTransactionMatchesSchema.$inferSelect;
 export type InsertBankTransactionMatch = z.infer<typeof insertBankTransactionMatchSchema>;
+
+// Bank Feed Categorization Rules
+export const categorizationRulesSchema = pgTable('categorization_rules', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+  priority: integer('priority').notNull().default(0), // Lower number = higher priority
+  conditions: json('conditions').notNull(), // Array of {field, operator, value}
+  actions: json('actions').notNull(), // {accountId, contactId, description, memo}
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const insertCategorizationRuleSchema = createInsertSchema(categorizationRulesSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export type CategorizationRule = typeof categorizationRulesSchema.$inferSelect;
+export type InsertCategorizationRule = z.infer<typeof insertCategorizationRuleSchema>;

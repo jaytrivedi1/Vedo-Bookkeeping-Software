@@ -2189,4 +2189,46 @@ export class DatabaseStorage implements IStorage {
       }
     });
   }
+
+  // Categorization Rules
+  async getCategorizationRules(): Promise<CategorizationRule[]> {
+    return await db.select()
+      .from(categorizationRulesSchema)
+      .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
+  }
+
+  async getCategorizationRule(id: number): Promise<CategorizationRule | undefined> {
+    const [rule] = await db.select()
+      .from(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.id, id))
+      .limit(1);
+    return rule;
+  }
+
+  async createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule> {
+    const [newRule] = await db.insert(categorizationRulesSchema)
+      .values({
+        ...rule,
+        updatedAt: new Date()
+      })
+      .returning();
+    return newRule;
+  }
+
+  async updateCategorizationRule(id: number, ruleUpdate: Partial<CategorizationRule>): Promise<CategorizationRule | undefined> {
+    const [updatedRule] = await db.update(categorizationRulesSchema)
+      .set({
+        ...ruleUpdate,
+        updatedAt: new Date()
+      })
+      .where(eq(categorizationRulesSchema.id, id))
+      .returning();
+    return updatedRule;
+  }
+
+  async deleteCategorizationRule(id: number): Promise<boolean> {
+    const result = await db.delete(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
 }

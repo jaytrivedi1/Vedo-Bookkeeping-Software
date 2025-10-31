@@ -9191,6 +9191,85 @@ Respond in JSON format:
     }
   });
 
+  // Categorization Rules routes
+  apiRouter.get("/categorization-rules", async (req: Request, res: Response) => {
+    try {
+      const rules = await storage.getCategorizationRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching categorization rules:", error);
+      res.status(500).json({ message: "Failed to fetch categorization rules" });
+    }
+  });
+
+  apiRouter.get("/categorization-rules/:id", async (req: Request, res: Response) => {
+    try {
+      const rule = await storage.getCategorizationRule(Number(req.params.id));
+      
+      if (!rule) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      res.json(rule);
+    } catch (error) {
+      console.error("Error fetching categorization rule:", error);
+      res.status(500).json({ message: "Failed to fetch categorization rule" });
+    }
+  });
+
+  apiRouter.post("/categorization-rules", async (req: Request, res: Response) => {
+    try {
+      const { name, conditions, actions, isEnabled = true, priority = 0 } = req.body;
+      
+      if (!name || !conditions || !actions) {
+        return res.status(400).json({ message: "Name, conditions, and actions are required" });
+      }
+      
+      const rule = await storage.createCategorizationRule({
+        name,
+        conditions,
+        actions,
+        isEnabled,
+        priority
+      });
+      
+      res.json(rule);
+    } catch (error) {
+      console.error("Error creating categorization rule:", error);
+      res.status(500).json({ message: "Failed to create categorization rule" });
+    }
+  });
+
+  apiRouter.patch("/categorization-rules/:id", async (req: Request, res: Response) => {
+    try {
+      const updatedRule = await storage.updateCategorizationRule(Number(req.params.id), req.body);
+      
+      if (!updatedRule) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      res.json(updatedRule);
+    } catch (error) {
+      console.error("Error updating categorization rule:", error);
+      res.status(500).json({ message: "Failed to update categorization rule" });
+    }
+  });
+
+  apiRouter.delete("/categorization-rules/:id", async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteCategorizationRule(Number(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting categorization rule:", error);
+      res.status(500).json({ message: "Failed to delete categorization rule" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

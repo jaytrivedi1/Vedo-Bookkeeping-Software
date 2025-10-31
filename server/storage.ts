@@ -58,6 +58,9 @@ import {
   type InsertReconciliation,
   type ReconciliationItem,
   type InsertReconciliationItem,
+  categorizationRulesSchema,
+  type CategorizationRule,
+  type InsertCategorizationRule,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -214,6 +217,13 @@ export interface IStorage {
   createReconciliationItem(item: InsertReconciliationItem): Promise<ReconciliationItem>;
   updateReconciliationItem(id: number, item: Partial<ReconciliationItem>): Promise<ReconciliationItem | undefined>;
   bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void>;
+
+  // Categorization Rules
+  getCategorizationRules(): Promise<CategorizationRule[]>;
+  getCategorizationRule(id: number): Promise<CategorizationRule | undefined>;
+  createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule>;
+  updateCategorizationRule(id: number, rule: Partial<CategorizationRule>): Promise<CategorizationRule | undefined>;
+  deleteCategorizationRule(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -1229,6 +1239,27 @@ export class MemStorage implements IStorage {
 
   async bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void> {
     throw new Error("Reconciliation items not supported in MemStorage");
+  }
+
+  // Categorization Rules
+  async getCategorizationRules(): Promise<CategorizationRule[]> {
+    throw new Error("Categorization rules not supported in MemStorage");
+  }
+
+  async getCategorizationRule(id: number): Promise<CategorizationRule | undefined> {
+    throw new Error("Categorization rules not supported in MemStorage");
+  }
+
+  async createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule> {
+    throw new Error("Categorization rules not supported in MemStorage");
+  }
+
+  async updateCategorizationRule(id: number, rule: Partial<CategorizationRule>): Promise<CategorizationRule | undefined> {
+    throw new Error("Categorization rules not supported in MemStorage");
+  }
+
+  async deleteCategorizationRule(id: number): Promise<boolean> {
+    throw new Error("Categorization rules not supported in MemStorage");
   }
 }
 
