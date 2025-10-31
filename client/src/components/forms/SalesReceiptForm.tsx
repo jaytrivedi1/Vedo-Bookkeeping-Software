@@ -407,7 +407,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                 <div className="col-span-12 md:col-span-3">
                   <label className="text-sm font-medium">Product/Service</label>
                   <SearchableSelect
-                    items={[{ value: '', label: 'None', subtitle: undefined }, ...productItems]}
+                    items={productItems}
                     value={form.watch(`lineItems.${index}.productId`) || ''}
                     onValueChange={(value) => handleProductSelect(index, value)}
                     onAddNew={() => {

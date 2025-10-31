@@ -991,10 +991,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                             <FormItem>
                               <FormControl>
                                 <SearchableSelect
-                                  items={[{ value: '', label: 'None', subtitle: undefined }, ...productItems]}
+                                  items={productItems}
                                   value={field.value ? field.value.toString() : ''}
                                   onValueChange={(value) => {
-                                    if (value === '') {
+                                    if (!value) {
                                       field.onChange(undefined);
                                       form.setValue(`lineItems.${index}.description`, '');
                                       form.setValue(`lineItems.${index}.unitPrice`, 0);
