@@ -1489,6 +1489,7 @@ export default function Banking() {
           <TabsList className="mb-6">
             <TabsTrigger value="bank-feeds" data-testid="tab-bank-feeds">Bank Feeds</TabsTrigger>
             <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
+            <TabsTrigger value="rules" data-testid="tab-rules">Rules</TabsTrigger>
           </TabsList>
           
           <TabsContent value="bank-feeds">
@@ -2628,6 +2629,45 @@ export default function Banking() {
                 </>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="rules">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
+                <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
+              </div>
+              <Button onClick={() => {
+                toast({
+                  title: "Coming soon",
+                  description: "Rule creation dialog will be available shortly",
+                });
+              }}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Rule
+              </Button>
+            </div>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-12 text-gray-500">
+                  <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Rules Created Yet</h3>
+                  <p className="text-sm mb-4">
+                    Create rules to automatically categorize transactions based on description, amount, or other criteria.
+                  </p>
+                  <Button variant="outline" onClick={() => {
+                    toast({
+                      title: "Coming soon",
+                      description: "Rule creation dialog will be available shortly",
+                    });
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Your First Rule
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
