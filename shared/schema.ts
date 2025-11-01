@@ -28,7 +28,7 @@ export enum AccountType {
 }
 
 export const transactionTypeEnum = pgEnum('transaction_type', [
-  'invoice', 'expense', 'journal_entry', 'deposit', 'payment', 'bill', 'cheque', 'sales_receipt', 'transfer'
+  'invoice', 'expense', 'journal_entry', 'deposit', 'payment', 'bill', 'cheque', 'sales_receipt', 'transfer', 'customer_credit', 'vendor_credit'
 ]);
 
 export const statusEnum = pgEnum('status', [

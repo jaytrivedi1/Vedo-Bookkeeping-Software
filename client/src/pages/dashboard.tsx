@@ -308,14 +308,18 @@ export default function Dashboard() {
                   <span>Journal Entry</span>
                 </DropdownMenuItem>
               </Link>
-              <DropdownMenuItem>
-                <Receipt className="mr-2 h-4 w-4" />
-                <span>Vendor Credit</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Customer Credit</span>
-              </DropdownMenuItem>
+              <Link href="/customer-credits/new">
+                <DropdownMenuItem>
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Customer Credit</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/vendor-credits/new">
+                <DropdownMenuItem>
+                  <Receipt className="mr-2 h-4 w-4" />
+                  <span>Vendor Credit</span>
+                </DropdownMenuItem>
+              </Link>
               <DropdownMenuItem onClick={() => setTransferDialogOpen(true)}>
                 <ArrowLeftRight className="mr-2 h-4 w-4" />
                 <span>Transfer</span>

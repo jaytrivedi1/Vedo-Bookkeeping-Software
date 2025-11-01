@@ -13,6 +13,8 @@ import DepositView from "@/pages/deposit-view";
 import BillCreate from "@/pages/bill-create";
 import BillView from "@/pages/bill-view";
 import PayBill from "@/pages/pay-bill";
+import CustomerCreditCreate from "@/pages/customer-credit-create";
+import VendorCreditCreate from "@/pages/vendor-credit-create";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
@@ -95,6 +97,8 @@ function Router() {
               <Route path="/bill-create" component={BillCreate} />
               <Route path="/bills/:id" component={BillView} />
               <Route path="/pay-bill" component={PayBill} />
+              <Route path="/customer-credits/new" component={CustomerCreditCreate} />
+              <Route path="/vendor-credits/new" component={VendorCreditCreate} />
               <Route path="/expenses" component={Expenses} />
               <Route path="/expenses/new" component={ExpenseForm} />
               <Route path="/expenses/:id/edit" component={ExpenseForm} />

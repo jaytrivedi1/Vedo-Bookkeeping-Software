@@ -6412,6 +6412,292 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Customer Credits API endpoint
+  apiRouter.post("/customer-credits", async (req: Request, res: Response) => {
+    try {
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date),
+      };
+      
+      // Check if customer credit reference already exists
+      const transactions = await storage.getTransactions();
+      const existingCredit = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'customer_credit'
+      );
+      
+      if (existingCredit) {
+        return res.status(400).json({ 
+          message: "Customer credit reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A customer credit with this reference number already exists" 
+          }] 
+        });
+      }
+      
+      // Use the calculated total amount from frontend (includes tax)
+      const totalAmount = body.totalAmount || body.lineItems.reduce(
+        (sum: number, item: any) => sum + Number(item.amount), 0
+      );
+      
+      const subTotal = body.subTotal || totalAmount;
+      const taxAmount = body.taxAmount || 0;
+      
+      // Create the customer credit transaction
+      const transaction = {
+        reference: body.reference,
+        type: 'customer_credit' as const,
+        date: body.date,
+        description: body.description || '',
+        amount: totalAmount,
+        subTotal: subTotal,
+        taxAmount: taxAmount,
+        balance: -totalAmount, // Negative balance represents available credit
+        contactId: body.contactId,
+        status: 'unapplied_credit' as const,
+      };
+      
+      // Prepare line items
+      const lineItemsData = body.lineItems.map((item: any) => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          transactionId: 0
+        };
+        
+        if (item.accountId) {
+          lineItem.accountId = item.accountId;
+        }
+        
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+        }
+        
+        return lineItem;
+      });
+      
+      // Get required accounts by code for double-entry accounting
+      const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
+      const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
+      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+      
+      if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
+        return res.status(500).json({ message: "Required accounts do not exist" });
+      }
+      
+      // Prepare ledger entries for double-entry accounting (REVERSED for credit memo)
+      // Customer credit reduces what customer owes, so:
+      // Debit Revenue (reduce income), Credit Accounts Receivable (reduce asset)
+      const ledgerEntriesData = body.lineItems.map((item: any) => ({
+        accountId: item.accountId || revenueAccount.id,
+        description: `Customer Credit ${body.reference} - ${item.description}`,
+        debit: item.amount, // Debit revenue to reverse the original sale
+        credit: 0,
+        date: body.date,
+        transactionId: 0
+      }));
+      
+      // Handle tax if present
+      const lineItemsTotal = body.lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+      const taxDifference = totalAmount - lineItemsTotal;
+      
+      if (taxDifference > 0.01) {
+        ledgerEntriesData.push({
+          accountId: taxPayableAccount.id,
+          description: `Customer Credit ${body.reference} - Tax`,
+          debit: taxDifference, // Debit sales tax payable to reduce liability
+          credit: 0,
+          date: body.date,
+          transactionId: 0
+        });
+      }
+      
+      // Credit Accounts Receivable for the total amount (reduces what customer owes)
+      ledgerEntriesData.push({
+        accountId: receivableAccount.id,
+        description: `Customer Credit ${body.reference}`,
+        debit: 0,
+        credit: totalAmount, // Credit to reduce accounts receivable
+        date: body.date,
+        transactionId: 0
+      });
+      
+      // Create the transaction
+      const creditTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+      
+      const createdLineItems = await storage.getLineItemsByTransaction(creditTransaction.id);
+      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(creditTransaction.id);
+      
+      const result = {
+        transaction: creditTransaction,
+        lineItems: createdLineItems,
+        ledgerEntries: createdLedgerEntries,
+      };
+      
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating customer credit:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid customer credit data", 
+          errors: error.format() 
+        });
+      }
+      res.status(500).json({
+        message: "Failed to create customer credit",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  // Vendor Credits API endpoint
+  apiRouter.post("/vendor-credits", async (req: Request, res: Response) => {
+    try {
+      const body = {
+        ...req.body,
+        date: new Date(req.body.date),
+      };
+      
+      // Check if vendor credit reference already exists
+      const transactions = await storage.getTransactions();
+      const existingCredit = transactions.find(t => 
+        t.reference === body.reference && 
+        t.type === 'vendor_credit'
+      );
+      
+      if (existingCredit) {
+        return res.status(400).json({ 
+          message: "Vendor credit reference must be unique", 
+          errors: [{ 
+            path: ["reference"], 
+            message: "A vendor credit with this reference number already exists" 
+          }] 
+        });
+      }
+      
+      // Use the calculated total amount from frontend (includes tax)
+      const totalAmount = body.totalAmount || body.lineItems.reduce(
+        (sum: number, item: any) => sum + Number(item.amount), 0
+      );
+      
+      const subTotal = body.subTotal || totalAmount;
+      const taxAmount = body.taxAmount || 0;
+      
+      // Create the vendor credit transaction
+      const transaction = {
+        reference: body.reference,
+        type: 'vendor_credit' as const,
+        date: body.date,
+        description: body.description || '',
+        amount: totalAmount,
+        subTotal: subTotal,
+        taxAmount: taxAmount,
+        balance: -totalAmount, // Negative balance represents available credit
+        contactId: body.contactId,
+        status: 'unapplied_credit' as const,
+      };
+      
+      // Prepare line items
+      const lineItemsData = body.lineItems.map((item: any) => {
+        const lineItem: any = {
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          amount: item.amount,
+          transactionId: 0
+        };
+        
+        if (item.accountId) {
+          lineItem.accountId = item.accountId;
+        }
+        
+        if (item.salesTaxId) {
+          lineItem.salesTaxId = item.salesTaxId;
+        }
+        
+        return lineItem;
+      });
+      
+      // Get required accounts by code for double-entry accounting
+      const payableAccount = await storage.getAccountByCode('2000'); // Accounts Payable
+      const expenseAccount = await storage.getAccountByCode('6000'); // General Expense
+      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+      
+      if (!payableAccount || !expenseAccount || !taxPayableAccount) {
+        return res.status(500).json({ message: "Required accounts do not exist" });
+      }
+      
+      // Prepare ledger entries for double-entry accounting (REVERSED for credit memo)
+      // Vendor credit reduces what we owe vendor, so:
+      // Debit Accounts Payable (reduce liability), Credit Expense (reduce expense)
+      
+      // First, credit expense accounts for each line item
+      const ledgerEntriesData = body.lineItems.map((item: any) => ({
+        accountId: item.accountId || expenseAccount.id,
+        description: `Vendor Credit ${body.reference} - ${item.description}`,
+        debit: 0,
+        credit: item.amount, // Credit expense to reverse the original purchase
+        date: body.date,
+        transactionId: 0
+      }));
+      
+      // Handle tax if present
+      const lineItemsTotal = body.lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
+      const taxDifference = totalAmount - lineItemsTotal;
+      
+      if (taxDifference > 0.01) {
+        ledgerEntriesData.push({
+          accountId: taxPayableAccount.id,
+          description: `Vendor Credit ${body.reference} - Tax`,
+          debit: 0,
+          credit: taxDifference, // Credit sales tax payable
+          date: body.date,
+          transactionId: 0
+        });
+      }
+      
+      // Debit Accounts Payable for the total amount (reduces what we owe)
+      ledgerEntriesData.push({
+        accountId: payableAccount.id,
+        description: `Vendor Credit ${body.reference}`,
+        debit: totalAmount, // Debit to reduce accounts payable
+        credit: 0,
+        date: body.date,
+        transactionId: 0
+      });
+      
+      // Create the transaction
+      const creditTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+      
+      const createdLineItems = await storage.getLineItemsByTransaction(creditTransaction.id);
+      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(creditTransaction.id);
+      
+      const result = {
+        transaction: creditTransaction,
+        lineItems: createdLineItems,
+        ledgerEntries: createdLedgerEntries,
+      };
+      
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Error creating vendor credit:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "Invalid vendor credit data", 
+          errors: error.format() 
+        });
+      }
+      res.status(500).json({
+        message: "Failed to create vendor credit",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   apiRouter.get("/transactions/next-reference", async (req: Request, res: Response) => {
     try {
       const type = req.query.type as string;
