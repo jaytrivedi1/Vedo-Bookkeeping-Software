@@ -58,18 +58,19 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [currencyLocked, setCurrencyLocked] = useState(false);
   
-  // Check if vendor has transactions to lock currency
-  const { data: vendorTransactions } = useQuery({
+  // Check if contact (customer or vendor) has transactions to lock currency
+  const { data: contactTransactions } = useQuery({
     queryKey: ['/api/contacts', contact.id, 'transactions'],
     queryFn: () => apiRequest(`/api/contacts/${contact.id}/transactions`, 'GET'),
-    enabled: contact.type === 'vendor'
+    enabled: true // Check for both customers and vendors
   });
 
   useEffect(() => {
-    if (contact.type === 'vendor' && vendorTransactions && vendorTransactions.length > 0) {
+    // Lock currency if contact has any existing transactions
+    if (contactTransactions && contactTransactions.length > 0) {
       setCurrencyLocked(true);
     }
-  }, [contact.type, vendorTransactions]);
+  }, [contactTransactions]);
   
   // Transform currencies for SearchableSelect
   const currencyItems: SearchableSelectItem[] = ALL_CURRENCIES.map(code => ({
