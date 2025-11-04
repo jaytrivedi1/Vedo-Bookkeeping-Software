@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal, json, varchar, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal, json, varchar, date, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -736,7 +736,10 @@ export const exchangeRatesSchema = pgTable('exchange_rates', {
   isManual: boolean('is_manual').notNull().default(false), // true if user manually set this rate
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-});
+}, (table) => ({
+  // Unique constraint to prevent duplicate rates for the same currency pair on the same date
+  uniqueRatePerDay: uniqueIndex('unique_rate_per_day').on(table.fromCurrency, table.toCurrency, table.effectiveDate),
+}));
 
 // FX Realizations table - tracks realized foreign exchange gains/losses
 export const fxRealizationsSchema = pgTable('fx_realizations', {

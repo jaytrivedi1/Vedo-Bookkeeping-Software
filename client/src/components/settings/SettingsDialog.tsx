@@ -63,7 +63,9 @@ const companyFormSchema = z.object({
 // Define settings for preferences
 interface SettingsState {
   darkMode: boolean;
-  foreignCurrency: boolean;
+  multiCurrencyEnabled: boolean;
+  homeCurrency: string | null;
+  multiCurrencyEnabledAt: Date | null;
 }
 
 // Define props for the component
@@ -75,11 +77,14 @@ interface SettingsDialogProps {
 export default function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("company");
+  const [selectedHomeCurrency, setSelectedHomeCurrency] = useState<string>("USD");
   
   // Initialize state for settings
   const [settings, setSettings] = useState<SettingsState>({
     darkMode: false,
-    foreignCurrency: false
+    multiCurrencyEnabled: false,
+    homeCurrency: null,
+    multiCurrencyEnabledAt: null
   });
   
   // Query company settings
@@ -94,14 +99,27 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     enabled: open
   });
   
+  // Query currencies
+  const currenciesQuery = useQuery({
+    queryKey: ['/api/currencies'],
+    enabled: open
+  });
+  
   // Process preferences data when it loads
   useEffect(() => {
     if (preferencesQuery.data && Object.keys(preferencesQuery.data).length > 0) {
       const data = preferencesQuery.data as any;
       setSettings({
         darkMode: data.darkMode || false,
-        foreignCurrency: data.foreignCurrency || false
+        multiCurrencyEnabled: data.multiCurrencyEnabled || false,
+        homeCurrency: data.homeCurrency || null,
+        multiCurrencyEnabledAt: data.multiCurrencyEnabledAt ? new Date(data.multiCurrencyEnabledAt) : null
       });
+      
+      // Set selected home currency if available
+      if (data.homeCurrency) {
+        setSelectedHomeCurrency(data.homeCurrency);
+      }
       
       // Apply dark mode if it's enabled
       if (data.darkMode) {
@@ -132,6 +150,15 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     label: month.label,
     subtitle: undefined
   }));
+  
+  // Transform currencies for SearchableSelect
+  const currencyItems: SearchableSelectItem[] = Array.isArray(currenciesQuery.data) 
+    ? currenciesQuery.data.map((currency: any) => ({
+        value: currency.code,
+        label: `${currency.code} - ${currency.name}`,
+        subtitle: currency.symbol
+      }))
+    : [];
   
   // Update form when company data is loaded
   useEffect(() => {
@@ -207,11 +234,16 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     setSettings(prev => ({ ...prev, darkMode: !prev.darkMode }));
   };
   
-  // Handle foreign currency toggle
-  const handleForeignCurrencyToggle = () => {
-    // Only allow turning it on, never off
-    if (!settings.foreignCurrency) {
-      setSettings(prev => ({ ...prev, foreignCurrency: true }));
+  // Handle multi-currency enable
+  const handleEnableMultiCurrency = () => {
+    // Only allow enabling once
+    if (!settings.multiCurrencyEnabled && selectedHomeCurrency) {
+      setSettings(prev => ({ 
+        ...prev, 
+        multiCurrencyEnabled: true,
+        homeCurrency: selectedHomeCurrency,
+        multiCurrencyEnabledAt: new Date()
+      }));
     }
   };
   
@@ -457,54 +489,112 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
           <TabsContent value="currency">
             <Card>
               <CardHeader>
-                <CardTitle>Currency Settings</CardTitle>
-                <CardDescription>Configure currency options for your business</CardDescription>
+                <CardTitle>Multi-Currency Settings</CardTitle>
+                <CardDescription>Configure multi-currency support for your business</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Foreign Currency Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="currency-toggle">Multi-Currency Support</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Enable support for foreign currencies 
-                      <span className="text-red-500 ml-1 font-medium">(cannot be disabled once enabled)</span>
-                    </p>
-                  </div>
-                  <Switch 
-                    id="currency-toggle" 
-                    checked={settings.foreignCurrency}
-                    onCheckedChange={handleForeignCurrencyToggle}
-                    disabled={settings.foreignCurrency}
-                  />
-                </div>
-                
-                {/* Default Currency Selection - shown only when foreign currency is enabled */}
-                {settings.foreignCurrency && (
-                  <div className="pt-4">
-                    <p className="text-sm font-medium mb-2">Default Currency</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {["USD", "CAD", "GBP", "EUR"].map(currency => (
-                        <Button
-                          key={currency}
-                          variant="outline"
-                          className="focus:ring-2 focus:ring-primary"
-                          // Currently only visual, could be connected to state
-                          data-state={currency === "CAD" ? "selected" : "idle"}
-                        >
-                          {currency}
-                        </Button>
-                      ))}
+                {!settings.multiCurrencyEnabled ? (
+                  /* Before enabling multi-currency */
+                  <>
+                    <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                            Before You Enable Multi-Currency
+                          </p>
+                          <p className="text-sm text-amber-700 dark:text-amber-300">
+                            Once enabled, multi-currency support cannot be disabled. Your home currency will be locked and cannot be changed.
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                    
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="home-currency">Select Home Currency</Label>
+                        <SearchableSelect
+                          items={currencyItems}
+                          value={selectedHomeCurrency}
+                          onValueChange={setSelectedHomeCurrency}
+                          placeholder="Select your home currency"
+                          searchPlaceholder="Search currencies..."
+                          emptyText="No currencies found"
+                          data-testid="select-home-currency"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          This will be your company's primary currency. All reports will use this currency.
+                        </p>
+                      </div>
+                      
+                      <Button 
+                        onClick={handleEnableMultiCurrency}
+                        disabled={!selectedHomeCurrency}
+                        className="w-full"
+                      >
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        Enable Multi-Currency Support
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  /* After enabling multi-currency */
+                  <>
+                    <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                            Multi-Currency Enabled
+                          </p>
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            Your business can now process transactions in foreign currencies.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Home Currency</Label>
+                        <div className="flex items-center justify-between p-3 border rounded-md bg-muted">
+                          <span className="font-medium">{settings.homeCurrency}</span>
+                          <span className="text-sm text-muted-foreground">Locked</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Home currency cannot be changed after multi-currency is enabled.
+                        </p>
+                      </div>
+                      
+                      {settings.multiCurrencyEnabledAt && (
+                        <div className="space-y-2">
+                          <Label>Enabled On</Label>
+                          <div className="p-3 border rounded-md bg-muted">
+                            <span className="text-sm">
+                              {new Date(settings.multiCurrencyEnabledAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
                 
-                <Button 
-                  onClick={savePreferencesHandler} 
-                  disabled={savePreferences.isPending}
-                  className="w-full"
-                >
-                  {savePreferences.isPending ? "Saving..." : "Save Currency Settings"}
-                </Button>
+                {settings.multiCurrencyEnabled && (
+                  <Button 
+                    onClick={savePreferencesHandler} 
+                    disabled={savePreferences.isPending}
+                    className="w-full"
+                  >
+                    {savePreferences.isPending ? "Saving..." : "Save Currency Settings"}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -119,6 +119,13 @@ export async function addMultiCurrencySupport() {
     } else {
       console.log("Currencies already seeded, skipping");
     }
+    
+    // Create unique index on exchange_rates to prevent duplicate rates for same currency pair on same date
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS unique_rate_per_day 
+      ON exchange_rates (from_currency, to_currency, effective_date);
+    `;
+    console.log("Created unique index on exchange_rates");
 
     console.log("Multi-currency migration completed successfully!");
   } catch (error) {
