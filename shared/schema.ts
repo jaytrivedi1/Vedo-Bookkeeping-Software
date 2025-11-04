@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal, json } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, doublePrecision, timestamp, boolean, pgEnum, decimal, json, varchar, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -78,7 +78,7 @@ export const transactions = pgTable('transactions', {
   type: transactionTypeEnum('type').notNull(),
   date: timestamp('date').notNull().defaultNow(),
   description: text('description'),
-  amount: doublePrecision('amount').notNull(),
+  amount: doublePrecision('amount').notNull(), // Home currency amount (converted if foreign)
   subTotal: doublePrecision('sub_total'),
   taxAmount: doublePrecision('tax_amount'),
   balance: doublePrecision('balance'),
@@ -91,6 +91,10 @@ export const transactions = pgTable('transactions', {
   attachments: text('attachments').array(),
   dueDate: timestamp('due_date'),
   paymentTerms: text('payment_terms'),
+  // Multi-currency fields
+  currency: varchar('currency', { length: 3 }), // Foreign currency code (null = home currency)
+  exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6 }), // Rate used for conversion
+  foreignAmount: decimal('foreign_amount', { precision: 15, scale: 2 }), // Original amount in foreign currency
 });
 
 // Line Items
@@ -426,8 +430,11 @@ export const companySchema = pgTable('company_settings', {
 export const preferencesSchema = pgTable('preferences', {
   id: serial('id').primaryKey(),
   darkMode: boolean('dark_mode').default(false),
-  foreignCurrency: boolean('foreign_currency').default(false),
-  defaultCurrency: text('default_currency').default('USD'),
+  foreignCurrency: boolean('foreign_currency').default(false), // deprecated - use multiCurrencyEnabled
+  defaultCurrency: text('default_currency').default('USD'), // deprecated - use homeCurrency
+  multiCurrencyEnabled: boolean('multi_currency_enabled').default(false), // one-time enable, cannot disable
+  homeCurrency: varchar('home_currency', { length: 3 }).default('USD'), // primary currency for business
+  multiCurrencyEnabledAt: timestamp('multi_currency_enabled_at'), // track when multi-currency was enabled
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
@@ -705,3 +712,107 @@ export const insertCategorizationRuleSchema = createInsertSchema(categorizationR
 
 export type CategorizationRule = typeof categorizationRulesSchema.$inferSelect;
 export type InsertCategorizationRule = z.infer<typeof insertCategorizationRuleSchema>;
+
+// Multi-Currency Support Tables
+
+// Currencies table - stores all available currencies
+export const currenciesSchema = pgTable('currencies', {
+  id: serial('id').primaryKey(),
+  code: varchar('code', { length: 3 }).notNull().unique(), // USD, CAD, EUR, etc.
+  name: text('name').notNull(), // US Dollar, Canadian Dollar, etc.
+  symbol: varchar('symbol', { length: 10 }).notNull(), // $, €, £, etc.
+  decimals: integer('decimals').notNull().default(2), // number of decimal places
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Exchange rates table - stores currency conversion rates
+export const exchangeRatesSchema = pgTable('exchange_rates', {
+  id: serial('id').primaryKey(),
+  fromCurrency: varchar('from_currency', { length: 3 }).notNull(), // e.g., USD
+  toCurrency: varchar('to_currency', { length: 3 }).notNull(), // e.g., CAD
+  rate: decimal('rate', { precision: 18, scale: 6 }).notNull(), // conversion rate
+  effectiveDate: date('effective_date').notNull(), // date this rate is effective
+  isManual: boolean('is_manual').notNull().default(false), // true if user manually set this rate
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// FX Realizations table - tracks realized foreign exchange gains/losses
+export const fxRealizationsSchema = pgTable('fx_realizations', {
+  id: serial('id').primaryKey(),
+  transactionId: integer('transaction_id').references(() => transactions.id), // original invoice/bill
+  paymentId: integer('payment_id').references(() => transactions.id), // payment transaction
+  originalRate: decimal('original_rate', { precision: 18, scale: 6 }).notNull(),
+  paymentRate: decimal('payment_rate', { precision: 18, scale: 6 }).notNull(),
+  foreignAmount: decimal('foreign_amount', { precision: 15, scale: 2 }).notNull(),
+  gainLossAmount: decimal('gain_loss_amount', { precision: 15, scale: 2 }).notNull(), // in home currency
+  realizedDate: date('realized_date').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// FX Revaluations table - tracks unrealized foreign exchange gains/losses (month-end)
+export const fxRevaluationsSchema = pgTable('fx_revaluations', {
+  id: serial('id').primaryKey(),
+  revaluationDate: date('revaluation_date').notNull(),
+  accountType: varchar('account_type', { length: 50 }).notNull(), // AR, AP, Bank
+  currency: varchar('currency', { length: 3 }).notNull(),
+  foreignBalance: decimal('foreign_balance', { precision: 15, scale: 2 }).notNull(),
+  originalRate: decimal('original_rate', { precision: 18, scale: 6 }).notNull(),
+  revaluationRate: decimal('revaluation_rate', { precision: 18, scale: 6 }).notNull(),
+  unrealizedGainLoss: decimal('unrealized_gain_loss', { precision: 15, scale: 2 }).notNull(), // in home currency
+  journalEntryId: integer('journal_entry_id').references(() => transactions.id), // journal entry that posted this
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Currency locks table - prevents currency changes after first transaction
+export const currencyLocksSchema = pgTable('currency_locks', {
+  id: serial('id').primaryKey(),
+  entityType: varchar('entity_type', { length: 50 }).notNull(), // customer, vendor, bank_account
+  entityId: integer('entity_id').notNull(),
+  lockedAt: timestamp('locked_at').notNull().defaultNow(),
+  firstTransactionId: integer('first_transaction_id').references(() => transactions.id),
+});
+
+// Insert schemas for multi-currency tables
+export const insertCurrencySchema = createInsertSchema(currenciesSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertExchangeRateSchema = createInsertSchema(exchangeRatesSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertFxRealizationSchema = createInsertSchema(fxRealizationsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertFxRevaluationSchema = createInsertSchema(fxRevaluationsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertCurrencyLockSchema = createInsertSchema(currencyLocksSchema).omit({
+  id: true,
+  lockedAt: true
+});
+
+// Types for multi-currency tables
+export type Currency = typeof currenciesSchema.$inferSelect;
+export type InsertCurrency = z.infer<typeof insertCurrencySchema>;
+
+export type ExchangeRate = typeof exchangeRatesSchema.$inferSelect;
+export type InsertExchangeRate = z.infer<typeof insertExchangeRateSchema>;
+
+export type FxRealization = typeof fxRealizationsSchema.$inferSelect;
+export type InsertFxRealization = z.infer<typeof insertFxRealizationSchema>;
+
+export type FxRevaluation = typeof fxRevaluationsSchema.$inferSelect;
+export type InsertFxRevaluation = z.infer<typeof insertFxRevaluationSchema>;
+
+export type CurrencyLock = typeof currencyLocksSchema.$inferSelect;
+export type InsertCurrencyLock = z.infer<typeof insertCurrencyLockSchema>;

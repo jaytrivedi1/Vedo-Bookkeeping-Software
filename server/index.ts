@@ -23,6 +23,7 @@ import { addCsvSupport } from "./migrations/add-csv-support";
 import migrateAddSalesReceiptTransfer from "./migrate-add-sales-receipt-transfer";
 import { migrateImportedTransactionsAccountId } from "./migrate-imported-transactions-account-id";
 import { migrateBankMultiMatch } from "./migrate-bank-multi-match";
+import { addMultiCurrencySupport } from "./migrations/add-multi-currency";
 
 const app = express();
 app.use(express.json());
@@ -73,6 +74,9 @@ app.use((req, res, next) => {
     
     // Run transactions migration to add balance field
     await migrateTransactions();
+    
+    // Add multi-currency support tables and columns BEFORE other migrations that might use them
+    await addMultiCurrencySupport();
     
     // Run migration to add 'cheque' to transaction_type enum
     await migrateChequeTransactionType();
