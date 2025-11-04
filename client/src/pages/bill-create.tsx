@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 
 import { Bill, Contact, billSchema, Account, SalesTax } from "@shared/schema";
+import { CURRENCIES } from "@shared/currencies";
 import {
   Form,
   FormControl,
@@ -38,6 +39,10 @@ export default function BillCreate() {
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
+  
+  // Multi-currency state
+  const [currency, setCurrency] = useState<string>('USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -55,6 +60,15 @@ export default function BillCreate() {
   const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery<SalesTax[]>({
     queryKey: ["/api/sales-taxes"],
   });
+  
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+  
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   useEffect(() => {
     if (allContacts) {
@@ -155,6 +169,59 @@ export default function BillCreate() {
     },
   });
 
+  // Fetch exchange rate when currency or date changes
+  const billDate = form.watch("date") || new Date();
+  const vendorId = form.watch("contactId");
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: billDate }],
+    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(billDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+  
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (currency === homeCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, currency, homeCurrency]);
+  
+  // Initialize currency to homeCurrency when preferences load
+  useEffect(() => {
+    if (homeCurrency) {
+      setCurrency(homeCurrency);
+    }
+  }, [homeCurrency]);
+  
+  // Update currency when vendor changes
+  useEffect(() => {
+    if (vendorId && allContacts && isMultiCurrencyEnabled) {
+      const vendor = allContacts.find(c => c.id === vendorId);
+      if (vendor && vendor.currency) {
+        setCurrency(vendor.currency);
+      } else {
+        setCurrency(homeCurrency);
+      }
+    }
+  }, [vendorId, allContacts, isMultiCurrencyEnabled, homeCurrency]);
+  
+  // Keep currency in sync with homeCurrency when multi-currency is disabled
+  useEffect(() => {
+    if (!isMultiCurrencyEnabled && homeCurrency) {
+      setCurrency(homeCurrency);
+    }
+  }, [isMultiCurrencyEnabled, homeCurrency]);
+  
   // Update reference when next bill number is fetched
   useEffect(() => {
     if (nextBillNumber) {
@@ -285,12 +352,18 @@ export default function BillCreate() {
     // Ensure totals are calculated before submission
     updateTotals();
     
-    // Use the latest form data with updated totals
+    const totalAmount = form.getValues("totalAmount") || 0;
+    
+    // Use the latest form data with updated totals and multi-currency fields
     const submissionData = {
       ...data,
       subTotal: form.getValues("subTotal") || 0,
       taxAmount: form.getValues("taxAmount") || 0,
-      totalAmount: form.getValues("totalAmount") || 0,
+      totalAmount,
+      // Multi-currency fields
+      currency,
+      exchangeRate: exchangeRate.toString(),
+      foreignAmount: currency !== homeCurrency ? totalAmount : null,
     };
     
     createBill.mutate(submissionData);
@@ -441,22 +514,50 @@ export default function BillCreate() {
                       </Select>
                     </div>
 
-                    <div>
-                      <Label htmlFor="attachment">File Attachment</Label>
-                      <div className="flex items-center space-x-2">
-                        <Input
-                          id="attachment"
-                          type="file"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // In a real implementation, this would upload the file
-                              console.log("File selected:", file.name);
-                            }
-                          }}
-                        />
+                    {isMultiCurrencyEnabled ? (
+                      <div>
+                        <Label htmlFor="currency">Currency</Label>
+                        <Select value={currency} onValueChange={(value) => setCurrency(value)}>
+                          <SelectTrigger id="currency">
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CURRENCIES.map(curr => (
+                              <SelectItem key={curr.code} value={curr.code}>
+                                {curr.code} - {curr.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {currency !== homeCurrency && exchangeRateData && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Rate: 1 {currency} = {exchangeRate.toFixed(4)} {homeCurrency}
+                          </p>
+                        )}
+                        {currency !== homeCurrency && !exchangeRateData && !exchangeRateLoading && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            ⚠ No exchange rate found for this date
+                          </p>
+                        )}
                       </div>
-                    </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="attachment">File Attachment</Label>
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            id="attachment"
+                            type="file"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                // In a real implementation, this would upload the file
+                                console.log("File selected:", file.name);
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -645,15 +746,42 @@ export default function BillCreate() {
                     <div className="w-1/3 space-y-2">
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
-                        <span>${form.watch("subTotal")?.toFixed(2) || "0.00"}</span>
+                        {currency !== homeCurrency ? (
+                          <div className="text-right">
+                            <div>{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{form.watch("subTotal")?.toFixed(2) || "0.00"}</div>
+                            <div className="text-xs text-gray-500">
+                              ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{((form.watch("subTotal") || 0) * exchangeRate).toFixed(2)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>${form.watch("subTotal")?.toFixed(2) || "0.00"}</span>
+                        )}
                       </div>
                       <div className="flex justify-between">
                         <span>Tax:</span>
-                        <span>${form.watch("taxAmount")?.toFixed(2) || "0.00"}</span>
+                        {currency !== homeCurrency ? (
+                          <div className="text-right">
+                            <div>{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{form.watch("taxAmount")?.toFixed(2) || "0.00"}</div>
+                            <div className="text-xs text-gray-500">
+                              ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{((form.watch("taxAmount") || 0) * exchangeRate).toFixed(2)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>${form.watch("taxAmount")?.toFixed(2) || "0.00"}</span>
+                        )}
                       </div>
                       <div className="flex justify-between font-medium">
                         <span>Total:</span>
-                        <span>${form.watch("totalAmount")?.toFixed(2) || "0.00"}</span>
+                        {currency !== homeCurrency ? (
+                          <div className="text-right">
+                            <div>{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{form.watch("totalAmount")?.toFixed(2) || "0.00"}</div>
+                            <div className="text-xs text-gray-500">
+                              ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{((form.watch("totalAmount") || 0) * exchangeRate).toFixed(2)}
+                            </div>
+                          </div>
+                        ) : (
+                          <span>${form.watch("totalAmount")?.toFixed(2) || "0.00"}</span>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { Invoice as BaseInvoice, invoiceSchema, Contact, SalesTax, Product, Transaction as BaseTransaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
+import { CURRENCIES } from "@shared/currencies";
 
 // Extend the Transaction type to include appliedAmount for credits
 interface Transaction extends BaseTransaction {
@@ -110,6 +111,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
   const [appliedCredits, setAppliedCredits] = useState<Array<{creditId: number, amount: number, credit: Transaction}>>([]);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+  
+  // Multi-currency state
+  const [currency, setCurrency] = useState<string>(invoice?.currency || 'USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(invoice?.exchangeRate ? parseFloat(invoice.exchangeRate) : 1);
+  const [showCurrencyInfo, setShowCurrencyInfo] = useState(false);
+  
   const { toast } = useToast();
 
   // Extract next invoice number or use existing
@@ -149,6 +156,41 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
     queryKey: ['/api/invoices', invoice?.id, 'payment-applications'],
     enabled: isEditing && !!invoice?.id,
   });
+  
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+  
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
+  
+  // Initialize currency to homeCurrency when preferences load
+  useEffect(() => {
+    if (homeCurrency && !isEditing && !invoice?.currency) {
+      setCurrency(homeCurrency);
+    }
+  }, [homeCurrency, isEditing, invoice?.currency]);
+  
+  // Update currency when customer changes (if not editing)
+  useEffect(() => {
+    if (!isEditing && watchContactId && contacts && isMultiCurrencyEnabled) {
+      const customer = contacts.find(c => c.id === watchContactId);
+      if (customer && customer.currency) {
+        setCurrency(customer.currency);
+      } else {
+        setCurrency(homeCurrency);
+      }
+    }
+  }, [watchContactId, contacts, isEditing, isMultiCurrencyEnabled, homeCurrency]);
+  
+  // Keep currency in sync with homeCurrency when multi-currency is disabled
+  useEffect(() => {
+    if (!isMultiCurrencyEnabled && homeCurrency && !isEditing) {
+      setCurrency(homeCurrency);
+    }
+  }, [isMultiCurrencyEnabled, homeCurrency, isEditing]);
   
   // Filter for unapplied credits for the selected customer
   useEffect(() => {
@@ -239,6 +281,33 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       setWatchContactId(watchedContactId);
     }
   }, [watchedContactId]);
+  
+  // Fetch exchange rate when currency or date changes
+  const invoiceDate = form.watch("date") || new Date();
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: invoiceDate }],
+    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(invoiceDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        // If no exchange rate found, return null to show warning
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+  
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (currency === homeCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, currency, homeCurrency]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -698,7 +767,11 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       subTotal,
       taxAmount,
       totalAmount,
-      paymentTerms
+      paymentTerms,
+      // Multi-currency fields
+      currency,
+      exchangeRate: exchangeRate.toString(), // Store as string to match schema
+      foreignAmount: currency !== homeCurrency ? totalAmount : null, // Only set foreignAmount if using foreign currency
     };
     
     // Calculate the line item amounts and ensure salesTaxId and productId are properly handled
@@ -885,6 +958,45 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                         </FormControl>
                       </FormItem>
                     </div>
+                    
+                    {isMultiCurrencyEnabled && (
+                      <div>
+                        <div className="flex items-center gap-1 mb-2">
+                          <FormLabel className="text-sm font-medium">Currency</FormLabel>
+                          <HelpCircle className="h-4 w-4 text-gray-400" />
+                        </div>
+                        <FormItem>
+                          <FormControl>
+                            <Select 
+                              value={currency} 
+                              onValueChange={(value) => setCurrency(value)}
+                              disabled={isEditing}
+                            >
+                              <SelectTrigger className="bg-white border-gray-300 h-10">
+                                <SelectValue placeholder="Select currency" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CURRENCIES.map(curr => (
+                                  <SelectItem key={curr.code} value={curr.code}>
+                                    {curr.code} - {curr.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                        </FormItem>
+                        {currency !== homeCurrency && exchangeRateData && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Rate: 1 {currency} = {exchangeRate.toFixed(4)} {homeCurrency}
+                          </p>
+                        )}
+                        {currency !== homeCurrency && !exchangeRateData && !exchangeRateLoading && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            ⚠ No exchange rate found for this date
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="space-y-4">
@@ -1287,7 +1399,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                     
                     <div className="flex justify-between font-bold border-t-2 border-gray-400 pt-3 mt-4 text-lg">
                       <span>Balance due</span>
-                      <span>${formatCurrency(balanceDue)}</span>
+                      {currency !== homeCurrency ? (
+                        <div className="text-right">
+                          <div>{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}</div>
+                          <div className="text-xs font-normal text-gray-500">
+                            ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
+                          </div>
+                        </div>
+                      ) : (
+                        <span>${formatCurrency(balanceDue)}</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1309,7 +1430,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
               <div className="bg-white rounded-lg border shadow-sm p-6">
                 <div className="text-center">
                   <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Balance Due</div>
-                  <div className="text-3xl font-bold text-gray-900">${formatCurrency(balanceDue)}</div>
+                  {currency !== homeCurrency ? (
+                    <div>
+                      <div className="text-3xl font-bold text-gray-900">
+                        {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
+                      </div>
+                      <div className="text-sm text-gray-500 mt-1">
+                        ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-3xl font-bold text-gray-900">${formatCurrency(balanceDue)}</div>
+                  )}
                 </div>
               </div>
               
