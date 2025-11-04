@@ -9688,6 +9688,154 @@ Respond in JSON format:
     }
   });
 
+  // ============= Currency Management Routes =============
+  
+  // Get all currencies
+  apiRouter.get("/currencies", async (req: Request, res: Response) => {
+    try {
+      const currencies = await storage.getCurrencies();
+      res.json(currencies);
+    } catch (error) {
+      console.error("Error fetching currencies:", error);
+      res.status(500).json({ message: "Failed to fetch currencies" });
+    }
+  });
+
+  // Get a specific currency by code
+  apiRouter.get("/currencies/:code", async (req: Request, res: Response) => {
+    try {
+      const currency = await storage.getCurrency(req.params.code);
+      
+      if (!currency) {
+        return res.status(404).json({ message: "Currency not found" });
+      }
+      
+      res.json(currency);
+    } catch (error) {
+      console.error("Error fetching currency:", error);
+      res.status(500).json({ message: "Failed to fetch currency" });
+    }
+  });
+
+  // ============= Exchange Rate Routes =============
+  
+  // Get all exchange rates
+  apiRouter.get("/exchange-rates", async (req: Request, res: Response) => {
+    try {
+      const exchangeRates = await storage.getExchangeRates();
+      res.json(exchangeRates);
+    } catch (error) {
+      console.error("Error fetching exchange rates:", error);
+      res.status(500).json({ message: "Failed to fetch exchange rates" });
+    }
+  });
+
+  // Get a specific exchange rate by ID
+  apiRouter.get("/exchange-rates/:id", async (req: Request, res: Response) => {
+    try {
+      const exchangeRate = await storage.getExchangeRate(Number(req.params.id));
+      
+      if (!exchangeRate) {
+        return res.status(404).json({ message: "Exchange rate not found" });
+      }
+      
+      res.json(exchangeRate);
+    } catch (error) {
+      console.error("Error fetching exchange rate:", error);
+      res.status(500).json({ message: "Failed to fetch exchange rate" });
+    }
+  });
+
+  // Get exchange rate for a specific date and currency pair
+  apiRouter.get("/exchange-rates/rate", async (req: Request, res: Response) => {
+    try {
+      const { fromCurrency, toCurrency, date } = req.query;
+      
+      if (!fromCurrency || !toCurrency || !date) {
+        return res.status(400).json({ 
+          message: "fromCurrency, toCurrency, and date are required" 
+        });
+      }
+      
+      const exchangeRate = await storage.getExchangeRateForDate(
+        fromCurrency as string,
+        toCurrency as string,
+        new Date(date as string)
+      );
+      
+      if (!exchangeRate) {
+        return res.status(404).json({ message: "Exchange rate not found for the specified date" });
+      }
+      
+      res.json(exchangeRate);
+    } catch (error) {
+      console.error("Error fetching exchange rate for date:", error);
+      res.status(500).json({ message: "Failed to fetch exchange rate" });
+    }
+  });
+
+  // Create a new exchange rate
+  apiRouter.post("/exchange-rates", async (req: Request, res: Response) => {
+    try {
+      const { fromCurrency, toCurrency, rate, date } = req.body;
+      
+      if (!fromCurrency || !toCurrency || !rate || !date) {
+        return res.status(400).json({ 
+          message: "fromCurrency, toCurrency, rate, and date are required" 
+        });
+      }
+      
+      const exchangeRate = await storage.createExchangeRate({
+        fromCurrency,
+        toCurrency,
+        rate: String(rate),
+        date: new Date(date)
+      });
+      
+      res.json(exchangeRate);
+    } catch (error) {
+      console.error("Error creating exchange rate:", error);
+      res.status(500).json({ message: "Failed to create exchange rate" });
+    }
+  });
+
+  // Update an exchange rate
+  apiRouter.patch("/exchange-rates/:id", async (req: Request, res: Response) => {
+    try {
+      const updates: any = {};
+      
+      if (req.body.rate !== undefined) updates.rate = String(req.body.rate);
+      if (req.body.date !== undefined) updates.date = new Date(req.body.date);
+      
+      const updatedRate = await storage.updateExchangeRate(Number(req.params.id), updates);
+      
+      if (!updatedRate) {
+        return res.status(404).json({ message: "Exchange rate not found" });
+      }
+      
+      res.json(updatedRate);
+    } catch (error) {
+      console.error("Error updating exchange rate:", error);
+      res.status(500).json({ message: "Failed to update exchange rate" });
+    }
+  });
+
+  // Delete an exchange rate
+  apiRouter.delete("/exchange-rates/:id", async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteExchangeRate(Number(req.params.id));
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Exchange rate not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting exchange rate:", error);
+      res.status(500).json({ message: "Failed to delete exchange rate" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
