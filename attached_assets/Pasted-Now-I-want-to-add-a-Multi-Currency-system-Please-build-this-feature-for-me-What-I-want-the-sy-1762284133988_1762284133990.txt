@@ -1,0 +1,63 @@
+Now I want to add a Multi-Currency system.
+Please build this feature for me.
+💡 What I want the system to do
+1.	Let me turn on “Multi-Currency” only once
+o	Once ON, it cannot be turned OFF
+o	I must choose my “Home Currency” (ex: CAD or USD)
+2.	Save each customer, vendor, and bank account with one fixed currency
+o	Example: This customer is USD only
+o	This vendor is EUR only
+o	Cannot change currency after transactions start
+3.	Store exchange rates
+o	Store exchange rate per date
+o	System auto-fills rate but I can manually override it
+4.	When entering a transaction (invoice or bill):
+o	User enters amount in foreign currency
+o	System converts to home currency using stored rate
+o	Save:
+	foreign currency amount
+	rate
+	converted home currency amount
+5.	When I receive payment or pay a vendor:
+o	Rate might be different
+o	System must calculate realized gain/loss
+o	Example: invoice at USD rate 1.30, payment at 1.35
+→ show FX gain
+6.	Month-end revaluation
+o	Recalculate open foreign balances (e.g., unpaid invoices, bank balance)
+o	Post unrealized gain/loss
+7.	Prevent mistakes
+o	Do NOT allow mixing currencies in same AR/AP line
+o	Do NOT allow changing currency for customer/vendor/account after use
+8.	Reports should show:
+o	Total in home currency
+o	FX gain/loss (realized and unrealized)
+o	Option to show foreign currency too
+✅ Technical requirements
+•	Use my existing stack (FastAPI + PostgreSQL + React)
+•	Create database tables for:
+o	currencies
+o	exchange rates
+o	documents and payments with stored fc amount, rate, hc amount
+o	FX revaluation logs
+•	Add APIs:
+o	Enable multi-currency & choose home currency
+o	Set/get exchange rates
+o	Create customer/vendor with currency
+o	Make invoices/bills in foreign currency
+o	Record payments with rate difference
+o	Run month-end currency revaluation
+•	Add frontend screens:
+o	Multi-currency settings
+o	Currency list & exchange rate entry
+o	Revaluation screen
+•	Write basic tests for:
+o	invoice in foreign currency
+o	payment at different rate (gain/loss)
+o	month-end revaluation
+🎯 Goal
+I want the system to work like QuickBooks multi-currency, but built fresh in my app.
+Please generate code, database tables, APIs and UI pages step-by-step.
+
+
+Start by designing the database tables first
