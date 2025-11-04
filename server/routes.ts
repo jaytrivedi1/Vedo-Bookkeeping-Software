@@ -2290,6 +2290,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Calculate and record FX gains/losses for multi-currency payments
+      const { fxRealizationsSchema } = await import('@shared/schema');
+      const fxGainAccount = await storage.getAccountByCode('4300'); // Realized FX Gain
+      const fxLossAccount = await storage.getAccountByCode('7100'); // Realized FX Loss
+      
+      if (!fxGainAccount || !fxLossAccount) {
+        throw new Error('FX Gain and FX Loss accounts must exist. Please ensure accounts 4300 and 7100 are created.');
+      }
+      
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'USD';
+      
+      // Process FX gains/losses for invoice payments
+      const invoiceApplications = (lineItems as any).invoiceApplications || [];
+      for (const app of invoiceApplications) {
+        const invoice = await storage.getTransaction(app.invoiceId);
+        if (!invoice) continue;
+        
+        // Only calculate FX if invoice is in a foreign currency
+        const invoiceCurrency = invoice.currency || homeCurrency;
+        if (invoiceCurrency === homeCurrency) continue; // Skip same-currency transactions
+        
+        const invoiceExchangeRate = invoice.exchangeRate ? parseFloat(invoice.exchangeRate.toString()) : 1;
+        
+        // Get payment exchange rate - default to invoice rate if not provided
+        // This ensures no fictitious FX gain/loss is recorded when rates are the same
+        const paymentExchangeRate = data.exchangeRate ? parseFloat(data.exchangeRate.toString()) : invoiceExchangeRate;
+        
+        // Skip if exchange rates are the same (no gain/loss)
+        if (Math.abs(invoiceExchangeRate - paymentExchangeRate) < 0.000001) continue;
+        
+        // Calculate foreign amount being paid (in invoice currency)
+        const foreignAmountPaid = app.amount / invoiceExchangeRate;
+        
+        // Calculate FX gain/loss in home currency
+        // Gain/Loss = Foreign Amount × (Payment Rate - Invoice Rate)
+        const gainLossAmount = foreignAmountPaid * (paymentExchangeRate - invoiceExchangeRate);
+        
+        console.log(`FX Calculation for Invoice #${invoice.reference}:
+- Invoice Rate: ${invoiceExchangeRate}
+- Payment Rate: ${paymentExchangeRate}
+- Foreign Amount: ${foreignAmountPaid.toFixed(2)} ${invoiceCurrency}
+- Home Amount Paid: ${app.amount.toFixed(2)} ${homeCurrency}
+- FX ${gainLossAmount >= 0 ? 'Gain' : 'Loss'}: ${Math.abs(gainLossAmount).toFixed(2)} ${homeCurrency}`);
+        
+        // Store FX realization for later (will be created after payment is created)
+        if (!lineItems.fxRealizations) {
+          (lineItems as any).fxRealizations = [];
+        }
+        (lineItems as any).fxRealizations.push({
+          transactionId: invoice.id,
+          originalRate: invoiceExchangeRate,
+          paymentRate: paymentExchangeRate,
+          foreignAmount: foreignAmountPaid,
+          gainLossAmount: gainLossAmount,
+          realizedDate: new Date(data.date)
+        });
+        
+        // Add ledger entry for FX gain or loss
+        if (gainLossAmount !== 0) {
+          if (gainLossAmount > 0) {
+            // FX Gain: Credit FX Gain (income), Debit AR
+            paymentLedgerEntries.push({
+              accountId: 2, // Accounts Receivable
+              debit: gainLossAmount,
+              credit: 0,
+              description: `FX gain on invoice #${invoice.reference}`,
+              date: new Date(data.date),
+              transactionId: 0
+            });
+            paymentLedgerEntries.push({
+              accountId: fxGainAccount!.id,
+              debit: 0,
+              credit: gainLossAmount,
+              description: `FX gain on invoice #${invoice.reference}`,
+              date: new Date(data.date),
+              transactionId: 0
+            });
+          } else {
+            // FX Loss: Debit FX Loss (expense), Credit AR
+            paymentLedgerEntries.push({
+              accountId: fxLossAccount!.id,
+              debit: Math.abs(gainLossAmount),
+              credit: 0,
+              description: `FX loss on invoice #${invoice.reference}`,
+              date: new Date(data.date),
+              transactionId: 0
+            });
+            paymentLedgerEntries.push({
+              accountId: 2, // Accounts Receivable
+              debit: 0,
+              credit: Math.abs(gainLossAmount),
+              description: `FX loss on invoice #${invoice.reference}`,
+              date: new Date(data.date),
+              transactionId: 0
+            });
+          }
+        }
+      }
+      
       // Build line items showing invoices paid (DEBIT side) and deposits used (CREDIT side)
       const customerPaymentLineItems = [];
       
@@ -2333,7 +2433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       // Record payment applications in payment_applications table
-      const invoiceApplications = (lineItems as any).invoiceApplications || [];
+      // invoiceApplications was already retrieved earlier for FX calculations
       if (invoiceApplications.length > 0) {
         const { paymentApplications } = await import('@shared/schema');
         for (const app of invoiceApplications) {
@@ -2343,6 +2443,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             amountApplied: app.amount
           });
           console.log(`Recorded payment application: Payment ${payment.id} -> Invoice ${app.invoiceId}, amount: ${app.amount}`);
+        }
+      }
+      
+      // Record FX realizations
+      const fxRealizations = (lineItems as any).fxRealizations || [];
+      if (fxRealizations.length > 0) {
+        for (const fxRealization of fxRealizations) {
+          await storage.createFxRealization({
+            transactionId: fxRealization.transactionId,
+            paymentId: payment.id,
+            originalRate: fxRealization.originalRate.toString(),
+            paymentRate: fxRealization.paymentRate.toString(),
+            foreignAmount: fxRealization.foreignAmount.toString(),
+            gainLossAmount: fxRealization.gainLossAmount.toString(),
+            realizedDate: fxRealization.realizedDate
+          });
+          console.log(`Recorded FX ${fxRealization.gainLossAmount >= 0 ? 'gain' : 'loss'}: ${Math.abs(fxRealization.gainLossAmount).toFixed(2)} for invoice #${fxRealization.transactionId}`);
         }
       }
       
