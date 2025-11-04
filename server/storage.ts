@@ -61,6 +61,21 @@ import {
   categorizationRulesSchema,
   type CategorizationRule,
   type InsertCategorizationRule,
+  currenciesSchema,
+  exchangeRatesSchema,
+  fxRealizationsSchema,
+  fxRevaluationsSchema,
+  currencyLocksSchema,
+  type Currency,
+  type InsertCurrency,
+  type ExchangeRate,
+  type InsertExchangeRate,
+  type FxRealization,
+  type InsertFxRealization,
+  type FxRevaluation,
+  type InsertFxRevaluation,
+  type CurrencyLock,
+  type InsertCurrencyLock,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -224,6 +239,33 @@ export interface IStorage {
   createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule>;
   updateCategorizationRule(id: number, rule: Partial<CategorizationRule>): Promise<CategorizationRule | undefined>;
   deleteCategorizationRule(id: number): Promise<boolean>;
+  
+  // Currencies
+  getCurrencies(): Promise<Currency[]>;
+  getCurrency(code: string): Promise<Currency | undefined>;
+  
+  // Exchange Rates
+  getExchangeRates(): Promise<ExchangeRate[]>;
+  getExchangeRate(id: number): Promise<ExchangeRate | undefined>;
+  getExchangeRateForDate(fromCurrency: string, toCurrency: string, date: Date): Promise<ExchangeRate | undefined>;
+  createExchangeRate(exchangeRate: InsertExchangeRate): Promise<ExchangeRate>;
+  updateExchangeRate(id: number, exchangeRate: Partial<ExchangeRate>): Promise<ExchangeRate | undefined>;
+  deleteExchangeRate(id: number): Promise<boolean>;
+  
+  // FX Realizations
+  getFxRealizations(): Promise<FxRealization[]>;
+  getFxRealizationsByTransaction(transactionId: number): Promise<FxRealization[]>;
+  createFxRealization(fxRealization: InsertFxRealization): Promise<FxRealization>;
+  
+  // FX Revaluations
+  getFxRevaluations(): Promise<FxRevaluation[]>;
+  getFxRevaluation(id: number): Promise<FxRevaluation | undefined>;
+  createFxRevaluation(fxRevaluation: InsertFxRevaluation): Promise<FxRevaluation>;
+  
+  // Currency Locks
+  getCurrencyLocks(): Promise<CurrencyLock[]>;
+  getCurrencyLockByEntity(entityType: string, entityId: number): Promise<CurrencyLock | undefined>;
+  createCurrencyLock(currencyLock: InsertCurrencyLock): Promise<CurrencyLock>;
 }
 
 export class MemStorage implements IStorage {

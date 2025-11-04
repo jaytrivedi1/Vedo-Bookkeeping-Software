@@ -4,14 +4,17 @@ import {
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem,
+  Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
+  InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
-  reconciliations, reconciliationItems
+  reconciliations, reconciliationItems,
+  currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -2230,5 +2233,139 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(categorizationRulesSchema)
       .where(eq(categorizationRulesSchema.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Currencies
+  async getCurrencies(): Promise<Currency[]> {
+    return await db.select()
+      .from(currenciesSchema)
+      .orderBy(currenciesSchema.code);
+  }
+
+  async getCurrency(code: string): Promise<Currency | undefined> {
+    const [currency] = await db.select()
+      .from(currenciesSchema)
+      .where(eq(currenciesSchema.code, code))
+      .limit(1);
+    return currency;
+  }
+
+  // Exchange Rates
+  async getExchangeRates(): Promise<ExchangeRate[]> {
+    return await db.select()
+      .from(exchangeRatesSchema)
+      .orderBy(desc(exchangeRatesSchema.date), exchangeRatesSchema.fromCurrency);
+  }
+
+  async getExchangeRate(id: number): Promise<ExchangeRate | undefined> {
+    const [exchangeRate] = await db.select()
+      .from(exchangeRatesSchema)
+      .where(eq(exchangeRatesSchema.id, id))
+      .limit(1);
+    return exchangeRate;
+  }
+
+  async getExchangeRateForDate(fromCurrency: string, toCurrency: string, date: Date): Promise<ExchangeRate | undefined> {
+    const [exchangeRate] = await db.select()
+      .from(exchangeRatesSchema)
+      .where(
+        and(
+          eq(exchangeRatesSchema.fromCurrency, fromCurrency),
+          eq(exchangeRatesSchema.toCurrency, toCurrency),
+          lte(exchangeRatesSchema.date, date)
+        )
+      )
+      .orderBy(desc(exchangeRatesSchema.date))
+      .limit(1);
+    return exchangeRate;
+  }
+
+  async createExchangeRate(exchangeRate: InsertExchangeRate): Promise<ExchangeRate> {
+    const [newRate] = await db.insert(exchangeRatesSchema)
+      .values(exchangeRate)
+      .returning();
+    return newRate;
+  }
+
+  async updateExchangeRate(id: number, exchangeRateUpdate: Partial<ExchangeRate>): Promise<ExchangeRate | undefined> {
+    const [updatedRate] = await db.update(exchangeRatesSchema)
+      .set(exchangeRateUpdate)
+      .where(eq(exchangeRatesSchema.id, id))
+      .returning();
+    return updatedRate;
+  }
+
+  async deleteExchangeRate(id: number): Promise<boolean> {
+    const result = await db.delete(exchangeRatesSchema)
+      .where(eq(exchangeRatesSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // FX Realizations
+  async getFxRealizations(): Promise<FxRealization[]> {
+    return await db.select()
+      .from(fxRealizationsSchema)
+      .orderBy(desc(fxRealizationsSchema.realizationDate));
+  }
+
+  async getFxRealizationsByTransaction(transactionId: number): Promise<FxRealization[]> {
+    return await db.select()
+      .from(fxRealizationsSchema)
+      .where(eq(fxRealizationsSchema.paymentTransactionId, transactionId));
+  }
+
+  async createFxRealization(fxRealization: InsertFxRealization): Promise<FxRealization> {
+    const [newRealization] = await db.insert(fxRealizationsSchema)
+      .values(fxRealization)
+      .returning();
+    return newRealization;
+  }
+
+  // FX Revaluations
+  async getFxRevaluations(): Promise<FxRevaluation[]> {
+    return await db.select()
+      .from(fxRevaluationsSchema)
+      .orderBy(desc(fxRevaluationsSchema.revaluationDate));
+  }
+
+  async getFxRevaluation(id: number): Promise<FxRevaluation | undefined> {
+    const [revaluation] = await db.select()
+      .from(fxRevaluationsSchema)
+      .where(eq(fxRevaluationsSchema.id, id))
+      .limit(1);
+    return revaluation;
+  }
+
+  async createFxRevaluation(fxRevaluation: InsertFxRevaluation): Promise<FxRevaluation> {
+    const [newRevaluation] = await db.insert(fxRevaluationsSchema)
+      .values(fxRevaluation)
+      .returning();
+    return newRevaluation;
+  }
+
+  // Currency Locks
+  async getCurrencyLocks(): Promise<CurrencyLock[]> {
+    return await db.select()
+      .from(currencyLocksSchema);
+  }
+
+  async getCurrencyLockByEntity(entityType: string, entityId: number): Promise<CurrencyLock | undefined> {
+    const [lock] = await db.select()
+      .from(currencyLocksSchema)
+      .where(
+        and(
+          eq(currencyLocksSchema.entityType, entityType),
+          eq(currencyLocksSchema.entityId, entityId)
+        )
+      )
+      .limit(1);
+    return lock;
+  }
+
+  async createCurrencyLock(currencyLock: InsertCurrencyLock): Promise<CurrencyLock> {
+    const [newLock] = await db.insert(currencyLocksSchema)
+      .values(currencyLock)
+      .returning();
+    return newLock;
   }
 }
