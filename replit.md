@@ -60,6 +60,17 @@ Preferred communication style: Simple, everyday language.
 - **Inline Product Creation**: Invoice and Sales Receipt forms support creating products on-the-fly with automatic field population.
   - Product dialog returns full product object to avoid stale closure issues.
   - Newly created products are automatically selected in the form.
+- **Multi-Currency Support** (Foundation Complete - Tasks 1-10):
+  - **Database Schema**: 5 dedicated tables (currencies with 80 world currencies seeded, exchange_rates with unique daily rate constraint, fx_realizations, fx_revaluations, currency_locks)
+  - **Preferences**: One-time multi-currency enablement with locked home currency selection and timestamp tracking
+  - **Contacts**: Currency field on customers/vendors, automatically locked after first transaction to prevent changes
+  - **Transactions**: Currency, exchange_rate, and foreign_amount fields to support multi-currency transactions
+  - **Backend API**: Complete CRUD endpoints for currencies and exchange rates with Zod validation
+  - **Currency Settings UI**: SearchableSelect for home currency, one-time enablement enforcement, proper state management
+  - **Exchange Rates Manager**: Full CRUD interface with date-based rates, currency filtering, sorted listing, unique constraint preventing duplicate same-day pairs
+  - **Contact Forms**: Currency selectors in all customer/vendor creation/edit forms with automatic locking when transactions exist
+  - **Lock Prevention**: ContactEditForm queries `/api/contacts/:id/transactions` and disables currency field for both customers and vendors with existing transactions
+  - **Status**: Foundation complete and production-ready. Remaining: invoice/bill form integration, FX gain/loss calculations, month-end revaluation, reporting updates
 
 ## External Dependencies
 
