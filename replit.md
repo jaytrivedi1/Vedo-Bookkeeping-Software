@@ -60,7 +60,7 @@ Preferred communication style: Simple, everyday language.
 - **Inline Product Creation**: Invoice and Sales Receipt forms support creating products on-the-fly with automatic field population.
   - Product dialog returns full product object to avoid stale closure issues.
   - Newly created products are automatically selected in the form.
-- **Multi-Currency Support** (Foundation Complete - Tasks 1-10):
+- **Multi-Currency Support** (Core Features Complete - Tasks 1-12):
   - **Database Schema**: 5 dedicated tables (currencies with 80 world currencies seeded, exchange_rates with unique daily rate constraint, fx_realizations, fx_revaluations, currency_locks)
   - **Preferences**: One-time multi-currency enablement with locked home currency selection and timestamp tracking
   - **Contacts**: Currency field on customers/vendors, automatically locked after first transaction to prevent changes
@@ -70,7 +70,15 @@ Preferred communication style: Simple, everyday language.
   - **Exchange Rates Manager**: Full CRUD interface with date-based rates, currency filtering, sorted listing, unique constraint preventing duplicate same-day pairs
   - **Contact Forms**: Currency selectors in all customer/vendor creation/edit forms with automatic locking when transactions exist
   - **Lock Prevention**: ContactEditForm queries `/api/contacts/:id/transactions` and disables currency field for both customers and vendors with existing transactions
-  - **Status**: Foundation complete and production-ready. Remaining: invoice/bill form integration, FX gain/loss calculations, month-end revaluation, reporting updates
+  - **Invoice/Bill Forms**: Full multi-currency integration with currency selector, exchange rate auto-fetch, foreign/home amount display, proper form initialization to homeCurrency
+  - **FX Accounts**: Realized FX Gain (4300, other_income) and Realized FX Loss (7100, other_expense) accounts created
+  - **Realized FX Gain/Loss**: Automatic calculation when payments are applied to foreign currency invoices at different exchange rates
+    - Compares invoice exchange rate with payment exchange rate (defaults to invoice rate if not provided)
+    - Formula: gainLossAmount = foreignAmountPaid × (paymentRate - invoiceRate)
+    - Records fx_realization entries with full context (transactionId, paymentId, rates, amounts, date)
+    - Creates ledger entries: gains debit AR + credit FX Gain; losses debit FX Loss + credit AR
+    - Production-ready for AR invoice payments
+  - **Status**: Core multi-currency features complete and production-ready. Remaining enhancements: AP bill payment FX, month-end unrealized FX revaluation, payment form exchange rate capture, reporting updates
 
 ## External Dependencies
 
