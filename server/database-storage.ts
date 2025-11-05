@@ -2343,6 +2343,79 @@ export class DatabaseStorage implements IStorage {
     return newRevaluation;
   }
 
+  async getForeignCurrencyBalances(asOfDate: Date): Promise<Array<{
+    currency: string;
+    accountType: string;
+    foreignBalance: string;
+    originalRate: string;
+  }>> {
+    const preferences = await this.getPreferences();
+    const homeCurrency = preferences?.homeCurrency || 'USD';
+
+    const result = await db.execute(sql`
+      WITH foreign_ledger AS (
+        SELECT 
+          a.type as account_type,
+          t.currency,
+          t.exchange_rate,
+          t.foreign_amount,
+          le.debit,
+          le.credit
+        FROM ${ledgerEntries} le
+        INNER JOIN ${accounts} a ON le.account_id = a.id
+        INNER JOIN ${transactions} t ON le.transaction_id = t.id
+        WHERE 
+          t.currency IS NOT NULL 
+          AND t.currency != ${homeCurrency}
+          AND le.date <= ${asOfDate}
+          AND a.type IN ('accounts_receivable', 'accounts_payable', 'bank')
+      ),
+      balances AS (
+        SELECT
+          account_type,
+          currency,
+          SUM(debit - credit) as home_balance,
+          SUM(
+            CASE 
+              WHEN foreign_amount IS NOT NULL AND exchange_rate IS NOT NULL 
+              THEN CAST(foreign_amount AS NUMERIC) 
+              ELSE (debit - credit)
+            END
+          ) as foreign_balance,
+          SUM(
+            CASE 
+              WHEN foreign_amount IS NOT NULL AND exchange_rate IS NOT NULL 
+              THEN CAST(foreign_amount AS NUMERIC) * CAST(exchange_rate AS NUMERIC)
+              ELSE (debit - credit)
+            END
+          ) / NULLIF(SUM(
+            CASE 
+              WHEN foreign_amount IS NOT NULL AND exchange_rate IS NOT NULL 
+              THEN CAST(foreign_amount AS NUMERIC)
+              ELSE (debit - credit)
+            END
+          ), 0) as weighted_avg_rate
+        FROM foreign_ledger
+        GROUP BY account_type, currency
+        HAVING SUM(debit - credit) != 0
+      )
+      SELECT 
+        currency,
+        account_type as "accountType",
+        foreign_balance::text as "foreignBalance",
+        COALESCE(weighted_avg_rate, 1.0)::text as "originalRate"
+      FROM balances
+      ORDER BY account_type, currency
+    `);
+
+    return result.rows as Array<{
+      currency: string;
+      accountType: string;
+      foreignBalance: string;
+      originalRate: string;
+    }>;
+  }
+
   // Currency Locks
   async getCurrencyLocks(): Promise<CurrencyLock[]> {
     return await db.select()

@@ -9953,6 +9953,239 @@ Respond in JSON format:
     }
   });
 
+  // FX Revaluations - Calculate/preview unrealized gains/losses
+  apiRouter.post("/fx-revaluations/calculate", async (req: Request, res: Response) => {
+    try {
+      const { revaluationDate } = req.body;
+      
+      if (!revaluationDate) {
+        return res.status(400).json({ message: "Revaluation date is required" });
+      }
+
+      const asOfDate = new Date(revaluationDate);
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'USD';
+
+      // Get foreign currency balances
+      const balances = await storage.getForeignCurrencyBalances(asOfDate);
+
+      // Calculate unrealized gains/losses for each balance
+      const calculations = await Promise.all(
+        balances.map(async (balance) => {
+          // Get the current exchange rate for revaluation date
+          const currentRate = await storage.getExchangeRateForDate(
+            balance.currency,
+            homeCurrency,
+            asOfDate
+          );
+
+          if (!currentRate) {
+            return {
+              ...balance,
+              revaluationRate: null,
+              unrealizedGainLoss: '0',
+              error: `No exchange rate found for ${balance.currency} on ${asOfDate.toISOString().split('T')[0]}`
+            };
+          }
+
+          // Calculate unrealized gain/loss
+          // Formula: foreignBalance * (currentRate - originalRate)
+          const foreignBal = parseFloat(balance.foreignBalance);
+          const origRate = parseFloat(balance.originalRate);
+          const revalRate = parseFloat(currentRate.rate);
+          const unrealizedGainLoss = foreignBal * (revalRate - origRate);
+
+          return {
+            ...balance,
+            revaluationRate: currentRate.rate,
+            unrealizedGainLoss: unrealizedGainLoss.toFixed(2)
+          };
+        })
+      );
+
+      res.json({
+        revaluationDate: asOfDate,
+        homeCurrency,
+        calculations
+      });
+    } catch (error) {
+      console.error("Error calculating FX revaluation:", error);
+      res.status(500).json({ message: "Failed to calculate FX revaluation" });
+    }
+  });
+
+  // FX Revaluations - Post journal entry for unrealized gains/losses
+  apiRouter.post("/fx-revaluations/post", async (req: Request, res: Response) => {
+    try {
+      const { revaluationDate, calculations } = req.body;
+      
+      if (!revaluationDate || !calculations || !Array.isArray(calculations)) {
+        return res.status(400).json({ message: "Revaluation date and calculations are required" });
+      }
+
+      const asOfDate = new Date(revaluationDate);
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'USD';
+
+      // Get FX gain/loss accounts
+      const fxGainAccount = await storage.getAccountByCode('4300');
+      const fxLossAccount = await storage.getAccountByCode('7100');
+
+      if (!fxGainAccount || !fxLossAccount) {
+        return res.status(400).json({ 
+          message: "FX Gain (4300) or FX Loss (7100) accounts not found" 
+        });
+      }
+
+      // Create journal entry for each currency/account type with non-zero gain/loss
+      const entries = calculations.filter((calc: any) => 
+        parseFloat(calc.unrealizedGainLoss) !== 0
+      );
+
+      if (entries.length === 0) {
+        return res.status(400).json({ message: "No unrealized gains or losses to post" });
+      }
+
+      // Calculate total unrealized gain/loss
+      const totalGainLoss = entries.reduce((sum: number, entry: any) => 
+        sum + parseFloat(entry.unrealizedGainLoss), 0
+      );
+
+      // Create journal entry transaction
+      const journalEntry = await storage.createTransaction(
+        {
+          type: 'journal_entry',
+          date: asOfDate,
+          description: `FX Revaluation - ${asOfDate.toISOString().split('T')[0]}`,
+          amount: Math.abs(totalGainLoss),
+          currency: homeCurrency,
+          exchangeRate: '1.0',
+          foreignAmount: String(Math.abs(totalGainLoss))
+        },
+        [],
+        []
+      );
+
+      // Create ledger entries for each revaluation
+      const ledgerEntries: any[] = [];
+      
+      for (const entry of entries) {
+        const unrealizedGainLoss = parseFloat(entry.unrealizedGainLoss);
+        
+        // Create FX revaluation record
+        await storage.createFxRevaluation({
+          revaluationDate: asOfDate,
+          accountType: entry.accountType,
+          currency: entry.currency,
+          foreignBalance: entry.foreignBalance,
+          originalRate: entry.originalRate,
+          revaluationRate: entry.revaluationRate,
+          unrealizedGainLoss: String(unrealizedGainLoss),
+          journalEntryId: journalEntry.id
+        });
+
+        // Determine account based on account type
+        let balanceAccount;
+        if (entry.accountType === 'accounts_receivable') {
+          balanceAccount = await storage.getAccountByCode('1200');
+        } else if (entry.accountType === 'accounts_payable') {
+          balanceAccount = await storage.getAccountByCode('2000');
+        } else if (entry.accountType === 'bank') {
+          balanceAccount = await storage.getAccountByCode('1000');
+        }
+
+        if (!balanceAccount) continue;
+
+        // Create ledger entries based on gain or loss
+        if (unrealizedGainLoss > 0) {
+          // Unrealized Gain: Debit AR/Bank or Credit AP, Credit FX Gain
+          if (entry.accountType === 'accounts_payable') {
+            ledgerEntries.push({
+              accountId: balanceAccount.id,
+              transactionId: journalEntry.id,
+              date: asOfDate,
+              description: `FX Revaluation - ${entry.currency}`,
+              debit: 0,
+              credit: Math.abs(unrealizedGainLoss)
+            });
+          } else {
+            ledgerEntries.push({
+              accountId: balanceAccount.id,
+              transactionId: journalEntry.id,
+              date: asOfDate,
+              description: `FX Revaluation - ${entry.currency}`,
+              debit: Math.abs(unrealizedGainLoss),
+              credit: 0
+            });
+          }
+          ledgerEntries.push({
+            accountId: fxGainAccount.id,
+            transactionId: journalEntry.id,
+            date: asOfDate,
+            description: `FX Revaluation - ${entry.currency}`,
+            debit: 0,
+            credit: Math.abs(unrealizedGainLoss)
+          });
+        } else {
+          // Unrealized Loss: Debit FX Loss, Credit AR/Bank or Debit AP
+          ledgerEntries.push({
+            accountId: fxLossAccount.id,
+            transactionId: journalEntry.id,
+            date: asOfDate,
+            description: `FX Revaluation - ${entry.currency}`,
+            debit: Math.abs(unrealizedGainLoss),
+            credit: 0
+          });
+          if (entry.accountType === 'accounts_payable') {
+            ledgerEntries.push({
+              accountId: balanceAccount.id,
+              transactionId: journalEntry.id,
+              date: asOfDate,
+              description: `FX Revaluation - ${entry.currency}`,
+              debit: Math.abs(unrealizedGainLoss),
+              credit: 0
+            });
+          } else {
+            ledgerEntries.push({
+              accountId: balanceAccount.id,
+              transactionId: journalEntry.id,
+              date: asOfDate,
+              description: `FX Revaluation - ${entry.currency}`,
+              debit: 0,
+              credit: Math.abs(unrealizedGainLoss)
+            });
+          }
+        }
+      }
+
+      // Create all ledger entries
+      for (const entry of ledgerEntries) {
+        await storage.createLedgerEntry(entry);
+      }
+
+      res.json({
+        success: true,
+        journalEntryId: journalEntry.id,
+        totalGainLoss: totalGainLoss.toFixed(2),
+        entriesCount: entries.length
+      });
+    } catch (error) {
+      console.error("Error posting FX revaluation:", error);
+      res.status(500).json({ message: "Failed to post FX revaluation" });
+    }
+  });
+
+  // Get FX revaluations history
+  apiRouter.get("/fx-revaluations", async (req: Request, res: Response) => {
+    try {
+      const revaluations = await storage.getFxRevaluations();
+      res.json(revaluations);
+    } catch (error) {
+      console.error("Error fetching FX revaluations:", error);
+      res.status(500).json({ message: "Failed to fetch FX revaluations" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

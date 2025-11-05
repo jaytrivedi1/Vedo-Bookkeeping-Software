@@ -261,6 +261,12 @@ export interface IStorage {
   getFxRevaluations(): Promise<FxRevaluation[]>;
   getFxRevaluation(id: number): Promise<FxRevaluation | undefined>;
   createFxRevaluation(fxRevaluation: InsertFxRevaluation): Promise<FxRevaluation>;
+  getForeignCurrencyBalances(asOfDate: Date): Promise<Array<{
+    currency: string;
+    accountType: string;
+    foreignBalance: string;
+    originalRate: string;
+  }>>;
   
   // Currency Locks
   getCurrencyLocks(): Promise<CurrencyLock[]>;
@@ -1302,6 +1308,88 @@ export class MemStorage implements IStorage {
 
   async deleteCategorizationRule(id: number): Promise<boolean> {
     throw new Error("Categorization rules not supported in MemStorage");
+  }
+
+  // Currencies
+  async getCurrencies(): Promise<Currency[]> {
+    throw new Error("Currencies not supported in MemStorage");
+  }
+
+  async getCurrency(code: string): Promise<Currency | undefined> {
+    throw new Error("Currencies not supported in MemStorage");
+  }
+
+  // Exchange Rates
+  async getExchangeRates(): Promise<ExchangeRate[]> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  async getExchangeRate(id: number): Promise<ExchangeRate | undefined> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  async getExchangeRateForDate(fromCurrency: string, toCurrency: string, date: Date): Promise<ExchangeRate | undefined> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  async createExchangeRate(exchangeRate: InsertExchangeRate): Promise<ExchangeRate> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  async updateExchangeRate(id: number, exchangeRate: Partial<ExchangeRate>): Promise<ExchangeRate | undefined> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  async deleteExchangeRate(id: number): Promise<boolean> {
+    throw new Error("Exchange rates not supported in MemStorage");
+  }
+
+  // FX Realizations
+  async getFxRealizations(): Promise<FxRealization[]> {
+    throw new Error("FX realizations not supported in MemStorage");
+  }
+
+  async getFxRealizationsByTransaction(transactionId: number): Promise<FxRealization[]> {
+    throw new Error("FX realizations not supported in MemStorage");
+  }
+
+  async createFxRealization(fxRealization: InsertFxRealization): Promise<FxRealization> {
+    throw new Error("FX realizations not supported in MemStorage");
+  }
+
+  // FX Revaluations
+  async getFxRevaluations(): Promise<FxRevaluation[]> {
+    throw new Error("FX revaluations not supported in MemStorage");
+  }
+
+  async getFxRevaluation(id: number): Promise<FxRevaluation | undefined> {
+    throw new Error("FX revaluations not supported in MemStorage");
+  }
+
+  async createFxRevaluation(fxRevaluation: InsertFxRevaluation): Promise<FxRevaluation> {
+    throw new Error("FX revaluations not supported in MemStorage");
+  }
+
+  async getForeignCurrencyBalances(asOfDate: Date): Promise<Array<{
+    currency: string;
+    accountType: string;
+    foreignBalance: string;
+    originalRate: string;
+  }>> {
+    throw new Error("FX revaluations not supported in MemStorage");
+  }
+
+  // Currency Locks
+  async getCurrencyLocks(): Promise<CurrencyLock[]> {
+    throw new Error("Currency locks not supported in MemStorage");
+  }
+
+  async getCurrencyLockByEntity(entityType: string, entityId: number): Promise<CurrencyLock | undefined> {
+    throw new Error("Currency locks not supported in MemStorage");
+  }
+
+  async createCurrencyLock(currencyLock: InsertCurrencyLock): Promise<CurrencyLock> {
+    throw new Error("Currency locks not supported in MemStorage");
   }
 }
 

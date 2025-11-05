@@ -31,6 +31,7 @@ import ChequeForm from "@/pages/cheque-form";
 import ChequeView from "@/pages/cheque-view";
 import JournalEntryForm from "@/pages/journal-entry-form";
 import JournalEntryView from "@/pages/journal-entry-view";
+import FxRevaluation from "@/pages/fx-revaluation";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
 
@@ -117,6 +118,7 @@ function Router() {
               <Route path="/account-books" component={AccountBooks} />
               <Route path="/sales-taxes" component={SalesTaxes} />
               <Route path="/products" component={Products} />
+              <Route path="/fx-revaluation" component={FxRevaluation} />
               <Route path="/reports" component={Reports} />
               <Route component={NotFound} />
             </Switch>
