@@ -381,6 +381,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contact not found" });
       }
       
+      // Validate currency changes - prevent changing currency if there are existing transactions
+      if (req.body.currency !== undefined && req.body.currency !== contact.currency) {
+        const transactions = await storage.getTransactionsByContact(id);
+        if (transactions.length > 0) {
+          return res.status(400).json({ 
+            message: "Cannot change currency for contact with existing transactions",
+            error: "CURRENCY_LOCKED"
+          });
+        }
+      }
+      
       // Validate the update data
       const contactUpdate = req.body;
       const updatedContact = await storage.updateContact(id, contactUpdate);

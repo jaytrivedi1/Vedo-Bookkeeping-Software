@@ -42,11 +42,10 @@ export default function FxRevaluation() {
 
   const calculateMutation = useMutation({
     mutationFn: async (date: string) => {
-      const response = await apiRequest("/api/fx-revaluations/calculate", {
+      return await apiRequest<CalculationResponse>("/api/fx-revaluations/calculate", {
         method: "POST",
         body: JSON.stringify({ revaluationDate: date }),
       });
-      return response.json();
     },
     onSuccess: (data: CalculationResponse) => {
       setCalculations(data.calculations);
@@ -67,14 +66,13 @@ export default function FxRevaluation() {
 
   const postMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("/api/fx-revaluations/post", {
+      return await apiRequest<any>("/api/fx-revaluations/post", {
         method: "POST",
         body: JSON.stringify({
           revaluationDate,
           calculations: calculations?.filter((c) => !c.error),
         }),
       });
-      return response.json();
     },
     onSuccess: (data) => {
       toast({
