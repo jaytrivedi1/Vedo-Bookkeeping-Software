@@ -205,8 +205,9 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       return await apiRequest('/api/settings/preferences', 'POST', values);
     },
     onSuccess: (data: any, variables: SettingsState) => {
-      // Invalidate preferences query to refetch the data
+      // Invalidate both preference query keys to ensure all components see the update
       queryClient.invalidateQueries({ queryKey: ['/api/settings/preferences'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/preferences'] });
       
       // Use response data if available, otherwise fall back to what we sent (variables)
       const finalDarkMode = data?.darkMode ?? variables.darkMode;
