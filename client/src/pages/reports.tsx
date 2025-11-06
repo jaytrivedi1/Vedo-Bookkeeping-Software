@@ -71,9 +71,10 @@ import {
   Pie,
   Cell
 } from "recharts";
-import { Account, LedgerEntry, Company } from "@shared/schema";
+import { Account, LedgerEntry, Company, Preferences } from "@shared/schema";
 import { getFiscalYearBounds, getFiscalYearLabel, getFiscalYear } from "@shared/fiscalYear";
 import { queryClient } from "@/lib/queryClient";
+import ExchangeRatesManager from "@/components/settings/ExchangeRatesManager";
 
 // Helper function to format currency
 const formatCurrency = (value: number) => {
@@ -284,6 +285,11 @@ export default function Reports() {
   // Fetch company settings to get fiscal year start month
   const { data: company } = useQuery<Company>({
     queryKey: ['/api/companies/default'],
+  });
+  
+  // Fetch preferences to get home currency for exchange rates
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/preferences'],
   });
   
   const fiscalYearStartMonth = useMemo(() => company?.fiscalYearStartMonth || 1, [company?.fiscalYearStartMonth]);
@@ -752,6 +758,8 @@ export default function Reports() {
         return 'Expense Analysis';
       case 'revenue-analysis':
         return 'Revenue Analysis';
+      case 'exchange-rates':
+        return 'Exchange Rates';
       default:
         return 'Financial Reports';
     }
@@ -880,6 +888,22 @@ export default function Reports() {
                 </CardHeader>
                 <CardFooter className="pt-4 flex justify-end border-t">
                   <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
+                </CardFooter>
+              </Card>
+
+              <Card 
+                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
+                onClick={() => setActiveTab("exchange-rates")}
+                data-testid="card-exchange-rates"
+              >
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl">Exchange Rates</CardTitle>
+                  <CardDescription className="text-sm mt-2">
+                    View and manage exchange rates for multi-currency transactions
+                  </CardDescription>
+                </CardHeader>
+                <CardFooter className="pt-4 flex justify-end border-t">
+                  <Button variant="ghost" size="sm" className="text-primary">View Rates →</Button>
                 </CardFooter>
               </Card>
             </div>
@@ -1953,6 +1977,28 @@ export default function Reports() {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+            
+            {/* Exchange Rates */}
+            <TabsContent value="exchange-rates">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Exchange Rates</CardTitle>
+                  <CardDescription>
+                    View and manage exchange rates for multi-currency transactions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {preferences?.multiCurrencyEnabled && preferences?.homeCurrency ? (
+                    <ExchangeRatesManager homeCurrency={preferences.homeCurrency} />
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>Multi-currency is not enabled.</p>
+                      <p className="text-sm mt-2">Enable multi-currency in Settings to manage exchange rates.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </div>

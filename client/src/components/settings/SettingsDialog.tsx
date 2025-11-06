@@ -42,7 +42,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Settings, Info, Languages, Moon, Sun, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
-import ExchangeRatesManager from "./ExchangeRatesManager";
 
 // Define schema for company details
 const companyFormSchema = z.object({
@@ -588,21 +587,6 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 )}
               </CardContent>
             </Card>
-            
-            {/* Exchange Rates Management - shown only when multi-currency is enabled */}
-            {settings.multiCurrencyEnabled && settings.homeCurrency && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Exchange Rates</CardTitle>
-                  <CardDescription>
-                    Manage exchange rates for currency conversions
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ExchangeRatesManager homeCurrency={settings.homeCurrency} />
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
         </Tabs>
         
