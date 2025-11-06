@@ -9859,23 +9859,8 @@ Respond in JSON format:
     }
   });
 
-  // Get a specific exchange rate by ID
-  apiRouter.get("/exchange-rates/:id", async (req: Request, res: Response) => {
-    try {
-      const exchangeRate = await storage.getExchangeRate(Number(req.params.id));
-      
-      if (!exchangeRate) {
-        return res.status(404).json({ message: "Exchange rate not found" });
-      }
-      
-      res.json(exchangeRate);
-    } catch (error) {
-      console.error("Error fetching exchange rate:", error);
-      res.status(500).json({ message: "Failed to fetch exchange rate" });
-    }
-  });
-
   // Get exchange rate for a specific date and currency pair
+  // NOTE: This must come BEFORE the /:id route to avoid "rate" being treated as an ID
   apiRouter.get("/exchange-rates/rate", async (req: Request, res: Response) => {
     try {
       const { fromCurrency, toCurrency, date } = req.query;
@@ -9925,6 +9910,22 @@ Respond in JSON format:
       res.json(exchangeRate);
     } catch (error) {
       console.error("Error fetching exchange rate for date:", error);
+      res.status(500).json({ message: "Failed to fetch exchange rate" });
+    }
+  });
+
+  // Get a specific exchange rate by ID
+  apiRouter.get("/exchange-rates/:id", async (req: Request, res: Response) => {
+    try {
+      const exchangeRate = await storage.getExchangeRate(Number(req.params.id));
+      
+      if (!exchangeRate) {
+        return res.status(404).json({ message: "Exchange rate not found" });
+      }
+      
+      res.json(exchangeRate);
+    } catch (error) {
+      console.error("Error fetching exchange rate:", error);
       res.status(500).json({ message: "Failed to fetch exchange rate" });
     }
   });

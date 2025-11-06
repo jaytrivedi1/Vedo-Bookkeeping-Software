@@ -2254,7 +2254,7 @@ export class DatabaseStorage implements IStorage {
   async getExchangeRates(): Promise<ExchangeRate[]> {
     return await db.select()
       .from(exchangeRatesSchema)
-      .orderBy(desc(exchangeRatesSchema.date), exchangeRatesSchema.fromCurrency);
+      .orderBy(desc(exchangeRatesSchema.effectiveDate), exchangeRatesSchema.fromCurrency);
   }
 
   async getExchangeRate(id: number): Promise<ExchangeRate | undefined> {
@@ -2266,16 +2266,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getExchangeRateForDate(fromCurrency: string, toCurrency: string, date: Date): Promise<ExchangeRate | undefined> {
+    const dateStr = date.toISOString().split('T')[0];
     const [exchangeRate] = await db.select()
       .from(exchangeRatesSchema)
       .where(
         and(
           eq(exchangeRatesSchema.fromCurrency, fromCurrency),
           eq(exchangeRatesSchema.toCurrency, toCurrency),
-          lte(exchangeRatesSchema.date, date)
+          lte(exchangeRatesSchema.effectiveDate, dateStr)
         )
       )
-      .orderBy(desc(exchangeRatesSchema.date))
+      .orderBy(desc(exchangeRatesSchema.effectiveDate))
       .limit(1);
     return exchangeRate;
   }
