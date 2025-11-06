@@ -204,21 +204,35 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     mutationFn: async (values: SettingsState) => {
       return await apiRequest('/api/settings/preferences', 'POST', values);
     },
-    onSuccess: () => {
+    onSuccess: (data: any, variables: SettingsState) => {
       // Invalidate preferences query to refetch the data
       queryClient.invalidateQueries({ queryKey: ['/api/settings/preferences'] });
+      
+      // Use response data if available, otherwise fall back to what we sent (variables)
+      const finalDarkMode = data?.darkMode ?? variables.darkMode;
+      const finalSettings = {
+        darkMode: data?.darkMode ?? variables.darkMode,
+        multiCurrencyEnabled: data?.multiCurrencyEnabled ?? variables.multiCurrencyEnabled,
+        homeCurrency: data?.homeCurrency ?? variables.homeCurrency,
+        multiCurrencyEnabledAt: data?.multiCurrencyEnabledAt 
+          ? new Date(data.multiCurrencyEnabledAt) 
+          : variables.multiCurrencyEnabledAt
+      };
+      
+      // Update local state with the final computed settings
+      setSettings(finalSettings);
+      
+      // Apply theme change immediately using the final computed value
+      if (finalDarkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
       
       toast({
         title: "Preferences saved",
         description: "Your preferences have been updated successfully.",
       });
-      
-      // Apply theme change immediately
-      if (settings.darkMode) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
     },
     onError: (error: any) => {
       toast({
@@ -238,12 +252,18 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   const handleEnableMultiCurrency = () => {
     // Only allow enabling once
     if (!settings.multiCurrencyEnabled && selectedHomeCurrency) {
-      setSettings(prev => ({ 
-        ...prev, 
+      const newSettings = { 
+        ...settings, 
         multiCurrencyEnabled: true,
         homeCurrency: selectedHomeCurrency,
         multiCurrencyEnabledAt: new Date()
-      }));
+      };
+      
+      // Update local state
+      setSettings(newSettings);
+      
+      // Save to database
+      savePreferences.mutate(newSettings);
     }
   };
   
