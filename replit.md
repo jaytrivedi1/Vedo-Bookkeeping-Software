@@ -78,7 +78,18 @@ Preferred communication style: Simple, everyday language.
     - Records fx_realization entries with full context (transactionId, paymentId, rates, amounts, date)
     - Creates ledger entries: gains debit AR + credit FX Gain; losses debit FX Loss + credit AR
     - Production-ready for AR invoice payments
-  - **Status**: Core multi-currency features complete and production-ready. Remaining enhancements: AP bill payment FX, month-end unrealized FX revaluation, payment form exchange rate capture, reporting updates
+  - **Unrealized FX Revaluation**: Month-end FX revaluation system to calculate and post unrealized gains/losses
+    - **Storage Method**: `getForeignCurrencyBalances()` calculates foreign currency balances by account type (AR, AP, Bank) with weighted average exchange rates
+    - **Preview Endpoint**: POST `/api/fx-revaluations/calculate` previews unrealized gains/losses by comparing original rates to revaluation date rates
+    - **Posting Endpoint**: POST `/api/fx-revaluations/post` creates journal entries posting unrealized FX gains/losses to AR/AP/Bank and FX Gain/Loss accounts
+    - **UI Page**: FX Revaluation page at `/fx-revaluation` with date selector, calculation preview table, and post button
+  - **Automatic Exchange Rate Updates**: Integration with ExchangeRate-API.com for automatic rate fetching
+    - **API Service**: `exchange-rate-service.ts` handles fetching rates from ExchangeRate-API.com based on home currency
+    - **Auto-Fetch on Demand**: GET `/api/exchange-rates/rate` endpoint automatically fetches from API if rate doesn't exist in database
+    - **Daily Startup Check**: Server fetches yesterday's exchange rates on startup (if multi-currency enabled and API key configured)
+    - **Configuration**: Requires `EXCHANGERATE_API_KEY` environment variable (free tier supports commercial use)
+    - **Rate Storage**: All fetched rates are stored in database with `effectiveDate`, `isManual=false` for audit trail
+  - **Status**: Complete multi-currency implementation with automatic exchange rate updates, realized/unrealized FX gain/loss tracking, and comprehensive reporting
 
 ## External Dependencies
 

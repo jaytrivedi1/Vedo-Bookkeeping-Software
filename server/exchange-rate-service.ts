@@ -92,9 +92,11 @@ export class ExchangeRateService {
     date: Date,
     storage: any
   ): Promise<void> {
-    const sampleRate = await storage.getExchangeRateForDate(homeCurrency, "USD", date);
+    // Pick a sample currency that's different from home currency
+    const sampleCurrency = homeCurrency === "USD" ? "EUR" : "USD";
+    const sampleRate = await storage.getExchangeRateForDate(homeCurrency, sampleCurrency, date);
     
-    if (!sampleRate || sampleRate.date.toISOString().split('T')[0] !== date.toISOString().split('T')[0]) {
+    if (!sampleRate || sampleRate.effectiveDate !== date.toISOString().split('T')[0]) {
       console.log(`No rates found for ${date.toISOString().split('T')[0]}, fetching from API...`);
       await this.fetchAndStoreRates(homeCurrency, date, storage);
     }

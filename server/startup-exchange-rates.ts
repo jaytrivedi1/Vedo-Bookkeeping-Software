@@ -26,19 +26,15 @@ export async function fetchYesterdayRates(): Promise<void> {
 
     console.log(`Checking if exchange rates exist for ${yesterday.toISOString().split('T')[0]}...`);
 
-    // Check if we already have yesterday's rates
-    const sampleCurrencies = ['USD', 'EUR', 'GBP', 'CAD'];
-    const needsFetch = sampleCurrencies.some(async (currency) => {
-      if (currency === homeCurrency) return false;
-      
-      const rate = await storage.getExchangeRateForDate(
-        homeCurrency,
-        currency,
-        yesterday
-      );
-      
-      return !rate || rate.effectiveDate !== yesterday.toISOString().split('T')[0];
-    });
+    // Check if we already have yesterday's rates by testing a sample currency
+    const sampleCurrency = homeCurrency === 'USD' ? 'EUR' : 'USD';
+    const existingRate = await storage.getExchangeRateForDate(
+      homeCurrency,
+      sampleCurrency,
+      yesterday
+    );
+
+    const needsFetch = !existingRate || existingRate.effectiveDate !== yesterday.toISOString().split('T')[0];
 
     if (needsFetch) {
       console.log(`Fetching exchange rates for ${yesterday.toISOString().split('T')[0]}...`);
