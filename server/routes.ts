@@ -11,6 +11,7 @@ import { deletePaymentAndRelatedTransactions } from "./payment-delete-handler";
 import { deleteDepositAndReverseApplications } from "./deposit-delete-handler";
 import { format } from "date-fns";
 import { roundTo2Decimals } from "@shared/utils";
+import { createExchangeRateService } from "./exchange-rate-service";
 import { 
   insertAccountSchema, 
   insertContactSchema, 
@@ -9885,11 +9886,37 @@ Respond in JSON format:
         });
       }
       
-      const exchangeRate = await storage.getExchangeRateForDate(
+      const requestDate = new Date(date as string);
+      let exchangeRate = await storage.getExchangeRateForDate(
         fromCurrency as string,
         toCurrency as string,
-        new Date(date as string)
+        requestDate
       );
+      
+      // If rate not found, try to fetch from API
+      if (!exchangeRate) {
+        const exchangeRateService = createExchangeRateService();
+        
+        if (exchangeRateService) {
+          try {
+            console.log(`Exchange rate not found for ${fromCurrency} -> ${toCurrency} on ${requestDate.toISOString().split('T')[0]}, fetching from API...`);
+            await exchangeRateService.fetchAndStoreRates(
+              fromCurrency as string,
+              requestDate,
+              storage
+            );
+            
+            // Try to get the rate again after fetching
+            exchangeRate = await storage.getExchangeRateForDate(
+              fromCurrency as string,
+              toCurrency as string,
+              requestDate
+            );
+          } catch (apiError) {
+            console.error("Failed to fetch rates from API:", apiError);
+          }
+        }
+      }
       
       if (!exchangeRate) {
         return res.status(404).json({ message: "Exchange rate not found for the specified date" });

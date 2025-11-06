@@ -24,6 +24,7 @@ import migrateAddSalesReceiptTransfer from "./migrate-add-sales-receipt-transfer
 import { migrateImportedTransactionsAccountId } from "./migrate-imported-transactions-account-id";
 import { migrateBankMultiMatch } from "./migrate-bank-multi-match";
 import { addMultiCurrencySupport } from "./migrations/add-multi-currency";
+import { fetchYesterdayRates } from "./startup-exchange-rates";
 
 const app = express();
 app.use(express.json());
@@ -138,6 +139,13 @@ app.use((req, res, next) => {
     } catch (error) {
       log(`Error in database seeding: ${error}`);
     }
+  }
+  
+  // Fetch yesterday's exchange rates on startup (if multi-currency enabled)
+  try {
+    await fetchYesterdayRates();
+  } catch (error) {
+    log(`Error fetching yesterday's exchange rates: ${error}`);
   }
   
   const server = await registerRoutes(app);
