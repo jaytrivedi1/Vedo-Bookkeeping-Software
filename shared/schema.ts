@@ -439,7 +439,11 @@ export const preferencesSchema = pgTable('preferences', {
 });
 
 export const insertCompanySchema = createInsertSchema(companySchema).omit({ id: true, updatedAt: true });
-export const insertPreferencesSchema = createInsertSchema(preferencesSchema).omit({ id: true, updatedAt: true });
+export const insertPreferencesSchema = createInsertSchema(preferencesSchema)
+  .omit({ id: true, updatedAt: true })
+  .extend({
+    multiCurrencyEnabledAt: z.coerce.date().optional().nullable()
+  });
 export const insertCompaniesSchema = createInsertSchema(companiesSchema).omit({ 
   id: true, 
   createdAt: true, 
