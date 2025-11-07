@@ -9987,6 +9987,62 @@ Respond in JSON format:
     }
   });
 
+  // Update exchange rate with scope (transaction_only or all_on_date)
+  apiRouter.put("/exchange-rates", async (req: Request, res: Response) => {
+    try {
+      const { fromCurrency, toCurrency, rate, date, scope } = req.body;
+      
+      if (!fromCurrency || !toCurrency || !rate || !date || !scope) {
+        return res.status(400).json({ 
+          message: "fromCurrency, toCurrency, rate, date, and scope are required" 
+        });
+      }
+
+      if (scope !== 'transaction_only' && scope !== 'all_on_date') {
+        return res.status(400).json({ 
+          message: "scope must be 'transaction_only' or 'all_on_date'" 
+        });
+      }
+
+      const requestDate = new Date(date);
+      
+      if (scope === 'all_on_date') {
+        // Find existing rate for this date and currency pair
+        const existingRate = await storage.getExchangeRateForDate(
+          fromCurrency,
+          toCurrency,
+          requestDate
+        );
+
+        if (existingRate) {
+          // Update existing rate
+          await storage.updateExchangeRate(existingRate.id, {
+            rate: String(rate),
+            isManual: true
+          });
+        } else {
+          // Create new rate
+          await storage.createExchangeRate({
+            fromCurrency,
+            toCurrency,
+            rate: String(rate),
+            date: requestDate,
+            isManual: true
+          });
+        }
+
+        res.json({ success: true, scope: 'all_on_date' });
+      } else {
+        // For transaction_only, the caller should handle storing the rate
+        // in the transaction record itself (exchangeRate field)
+        res.json({ success: true, scope: 'transaction_only' });
+      }
+    } catch (error) {
+      console.error("Error updating exchange rate:", error);
+      res.status(500).json({ message: "Failed to update exchange rate" });
+    }
+  });
+
   // Delete an exchange rate
   apiRouter.delete("/exchange-rates/:id", async (req: Request, res: Response) => {
     try {
