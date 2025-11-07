@@ -39,6 +39,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ImportedTransaction, Account, Contact, SalesTax, Product } from "@shared/schema";
 import { format } from "date-fns";
 import { Loader2, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 
 interface CategorizeTransactionDialogProps {
   open: boolean;
@@ -90,6 +91,7 @@ export default function CategorizeTransactionDialog({
   const { toast } = useToast();
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
 
   // Fetch all GL accounts
   const { data: accounts = [] } = useQuery<Account[]>({
