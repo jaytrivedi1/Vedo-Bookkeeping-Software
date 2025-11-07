@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Account, insertAccountSchema } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 
 import {
   Table,
@@ -75,36 +76,6 @@ export default function ChartOfAccounts() {
     queryKey: ['/api/sales-taxes'],
   });
   
-  const form = useForm({
-    resolver: zodResolver(insertAccountSchema),
-    defaultValues: {
-      code: "",
-      name: "",
-      type: "current_assets",
-      currency: "CAD",
-      salesTaxType: "",
-      isActive: true,
-    },
-  });
-  
-  const createAccount = useMutation({
-    mutationFn: async (data: any) => {
-      console.log("Creating account with data:", data);
-      // FIXED: Correct parameter order for apiRequest
-      return await apiRequest('/api/accounts', 'POST', data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
-      setNewAccountOpen(false);
-      form.reset();
-      toast({
-        title: "Account created",
-        description: "The account has been created successfully.",
-      });
-    },
-  });
-  
   // Handler for editing an account
   const updateAccount = useMutation({
     mutationFn: async (data: any) => {
@@ -149,15 +120,6 @@ export default function ChartOfAccounts() {
       isActive: account.isActive,
     });
     setEditAccountOpen(true);
-  };
-  
-  // Handler for creating an account
-  const onSubmit = (data: any) => {
-    // Convert "none" to empty string for salesTaxType
-    if (data.salesTaxType === "none") {
-      data.salesTaxType = "";
-    }
-    createAccount.mutate(data);
   };
   
   // Handler for updating an account
@@ -330,181 +292,14 @@ export default function ChartOfAccounts() {
         <h1 className="text-2xl font-semibold text-gray-900">Chart of Accounts</h1>
         <div className="flex items-center space-x-3">
           <span className="text-sm text-gray-500">{format(new Date(), 'MMMM d, yyyy')}</span>
-          <Dialog open={newAccountOpen} onOpenChange={setNewAccountOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <PlusIcon className="h-4 w-4 mr-2" />
-                New Account
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Account</DialogTitle>
-                <DialogDescription>
-                  Add a new account to your chart of accounts.
-                </DialogDescription>
-              </DialogHeader>
-              
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit((data) => onSubmit(data))} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="code"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Account Code</FormLabel>
-                          <FormControl>
-                            <Input placeholder="e.g. 1000" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Account Type</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select account type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectGroup>
-                                <SelectLabel>Assets</SelectLabel>
-                                <SelectItem value="accounts_receivable">Accounts Receivable</SelectItem>
-                                <SelectItem value="current_assets">Current Assets</SelectItem>
-                                <SelectItem value="bank">Bank</SelectItem>
-                                <SelectItem value="property_plant_equipment">Property, Plant & Equipment</SelectItem>
-                                <SelectItem value="long_term_assets">Long-term Assets</SelectItem>
-                              </SelectGroup>
-                              <SelectGroup>
-                                <SelectLabel>Liabilities</SelectLabel>
-                                <SelectItem value="accounts_payable">Accounts Payable</SelectItem>
-                                <SelectItem value="credit_card">Credit Card</SelectItem>
-                                <SelectItem value="other_current_liabilities">Other Current Liabilities</SelectItem>
-                                <SelectItem value="long_term_liabilities">Long-term Liabilities</SelectItem>
-                              </SelectGroup>
-                              <SelectGroup>
-                                <SelectLabel>Equity</SelectLabel>
-                                <SelectItem value="equity">Equity</SelectItem>
-                              </SelectGroup>
-                              <SelectGroup>
-                                <SelectLabel>Income</SelectLabel>
-                                <SelectItem value="income">Income</SelectItem>
-                                <SelectItem value="other_income">Other Income</SelectItem>
-                              </SelectGroup>
-                              <SelectGroup>
-                                <SelectLabel>Expenses</SelectLabel>
-                                <SelectItem value="cost_of_goods_sold">Cost of Goods Sold</SelectItem>
-                                <SelectItem value="expenses">Expenses</SelectItem>
-                                <SelectItem value="other_expense">Other Expense</SelectItem>
-                              </SelectGroup>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Account Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="e.g. Cash" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="currency"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Currency</FormLabel>
-                          <FormControl>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select currency" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
-                                <SelectItem value="USD">USD - US Dollar</SelectItem>
-                                <SelectItem value="GBP">GBP - British Pound</SelectItem>
-                                <SelectItem value="EUR">EUR - Euro</SelectItem>
-                                <SelectItem value="INR">INR - Indian Rupee</SelectItem>
-                                <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
-                                <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
-                                <SelectItem value="CNY">CNY - Chinese Yuan</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="salesTaxType"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Sales Tax Type</FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value}
-                            defaultValue={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a tax type" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="none">None</SelectItem>
-                              {salesTaxes && salesTaxes.filter(tax => tax.isActive).map(tax => (
-                                <SelectItem key={tax.id} value={tax.name}>
-                                  {tax.name} ({tax.rate.toFixed(tax.rate % 1 ? 3 : 0)}%)
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <DialogFooter>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => setNewAccountOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={createAccount.isPending}>
-                      {createAccount.isPending ? "Creating..." : "Create Account"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setNewAccountOpen(true)}>
+            <PlusIcon className="h-4 w-4 mr-2" />
+            New Account
+          </Button>
+          <AddAccountDialog
+            open={newAccountOpen}
+            onOpenChange={setNewAccountOpen}
+          />
         </div>
       </div>
       
