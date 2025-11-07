@@ -58,6 +58,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Contact, Transaction, Account } from "@shared/schema";
+import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 
 // Form validation schema
 const payBillSchema = z.object({
@@ -114,6 +115,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [totalSelected, setTotalSelected] = useState(0);
   const [totalChequeCredits, setTotalChequeCredits] = useState(0);
+  const [addAccountOpen, setAddAccountOpen] = useState(false);
 
   // Form setup
   const form = useForm<PayBillFormValues>({
@@ -535,6 +537,8 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       searchPlaceholder="Search accounts..."
                       emptyText={isLoadingAccounts ? "Loading accounts..." : "No accounts found."}
                       disabled={isLoadingAccounts}
+                      onAddNew={() => setAddAccountOpen(true)}
+                      addNewText="Add New Account"
                     />
                     <FormMessage />
                   </FormItem>
@@ -905,6 +909,14 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
           </div>
         </form>
       </Form>
+      
+      <AddAccountDialog
+        open={addAccountOpen}
+        onOpenChange={setAddAccountOpen}
+        onAccountCreated={(accountId) => {
+          form.setValue("paymentAccountId", accountId);
+        }}
+      />
     </div>
   );
 }

@@ -92,6 +92,7 @@ export default function CategorizeTransactionDialog({
   const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [accountFieldContext, setAccountFieldContext] = useState<'account' | 'transfer'>('account');
 
   // Fetch all GL accounts
   const { data: accounts = [] } = useQuery<Account[]>({
@@ -468,7 +469,11 @@ export default function CategorizeTransactionDialog({
                           placeholder="Select account"
                           emptyText="No accounts found"
                           data-testid="select-account"
-                          onAddNew={() => setAddAccountOpen(true)}
+                          onAddNew={() => {
+                            setAccountFieldContext('account');
+                            setAddAccountOpen(true);
+                          }}
+                          addNewText="Add New Account"
                         />
                       </FormControl>
                       <FormMessage />
@@ -612,6 +617,11 @@ export default function CategorizeTransactionDialog({
                           placeholder={`Select ${isDebit ? 'destination' : 'source'} account`}
                           emptyText="No accounts found"
                           data-testid="select-transfer-account"
+                          onAddNew={() => {
+                            setAccountFieldContext('transfer');
+                            setAddAccountOpen(true);
+                          }}
+                          addNewText="Add New Account"
                         />
                       </FormControl>
                       <FormMessage />
@@ -671,7 +681,11 @@ export default function CategorizeTransactionDialog({
         open={addAccountOpen}
         onOpenChange={setAddAccountOpen}
         onAccountCreated={(accountId) => {
-          form.setValue("accountId", accountId);
+          if (accountFieldContext === 'account') {
+            form.setValue("accountId", accountId);
+          } else {
+            form.setValue("transferAccountId", accountId);
+          }
         }}
       />
     </Dialog>
