@@ -5313,6 +5313,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Preferences endpoint (used by Reports page and other components)
+  apiRouter.get("/preferences", async (req: Request, res: Response) => {
+    try {
+      const preferences = await storage.getPreferences();
+      res.json(preferences || {});
+    } catch (error) {
+      console.error("Error fetching preferences:", error);
+      res.status(500).json({ message: "Failed to get preferences" });
+    }
+  });
+
   apiRouter.get("/settings/preferences", async (req: Request, res: Response) => {
     try {
       const preferences = await storage.getPreferences();
