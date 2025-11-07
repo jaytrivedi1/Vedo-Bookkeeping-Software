@@ -468,6 +468,7 @@ export default function CategorizeTransactionDialog({
                           placeholder="Select account"
                           emptyText="No accounts found"
                           data-testid="select-account"
+                          onAddNew={() => setAddAccountOpen(true)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -665,6 +666,14 @@ export default function CategorizeTransactionDialog({
           </form>
         </Form>
       </DialogContent>
+      
+      <AddAccountDialog
+        open={addAccountOpen}
+        onOpenChange={setAddAccountOpen}
+        onAccountCreated={(accountId) => {
+          form.setValue("accountId", accountId);
+        }}
+      />
     </Dialog>
   );
 }
