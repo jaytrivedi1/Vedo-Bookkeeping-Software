@@ -7,8 +7,11 @@ import { queryClient } from "@/lib/queryClient";
 import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
+import { CURRENCIES } from "@shared/currencies";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -101,6 +104,12 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const { toast } = useToast();
 
+  // Multi-currency state
+  const [currency, setCurrency] = useState<string>(expense?.currency || 'USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(expense?.exchangeRate ? parseFloat(expense.exchangeRate) : 1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+
   const defaultExpenseNumber = isEditing ? expense?.reference : "";  // Allow blank reference numbers
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
@@ -124,6 +133,15 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
+
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   const payees = contacts || [];
   const allAccounts = accounts?.filter(account => account.code !== '3999') || [];
@@ -182,7 +200,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     } : {
       date: initialDate,
       contactId: undefined,
-      reference: defaultExpenseNumber,
+      reference: defaultExpenseNumber || '',
       description: '',
       status: 'completed' as const,
       paymentMethod: undefined,
@@ -197,6 +215,47 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     control: form.control,
     name: "lineItems",
   });
+
+  // Fetch exchange rate when currency or date changes
+  const expenseDate = form.watch("paymentDate") || form.watch("date") || new Date();
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: expenseDate }],
+    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(expenseDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        // If no exchange rate found, return null to show warning
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Initialize currency to homeCurrency when preferences load
+  useEffect(() => {
+    if (homeCurrency && !isEditing && !expense?.currency) {
+      setCurrency(homeCurrency);
+    }
+  }, [homeCurrency, isEditing, expense?.currency]);
+
+  // Keep currency in sync with homeCurrency when multi-currency is disabled
+  useEffect(() => {
+    if (!isMultiCurrencyEnabled && homeCurrency && !isEditing) {
+      setCurrency(homeCurrency);
+    }
+  }, [isMultiCurrencyEnabled, homeCurrency, isEditing]);
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (currency === homeCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, currency, homeCurrency]);
 
   useEffect(() => {
     if (isEditing && lineItems?.length && expense) {
@@ -261,6 +320,60 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
       });
     }
   });
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      // Just update the local state for this transaction
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      // Update the exchange rate in the database for all transactions on this date
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: currency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(expenseDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        // Invalidate exchange rate queries to refresh the data
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(expenseDate, 'PPP')}.`,
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error updating exchange rate",
+          description: error?.message || "Failed to update exchange rate in database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   const calculateTotals = (manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
@@ -646,6 +759,47 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           />
         </div>
 
+        {isMultiCurrencyEnabled && (
+          <div className="border rounded-lg p-4 bg-gray-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <FormLabel className="text-sm font-medium">Currency</FormLabel>
+                <FormItem>
+                  <FormControl>
+                    <Select 
+                      value={currency} 
+                      onValueChange={(value) => setCurrency(value)}
+                      disabled={isEditing}
+                    >
+                      <SelectTrigger className="bg-white border-gray-300 h-10">
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCIES.map(curr => (
+                          <SelectItem key={curr.code} value={curr.code}>
+                            {curr.code} - {curr.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              </div>
+
+              {currency !== homeCurrency && (
+                <ExchangeRateInput
+                  fromCurrency={currency}
+                  toCurrency={homeCurrency}
+                  value={exchangeRate}
+                  onChange={handleExchangeRateChange}
+                  isLoading={exchangeRateLoading}
+                  date={expenseDate}
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         <div>
           <h3 className="text-lg font-semibold mb-3">Line Items</h3>
           <div className="w-full flex justify-end mb-2">
@@ -1001,6 +1155,17 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
           form.setValue('contactId', vendorId);
           queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={currency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={expenseDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </Form>
   );

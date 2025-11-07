@@ -62,6 +62,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 import AddProductDialog from "@/components/dialogs/AddProductDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 
 interface InvoiceFormProps {
   invoice?: any; // Transaction object from database
@@ -116,6 +118,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [currency, setCurrency] = useState<string>(invoice?.currency || 'USD');
   const [exchangeRate, setExchangeRate] = useState<number>(invoice?.exchangeRate ? parseFloat(invoice.exchangeRate) : 1);
   const [showCurrencyInfo, setShowCurrencyInfo] = useState(false);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
   
   const { toast } = useToast();
 
@@ -308,6 +312,62 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       setExchangeRate(1);
     }
   }, [exchangeRateData, currency, homeCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      // Just update the local state for this transaction
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      // Update the exchange rate in the database for all transactions on this date
+      try {
+        await apiRequest('PUT', '/api/exchange-rates', {
+          fromCurrency: currency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(invoiceDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        // Invalidate exchange rates cache
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates/rate'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all ${currency} transactions on ${format(invoiceDate, 'dd/MM/yyyy')}.`,
+        });
+      } catch (error) {
+        console.error('Error updating exchange rate:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update exchange rate. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -960,40 +1020,43 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                     </div>
                     
                     {isMultiCurrencyEnabled && (
-                      <div>
-                        <div className="flex items-center gap-1 mb-2">
-                          <FormLabel className="text-sm font-medium">Currency</FormLabel>
-                          <HelpCircle className="h-4 w-4 text-gray-400" />
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex items-center gap-1 mb-2">
+                            <FormLabel className="text-sm font-medium">Currency</FormLabel>
+                            <HelpCircle className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <FormItem>
+                            <FormControl>
+                              <Select 
+                                value={currency} 
+                                onValueChange={(value) => setCurrency(value)}
+                                disabled={isEditing}
+                              >
+                                <SelectTrigger className="bg-white border-gray-300 h-10">
+                                  <SelectValue placeholder="Select currency" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CURRENCIES.map(curr => (
+                                    <SelectItem key={curr.code} value={curr.code}>
+                                      {curr.code} - {curr.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                          </FormItem>
                         </div>
-                        <FormItem>
-                          <FormControl>
-                            <Select 
-                              value={currency} 
-                              onValueChange={(value) => setCurrency(value)}
-                              disabled={isEditing}
-                            >
-                              <SelectTrigger className="bg-white border-gray-300 h-10">
-                                <SelectValue placeholder="Select currency" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {CURRENCIES.map(curr => (
-                                  <SelectItem key={curr.code} value={curr.code}>
-                                    {curr.code} - {curr.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                        </FormItem>
-                        {currency !== homeCurrency && exchangeRateData && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Rate: 1 {currency} = {exchangeRate.toFixed(4)} {homeCurrency}
-                          </p>
-                        )}
-                        {currency !== homeCurrency && !exchangeRateData && !exchangeRateLoading && (
-                          <p className="text-xs text-amber-600 mt-1">
-                            ⚠ No exchange rate found for this date
-                          </p>
+                        
+                        {currency !== homeCurrency && (
+                          <ExchangeRateInput
+                            fromCurrency={currency}
+                            toCurrency={homeCurrency}
+                            value={exchangeRate}
+                            onChange={handleExchangeRateChange}
+                            isLoading={exchangeRateLoading}
+                            date={invoiceDate}
+                          />
                         )}
                       </div>
                     )}
@@ -1662,6 +1725,17 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
             queryClient.invalidateQueries({ queryKey: ['/api/products'] });
           }
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={currency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={invoiceDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </Form>
   );

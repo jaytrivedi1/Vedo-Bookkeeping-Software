@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -6,6 +6,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Account, Transaction } from "@shared/schema";
 import { formatCurrency } from "@shared/utils";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { CalendarIcon } from "lucide-react";
 import { z } from "zod";
 
@@ -55,21 +57,31 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
   const { toast } = useToast();
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [accountDialogContext, setAccountDialogContext] = useState<'from' | 'to' | null>(null);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<number>(transfer?.exchangeRate ? parseFloat(transfer.exchangeRate) : 1);
 
   // Fetch all accounts
   const { data: allAccounts = [], isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
 
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
+
   // Filter for balance sheet accounts only (assets and liabilities)
   const balanceSheetAccounts = allAccounts.filter(acc => 
     acc.type === 'bank' ||
     acc.type === 'current_assets' ||
-    acc.type === 'fixed_assets' ||
-    acc.type === 'other_current_assets' ||
-    acc.type === 'other_assets' ||
+    acc.type === 'property_plant_equipment' ||
+    acc.type === 'long_term_assets' ||
     acc.type === 'credit_card' ||
-    acc.type === 'current_liabilities' ||
     acc.type === 'other_current_liabilities' ||
     acc.type === 'long_term_liabilities'
   );
@@ -91,6 +103,101 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
       memo: "",
     },
   });
+
+  // Watch for account changes to detect foreign currency
+  const fromAccountId = form.watch("fromAccountId");
+  const toAccountId = form.watch("toAccountId");
+  const transferDate = form.watch("date") || new Date();
+
+  // Detect foreign currency from either account
+  const fromAccount = allAccounts.find(acc => acc.id === fromAccountId);
+  const toAccount = allAccounts.find(acc => acc.id === toAccountId);
+  
+  const foreignCurrencyAccount = fromAccount?.currency !== homeCurrency ? fromAccount : 
+                                  toAccount?.currency !== homeCurrency ? toAccount : null;
+  const foreignCurrency = foreignCurrencyAccount?.currency || homeCurrency;
+  const hasForeignCurrency = isMultiCurrencyEnabled && foreignCurrency !== homeCurrency;
+
+  // Fetch exchange rate when foreign currency is detected
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: foreignCurrency, toCurrency: homeCurrency, date: transferDate }],
+    enabled: hasForeignCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${foreignCurrency}&toCurrency=${homeCurrency}&date=${format(transferDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!hasForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, hasForeignCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      // Just update the local state for this transaction
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      // Update the exchange rate in the database for all transactions on this date
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: foreignCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(transferDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        // Invalidate exchange rates cache
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates/rate'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all ${foreignCurrency} transactions on ${format(transferDate, 'dd/MM/yyyy')}.`,
+        });
+      } catch (error) {
+        console.error('Error updating exchange rate:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update exchange rate. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   const createTransferMutation = useMutation({
     mutationFn: async (data: TransferFormData) => {
@@ -270,6 +377,18 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
             )}
           />
 
+          {/* Exchange Rate Input - Show when foreign currency is detected */}
+          {hasForeignCurrency && (
+            <ExchangeRateInput
+              fromCurrency={foreignCurrency}
+              toCurrency={homeCurrency}
+              value={exchangeRate}
+              onChange={handleExchangeRateChange}
+              isLoading={exchangeRateLoading}
+              date={transferDate}
+            />
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 pt-4">
             <Button 
@@ -303,6 +422,18 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
           }
           setAccountDialogContext(null);
         }}
+      />
+
+      {/* Exchange Rate Update Dialog */}
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={foreignCurrency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={transferDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </>
   );

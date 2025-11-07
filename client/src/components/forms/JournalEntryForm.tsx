@@ -8,9 +8,11 @@ import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } fro
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { CalendarIcon, Plus, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +55,9 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
   const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
   const [currentEntryIndex, setCurrentEntryIndex] = useState<number | null>(null);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
@@ -65,6 +70,15 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+  
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+  
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   // Transform contacts into SearchableSelectItem format
   const contactItems: SearchableSelectItem[] = [
@@ -112,6 +126,94 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
     control: form.control,
     name: "entries",
   });
+  
+  // Detect foreign currency from line items
+  const entries = form.watch("entries") || [];
+  const foreignCurrencyAccount = entries
+    .map(entry => accounts?.find(acc => acc.id === entry.accountId))
+    .find(account => account && account.currency && account.currency !== homeCurrency);
+  
+  const foreignCurrency = foreignCurrencyAccount?.currency;
+  const hasForeignCurrency = isMultiCurrencyEnabled && !!foreignCurrency;
+  
+  // Fetch exchange rate when foreign currency is detected
+  const journalDate = form.watch("date") || new Date();
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: foreignCurrency, toCurrency: homeCurrency, date: journalDate }],
+    enabled: hasForeignCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${foreignCurrency}&toCurrency=${homeCurrency}&date=${format(journalDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+  
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!hasForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, hasForeignCurrency]);
+  
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null || !foreignCurrency) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: foreignCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(journalDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        queryClient.invalidateQueries({ 
+          queryKey: ['/api/exchange-rates/rate'] 
+        });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(journalDate, 'PP')}.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Error updating exchange rate",
+          description: "Failed to update the exchange rate. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   const createJournalEntry = useMutation({
     mutationFn: async (data: JournalEntry) => {
@@ -278,6 +380,18 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
               </FormItem>
             )}
           />
+
+          {/* Exchange Rate Input */}
+          {hasForeignCurrency && foreignCurrency && (
+            <ExchangeRateInput
+              fromCurrency={foreignCurrency}
+              toCurrency={homeCurrency}
+              value={exchangeRate}
+              onChange={handleExchangeRateChange}
+              isLoading={exchangeRateLoading}
+              date={journalDate}
+            />
+          )}
 
           {/* Entry Table Section */}
           <div className="border rounded-lg p-4">
@@ -566,6 +680,19 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
           queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
         }}
       />
+
+      {hasForeignCurrency && foreignCurrency && (
+        <ExchangeRateUpdateDialog
+          open={showExchangeRateDialog}
+          onOpenChange={setShowExchangeRateDialog}
+          fromCurrency={foreignCurrency}
+          toCurrency={homeCurrency}
+          oldRate={exchangeRate}
+          newRate={pendingExchangeRate || exchangeRate}
+          date={journalDate}
+          onConfirm={handleExchangeRateUpdate}
+        />
+      )}
     </Form>
   );
 }

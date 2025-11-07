@@ -5,10 +5,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Contact, SalesTax, Product, Account } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
+import { CURRENCIES } from "@shared/currencies";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 import AddProductDialog from "@/components/dialogs/AddProductDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,11 +79,18 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
   const [currentLineItemIndex, setCurrentLineItemIndex] = useState<number | null>(null);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Generate default receipt number
   const today = new Date();
   const defaultReceiptNumber = `SR-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+
+  // Multi-currency state
+  const [currency, setCurrency] = useState<string>('USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [watchContactId, setWatchContactId] = useState<number | undefined>(undefined);
 
   // Fetch data
   const { data: contacts = [] } = useQuery<Contact[]>({
@@ -98,6 +108,15 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
+
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   // Filter for deposit accounts: bank, cash, credit card, line of credit, and undeposited funds
   const depositAccounts = accounts.filter((acc: Account) => 
@@ -127,7 +146,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
 
   const productItems: SearchableSelectItem[] = products.map((product: Product) => ({
     value: product.id.toString(),
-    label: `${product.name} (${formatCurrency(product.price)})`,
+    label: `${product.name} (${formatCurrency(typeof product.price === 'string' ? parseFloat(product.price) : product.price)})`,
     subtitle: undefined
   }));
 
@@ -135,6 +154,13 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     value: acc.id.toString(),
     label: `${acc.code} - ${acc.name}`,
     subtitle: acc.balance !== undefined ? `· ${formatCurrency(acc.balance)}` : undefined
+  }));
+
+  // Currency selector items
+  const currencyItems: SearchableSelectItem[] = CURRENCIES.map((curr) => ({
+    value: curr.code,
+    label: `${curr.code} - ${curr.name}`,
+    subtitle: curr.symbol ? `· ${curr.symbol}` : undefined
   }));
 
   const form = useForm<SalesReceiptFormData>({
@@ -155,6 +181,67 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     control: form.control,
     name: "lineItems",
   });
+
+  // Initialize currency to homeCurrency when preferences load
+  useEffect(() => {
+    if (homeCurrency) {
+      setCurrency(homeCurrency);
+    }
+  }, [homeCurrency]);
+
+  // Update currency when customer changes
+  useEffect(() => {
+    if (watchContactId && contacts && isMultiCurrencyEnabled) {
+      const customer = contacts.find((c: Contact) => c.id === watchContactId);
+      if (customer && customer.currency) {
+        setCurrency(customer.currency);
+      } else {
+        setCurrency(homeCurrency);
+      }
+    }
+  }, [watchContactId, contacts, isMultiCurrencyEnabled, homeCurrency]);
+
+  // Keep currency in sync with homeCurrency when multi-currency is disabled
+  useEffect(() => {
+    if (!isMultiCurrencyEnabled && homeCurrency) {
+      setCurrency(homeCurrency);
+    }
+  }, [isMultiCurrencyEnabled, homeCurrency]);
+
+  // Watch for contact changes
+  const watchedContactId = form.watch("contactId");
+  useEffect(() => {
+    if (watchedContactId) {
+      setWatchContactId(watchedContactId);
+    }
+  }, [watchedContactId]);
+
+  // Fetch exchange rate when currency or date changes
+  const receiptDate = form.watch("date") || new Date();
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: receiptDate }],
+    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(receiptDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        // If no exchange rate found, return null to show warning
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (currency === homeCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, currency, homeCurrency]);
 
   // Function to recalculate totals
   const recalculateTotals = useCallback(() => {
@@ -200,6 +287,59 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     setTotalAmount(total);
   }, [form, salesTaxes, isExclusiveOfTax]);
 
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      // Just update the local state for this transaction
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      // Update the exchange rate in the database for all transactions on this date
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: currency,
+          toCurrency: homeCurrency,
+          date: format(receiptDate, 'yyyy-MM-dd'),
+          rate: pendingExchangeRate,
+        });
+
+        setExchangeRate(pendingExchangeRate);
+        
+        // Invalidate exchange rate queries to refresh
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all ${currency} to ${homeCurrency} transactions on ${format(receiptDate, 'PPP')}.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to update exchange rate in database",
+          variant: "destructive",
+        });
+      }
+    }
+
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
+
   const createSalesReceiptMutation = useMutation({
     mutationFn: async (data: SalesReceiptFormData) => {
       return await apiRequest('/api/sales-receipts', 'POST', {
@@ -207,6 +347,8 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
         subTotal,
         taxAmount,
         totalAmount,
+        currency,
+        exchangeRate: currency !== homeCurrency ? exchangeRate : undefined,
       });
     },
     onSuccess: () => {
@@ -236,7 +378,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     const product = products.find((p: Product) => p.id === Number(productId));
     if (product) {
       form.setValue(`lineItems.${index}.description`, product.name);
-      form.setValue(`lineItems.${index}.unitPrice`, product.price || 0);
+      form.setValue(`lineItems.${index}.unitPrice`, typeof product.price === 'string' ? parseFloat(product.price) : product.price || 0);
       form.setValue(`lineItems.${index}.productId`, productId);
       
       // Set tax if product has default tax
@@ -382,6 +524,39 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
               </FormItem>
             )}
           />
+
+          {/* Currency Selector - only show if multi-currency is enabled */}
+          {isMultiCurrencyEnabled && (
+            <FormItem className="md:col-span-1">
+              <FormLabel>Currency *</FormLabel>
+              <FormControl>
+                <SearchableSelect
+                  items={currencyItems}
+                  value={currency}
+                  onValueChange={setCurrency}
+                  placeholder="Select currency"
+                  searchPlaceholder="Search currencies..."
+                  emptyText="No currencies found."
+                  data-testid="select-currency"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+
+          {/* Exchange Rate Input - only show if currency is different from home currency */}
+          {isMultiCurrencyEnabled && currency !== homeCurrency && (
+            <div className="md:col-span-1">
+              <ExchangeRateInput
+                fromCurrency={currency}
+                toCurrency={homeCurrency}
+                value={exchangeRate}
+                onChange={handleExchangeRateChange}
+                isLoading={exchangeRateLoading}
+                date={receiptDate}
+              />
+            </div>
+          )}
         </div>
 
         {/* Line Items */}
@@ -596,6 +771,17 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
             queryClient.invalidateQueries({ queryKey: ['/api/products'] });
           }
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={currency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={receiptDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </Form>
   );

@@ -49,6 +49,8 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { apiRequest } from "@/lib/queryClient";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { Account, Contact, SalesTax } from "@shared/schema";
 
 // Define the deposit line item schema
@@ -88,6 +90,9 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [accountDialogContext, setAccountDialogContext] = useState<{type: 'deposit' | 'lineItem', index?: number} | null>(null);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<number>(initialData?.exchangeRate ? parseFloat(initialData.exchangeRate) : 1);
 
   // Fetch accounts for the dropdown
   const { data: accounts } = useQuery<Account[]>({
@@ -103,6 +108,14 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   const { data: salesTaxes } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
 
   // Transform sales taxes for SearchableSelect
   const taxItems: SearchableSelectItem[] = [
@@ -225,6 +238,90 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
 
   // Watch for changes to line items to recalculate totals
   const lineItems = form.watch("lineItems");
+
+  // Watch for deposit account changes to detect foreign currency
+  const depositAccountId = form.watch("depositAccountId");
+  const depositDate = form.watch("date") || new Date();
+
+  // Detect foreign currency from selected bank account
+  const selectedAccount = accounts?.find(acc => acc.id === depositAccountId);
+  const accountCurrency = selectedAccount?.currency || homeCurrency;
+  const isForeignCurrency = accountCurrency !== homeCurrency;
+
+  // Fetch exchange rate when currency or date changes
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: accountCurrency, toCurrency: homeCurrency, date: depositDate }],
+    enabled: isForeignCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${accountCurrency}&toCurrency=${homeCurrency}&date=${format(depositDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!isForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, isForeignCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: accountCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(depositDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(depositDate, 'MMMM dd, yyyy')}.`,
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to update exchange rate in database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+  };
   
   // Function to calculate sales tax amount
   const calculateSalesTax = (amount: number, taxId?: number) => {
@@ -540,8 +637,21 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                     </FormItem>
                   )}
                 />
+              </div>
 
-          </div>
+              {/* Exchange Rate Input - Show when foreign currency is detected */}
+              {isForeignCurrency && (
+                <div className="mt-4">
+                  <ExchangeRateInput
+                    fromCurrency={accountCurrency}
+                    toCurrency={homeCurrency}
+                    value={exchangeRate}
+                    onChange={handleExchangeRateChange}
+                    isLoading={exchangeRateLoading}
+                    date={depositDate}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -948,6 +1058,17 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
             }
             setAccountDialogContext(null);
           }}
+        />
+
+        <ExchangeRateUpdateDialog
+          open={showExchangeRateDialog}
+          onOpenChange={setShowExchangeRateDialog}
+          fromCurrency={accountCurrency}
+          toCurrency={homeCurrency}
+          oldRate={exchangeRate}
+          newRate={pendingExchangeRate || exchangeRate}
+          date={depositDate}
+          onConfirm={handleExchangeRateUpdate}
         />
       </Form>
     </div>

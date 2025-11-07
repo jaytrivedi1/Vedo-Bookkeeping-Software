@@ -30,6 +30,8 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 
 export default function BillCreate() {
   const { toast } = useToast();
@@ -43,6 +45,8 @@ export default function BillCreate() {
   // Multi-currency state
   const [currency, setCurrency] = useState<string>('USD');
   const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -195,6 +199,62 @@ export default function BillCreate() {
       setExchangeRate(1);
     }
   }, [exchangeRateData, currency, homeCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      // Just update the local state for this transaction
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      // Update the exchange rate in the database for all transactions on this date
+      try {
+        await apiRequest('PUT', '/api/exchange-rates', {
+          fromCurrency: currency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(billDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        // Invalidate exchange rates cache
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates/rate'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all ${currency} transactions on ${format(billDate, 'dd/MM/yyyy')}.`,
+        });
+      } catch (error) {
+        console.error('Error updating exchange rate:', error);
+        toast({
+          title: "Error",
+          description: "Failed to update exchange rate. Please try again.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
   
   // Initialize currency to homeCurrency when preferences load
   useEffect(() => {
@@ -515,29 +575,32 @@ export default function BillCreate() {
                     </div>
 
                     {isMultiCurrencyEnabled ? (
-                      <div>
-                        <Label htmlFor="currency">Currency</Label>
-                        <Select value={currency} onValueChange={(value) => setCurrency(value)}>
-                          <SelectTrigger id="currency">
-                            <SelectValue placeholder="Select currency" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CURRENCIES.map(curr => (
-                              <SelectItem key={curr.code} value={curr.code}>
-                                {curr.code} - {curr.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {currency !== homeCurrency && exchangeRateData && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Rate: 1 {currency} = {exchangeRate.toFixed(4)} {homeCurrency}
-                          </p>
-                        )}
-                        {currency !== homeCurrency && !exchangeRateData && !exchangeRateLoading && (
-                          <p className="text-xs text-amber-600 mt-1">
-                            ⚠ No exchange rate found for this date
-                          </p>
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="currency">Currency</Label>
+                          <Select value={currency} onValueChange={(value) => setCurrency(value)}>
+                            <SelectTrigger id="currency">
+                              <SelectValue placeholder="Select currency" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CURRENCIES.map(curr => (
+                                <SelectItem key={curr.code} value={curr.code}>
+                                  {curr.code} - {curr.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {currency !== homeCurrency && (
+                          <ExchangeRateInput
+                            fromCurrency={currency}
+                            toCurrency={homeCurrency}
+                            value={exchangeRate}
+                            onChange={handleExchangeRateChange}
+                            isLoading={exchangeRateLoading}
+                            date={billDate}
+                          />
                         )}
                       </div>
                     ) : (
@@ -837,6 +900,17 @@ export default function BillCreate() {
           form.trigger('contactId');
           queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={currency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={billDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </div>
   );

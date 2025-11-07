@@ -8,6 +8,8 @@ import { chequeSchema, Contact, SalesTax, Account, Transaction } from "@shared/s
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -97,6 +99,13 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const [showAddAccountDialog, setShowAddAccountDialog] = useState(false);
   const [accountDialogContext, setAccountDialogContext] = useState<{type: 'payment' | 'lineItem', index?: number} | null>(null);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+  
+  // Multi-currency state
+  const [currency, setCurrency] = useState<string>(cheque?.currency || 'USD');
+  const [exchangeRate, setExchangeRate] = useState<number>(cheque?.exchangeRate ? parseFloat(cheque.exchangeRate) : 1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+  
   const { toast } = useToast();
 
   const defaultChequeNumber = isEditing ? cheque?.reference : '';
@@ -122,6 +131,15 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
   });
+  
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+  
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   const payees = contacts || [];
   const allAccounts = accounts?.filter(account => account.code !== '3999') || [];
@@ -164,12 +182,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     defaultValues: isEditing ? {
       date: initialDate,
       contactId: cheque?.contactId || 0,
-      reference: cheque?.reference || '',
-      description: cheque?.description || '',
+      reference: cheque?.reference || undefined,
+      description: cheque?.description || undefined,
       status: 'completed' as const,
       paymentAccountId: cheque?.paymentAccountId || 0,
       paymentDate: initialPaymentDate,
-      memo: cheque?.memo || '',
+      memo: cheque?.memo || undefined,
       lineItems: lineItems?.length ? lineItems.map(item => ({
         accountId: item.accountId || undefined,
         description: item.description,
@@ -193,7 +211,60 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     control: form.control,
     name: "lineItems",
   });
+  
+  // Fetch exchange rate when currency or date changes
+  const chequeDate = form.watch("paymentDate") || form.watch("date") || new Date();
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: chequeDate }],
+    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(chequeDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
 
+  // Initialize currency to homeCurrency when preferences load
+  useEffect(() => {
+    if (homeCurrency && !isEditing && !cheque?.currency) {
+      setCurrency(homeCurrency);
+    }
+  }, [homeCurrency, isEditing, cheque?.currency]);
+  
+  // Update currency when vendor changes (if not editing)
+  useEffect(() => {
+    const contactId = form.watch('contactId');
+    if (!isEditing && contactId && contacts && isMultiCurrencyEnabled) {
+      const vendor = contacts.find(c => c.id === contactId);
+      if (vendor && vendor.currency) {
+        setCurrency(vendor.currency);
+      } else {
+        setCurrency(homeCurrency);
+      }
+    }
+  }, [form.watch('contactId'), contacts, isEditing, isMultiCurrencyEnabled, homeCurrency]);
+  
+  // Keep currency in sync with homeCurrency when multi-currency is disabled
+  useEffect(() => {
+    if (!isMultiCurrencyEnabled && homeCurrency && !isEditing) {
+      setCurrency(homeCurrency);
+    }
+  }, [isMultiCurrencyEnabled, homeCurrency, isEditing]);
+  
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (currency === homeCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, currency, homeCurrency]);
+  
   // Update payee address when contact is selected
   useEffect(() => {
     const selectedContactId = form.watch('contactId');
@@ -228,12 +299,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
       form.reset({
         date: new Date(cheque.date),
         contactId: cheque.contactId || 0,
-        reference: cheque.reference || '',
-        description: cheque.description || '',
+        reference: cheque.reference ?? '',
+        description: cheque.description ?? '',
         status: 'completed' as const,
         paymentAccountId: cheque.paymentAccountId || 0,
         paymentDate: cheque.paymentDate ? new Date(cheque.paymentDate) : new Date(cheque.date),
-        memo: cheque.memo || '',
+        memo: cheque.memo ?? '',
         lineItems: lineItems.length ? lineItems.map(item => ({
           accountId: item.accountId || undefined,
           description: item.description,
@@ -453,6 +524,58 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: currency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(chequeDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates/rate'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: "The rate has been updated for all transactions on this date.",
+        });
+      } catch (error) {
+        toast({
+          title: "Error updating exchange rate",
+          description: "Failed to update the exchange rate in the database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
+
   const onSubmit = (data: Cheque) => {
     // Validate A/P and A/R account requirements
     const { hasAP, hasAR, accountsLoaded } = hasAccountsPayableOrReceivable(data.lineItems, accounts);
@@ -620,27 +743,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="paymentMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Method</FormLabel>
-                <SearchableSelect
-                  items={paymentMethodItems}
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  placeholder="Select payment method"
-                  searchPlaceholder="Search methods..."
-                  emptyText="No payment methods found"
-                  data-testid="select-payment-method"
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
+        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
           <FormField
             control={form.control}
             name="reference"
@@ -655,6 +758,19 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
             )}
           />
         </div>
+
+        {isMultiCurrencyEnabled && currency !== homeCurrency && (
+          <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950">
+            <ExchangeRateInput
+              fromCurrency={currency}
+              toCurrency={homeCurrency}
+              value={exchangeRate}
+              onChange={handleExchangeRateChange}
+              isLoading={exchangeRateLoading}
+              date={chequeDate}
+            />
+          </div>
+        )}
 
         <div>
           <h3 className="text-lg font-semibold mb-3">Line Items</h3>
@@ -1002,6 +1118,17 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
           }
           setAccountDialogContext(null);
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        fromCurrency={currency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={chequeDate}
+        onConfirm={handleExchangeRateUpdate}
       />
     </Form>
   );
