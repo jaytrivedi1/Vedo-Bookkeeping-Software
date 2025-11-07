@@ -89,7 +89,15 @@ Preferred communication style: Simple, everyday language.
     - **Daily Startup Check**: Server fetches yesterday's exchange rates on startup (if multi-currency enabled and API key configured)
     - **Configuration**: Requires `EXCHANGERATE_API_KEY` environment variable (free tier supports commercial use)
     - **Rate Storage**: All fetched rates are stored in database with `effectiveDate`, `isManual=false` for audit trail
-  - **Status**: Complete multi-currency implementation with automatic exchange rate updates, realized/unrealized FX gain/loss tracking, and comprehensive reporting
+  - **Editable Exchange Rates**: User-editable exchange rate functionality across all transaction forms
+    - **ExchangeRateInput Component**: Reusable component showing fetched exchange rate with edit/save/cancel UI
+    - **ExchangeRateUpdateDialog Component**: Modal asking users whether to update "this transaction only" or "all transactions on this date"
+    - **Backend Endpoint**: PUT `/api/exchange-rates` handles both update scopes with `isManual` flag
+    - **Form Integration**: Integrated into all transaction forms (Invoice, Bill, Expense, SalesReceipt, Cheque, Deposit, Transfer, JournalEntry)
+    - **Foreign Currency Detection**: Forms automatically detect foreign currency from contacts (Invoice/Bill/Expense/SalesReceipt) or accounts (Cheque/Deposit/Transfer/JournalEntry)
+    - **Update Scopes**: Transaction-only updates local state; all-on-date updates database and invalidates cache
+    - **User Experience**: Edit button triggers inline editing, save prompts for scope selection, toast notifications confirm updates
+  - **Status**: Complete multi-currency implementation with automatic exchange rate updates, user-editable rates across all forms, realized/unrealized FX gain/loss tracking, and comprehensive reporting
 
 ## External Dependencies
 
