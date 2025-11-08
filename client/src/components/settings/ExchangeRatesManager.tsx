@@ -74,9 +74,21 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedRate, setSelectedRate] = useState<ExchangeRate | null>(null);
   const [filterCurrency, setFilterCurrency] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const exchangeRatesQuery = useQuery<ExchangeRate[]>({
-    queryKey: ['/api/exchange-rates'],
+    queryKey: ['/api/exchange-rates', homeCurrency, format(selectedDate, 'yyyy-MM-dd')],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        fromCurrency: homeCurrency,
+        effectiveDate: format(selectedDate, 'yyyy-MM-dd')
+      });
+      const response = await fetch(`/api/exchange-rates?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch exchange rates');
+      }
+      return response.json();
+    },
   });
 
   const currenciesQuery = useQuery<Currency[]>({
@@ -115,7 +127,13 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
         description: "Exchange rate added successfully",
       });
       setIsAddDialogOpen(false);
-      addForm.reset();
+      addForm.reset({
+        fromCurrency: homeCurrency,
+        toCurrency: "",
+        rate: "",
+        effectiveDate: new Date(),
+        isManual: true,
+      });
     },
     onError: (error: any) => {
       toast({
@@ -210,6 +228,15 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
   };
 
   const currencies = currenciesQuery.data || [];
+  
+  // Filter out home currency to show only foreign currencies
+  const foreignCurrencies = currencies.filter(c => c.code !== homeCurrency);
+  const foreignCurrencyItems: SearchableSelectItem[] = foreignCurrencies.map((currency) => ({
+    value: currency.code,
+    label: `${currency.code} - ${currency.name}`,
+  }));
+  
+  // All currencies for the add/edit dialogs
   const currencyItems: SearchableSelectItem[] = currencies.map((currency) => ({
     value: currency.code,
     label: `${currency.code} - ${currency.name}`,
@@ -217,10 +244,7 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
 
   const exchangeRates = exchangeRatesQuery.data || [];
   const filteredRates = filterCurrency
-    ? exchangeRates.filter(
-        (rate) =>
-          rate.fromCurrency === filterCurrency || rate.toCurrency === filterCurrency
-      )
+    ? exchangeRates.filter((rate) => rate.toCurrency === filterCurrency)
     : exchangeRates;
 
   // Sort by effective date (most recent first)
@@ -231,16 +255,46 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 max-w-xs">
-          <SearchableSelect
-            items={[{ value: "", label: "All Currencies" }, ...currencyItems]}
-            value={filterCurrency}
-            onValueChange={setFilterCurrency}
-            placeholder="Filter by currency"
-            searchPlaceholder="Search currencies..."
-            emptyText="No currencies found"
-            data-testid="filter-currency"
-          />
+        <div className="flex items-center gap-4 flex-1">
+          <div className="flex-1 max-w-xs">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !selectedDate && "text-muted-foreground"
+                  )}
+                  data-testid="button-select-effective-date"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground mt-1">
+              Showing latest rates as of {format(selectedDate, "MMM d, yyyy")}
+            </p>
+          </div>
+          <div className="flex-1 max-w-xs">
+            <SearchableSelect
+              items={[{ value: "", label: "All Foreign Currencies" }, ...foreignCurrencyItems]}
+              value={filterCurrency}
+              onValueChange={setFilterCurrency}
+              placeholder="Filter by currency"
+              searchPlaceholder="Search currencies..."
+              emptyText="No currencies found"
+              data-testid="filter-currency"
+            />
+          </div>
         </div>
         <Button onClick={() => setIsAddDialogOpen(true)} data-testid="button-add-rate">
           <Plus className="h-4 w-4 mr-2" />
@@ -253,8 +307,8 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
       ) : sortedRates.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           {filterCurrency
-            ? `No exchange rates found for ${filterCurrency}`
-            : "No exchange rates configured. Add your first rate to get started."}
+            ? `No exchange rates found for ${homeCurrency} → ${filterCurrency} as of ${format(selectedDate, "MMM d, yyyy")}`
+            : `No exchange rates found for ${homeCurrency} as of ${format(selectedDate, "MMM d, yyyy")}. Add rates to enable multi-currency transactions.`}
         </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
