@@ -2251,10 +2251,46 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Exchange Rates
-  async getExchangeRates(): Promise<ExchangeRate[]> {
-    return await db.select()
-      .from(exchangeRatesSchema)
-      .orderBy(desc(exchangeRatesSchema.effectiveDate), exchangeRatesSchema.fromCurrency);
+  async getExchangeRates(fromCurrency?: string, effectiveDate?: string): Promise<ExchangeRate[]> {
+    const conditions = [];
+    
+    if (fromCurrency) {
+      conditions.push(eq(exchangeRatesSchema.fromCurrency, fromCurrency));
+    }
+    
+    if (effectiveDate) {
+      conditions.push(lte(exchangeRatesSchema.effectiveDate, effectiveDate));
+    }
+    
+    let query = db.select().from(exchangeRatesSchema);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    // If filtering by date, get the most recent rate for each currency pair on or before that date
+    if (effectiveDate && fromCurrency) {
+      // Use subquery to get the latest rate for each toCurrency
+      const rates = await query.orderBy(
+        exchangeRatesSchema.toCurrency,
+        desc(exchangeRatesSchema.effectiveDate)
+      );
+      
+      // Group by toCurrency and keep only the most recent rate
+      const latestRates: ExchangeRate[] = [];
+      const seenCurrencies = new Set<string>();
+      
+      for (const rate of rates) {
+        if (!seenCurrencies.has(rate.toCurrency)) {
+          latestRates.push(rate);
+          seenCurrencies.add(rate.toCurrency);
+        }
+      }
+      
+      return latestRates;
+    }
+    
+    return await query.orderBy(desc(exchangeRatesSchema.effectiveDate), exchangeRatesSchema.fromCurrency);
   }
 
   async getExchangeRate(id: number): Promise<ExchangeRate | undefined> {

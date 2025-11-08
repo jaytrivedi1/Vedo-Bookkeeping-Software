@@ -9862,7 +9862,11 @@ Respond in JSON format:
   // Get all exchange rates
   apiRouter.get("/exchange-rates", async (req: Request, res: Response) => {
     try {
-      const exchangeRates = await storage.getExchangeRates();
+      const { fromCurrency, effectiveDate } = req.query;
+      const exchangeRates = await storage.getExchangeRates(
+        fromCurrency as string | undefined,
+        effectiveDate as string | undefined
+      );
       res.json(exchangeRates);
     } catch (error) {
       console.error("Error fetching exchange rates:", error);

@@ -245,7 +245,7 @@ export interface IStorage {
   getCurrency(code: string): Promise<Currency | undefined>;
   
   // Exchange Rates
-  getExchangeRates(): Promise<ExchangeRate[]>;
+  getExchangeRates(fromCurrency?: string, effectiveDate?: string): Promise<ExchangeRate[]>;
   getExchangeRate(id: number): Promise<ExchangeRate | undefined>;
   getExchangeRateForDate(fromCurrency: string, toCurrency: string, date: Date): Promise<ExchangeRate | undefined>;
   createExchangeRate(exchangeRate: InsertExchangeRate): Promise<ExchangeRate>;
@@ -1320,7 +1320,7 @@ export class MemStorage implements IStorage {
   }
 
   // Exchange Rates
-  async getExchangeRates(): Promise<ExchangeRate[]> {
+  async getExchangeRates(fromCurrency?: string, effectiveDate?: string): Promise<ExchangeRate[]> {
     throw new Error("Exchange rates not supported in MemStorage");
   }
 
