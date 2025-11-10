@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -75,6 +75,8 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
   const [selectedRate, setSelectedRate] = useState<ExchangeRate | null>(null);
   const [filterCurrency, setFilterCurrency] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isFetchingRates, setIsFetchingRates] = useState(false);
+  const [hasFetchedForDate, setHasFetchedForDate] = useState<Set<string>>(new Set());
 
   const exchangeRatesQuery = useQuery<ExchangeRate[]>({
     queryKey: ['/api/exchange-rates', homeCurrency, format(selectedDate, 'yyyy-MM-dd')],
@@ -94,6 +96,42 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
   const currenciesQuery = useQuery<Currency[]>({
     queryKey: ['/api/currencies'],
   });
+
+  // Auto-fetch rates when selected date has no rates
+  useEffect(() => {
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const exchangeRates = exchangeRatesQuery.data || [];
+    
+    // If query is done loading, we have no rates, and we haven't tried fetching for this date yet
+    if (!exchangeRatesQuery.isLoading && !isFetchingRates && exchangeRates.length === 0 && !hasFetchedForDate.has(dateStr)) {
+      // Mark this date as attempted to avoid infinite loops
+      setHasFetchedForDate(prev => new Set([...prev, dateStr]));
+      
+      // Fetch rates for this date
+      setIsFetchingRates(true);
+      apiRequest('/api/exchange-rates/fetch', 'POST', { date: dateStr })
+        .then((response: any) => {
+          if (response.createdCount > 0) {
+            toast({
+              title: "Exchange Rates Fetched",
+              description: `Successfully fetched ${response.createdCount} exchange rates for ${dateStr}`,
+            });
+          }
+          // Refetch the rates
+          queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        })
+        .catch((error: any) => {
+          toast({
+            title: "Failed to Fetch Rates",
+            description: error.message || "Could not fetch exchange rates from API. You can add them manually.",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
+          setIsFetchingRates(false);
+        });
+    }
+  }, [selectedDate, exchangeRatesQuery.data, exchangeRatesQuery.isLoading, isFetchingRates, hasFetchedForDate, toast]);
 
   const addForm = useForm<ExchangeRateFormValues>({
     resolver: zodResolver(exchangeRateFormSchema),
@@ -302,8 +340,10 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
         </Button>
       </div>
 
-      {exchangeRatesQuery.isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">Loading exchange rates...</div>
+      {exchangeRatesQuery.isLoading || isFetchingRates ? (
+        <div className="text-center py-8 text-muted-foreground">
+          {isFetchingRates ? "Fetching exchange rates from API..." : "Loading exchange rates..."}
+        </div>
       ) : sortedRates.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           {filterCurrency
