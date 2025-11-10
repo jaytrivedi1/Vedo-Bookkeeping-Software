@@ -1,0 +1,139 @@
+✅ Prompt for Replit: QuickBooks-Style General Ledger
+
+I want a General Ledger report that looks and works exactly like the one in QuickBooks Online.
+
+🎯 Purpose
+
+Show every transaction for each account (like a bank account, receivable, payable, expense, etc.) in date order, with running balances — just like QuickBooks.
+
+📘 Layout / Structure
+
+For each account (example: “RBC Bank”, “Stripe Clearing”, “Accounts Receivable (A/R)”), the ledger should appear as:
+
+Account Header (expandable)
+
+Shows account name (and currency if multicurrency is on)
+
+Can be expanded or collapsed
+
+At the end of each account, show “Total for [Account Name]”
+
+Inside each account, columns should be:
+
+Date
+
+Transaction Type (Invoice, Payment, Expense, Deposit, etc.)
+
+# (Transaction Number)
+
+Name (Customer, Vendor, or Payee)
+
+Memo/Description
+
+Split (the other account involved)
+
+Amount (Debit or Credit depending on account type)
+
+Running Balance
+
+(If multicurrency is enabled, also show “Foreign Amount” and “Exchange Rate.”)
+
+🧮 Behavior
+
+Show Beginning Balance at the top of each account (based on opening or prior balance).
+
+List all transactions by date.
+
+Show Total for each account at the end.
+
+Show Grand Total at the bottom for all accounts.
+
+Debit and Credit columns must balance across the full report.
+
+Use parentheses ( ) for negative balances.
+
+⚙️ Filters / Options (top of report)
+
+Date range (From / To)
+
+Account filter (single account or All)
+
+Transaction Type filter (optional)
+
+Sort by Date or Transaction #
+
+Export to PDF, Excel, or CSV
+
+Print friendly layout
+
+Expand / Collapse all accounts
+
+🧩 Technical Logic
+
+Fetch all journal entries and transaction lines within the date range.
+
+Group lines by Account ID.
+
+For each group:
+
+Sort by Transaction Date → Transaction Number → Line ID
+
+Calculate Running Balance = previous balance + (debit − credit)
+
+Add Beginning Balance (sum of prior transactions before the report start date).
+
+Combine all accounts into one report.
+
+Format with proper alignment (numbers right-aligned, 2-decimal precision).
+
+Include Voided or Deleted entries faintly (optional).
+
+If multicurrency is active:
+
+Show foreign amounts + rate
+
+Total and balance always in Home Currency
+
+🧭 Example
+RBC Bank
+Date        Type        No.       Name             Memo/Desc               Split                    Amount      Balance
+01-09-2025  Beginning Balance                                                                                     30,319.98
+02-09-2025  Expense                PayFile Fees Bill Payment Bank charges & int.   4.00-             30,315.98
+03-09-2025  Expense                Excelfront Bizcon Pvt Ltd Subcontract expense   3,500.00-         25,641.04
+08-09-2025  Deposit                STRIPE Misc Payment                             543.87             26,421.91
+...
+Total for RBC Bank:                                                               1,627.50
+
+💾 API Endpoint (Backend)
+
+GET /reports/general-ledger
+
+Parameters:
+
+from_date
+
+to_date
+
+account_id (optional)
+
+transaction_type (optional)
+
+include_inactive (bool)
+
+currency (optional)
+
+format (json | pdf | csv)
+
+✅ Acceptance Criteria
+
+Each account section starts with “Beginning Balance”
+
+Running balance per account is correct
+
+Totals per account and overall match debits = credits
+
+Drill-down link from each line to the original transaction
+
+Expand / Collapse per account works
+
+Export and Print look exactly like the sample screenshot
