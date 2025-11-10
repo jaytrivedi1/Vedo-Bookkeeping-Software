@@ -52,6 +52,7 @@ import {
 } from "@shared/schema";
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
+import { adminRouter } from "./admin-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
 import { CountryCode, Products } from 'plaid';
@@ -5907,6 +5908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Use company router for company management endpoints
   apiRouter.use("/companies", companyRouter);
+  apiRouter.use("/admin", adminRouter);
 
   // User Management Routes (Protected with requireAdmin middleware)
   apiRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
