@@ -306,6 +306,13 @@ export default function Reports() {
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | 'current'>(new Date().getFullYear());
   const [, setLocation] = useLocation();
   
+  // Grouped General Ledger state
+  const [ledgerViewType, setLedgerViewType] = useState<'detailed' | 'grouped'>('detailed');
+  const [groupedFilterAccountId, setGroupedFilterAccountId] = useState<number | null>(null);
+  const [groupedFilterTransactionType, setGroupedFilterTransactionType] = useState<string>('');
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
+  const [expandAll, setExpandAll] = useState(false);
+  
   // Store stable current date ISO string that won't change on re-renders
   const currentDateISORef = useRef(new Date().toISOString());
   
@@ -456,6 +463,36 @@ export default function Reports() {
     enabled: activeTab === 'general-ledger',
   });
   
+  // Fetch grouped general ledger data
+  const { data: groupedLedgerData, isLoading: groupedLedgerLoading } = useQuery({
+    queryKey: [
+      '/api/reports/general-ledger-grouped', 
+      fiscalYearBounds.fiscalYearStartISO, 
+      fiscalYearBounds.fiscalYearEndISO,
+      groupedFilterAccountId,
+      groupedFilterTransactionType
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        startDate: fiscalYearBounds.fiscalYearStartISO,
+        endDate: fiscalYearBounds.fiscalYearEndISO,
+      });
+      
+      if (groupedFilterAccountId) {
+        params.append('accountId', groupedFilterAccountId.toString());
+      }
+      
+      if (groupedFilterTransactionType) {
+        params.append('transactionType', groupedFilterTransactionType);
+      }
+      
+      const response = await fetch(`/api/reports/general-ledger-grouped?${params.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch grouped general ledger');
+      return response.json();
+    },
+    enabled: activeTab === 'general-ledger' && ledgerViewType === 'grouped',
+  });
+  
   // Helper function to determine if an account is a balance sheet account
   const isBalanceSheetAccount = (accountType: string) => {
     const balanceSheetTypes = [
@@ -579,6 +616,32 @@ export default function Reports() {
       default:
         console.warn(`Unknown transaction type: ${transactionType}`);
     }
+  };
+  
+  // Handle expand/collapse all for grouped view
+  const handleExpandAll = () => {
+    if (groupedLedgerData?.accountGroups) {
+      const allAccountIds = new Set(groupedLedgerData.accountGroups.map((g: any) => g.account.id));
+      setExpandedAccounts(allAccountIds);
+      setExpandAll(true);
+    }
+  };
+  
+  const handleCollapseAll = () => {
+    setExpandedAccounts(new Set());
+    setExpandAll(false);
+  };
+  
+  const toggleAccountExpansion = (accountId: number) => {
+    setExpandedAccounts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId);
+      } else {
+        newSet.add(accountId);
+      }
+      return newSet;
+    });
   };
   
   // First sort by date for running balance calculation
@@ -1280,8 +1343,8 @@ export default function Reports() {
             
             {/* General Ledger */}
             <TabsContent value="general-ledger">
-              <div className="mb-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="mb-4 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex-1">
                     <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
                     <Select 
@@ -1305,39 +1368,133 @@ export default function Reports() {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant={ledgerViewType === 'detailed' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setLedgerViewType('detailed')}
+                      data-testid="button-view-detailed"
+                    >
+                      Detailed View
+                    </Button>
+                    <Button
+                      variant={ledgerViewType === 'grouped' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setLedgerViewType('grouped')}
+                      data-testid="button-view-grouped"
+                    >
+                      Grouped by Account
+                    </Button>
+                  </div>
                 </div>
+                
+                {/* Filters for Grouped View */}
+                {ledgerViewType === 'grouped' && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 p-4 bg-gray-50 rounded-lg border">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Filter by Account</label>
+                      <Select 
+                        value={groupedFilterAccountId?.toString() || 'all'} 
+                        onValueChange={(value) => setGroupedFilterAccountId(value === 'all' ? null : parseInt(value))}
+                        data-testid="select-filter-account"
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All Accounts" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Accounts</SelectItem>
+                          {accounts?.map((account) => (
+                            <SelectItem key={account.id} value={account.id.toString()}>
+                              {account.code} - {account.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-sm font-medium text-gray-700 mb-1 block">Filter by Type</label>
+                      <Select 
+                        value={groupedFilterTransactionType || 'all'} 
+                        onValueChange={(value) => setGroupedFilterTransactionType(value === 'all' ? '' : value)}
+                        data-testid="select-filter-type"
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All Types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="invoice">Invoice</SelectItem>
+                          <SelectItem value="payment">Payment</SelectItem>
+                          <SelectItem value="bill">Bill</SelectItem>
+                          <SelectItem value="expense">Expense</SelectItem>
+                          <SelectItem value="deposit">Deposit</SelectItem>
+                          <SelectItem value="journal_entry">Journal Entry</SelectItem>
+                          <SelectItem value="cheque">Cheque</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExpandAll}
+                        disabled={expandAll}
+                        data-testid="button-expand-all"
+                      >
+                        Expand All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCollapseAll}
+                        disabled={!expandAll && expandedAccounts.size === 0}
+                        data-testid="button-collapse-all"
+                      >
+                        Collapse All
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="grid grid-cols-1 gap-6">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div>
-                      <CardTitle>General Ledger</CardTitle>
+                      <CardTitle>General Ledger {ledgerViewType === 'grouped' && '- Grouped by Account'}</CardTitle>
                       <CardDescription>
-                        {selectedAccountId ? (
-                          <div className="flex items-center gap-2">
-                            <span>Filtered by account for {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setSelectedAccountId(null)}
-                              data-testid="button-clear-filter"
-                            >
-                              Clear Filter
-                            </Button>
-                          </div>
+                        {ledgerViewType === 'detailed' ? (
+                          selectedAccountId ? (
+                            <div className="flex items-center gap-2">
+                              <span>Filtered by account for {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}</span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedAccountId(null)}
+                                data-testid="button-clear-filter"
+                              >
+                                Clear Filter
+                              </Button>
+                            </div>
+                          ) : (
+                            `View all ledger entries for ${format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - ${format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}`
+                          )
                         ) : (
-                          `View all ledger entries for ${format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - ${format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}`
+                          `${format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - ${format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}`
                         )}
                       </CardDescription>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    {ledgerLoading ? (
-                      <div className="text-center py-6">Loading general ledger...</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <Table>
+                    {ledgerViewType === 'detailed' ? (
+                      ledgerLoading ? (
+                        <div className="text-center py-6">Loading general ledger...</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead 
@@ -1500,6 +1657,161 @@ export default function Reports() {
                           </TableBody>
                         </Table>
                       </div>
+                      )
+                    ) : (
+                      groupedLedgerLoading ? (
+                        <div className="text-center py-6">Loading grouped general ledger...</div>
+                      ) : groupedLedgerData && groupedLedgerData.accountGroups ? (
+                        <div className="space-y-6">
+                          {groupedLedgerData.accountGroups.length === 0 ? (
+                            <div className="text-center py-6 text-gray-500">
+                              No accounts found with activity in the selected period
+                            </div>
+                          ) : (
+                            <>
+                              {groupedLedgerData.accountGroups.map((group: any) => {
+                                const isExpanded = expandedAccounts.has(group.account.id);
+                                
+                                return (
+                                  <Collapsible
+                                    key={group.account.id}
+                                    open={isExpanded}
+                                    onOpenChange={() => toggleAccountExpansion(group.account.id)}
+                                    data-testid={`account-group-${group.account.id}`}
+                                  >
+                                    <div className="border rounded-lg overflow-hidden">
+                                      <CollapsibleTrigger className="w-full hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-center justify-between p-4 bg-gray-100">
+                                          <div className="flex items-center gap-2">
+                                            {isExpanded ? (
+                                              <ChevronUp className="h-5 w-5 text-gray-600" />
+                                            ) : (
+                                              <ChevronDown className="h-5 w-5 text-gray-600" />
+                                            )}
+                                            <span className="font-semibold text-left">
+                                              {group.account.code} - {group.account.name}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-4">
+                                            <span className="text-sm text-gray-600">
+                                              {group.entries.length} transaction{group.entries.length !== 1 ? 's' : ''}
+                                            </span>
+                                            <span className="font-medium">
+                                              Balance: {formatCurrency(group.endingBalance)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </CollapsibleTrigger>
+                                      
+                                      <CollapsibleContent>
+                                        <div className="overflow-x-auto">
+                                          <Table>
+                                            <TableHeader>
+                                              <TableRow>
+                                                <TableHead>Date</TableHead>
+                                                <TableHead>Type</TableHead>
+                                                <TableHead>#</TableHead>
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>Memo</TableHead>
+                                                <TableHead>Split</TableHead>
+                                                <TableHead className="text-right">Amount</TableHead>
+                                                <TableHead className="text-right">Balance</TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {/* Beginning Balance Row */}
+                                              {group.beginningBalance !== 0 && (
+                                                <TableRow className="bg-blue-50 font-semibold">
+                                                  <TableCell colSpan={6}>Beginning Balance</TableCell>
+                                                  <TableCell className="text-right"></TableCell>
+                                                  <TableCell className="text-right" data-testid={`beginning-balance-${group.account.id}`}>
+                                                    {formatCurrency(group.beginningBalance)}
+                                                  </TableCell>
+                                                </TableRow>
+                                              )}
+                                              
+                                              {/* Transaction Rows */}
+                                              {group.entries.map((entry: any) => (
+                                                <TableRow
+                                                  key={entry.id}
+                                                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                                  onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
+                                                  data-testid={`grouped-transaction-${entry.transactionId}`}
+                                                >
+                                                  <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                                  <TableCell>
+                                                    <span className="text-sm font-medium">
+                                                      {formatTransactionType(entry.transactionType)}
+                                                    </span>
+                                                  </TableCell>
+                                                  <TableCell>{entry.transactionReference || ''}</TableCell>
+                                                  <TableCell>{entry.contactName || '-'}</TableCell>
+                                                  <TableCell>{entry.memo || '-'}</TableCell>
+                                                  <TableCell>{entry.splitAccountName}</TableCell>
+                                                  <TableCell className="text-right">
+                                                    {entry.amount > 0 ? '' : '-'}
+                                                    {formatCurrency(entry.amount)}
+                                                  </TableCell>
+                                                  <TableCell className="text-right font-medium">
+                                                    {formatCurrency(entry.runningBalance)}
+                                                  </TableCell>
+                                                </TableRow>
+                                              ))}
+                                              
+                                              {/* Total Row */}
+                                              <TableRow className="border-t-2 border-gray-300 font-bold bg-gray-50">
+                                                <TableCell colSpan={6} className="text-right">
+                                                  Total for {group.account.name}
+                                                </TableCell>
+                                                <TableCell className="text-right" data-testid={`account-total-${group.account.id}`}>
+                                                  {group.accountTotal > 0 ? '' : '-'}
+                                                  {formatCurrency(group.accountTotal)}
+                                                </TableCell>
+                                                <TableCell className="text-right font-medium">
+                                                  {formatCurrency(group.endingBalance)}
+                                                </TableCell>
+                                              </TableRow>
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      </CollapsibleContent>
+                                    </div>
+                                  </Collapsible>
+                                );
+                              })}
+                              
+                              {/* Grand Total */}
+                              <div className="border-t-4 border-double border-gray-400 pt-4">
+                                <div className="flex justify-between items-center p-4 bg-gray-100 rounded-lg">
+                                  <div className="font-bold text-lg">Grand Total</div>
+                                  <div className="flex gap-6">
+                                    <div className="text-right">
+                                      <div className="text-sm text-gray-600">Total Debits</div>
+                                      <div className="font-bold" data-testid="grand-total-debits">
+                                        {formatCurrency(groupedLedgerData.grandTotalDebit)}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-sm text-gray-600">Total Credits</div>
+                                      <div className="font-bold" data-testid="grand-total-credits">
+                                        {formatCurrency(groupedLedgerData.grandTotalCredit)}
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-sm text-gray-600">Accounts</div>
+                                      <div className="font-bold">{groupedLedgerData.totalAccounts}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-500">
+                          No data available
+                        </div>
+                      )
                     )}
                   </CardContent>
                 </Card>

@@ -5180,6 +5180,156 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Grouped General Ledger report - QuickBooks style with accounts grouped
+  apiRouter.get("/reports/general-ledger-grouped", async (req: Request, res: Response) => {
+    try {
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      const accountIdStr = req.query.accountId as string | undefined;
+      const transactionType = req.query.transactionType as string | undefined;
+      
+      if (!startDateStr || !endDateStr) {
+        return res.status(400).json({ message: "startDate and endDate are required" });
+      }
+      
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+      
+      // Get all accounts, transactions, contacts, and ledger entries
+      const allAccounts = await storage.getAccounts();
+      const allTransactions = await storage.getTransactions();
+      const allContacts = await storage.getContacts();
+      const allLedgerEntries = await storage.getAllLedgerEntries();
+      
+      // Filter accounts if specific account is requested
+      const accounts = accountIdStr 
+        ? allAccounts.filter(acc => acc.id === parseInt(accountIdStr))
+        : allAccounts;
+      
+      // Create lookup maps
+      const accountMap = new Map(allAccounts.map(acc => [acc.id, acc]));
+      const transactionMap = new Map(allTransactions.map(tx => [tx.id, tx]));
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      
+      // Process each account
+      const accountGroups = await Promise.all(accounts.map(async (account) => {
+        // Calculate beginning balance (all entries before start date)
+        const beginningBalanceEntries = allLedgerEntries.filter(entry =>
+          entry.accountId === account.id && new Date(entry.date) < startDate
+        );
+        
+        let beginningBalance = 0;
+        beginningBalanceEntries.forEach(entry => {
+          beginningBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
+        });
+        
+        // Get entries for this account within the date range
+        let accountEntries = allLedgerEntries.filter(entry =>
+          entry.accountId === account.id &&
+          new Date(entry.date) >= startDate &&
+          new Date(entry.date) <= endDate
+        );
+        
+        // Filter by transaction type if specified
+        if (transactionType) {
+          const filteredTransactionIds = allTransactions
+            .filter(tx => tx.type === transactionType)
+            .map(tx => tx.id);
+          accountEntries = accountEntries.filter(entry => 
+            filteredTransactionIds.includes(entry.transactionId)
+          );
+        }
+        
+        // Sort by date, then transaction ID, then entry ID
+        accountEntries.sort((a, b) => {
+          const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+          if (dateCompare !== 0) return dateCompare;
+          const txCompare = a.transactionId - b.transactionId;
+          if (txCompare !== 0) return txCompare;
+          return a.id - b.id;
+        });
+        
+        // Calculate running balance and enrich entries
+        let runningBalance = beginningBalance;
+        const enrichedEntries = accountEntries.map(entry => {
+          const transaction = transactionMap.get(entry.transactionId);
+          const contact = transaction?.contactId ? contactMap.get(transaction.contactId) : null;
+          
+          // Update running balance
+          const debit = Number(entry.debit || 0);
+          const credit = Number(entry.credit || 0);
+          runningBalance += debit - credit;
+          
+          // Find the split account (other account in the same transaction)
+          const otherEntry = allLedgerEntries.find(e => 
+            e.transactionId === entry.transactionId && e.id !== entry.id
+          );
+          const splitAccount = otherEntry ? accountMap.get(otherEntry.accountId) : null;
+          
+          return {
+            id: entry.id,
+            date: entry.date,
+            transactionId: entry.transactionId,
+            transactionType: transaction?.type || '',
+            transactionReference: transaction?.reference || '',
+            contactName: contact ? (contact.displayName || contact.name) : '',
+            memo: transaction?.memo || entry.memo || '',
+            splitAccountName: splitAccount?.name || 'Split',
+            debit,
+            credit,
+            amount: debit > 0 ? debit : -credit,
+            runningBalance,
+            currency: transaction?.currency || null,
+            exchangeRate: transaction?.exchangeRate || null,
+            foreignAmount: transaction?.foreignAmount || null
+          };
+        });
+        
+        // Calculate total for this account
+        const totalDebit = accountEntries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
+        const totalCredit = accountEntries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
+        const accountTotal = totalDebit - totalCredit;
+        
+        return {
+          account: {
+            id: account.id,
+            code: account.code,
+            name: account.name,
+            type: account.type,
+            currency: account.currency || null
+          },
+          beginningBalance,
+          entries: enrichedEntries,
+          totalDebit,
+          totalCredit,
+          accountTotal,
+          endingBalance: beginningBalance + accountTotal
+        };
+      }));
+      
+      // Filter out accounts with no activity
+      const accountsWithActivity = accountGroups.filter(group => 
+        group.beginningBalance !== 0 || group.entries.length > 0
+      );
+      
+      // Calculate grand totals
+      const grandTotalDebit = accountsWithActivity.reduce((sum, g) => sum + g.totalDebit, 0);
+      const grandTotalCredit = accountsWithActivity.reduce((sum, g) => sum + g.totalCredit, 0);
+      
+      res.json({
+        startDate: startDateStr,
+        endDate: endDateStr,
+        accountGroups: accountsWithActivity,
+        grandTotalDebit,
+        grandTotalCredit,
+        totalAccounts: accountsWithActivity.length
+      });
+    } catch (error) {
+      console.error("Error generating grouped general ledger:", error);
+      res.status(500).json({ message: "Failed to generate grouped general ledger" });
+    }
+  });
+
   // Banking routes for transaction classification and import
   apiRouter.post("/banking/classify", async (req: Request, res: Response) => {
     try {
