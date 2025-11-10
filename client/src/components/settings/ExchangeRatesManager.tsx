@@ -104,13 +104,17 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
     
     // If query is done loading, we have no rates, and we haven't tried fetching for this date yet
     if (!exchangeRatesQuery.isLoading && !isFetchingRates && exchangeRates.length === 0 && !hasFetchedForDate.has(dateStr)) {
-      // Mark this date as attempted to avoid infinite loops
-      setHasFetchedForDate(prev => new Set([...prev, dateStr]));
-      
       // Fetch rates for this date
       setIsFetchingRates(true);
       apiRequest('/api/exchange-rates/fetch', 'POST', { date: dateStr })
         .then((response: any) => {
+          // Mark this date as successfully fetched to avoid refetching
+          setHasFetchedForDate(prev => {
+            const next = new Set(prev);
+            next.add(dateStr);
+            return next;
+          });
+          
           if (response.createdCount > 0) {
             toast({
               title: "Exchange Rates Fetched",
@@ -121,6 +125,7 @@ export default function ExchangeRatesManager({ homeCurrency }: ExchangeRatesMana
           queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
         })
         .catch((error: any) => {
+          // Don't mark as fetched on error, so user can retry
           toast({
             title: "Failed to Fetch Rates",
             description: error.message || "Could not fetch exchange rates from API. You can add them manually.",
