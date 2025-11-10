@@ -17,7 +17,8 @@ import {
   ShoppingBagIcon,
   DollarSignIcon,
   LogOutIcon,
-  TrendingUpIcon
+  TrendingUpIcon,
+  ShieldIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +41,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
 
-  const menuItems = [
+  const baseMenuItems = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-5 h-5 mr-3" /> },
     { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-5 h-5 mr-3" /> },
@@ -52,6 +53,11 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/fx-revaluation", label: "FX Revaluation", icon: <TrendingUpIcon className="w-5 h-5 mr-3" /> },
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-5 h-5 mr-3" /> },
   ];
+
+  // Add Admin Dashboard for admin users only
+  const menuItems = user?.role === 'admin' 
+    ? [...baseMenuItems, { path: "/admin", label: "Admin Dashboard", icon: <ShieldIcon className="w-5 h-5 mr-3" /> }]
+    : baseMenuItems;
   
   const transactionTypes = [
     { path: "/invoices/new", label: "Invoice", icon: <FileTextIcon className="w-4 h-4 mr-2" /> },

@@ -32,6 +32,7 @@ import ChequeView from "@/pages/cheque-view";
 import JournalEntryForm from "@/pages/journal-entry-form";
 import JournalEntryView from "@/pages/journal-entry-view";
 import FxRevaluation from "@/pages/fx-revaluation";
+import AdminDashboard from "@/pages/AdminDashboard";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
 
@@ -52,6 +53,39 @@ function ProtectedRoute({ component: Component, ...rest }: { component: any; pat
 
   if (!user) {
     return <Redirect to="/login" />;
+  }
+
+  return <Component {...rest} />;
+}
+
+function AdminRoute({ component: Component, ...rest }: { component: any; path?: string }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (user.role !== 'admin') {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+          <p className="text-gray-500">You don't have permission to access this page.</p>
+          <p className="text-sm text-gray-400 mt-2">Administrator access required.</p>
+        </div>
+      </div>
+    );
   }
 
   return <Component {...rest} />;
@@ -120,6 +154,9 @@ function Router() {
               <Route path="/products" component={Products} />
               <Route path="/fx-revaluation" component={FxRevaluation} />
               <Route path="/reports" component={Reports} />
+              <Route path="/admin">
+                {() => <AdminRoute component={AdminDashboard} />}
+              </Route>
               <Route component={NotFound} />
             </Switch>
           </MainLayout>
