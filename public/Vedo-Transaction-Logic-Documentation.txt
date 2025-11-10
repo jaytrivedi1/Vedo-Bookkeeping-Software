@@ -1,0 +1,1454 @@
+===============================================================================
+                    VEDO BOOKKEEPING SYSTEM
+          COMPREHENSIVE TRANSACTION LOGIC DOCUMENTATION
+===============================================================================
+
+Generated: ${new Date().toLocaleDateString()}
+
+This document provides detailed technical documentation for all transaction
+types in the Vedo bookkeeping system, including creation logic, ledger
+entries, deletion cascades, and payment applications.
+
+===============================================================================
+TABLE OF CONTENTS
+===============================================================================
+
+1. Invoice Transactions .......................................... 3
+2. Receive Payment Transactions ................................. 15
+3. Deposit Transactions ......................................... 25
+4. Sales Receipt Transactions ................................... 35
+5. Customer Credit Transactions ................................. 42
+6. Journal Entry Transactions ................................... 50
+7. Payment Applications Table ................................... 58
+8. Deletion Cascade Logic Summary ............................... 62
+
+===============================================================================
+1. INVOICE TRANSACTIONS
+===============================================================================
+
+1.1 OVERVIEW
+------------
+Invoices represent amounts owed by customers for goods or services provided.
+They follow double-entry accounting principles, affecting Accounts Receivable
+and Revenue accounts. Invoices can have credits applied, be paid through
+Receive Payment transactions, and support multi-currency operations.
+
+1.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "invoice")
+
+Field           Type                Description
+----------------------------------------------------------------------------
+id              serial              Primary key, auto-incremented
+reference       text                Invoice number (e.g., INV-1001)
+type            transaction_type    Always "invoice" for invoices
+date            timestamp           Invoice date
+description     text                Invoice description
+amount          double precision    Total amount in home currency
+subTotal        double precision    Subtotal before tax
+taxAmount       double precision    Total tax amount
+balance         double precision    Remaining unpaid balance
+contactId       integer             FK to contacts (customer)
+status          status              open, paid, partial, overdue
+dueDate         timestamp           Payment due date
+paymentTerms    text                Payment terms (e.g., Net 30)
+currency        varchar(3)          Foreign currency code
+exchangeRate    decimal(18,6)       Exchange rate used
+foreignAmount   decimal(15,2)       Amount in foreign currency
+
+1.3 INVOICE CREATION FLOW
+--------------------------
+Step 1: Validate invoice data using invoiceSchema from shared/schema.ts
+  - Ensure contactId exists and is a valid customer
+  - Ensure reference number is unique
+  - Validate line items (at least 1 required)
+  - Check that quantities and prices are valid (> 0)
+
+Step 2: Calculate totals
+  - subTotal = sum of (quantity × unitPrice) for all line items
+  - taxAmount = sum of calculated tax for each line item
+  - totalAmount = subTotal + taxAmount
+  - Round all amounts to 2 decimal places
+
+Step 3: Create transaction record
+  - Insert into transactions table with type = "invoice"
+  - Set balance = totalAmount (fully unpaid)
+  - Set status = "open" (unless specified otherwise)
+  - Store multi-currency fields if applicable
+
+Step 4: Create line items
+  - Insert each line item into line_items table
+  - Link to transaction via transactionId
+  - Store description, quantity, unitPrice, amount
+  - Link to product (productId) and sales tax (salesTaxId) if provided
+
+Step 5: Generate ledger entries (double-entry bookkeeping)
+  a) Debit Accounts Receivable (typically account #2)
+     - Account: Accounts Receivable
+     - Debit: totalAmount
+     - Description: "Invoice #[reference]"
+
+  b) Credit Revenue Account(s) (from line items)
+     - For each line item:
+       - Account: Revenue account linked to product/service
+       - Credit: line item amount (quantity × unitPrice)
+       - Description: Line item description
+
+  c) Credit Sales Tax Payable (if tax applies)
+     - Account: Sales Tax Payable (account from sales tax config)
+     - Credit: taxAmount
+     - Description: "Sales tax for invoice #[reference]"
+
+Step 6: Update account balances
+  - Increase Accounts Receivable by totalAmount
+  - Increase Revenue accounts by respective line item amounts
+  - Increase Sales Tax Payable by taxAmount
+
+Step 7: Handle credit applications (if credits selected)
+  - See section 1.5 for detailed credit application logic
+
+1.4 LEDGER ENTRY EXAMPLE
+-------------------------
+Example: Invoice #INV-1001 for $1,180 ($1,000 subtotal + $180 tax @ 18%)
+
+Account                  Account Type    Debit      Credit     Description
+----------------------------------------------------------------------------
+Accounts Receivable      Asset           $1,180.00             Invoice #INV-1001
+Sales Revenue            Income                     $1,000.00  Service: Consulting
+Sales Tax Payable        Liability                  $180.00    Tax for INV-1001
+
+1.5 CREDIT APPLICATION DURING INVOICE CREATION
+-----------------------------------------------
+When credits (customer credits or unapplied payments) are selected during
+invoice creation, the system automatically applies them to reduce the balance:
+
+Step 1: User selects available credits
+  - System displays all unapplied credits for the customer
+  - Credits shown include: customer_credit transactions and
+    unapplied payments/deposits with status = "unapplied_credit"
+  - Display available balance for each credit
+
+Step 2: Specify amount to apply
+  - User can apply full or partial amount from each credit
+  - System validates that applied amount ≤ available credit balance
+
+Step 3: Create payment application record
+  - Insert into payment_applications table:
+    - paymentId: ID of the credit transaction
+    - invoiceId: ID of the newly created invoice
+    - amountApplied: Amount being applied
+
+Step 4: Update invoice balance and status
+  - newBalance = invoiceAmount - total credits applied
+  - If newBalance = 0: status = "paid"
+  - If newBalance > 0: status = "partial" or "open"
+
+Step 5: Update credit transaction
+  - Calculate remaining credit balance
+  - If fully applied (remaining = 0):
+    - status = "completed"
+    - balance = 0
+  - If partially applied (remaining > 0):
+    - status = "unapplied_credit"
+    - balance = remaining amount
+    - For deposits: balance stored as negative value
+
+Step 6: Update credit description
+  - Append: "Applied to invoice #[reference] on [date]"
+
+Example:
+  Invoice Amount: $1,000
+  Credit Applied: $600 from Customer Credit #CR-001
+  Result:
+    - Invoice balance: $400
+    - Invoice status: "partial"
+    - Credit balance: $0 (if original credit was $600)
+    - Credit status: "completed"
+    - Payment application record created
+
+1.6 INVOICE DELETION LOGIC
+---------------------------
+Handler: handleInvoiceDeletion() in database-storage.ts
+
+When an invoice is deleted, the system performs cascade operations:
+
+Step 1: Find all payment applications
+  - Query payment_applications table where invoiceId = this invoice
+  - Identify all payments/credits that were applied to this invoice
+
+Step 2: Restore payment/credit balances
+  - For each payment application:
+    a) Get the payment/credit transaction
+    b) Calculate restored balance = current + amountApplied
+    c) Update payment status = "unapplied_credit"
+    d) Update payment balance to restored amount
+    e) Log: "Payment #X restored: new balance = Y"
+
+Step 3: Delete payment application records
+  - DELETE FROM payment_applications WHERE invoiceId = this invoice
+  - This removes the link between payments and the invoice
+
+Step 4: Handle legacy deposit credits
+  - Find deposits with descriptions mentioning this invoice
+  - Pattern: "applied%to invoice #[reference]%"
+  - Restore full credit balance (negative of original amount)
+  - Update status = "unapplied_credit"
+
+Step 5: Reverse ledger entries
+  - Delete all ledger entries for this invoice
+  - Reverse account balance changes:
+    - Decrease Accounts Receivable by invoice amount
+    - Decrease Revenue accounts by line item amounts
+    - Decrease Sales Tax Payable by tax amount
+
+Step 6: Delete line items
+  - DELETE FROM line_items WHERE transactionId = this invoice
+
+Step 7: Delete transaction record
+  - DELETE FROM transactions WHERE id = this invoice
+
+Step 8: Recalculate customer balance
+  - Recalculate total AR balance for the customer
+
+Example Deletion Flow:
+  Invoice: INV-1001 for $1,000
+  Payments Applied: $600 from Payment #PAY-001
+  Current Invoice Balance: $400
+
+  After Deletion:
+    - Payment #PAY-001 balance: $600 (restored)
+    - Payment #PAY-001 status: "unapplied_credit"
+    - Payment application record: Deleted
+    - Accounts Receivable: Decreased by $1,000
+    - Sales Revenue: Decreased by $847 (if tax was $153)
+    - Sales Tax Payable: Decreased by $153
+    - Invoice record: Deleted
+    - Line items: Deleted
+
+===============================================================================
+2. RECEIVE PAYMENT TRANSACTIONS
+===============================================================================
+
+2.1 OVERVIEW
+------------
+Receive Payment transactions record money received from customers to pay
+off invoices or create unapplied credits. They link to invoices via the
+payment_applications table, which is the source of truth for how payments
+are allocated. Payments support multiple payment methods and can be applied
+to multiple invoices simultaneously.
+
+2.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "payment")
+
+Field              Type                Description
+----------------------------------------------------------------------------
+id                 serial              Primary key
+reference          text                Payment reference (e.g., PAY-001)
+type               transaction_type    Always "payment"
+date               timestamp           Payment date
+amount             double precision    Total payment amount
+balance            double precision    Unapplied amount
+contactId          integer             FK to contacts (customer)
+status             status              completed, unapplied_credit
+paymentMethod      payment_method      cash, check, credit_card, etc.
+paymentAccountId   integer             FK to accounts (bank/cash account)
+paymentDate        timestamp           Date payment was received
+currency           varchar(3)          Currency code
+exchangeRate       decimal(18,6)       Exchange rate for FX
+foreignAmount      decimal(15,2)       Amount in foreign currency
+
+2.3 PAYMENT CREATION FLOW
+--------------------------
+Step 1: Validate payment data
+  - Ensure contactId exists and is a customer
+  - Validate payment amount > 0
+  - Ensure paymentAccountId is a valid bank/cash account
+  - Verify selected invoices exist and belong to this customer
+
+Step 2: Calculate payment allocations
+  - User specifies which invoices to pay and amounts
+  - Validate: sum of allocated amounts ≤ payment amount
+  - If payment > allocated: remainder becomes unapplied credit
+
+Step 3: Create payment transaction
+  - Insert into transactions table with type = "payment"
+  - amount = total payment received
+  - balance = unapplied amount (payment - sum of allocations)
+  - status = "completed" if fully applied, "unapplied_credit" otherwise
+
+Step 4: Create payment application records
+  - For each invoice being paid:
+    INSERT INTO payment_applications:
+      - paymentId: ID of this payment
+      - invoiceId: ID of invoice being paid
+      - amountApplied: Amount allocated to this invoice
+
+Step 5: Update invoice balances and statuses
+  - For each invoice receiving payment:
+    a) newBalance = invoice.balance - amountApplied
+    b) if newBalance = 0: status = "paid"
+    c) if newBalance > 0: status = "partial" (or keep "open")
+    d) UPDATE transactions SET balance, status WHERE id = invoiceId
+
+Step 6: Generate ledger entries
+  a) Debit Bank/Cash Account (paymentAccountId)
+     - Debit: total payment amount
+     - Description: "Payment received from [customer]"
+
+  b) Credit Accounts Receivable (for each invoice)
+     - For each invoice application:
+       - Credit: amountApplied
+       - Description: "Payment applied to invoice #[reference]"
+
+  c) Credit Unapplied Credit (if balance > 0)
+     - If payment has unapplied amount:
+       - Credit: unapplied amount
+       - Description: "Unapplied credit from payment #[reference]"
+
+Step 7: Calculate FX Gains/Losses (multi-currency)
+  - If invoice currency ≠ home currency:
+    a) Compare invoice exchange rate vs payment exchange rate
+    b) Calculate: foreignAmount × (paymentRate - invoiceRate)
+    c) If gain: Debit AR, Credit FX Gain (account 4300)
+    d) If loss: Debit FX Loss (account 7100), Credit AR
+    e) Create fx_realizations record for audit trail
+
+Step 8: Update account balances
+  - Increase Bank/Cash account by payment amount
+  - Decrease Accounts Receivable by sum of applied amounts
+
+2.4 PAYMENT APPLICATION EXAMPLE
+--------------------------------
+Scenario: Customer pays $2,500 against 2 invoices
+
+Payment Details:
+  - Payment Amount: $2,500
+  - Payment Method: Check
+  - Payment Account: Checking Account (ID: 1)
+
+Invoice Allocations:
+  - Invoice #INV-1001: $1,000 (full payment)
+  - Invoice #INV-1002: $1,200 (partial, balance was $1,500)
+  - Unapplied Credit: $300
+
+Ledger Entries Created:
+  1) Debit: Checking Account - $2,500
+     Description: "Payment received from Acme Corp"
+
+  2) Credit: Accounts Receivable - $1,000
+     Description: "Payment applied to invoice #INV-1001"
+
+  3) Credit: Accounts Receivable - $1,200
+     Description: "Payment applied to invoice #INV-1002"
+
+  4) Credit: Unapplied Credit - $300
+     Description: "Unapplied credit from payment #PAY-001"
+
+Payment Applications Table:
+  - Record 1: paymentId=5, invoiceId=10, amountApplied=1000
+  - Record 2: paymentId=5, invoiceId=11, amountApplied=1200
+
+Invoice Updates:
+  - INV-1001: balance $1,000 → $0, status "open" → "paid"
+  - INV-1002: balance $1,500 → $300, status "open" → "partial"
+
+Payment Record:
+  - amount: $2,500
+  - balance: $300 (unapplied)
+  - status: "unapplied_credit"
+
+2.5 PAYMENT DELETION LOGIC
+---------------------------
+Handler: deletePaymentAndRelatedTransactions() in payment-delete-handler.ts
+
+Step 1: Verify payment exists
+  - Query: transactions WHERE id = paymentId AND type IN ("payment", "cheque")
+  - Throw error if not found
+
+Step 2: Find all payment applications
+  - Query: SELECT * FROM payment_applications WHERE paymentId = this payment
+  - This identifies all invoices that received money from this payment
+
+Step 3: Restore invoice balances and statuses
+  - For each payment application:
+    a) Get current invoice data
+    b) newBalance = invoice.balance + amountApplied (add back)
+    c) newStatus = newBalance > 0 ? "open" : "completed"
+    d) UPDATE transactions SET balance, status WHERE id = invoiceId
+    e) Log restoration details
+
+Step 4: Restore deposit/cheque credits (if applicable)
+  - Find line items for this payment with negative amounts
+  - These indicate deposits/cheques used as payment sources
+  - Extract deposit/cheque reference from description
+  - Calculate restored balance:
+    - For deposits: currentBalance - amountUsed (more negative)
+    - For cheques: currentBalance + amountUsed
+  - UPDATE transaction SET balance, status = "unapplied_credit"
+
+Step 5: Delete payment application records
+  - DELETE FROM payment_applications WHERE paymentId = this payment
+  - This removes the link between payment and invoices
+
+Step 6: Delete ledger entries
+  - DELETE FROM ledger_entries WHERE transactionId = this payment
+  - This removes all accounting entries
+
+Step 7: Delete line items
+  - DELETE FROM line_items WHERE transactionId = this payment
+
+Step 8: Delete payment transaction
+  - DELETE FROM transactions WHERE id = this payment
+
+Step 9: All operations wrapped in database transaction
+  - If any step fails, entire operation rolls back
+  - Ensures data consistency
+
+Example Deletion:
+  Payment: PAY-001 for $2,500
+  Applications:
+    - INV-1001: $1,000 applied
+    - INV-1002: $1,200 applied
+  Unapplied: $300
+
+  After Deletion:
+    - INV-1001: balance $0 → $1,000, status "paid" → "open"
+    - INV-1002: balance $300 → $1,500, status "partial" → "open"
+    - Payment applications: 2 records deleted
+    - Ledger entries: All deleted
+    - Payment record: Deleted
+
+  Result: Invoices restored to unpaid state, as if payment never occurred
+
+===============================================================================
+3. DEPOSIT TRANSACTIONS
+===============================================================================
+
+3.1 OVERVIEW
+------------
+Deposits record money deposited into bank accounts. They can represent:
+  1) Direct income deposits (bypassing invoices)
+  2) Customer payments being deposited
+  3) Unapplied credits that can be applied to invoices later
+
+Deposits support line items for categorizing different components and
+can be linked to invoices via payment_applications table.
+
+3.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "deposit")
+
+Field              Type                Description
+----------------------------------------------------------------------------
+id                 serial              Primary key
+reference          text                Deposit reference (e.g., DEP-001)
+type               transaction_type    Always "deposit"
+date               timestamp           Deposit date
+description        text                Deposit description
+amount             double precision    Total deposit amount
+balance            double precision    Unapplied amount (stored as negative)
+contactId          integer             FK to contacts (optional)
+status             status              completed, unapplied_credit
+paymentAccountId   integer             FK to destination bank account
+currency           varchar(3)          Currency code
+
+3.3 DEPOSIT CREATION FLOW
+--------------------------
+Step 1: Validate deposit data
+  - Ensure paymentAccountId is a valid bank account
+  - Validate amount > 0
+  - Validate line items if provided
+
+Step 2: Determine deposit type
+  - Direct Income: No invoice linkage, goes straight to revenue
+  - Customer Payment: Links to invoices via payment_applications
+  - Unapplied Credit: Can be applied to invoices later
+
+Step 3: Create deposit transaction
+  - Insert into transactions table with type = "deposit"
+  - amount = total deposit amount
+  - balance = negative of amount (represents available credit)
+  - status = "unapplied_credit" (can be applied later)
+
+Step 4: Create line items (if applicable)
+  - Each line item represents a component of the deposit
+  - Can link to different revenue/income accounts
+  - Store description, amount, accountId
+
+Step 5: Generate ledger entries
+  a) Debit Bank Account (paymentAccountId)
+     - Debit: total deposit amount
+     - Description: "Deposit to [bank account]"
+
+  b) Credit Revenue/Income Accounts (from line items)
+     - For each line item:
+       - Credit: line item amount
+       - Account: line item accountId
+       - Description: line item description
+
+  OR
+
+  b) Credit Unapplied Credit Account
+     - If deposit not immediately categorized:
+       - Credit: total amount
+       - Description: "Unapplied deposit credit"
+
+Step 6: Link to invoices (if applicable)
+  - If deposit is being applied to invoices:
+    a) Create payment_applications records
+    b) Update invoice balances and statuses
+    c) Update deposit description to include invoice references
+    d) Reduce deposit balance by applied amounts
+
+Step 7: Update account balances
+  - Increase Bank Account by deposit amount
+  - Increase Revenue/Income accounts per line items
+  - Or increase Unapplied Credit liability
+
+Special Note: Deposit Balance Convention
+  - Deposits representing unapplied credits store balance as NEGATIVE
+  - Example: $5,000 deposit → balance = -$5,000
+  - This indicates $5,000 available to apply to future invoices
+  - When $2,000 applied → balance becomes -$3,000
+  - When fully applied → balance = $0, status = "completed"
+
+3.4 DEPOSIT DELETION LOGIC
+---------------------------
+Handler: deleteDepositAndReverseApplications() in deposit-delete-handler.ts
+
+Step 1: Verify deposit exists
+  - Query: SELECT * FROM transactions WHERE id = depositId AND type = "deposit"
+  - Throw error if not found
+
+Step 2: Check if deposit has been applied to invoices
+  - Method 1: Check payment_applications table
+    SELECT * FROM payment_applications WHERE paymentId = depositId
+
+  - Method 2: Check for ledger entry references
+    Look for ledger entries from other transactions mentioning this deposit
+
+  - Method 3: Check balance vs amount discrepancy
+    If availableCredit ≠ originalAmount AND ledger entries confirm application
+
+  - Method 4: Check description for application evidence
+    Pattern: "Applied $X to invoice #Y"
+
+  - If ANY method indicates applications: PREVENT DELETION
+    Throw error: "Cannot delete this deposit: Credit has been applied"
+
+Step 3: Find payment applications (if deletable)
+  - Query payment_applications WHERE paymentId = depositId
+  - Build map of affected invoices and amounts
+
+Step 4: Restore invoice balances and statuses
+  - For each payment application:
+    a) Get current invoice
+    b) newBalance = currentBalance + amountApplied (restore)
+    c) newStatus = newBalance > 0 ? "open" : "paid"
+    d) UPDATE transactions SET balance, status WHERE id = invoiceId
+
+Step 5: Delete payment applications
+  - DELETE FROM payment_applications WHERE paymentId = depositId
+
+Step 6: Delete ledger entries
+  - DELETE FROM ledger_entries WHERE transactionId = depositId
+
+Step 7: Delete line items
+  - DELETE FROM line_items WHERE transactionId = depositId
+
+Step 8: Delete deposit transaction
+  - DELETE FROM transactions WHERE id = depositId
+
+Example Deletion Scenarios:
+
+Scenario 1 (Allowed):
+  Deposit: DEP-001 for $5,000
+  Balance: -$5,000 (fully unapplied)
+  Applications: None
+  Result: Deletion succeeds, all records removed
+
+Scenario 2 (Blocked):
+  Deposit: DEP-002 for $5,000
+  Balance: -$2,000 (partially applied)
+  Applications: $3,000 applied to INV-1001
+  Result: Error "Cannot delete: Credit has been applied to INV-1001"
+
+Scenario 3 (Allowed after restoration):
+  Deposit: DEP-003 for $3,000
+  Balance: $0 (fully applied)
+  Applications: $3,000 to INV-1005
+  Process:
+    1) Restore INV-1005: balance $0 → $3,000, status "paid" → "open"
+    2) Delete payment application
+    3) Delete deposit
+  Result: Deletion succeeds, invoice restored to unpaid state
+
+===============================================================================
+4. SALES RECEIPT TRANSACTIONS
+===============================================================================
+
+4.1 OVERVIEW
+------------
+Sales Receipts represent immediate cash sales where payment is received
+at the time of sale. Unlike invoices (which create receivables), sales
+receipts record both the revenue and the cash receipt in a single transaction.
+
+Key Difference from Invoice + Payment:
+  - Invoice: Creates AR, records revenue, then later payment reduces AR
+  - Sales Receipt: Records revenue AND cash simultaneously, no AR involved
+
+4.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "sales_receipt")
+
+Field              Type                Description
+----------------------------------------------------------------------------
+id                 serial              Primary key
+reference          text                Sales receipt number (e.g., SR-001)
+type               transaction_type    Always "sales_receipt"
+date               timestamp           Sale date
+description        text                Sale description
+amount             double precision    Total amount
+subTotal           double precision    Subtotal before tax
+taxAmount          double precision    Tax amount
+contactId          integer             FK to contacts (customer)
+status             status              Always "completed"
+paymentMethod      payment_method      cash, credit_card, etc.
+paymentAccountId   integer             FK to bank/cash account
+currency           varchar(3)          Currency code
+
+4.3 SALES RECEIPT CREATION FLOW
+--------------------------------
+Step 1: Validate sales receipt data
+  - Ensure contactId exists and is a customer
+  - Validate paymentAccountId is a valid bank/cash account
+  - Validate line items (at least 1 required)
+  - Ensure payment method is specified
+
+Step 2: Calculate totals
+  - subTotal = sum of line item amounts
+  - taxAmount = sum of calculated tax for each line
+  - totalAmount = subTotal + taxAmount
+
+Step 3: Create sales receipt transaction
+  - Insert into transactions with type = "sales_receipt"
+  - amount = totalAmount
+  - balance = 0 (no outstanding balance)
+  - status = "completed" (payment already received)
+
+Step 4: Create line items
+  - Insert each line item with product, quantity, price
+  - Link to revenue accounts via productId or accountId
+
+Step 5: Generate ledger entries
+  a) Debit Bank/Cash Account (paymentAccountId)
+     - Debit: totalAmount
+     - Description: "Sales receipt from [customer]"
+
+  b) Credit Revenue Account(s) (from line items)
+     - For each line item:
+       - Credit: line item amount
+       - Account: Revenue account from product/service
+       - Description: Line item description
+
+  c) Credit Sales Tax Payable (if tax applies)
+     - Account: Sales Tax Payable
+     - Credit: taxAmount
+     - Description: "Sales tax for sales receipt #[reference]"
+
+Step 6: Update account balances
+  - Increase Bank/Cash account by totalAmount
+  - Increase Revenue accounts by line item amounts
+  - Increase Sales Tax Payable by taxAmount
+
+Comparison: Invoice vs Sales Receipt
+
+Creating an Invoice ($1,000 + $180 tax):
+  Ledger Entries:
+    - Debit: Accounts Receivable $1,180
+    - Credit: Sales Revenue $1,000
+    - Credit: Sales Tax Payable $180
+  Balance Sheet Impact:
+    - AR increases $1,180 (asset)
+    - No cash received yet
+
+Creating a Sales Receipt ($1,000 + $180 tax):
+  Ledger Entries:
+    - Debit: Cash $1,180
+    - Credit: Sales Revenue $1,000
+    - Credit: Sales Tax Payable $180
+  Balance Sheet Impact:
+    - Cash increases $1,180 (asset)
+    - No AR involved
+
+Key Difference:
+  - Invoice creates receivable (customer owes money)
+  - Sales Receipt records cash (money already received)
+  - Sales Receipt status is always "completed"
+  - Sales Receipt has no balance to track
+  - Sales Receipt cannot have payments applied to it
+
+4.4 SALES RECEIPT DELETION LOGIC
+---------------------------------
+Sales receipt deletion is straightforward since there are no linked payments:
+
+Step 1: Verify sales receipt exists
+  - Query: transactions WHERE id = salesReceiptId AND type = "sales_receipt"
+
+Step 2: Reverse ledger entries
+  - Get all ledger entries for this sales receipt
+  - For each entry:
+    - Reverse the debit/credit on the account
+    - Decrease Bank/Cash by total amount
+    - Decrease Revenue by line item amounts
+    - Decrease Sales Tax Payable by tax amount
+
+Step 3: Delete ledger entries
+  - DELETE FROM ledger_entries WHERE transactionId = salesReceiptId
+
+Step 4: Delete line items
+  - DELETE FROM line_items WHERE transactionId = salesReceiptId
+
+Step 5: Delete sales receipt
+  - DELETE FROM transactions WHERE id = salesReceiptId
+
+No Additional Considerations:
+  - No invoice linkages to restore
+  - No payment applications to delete
+  - No customer balance calculations needed
+  - Simple reversal of accounting entries
+
+Example:
+  Sales Receipt: SR-001 for $1,180 ($1,000 + $180 tax)
+
+  Before Deletion:
+    - Cash: $10,000
+    - Sales Revenue: $50,000
+    - Sales Tax Payable: $5,000
+
+  After Deletion:
+    - Cash: $8,820 ($10,000 - $1,180)
+    - Sales Revenue: $49,000 ($50,000 - $1,000)
+    - Sales Tax Payable: $4,820 ($5,000 - $180)
+    - All related records deleted
+
+===============================================================================
+5. CUSTOMER CREDIT TRANSACTIONS
+===============================================================================
+
+5.1 OVERVIEW
+------------
+Customer Credits (also called Credit Memos) are issued to customers to reduce
+their account balance. Common scenarios include:
+  - Product returns or refunds
+  - Service adjustments or discounts
+  - Billing corrections
+  - Goodwill gestures
+
+Customer Credits can be applied to existing invoices or kept as unapplied
+credits for future use. They reduce Accounts Receivable and reverse revenue.
+
+5.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "customer_credit")
+
+Field          Type                Description
+----------------------------------------------------------------------------
+id             serial              Primary key
+reference      text                Credit memo number (e.g., CR-001)
+type           transaction_type    Always "customer_credit"
+date           timestamp           Credit date
+description    text                Reason for credit
+amount         double precision    Total credit amount
+balance        double precision    Unapplied amount
+contactId      integer             FK to contacts (customer)
+status         status              unapplied_credit, completed
+currency       varchar(3)          Currency code
+
+5.3 CUSTOMER CREDIT CREATION FLOW
+----------------------------------
+Step 1: Validate credit data
+  - Ensure contactId exists and is a customer
+  - Validate amount > 0
+  - Ensure description/reason is provided
+
+Step 2: Create customer credit transaction
+  - Insert into transactions with type = "customer_credit"
+  - amount = total credit amount
+  - balance = amount (fully unapplied initially)
+  - status = "unapplied_credit"
+
+Step 3: Create line items (if detailed breakdown)
+  - Each line item shows what is being credited
+  - Links to original revenue accounts
+
+Step 4: Generate ledger entries
+  a) Debit Sales Revenue (reverses revenue)
+     - Debit: credit amount
+     - Account: Revenue account(s) from line items
+     - Description: "Customer credit #[reference] - [reason]"
+
+  b) Credit Accounts Receivable (reduces customer balance)
+     - Credit: credit amount
+     - Account: Accounts Receivable
+     - Description: "Credit issued to [customer]"
+
+  c) Handle Sales Tax (if applicable)
+     - Debit: Sales Tax Payable (reverses tax)
+     - Credit: Accounts Receivable (additional reduction)
+
+Step 5: Update account balances
+  - Decrease Accounts Receivable by credit amount
+  - Decrease Revenue by credit amount
+  - Decrease Sales Tax Payable if tax was reversed
+
+Step 6: Make credit available for application
+  - Credit appears in customer's available credits list
+  - Can be applied to existing or future invoices
+
+Example: Product Return Credit
+  Customer returned $500 worth of products:
+
+  Ledger Entries:
+    - Debit: Sales Revenue $500
+    - Credit: Accounts Receivable $500
+
+  Customer Credit Record:
+    - amount: $500
+    - balance: $500 (unapplied)
+    - status: "unapplied_credit"
+
+  Account Impacts:
+    - AR decreased by $500
+    - Revenue decreased by $500
+    - Customer now has $500 credit to use
+
+5.4 APPLYING CUSTOMER CREDIT TO INVOICES
+-----------------------------------------
+Customer credits can be applied in two ways:
+  1) During invoice creation (see section 1.5)
+  2) After invoice creation (via Receive Payment or directly)
+
+Application Process:
+
+Step 1: Select credit and invoice
+  - User chooses which customer credit to apply
+  - Selects target invoice (must be same customer)
+  - Specifies amount to apply (≤ min(credit balance, invoice balance))
+
+Step 2: Create payment application record
+  - INSERT INTO payment_applications:
+    - paymentId: customer credit ID
+    - invoiceId: target invoice ID
+    - amountApplied: amount being applied
+
+Step 3: Update invoice balance and status
+  - newBalance = invoice.balance - amountApplied
+  - if newBalance = 0: status = "paid"
+  - if newBalance > 0: status = "partial"
+
+Step 4: Update customer credit balance and status
+  - newBalance = credit.balance - amountApplied
+  - if newBalance = 0: status = "completed"
+  - if newBalance > 0: status = "unapplied_credit"
+
+Step 5: Update credit description
+  - Append: "Applied to invoice #[reference] on [date]"
+
+Example Application:
+  Customer Credit: CR-001 for $500
+  Invoice: INV-1003 with balance $1,200
+  Application: Apply $500 from CR-001 to INV-1003
+
+  Results:
+    - CR-001: balance $500 → $0, status "unapplied_credit" → "completed"
+    - INV-1003: balance $1,200 → $700, status "open" → "partial"
+    - Payment application created linking CR-001 to INV-1003
+
+Partial Application Example:
+  Customer Credit: CR-002 for $1,000
+  Invoice: INV-1004 with balance $400
+  Application: Apply $400 from CR-002 to INV-1004
+
+  Results:
+    - CR-002: balance $1,000 → $600, status stays "unapplied_credit"
+    - INV-1004: balance $400 → $0, status "open" → "paid"
+    - Payment application created
+    - Remaining $600 credit available for future invoices
+
+5.5 CUSTOMER CREDIT DELETION LOGIC
+-----------------------------------
+Similar to payment and deposit deletion, with special handling:
+
+Step 1: Check if credit has been applied
+  - Query payment_applications WHERE paymentId = creditId
+  - If applications exist: Must restore invoice balances first
+
+Step 2: Restore invoice balances
+  - For each payment application:
+    a) Get invoice
+    b) newBalance = invoice.balance + amountApplied
+    c) newStatus = newBalance > 0 ? "open" : "paid"
+    d) UPDATE invoice
+
+Step 3: Delete payment applications
+  - DELETE FROM payment_applications WHERE paymentId = creditId
+
+Step 4: Reverse ledger entries
+  - Reverse the revenue debit (increase revenue back)
+  - Reverse the AR credit (increase AR back)
+  - This undoes the credit's accounting impact
+
+Step 5: Delete ledger entries
+  - DELETE FROM ledger_entries WHERE transactionId = creditId
+
+Step 6: Delete line items
+  - DELETE FROM line_items WHERE transactionId = creditId
+
+Step 7: Delete customer credit
+  - DELETE FROM transactions WHERE id = creditId
+
+Example:
+  Customer Credit: CR-001 for $500
+  Applied to: INV-1003 ($500 paid INV balance from $1,200 to $700)
+
+  Deletion Process:
+    1) Restore INV-1003: balance $700 → $1,200, status "partial" → "open"
+    2) Delete payment application
+    3) Reverse ledger entries:
+       - Increase Sales Revenue by $500
+       - Increase Accounts Receivable by $500
+    4) Delete credit record
+
+  Result:
+    - Invoice restored to unpaid state
+    - Revenue and AR restored
+    - Credit removed from system
+    - As if credit was never issued
+
+===============================================================================
+6. JOURNAL ENTRY TRANSACTIONS
+===============================================================================
+
+6.1 OVERVIEW
+------------
+Journal Entries are manual accounting entries that allow direct manipulation
+of the general ledger. They are used for:
+  - Adjusting entries (accruals, deferrals, corrections)
+  - Period-end adjustments
+  - Depreciation entries
+  - Equity transactions
+  - Any transaction not covered by standard transaction types
+
+Journal entries strictly enforce the fundamental accounting equation:
+  Total Debits MUST EQUAL Total Credits (within 0.001 tolerance)
+
+6.2 DATABASE SCHEMA
+-------------------
+Table: transactions (type: "journal_entry")
+
+Field          Type                Description
+----------------------------------------------------------------------------
+id             serial              Primary key
+reference      text                Journal entry number (e.g., JE-001) - REQUIRED
+type           transaction_type    Always "journal_entry"
+date           timestamp           Entry date
+description    text                Explanation of the entry
+amount         double precision    Total of debits (or credits)
+attachments    text[]              Supporting documentation
+
+Journal Entry Line Structure (stored in ledgerEntries):
+
+Field          Type        Description
+----------------------------------------------------------------------------
+accountId      integer     FK to accounts - REQUIRED
+contactId      integer     FK to contacts (customer/vendor) - OPTIONAL
+description    text        Line description - REQUIRED
+debit          double      Debit amount (≥ 0)
+credit         double      Credit amount (≥ 0)
+salesTaxId     integer     FK to sales_taxes - OPTIONAL
+
+6.3 JOURNAL ENTRY CREATION FLOW
+--------------------------------
+Step 1: Validate journal entry data
+  - Ensure reference is provided (required)
+  - Validate entries array has at least 2 entries
+  - Check that each entry has accountId and description
+  - Verify debit ≥ 0 and credit ≥ 0 for each entry
+  - Validate that each entry has either debit OR credit (not both)
+
+Step 2: Enforce balanced equation
+  - Calculate totalDebits = sum of all debit entries
+  - Calculate totalCredits = sum of all credit entries
+  - CRITICAL VALIDATION: |totalDebits - totalCredits| < 0.001
+  - If not balanced: Reject with error "Total debits must equal total credits"
+
+Step 3: Create journal entry transaction
+  - Insert into transactions with type = "journal_entry"
+  - amount = totalDebits (same as totalCredits)
+  - status = "completed"
+  - Store reference, date, description
+
+Step 4: Create ledger entries directly
+  - For each entry in the journal entry:
+    INSERT INTO ledger_entries:
+      - transactionId: journal entry ID
+      - accountId: from entry
+      - contactId: from entry (if provided)
+      - description: from entry
+      - debit: from entry (or 0)
+      - credit: from entry (or 0)
+      - date: journal entry date
+
+Step 5: Update account balances
+  - For each ledger entry:
+    a) Get account type
+    b) Apply normal balance rules:
+       - Assets & Expenses: increase with debits, decrease with credits
+       - Liabilities, Equity, Income: increase with credits, decrease with debits
+    c) Update account.balance accordingly
+
+Step 6: Handle customer/vendor links
+  - If contactId provided on any entry:
+    - Links journal entry to customer or vendor
+    - Useful for AR/AP adjustments
+    - Appears in customer/vendor transaction history
+
+No Line Items:
+  - Journal entries do NOT use the line_items table
+  - All data stored directly in ledger_entries
+  - This is because journal entries ARE the ledger entries
+
+Validation Examples:
+
+Valid Entry:
+  Entry 1: Debit Rent Expense $1,000
+  Entry 2: Credit Cash $1,000
+  Total Debits: $1,000
+  Total Credits: $1,000
+  Balanced: ✓ Accepted
+
+Invalid Entry:
+  Entry 1: Debit Rent Expense $1,000
+  Entry 2: Credit Cash $900
+  Total Debits: $1,000
+  Total Credits: $900
+  Balanced: ✗ Rejected with error
+
+6.4 JOURNAL ENTRY EXAMPLES
+---------------------------
+Example 1: Depreciation Entry
+  Date: 2025-01-31
+  Reference: JE-001
+  Description: Monthly depreciation for equipment
+
+  Entries:
+    Entry 1:
+      Account: Depreciation Expense (7200)
+      Description: "Equipment depreciation - January 2025"
+      Debit: $500.00
+
+    Entry 2:
+      Account: Accumulated Depreciation (1500)
+      Description: "Equipment accumulated depreciation"
+      Credit: $500.00
+
+  Result:
+    - Depreciation Expense increased by $500
+    - Accumulated Depreciation increased by $500
+    - Net book value of equipment decreased by $500
+
+Example 2: Accrued Revenue
+  Date: 2025-01-31
+  Reference: JE-002
+  Description: Accrue consulting revenue earned but not invoiced
+
+  Entries:
+    Entry 1:
+      Account: Accounts Receivable (2)
+      ContactId: 5 (Acme Corp)
+      Description: "Accrued revenue - January consulting"
+      Debit: $3,000.00
+
+    Entry 2:
+      Account: Consulting Revenue (4000)
+      Description: "January consulting services"
+      Credit: $3,000.00
+
+  Result:
+    - AR increased by $3,000 for Acme Corp
+    - Consulting Revenue increased by $3,000
+    - Entry linked to customer (shows in Acme Corp transaction history)
+
+Example 3: Multi-Line Entry (Payroll)
+  Date: 2025-01-31
+  Reference: JE-003
+  Description: Record January payroll
+
+  Entries:
+    Entry 1:
+      Account: Salary Expense (6000)
+      Description: "Gross salaries - January"
+      Debit: $15,000.00
+
+    Entry 2:
+      Account: Payroll Tax Expense (6100)
+      Description: "Employer payroll taxes"
+      Debit: $1,500.00
+
+    Entry 3:
+      Account: Salaries Payable (2200)
+      Description: "Net pay owed to employees"
+      Credit: $12,000.00
+
+    Entry 4:
+      Account: Payroll Taxes Payable (2201)
+      Description: "Taxes withheld and employer portion"
+      Credit: $4,500.00
+
+  Total Debits: $16,500
+  Total Credits: $16,500
+  Balanced: ✓
+
+  Result:
+    - Salary Expense: +$15,000
+    - Payroll Tax Expense: +$1,500
+    - Salaries Payable: +$12,000
+    - Payroll Taxes Payable: +$4,500
+
+6.5 JOURNAL ENTRY DELETION LOGIC
+---------------------------------
+Journal entry deletion is straightforward since there are no linked transactions:
+
+Step 1: Verify journal entry exists
+  - Query: transactions WHERE id = journalEntryId AND type = "journal_entry"
+
+Step 2: Get all ledger entries
+  - Query: ledger_entries WHERE transactionId = journalEntryId
+
+Step 3: Reverse account balances
+  - For each ledger entry:
+    a) Get account and its type
+    b) Reverse the balance change:
+       - If was debit: subtract from account balance (or add if liability/equity/income)
+       - If was credit: subtract from account balance (or add if asset/expense)
+    c) Update account.balance
+
+Step 4: Delete ledger entries
+  - DELETE FROM ledger_entries WHERE transactionId = journalEntryId
+
+Step 5: Delete journal entry
+  - DELETE FROM transactions WHERE id = journalEntryId
+
+No Additional Considerations:
+  - No invoice or payment linkages
+  - No customer/vendor balance calculations (unless AR/AP affected)
+  - Simple reversal of all ledger entries
+
+Example Deletion:
+  Journal Entry: JE-001 (Depreciation $500)
+
+  Original Entry:
+    - Debit: Depreciation Expense $500
+    - Credit: Accumulated Depreciation $500
+
+  Deletion Process:
+    1) Reverse balances:
+       - Depreciation Expense: -$500
+       - Accumulated Depreciation: -$500
+    2) Delete ledger entries (2 entries)
+    3) Delete journal entry transaction
+
+  Result:
+    - Account balances restored to pre-entry state
+    - All journal entry records removed
+    - As if entry never occurred
+
+Important Note on Customer/Vendor Links:
+  - If journal entry included contactId on AR/AP accounts:
+    - Customer/vendor transaction history is affected
+    - May need to recalculate customer/vendor balances
+    - Deletion removes entry from their transaction history
+
+===============================================================================
+7. PAYMENT APPLICATIONS TABLE
+===============================================================================
+
+7.1 OVERVIEW
+------------
+The payment_applications table is the SOURCE OF TRUTH for tracking which
+payments have been applied to which invoices. This table creates a many-to-many
+relationship between payments and invoices, allowing:
+  - One payment to be split across multiple invoices
+  - One invoice to receive payments from multiple sources
+  - Accurate tracking of payment allocations
+  - Easy calculation of invoice and payment balances
+
+7.2 TABLE SCHEMA
+----------------
+Field           Type                Description
+----------------------------------------------------------------------------
+id              serial              Primary key
+paymentId       integer             FK to transactions (payment type)
+invoiceId       integer             FK to transactions (invoice type)
+amountApplied   double precision    Amount allocated from payment to invoice
+createdAt       timestamp           When application was created
+
+7.3 PAYMENT TYPES THAT USE THIS TABLE
+--------------------------------------
+The following transaction types can be the "payment" in payment_applications:
+  1. payment - Regular receive payment transactions
+  2. deposit - Deposits can be applied to invoices
+  3. customer_credit - Credit memos applied to invoices
+  4. cheque - Vendor checks can be applied to bills (AR side)
+
+The "invoice" side can be:
+  1. invoice - Customer invoices (most common)
+  2. bill - Vendor bills (for AP side)
+
+Note: Sales receipts do NOT use payment_applications because they are
+complete transactions with no balance to track.
+
+7.4 USAGE EXAMPLES
+------------------
+Example 1: Single Payment to Single Invoice
+  Payment: PAY-001 for $1,000
+  Invoice: INV-1001 balance $1,000
+
+  payment_applications record:
+    - paymentId: 5 (PAY-001)
+    - invoiceId: 10 (INV-1001)
+    - amountApplied: $1,000
+
+  Result:
+    - Payment fully applied (balance $0)
+    - Invoice fully paid (balance $0)
+
+Example 2: Single Payment to Multiple Invoices
+  Payment: PAY-002 for $5,000
+  Invoices:
+    - INV-1002: balance $2,000
+    - INV-1003: balance $1,500
+    - INV-1004: balance $1,000
+  Unapplied: $500
+
+  payment_applications records:
+    - Record 1: paymentId=6, invoiceId=11, amountApplied=$2,000
+    - Record 2: paymentId=6, invoiceId=12, amountApplied=$1,500
+    - Record 3: paymentId=6, invoiceId=13, amountApplied=$1,000
+
+  Result:
+    - Payment has $500 unapplied (balance $500)
+    - All 3 invoices fully paid (balance $0)
+
+Example 3: Multiple Payments to Single Invoice
+  Invoice: INV-1005 balance $10,000
+  Payments:
+    - PAY-003: $4,000
+    - PAY-004: $3,000
+    - CR-001 (customer credit): $2,000
+  Remaining: $1,000
+
+  payment_applications records:
+    - Record 1: paymentId=7, invoiceId=14, amountApplied=$4,000
+    - Record 2: paymentId=8, invoiceId=14, amountApplied=$3,000
+    - Record 3: paymentId=15, invoiceId=14, amountApplied=$2,000
+
+  Result:
+    - Invoice has $1,000 remaining balance
+    - All 3 payments fully applied (balance $0)
+
+Example 4: Deposit Applied to Invoice
+  Deposit: DEP-001 for $5,000 (unapplied credit)
+  Invoice: INV-1006 balance $3,000
+
+  payment_applications record:
+    - paymentId: 20 (DEP-001)
+    - invoiceId: 16 (INV-1006)
+    - amountApplied: $3,000
+
+  Result:
+    - Deposit has $2,000 remaining credit (balance -$2,000)
+    - Invoice fully paid (balance $0)
+
+Example 5: Customer Credit Applied During Invoice Creation
+  Customer Credit: CR-002 for $800
+  New Invoice: INV-1007 for $1,200
+  Credit applied during creation: $800
+
+  payment_applications record:
+    - paymentId: 21 (CR-002)
+    - invoiceId: 17 (INV-1007)
+    - amountApplied: $800
+
+  Result:
+    - Invoice created with balance $400 ($1,200 - $800)
+    - Invoice status: "partial"
+    - Customer credit fully applied (balance $0, status "completed")
+
+7.5 BALANCE CALCULATION USING payment_applications
+---------------------------------------------------
+Invoice Balance Calculation:
+  SELECT
+    invoice.amount -
+    COALESCE(SUM(pa.amountApplied), 0) AS balance
+  FROM transactions invoice
+  LEFT JOIN payment_applications pa ON pa.invoiceId = invoice.id
+  WHERE invoice.id = ?
+  GROUP BY invoice.id, invoice.amount
+
+Payment Balance Calculation:
+  SELECT
+    payment.amount -
+    COALESCE(SUM(pa.amountApplied), 0) AS balance
+  FROM transactions payment
+  LEFT JOIN payment_applications pa ON pa.paymentId = payment.id
+  WHERE payment.id = ?
+  GROUP BY payment.id, payment.amount
+
+Find All Payments for an Invoice:
+  SELECT
+    p.*,
+    pa.amountApplied
+  FROM payment_applications pa
+  JOIN transactions p ON p.id = pa.paymentId
+  WHERE pa.invoiceId = ?
+  ORDER BY pa.createdAt
+
+Find All Invoices for a Payment:
+  SELECT
+    i.*,
+    pa.amountApplied
+  FROM payment_applications pa
+  JOIN transactions i ON i.id = pa.invoiceId
+  WHERE pa.paymentId = ?
+  ORDER BY pa.createdAt
+
+Advantages of payment_applications Table:
+  1. Single source of truth for payment allocations
+  2. Easy to query and report on payment history
+  3. Supports complex payment scenarios (splits, partials)
+  4. Atomic deletion and restoration operations
+  5. Clear audit trail of when payments were applied
+  6. Eliminates need to parse ledger entry descriptions
+  7. Enables accurate balance calculations
+  8. Simplifies unapplied credit management
+
+===============================================================================
+8. DELETION CASCADE LOGIC SUMMARY
+===============================================================================
+
+8.1 GENERAL DELETION PRINCIPLES
+--------------------------------
+All transaction deletions in Vedo follow these principles:
+
+1. Atomic Operations
+   - All deletions wrapped in database transactions
+   - If any step fails, entire operation rolls back
+   - Ensures data integrity and consistency
+
+2. Cascade Restoration
+   - Restore all linked transactions to pre-deletion state
+   - Update balances and statuses accurately
+   - Maintain referential integrity
+
+3. Complete Cleanup
+   - Delete from payment_applications first
+   - Then delete ledger_entries
+   - Then delete line_items
+   - Finally delete the transaction itself
+
+4. Account Balance Reversal
+   - Reverse all ledger entry effects on account balances
+   - Follow account type rules (debit/credit nature)
+   - Maintain accurate account balances
+
+5. Logging and Auditability
+   - Log all restoration operations
+   - Track which invoices/payments were affected
+   - Provide detailed feedback on what was restored
+
+8.2 DELETION FLOW COMPARISON TABLE
+-----------------------------------
+Transaction       Applications       Linked Records                  Special Handling
+--------------------------------------------------------------------------------------------------
+Invoice           Restores payments  payment_applications,           Restores payment balances
+                                    ledger_entries, line_items      and statuses to unapplied_credit
+
+Receive Payment   Restores invoices  payment_applications,           Restores invoice balances and
+                                    ledger_entries, line_items      statuses, may restore deposit credits
+
+Deposit           Restores invoices  payment_applications,           Checks if deposit has been applied,
+                                    ledger_entries, line_items      prevents deletion if applied
+
+Sales Receipt     None              ledger_entries, line_items      Simple reversal, no linked transactions
+
+Customer Credit   Restores invoices  payment_applications,           Similar to payment deletion,
+                                    ledger_entries, line_items      restores invoice balances
+
+Journal Entry     None              ledger_entries only             Simple reversal, may affect
+                                                                   customer/vendor if contactId linked
+
+8.3 DELETION ORDER OF OPERATIONS
+---------------------------------
+Standard deletion order for all transaction types:
+
+1. Validation
+   - Verify transaction exists
+   - Check transaction type matches
+   - Determine if deletion is allowed
+
+2. Find Linked Transactions
+   - Query payment_applications table
+   - Identify all invoices/payments affected
+   - Build restoration plan
+
+3. Restore Linked Transaction Balances
+   - For each linked transaction:
+     a) Calculate new balance (add back applied amount)
+     b) Determine new status (based on new balance)
+     c) UPDATE transaction record
+     d) Log restoration
+
+4. Delete Link Records
+   - DELETE FROM payment_applications
+   - WHERE paymentId or invoiceId = this transaction
+
+5. Reverse Account Balances
+   - Get all ledger entries for this transaction
+   - For each entry:
+     a) Get account and determine type
+     b) Calculate balance reversal amount
+     c) UPDATE account.balance
+
+6. Delete Ledger Entries
+   - DELETE FROM ledger_entries
+   - WHERE transactionId = this transaction
+
+7. Delete Line Items
+   - DELETE FROM line_items
+   - WHERE transactionId = this transaction
+
+8. Delete Transaction
+   - DELETE FROM transactions
+   - WHERE id = this transaction
+
+9. Recalculate Related Balances
+   - Recalculate customer/vendor total balances
+   - Verify account balances are accurate
+
+10. Return Result
+   - Return success status
+   - Include details of what was restored
+   - Provide list of affected transactions
+
+===============================================================================
+END OF DOCUMENTATION
+===============================================================================
+
+For questions or clarifications about this documentation,
+please refer to the Vedo codebase or contact the development team.
+
+This documentation was automatically generated based on the Vedo system's
+current implementation as of the generation date.
