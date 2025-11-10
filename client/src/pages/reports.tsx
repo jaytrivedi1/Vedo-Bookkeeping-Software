@@ -86,12 +86,14 @@ function BalanceSheetSection({
   title, 
   accounts, 
   subtotal,
-  defaultOpen = true 
+  defaultOpen = true,
+  onAccountClick
 }: { 
   title: string; 
   accounts: any[]; 
   subtotal: number;
   defaultOpen?: boolean;
+  onAccountClick?: (accountId: number) => void;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   
@@ -112,8 +114,18 @@ function BalanceSheetSection({
         <CollapsibleContent>
           <div className="ml-6 space-y-1">
             {accounts.map((account) => (
-              <div key={account.id} className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
-                <span className="text-sm text-gray-600">{account.name}</span>
+              <div 
+                key={account.id} 
+                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onAccountClick) {
+                    onAccountClick(account.id);
+                  }
+                }}
+                data-testid={`balance-sheet-account-${account.id}`}
+              >
+                <span className="text-sm text-gray-600 hover:text-blue-600">{account.name}</span>
                 <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
               </div>
             ))}
@@ -125,7 +137,13 @@ function BalanceSheetSection({
 }
 
 // Main Balance Sheet Report Component
-function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
+function BalanceSheetReport({ 
+  balanceSheet, 
+  onAccountClick 
+}: { 
+  balanceSheet: any;
+  onAccountClick?: (accountId: number) => void;
+}) {
   if (!balanceSheet) {
     return <div className="text-center py-6 text-gray-500">No balance sheet data available</div>;
   }
@@ -181,6 +199,7 @@ function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
           accounts={currentAssetAccounts}
           subtotal={currentAssetsTotal}
           defaultOpen={true}
+          onAccountClick={onAccountClick}
         />
         
         {/* Fixed Assets */}
@@ -189,6 +208,7 @@ function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
           accounts={fixedAssetAccounts}
           subtotal={fixedAssetsTotal}
           defaultOpen={true}
+          onAccountClick={onAccountClick}
         />
         
         {/* Total Assets */}
@@ -208,6 +228,7 @@ function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
           accounts={currentLiabilityAccounts}
           subtotal={currentLiabilitiesTotal}
           defaultOpen={true}
+          onAccountClick={onAccountClick}
         />
         
         {/* Long-term Liabilities */}
@@ -216,6 +237,7 @@ function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
           accounts={longTermLiabilityAccounts}
           subtotal={longTermLiabilitiesTotal}
           defaultOpen={true}
+          onAccountClick={onAccountClick}
         />
         
         {/* Total Liabilities */}
@@ -233,8 +255,13 @@ function BalanceSheetReport({ balanceSheet }: { balanceSheet: any }) {
         {equityAccounts.length > 0 && (
           <div className="space-y-1">
             {equityAccounts.map((account: any) => (
-              <div key={account.id} className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
-                <span className="text-sm text-gray-600">{account.name}</span>
+              <div 
+                key={account.id} 
+                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                onClick={() => onAccountClick && onAccountClick(account.id)}
+                data-testid={`balance-sheet-account-${account.id}`}
+              >
+                <span className="text-sm text-gray-600 hover:text-blue-600">{account.name}</span>
                 <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
               </div>
             ))}
@@ -1239,7 +1266,13 @@ export default function Reports() {
                   {balanceLoading ? (
                     <div className="text-center py-6">Loading balance sheet...</div>
                   ) : (
-                    <BalanceSheetReport balanceSheet={balanceSheet} />
+                    <BalanceSheetReport 
+                      balanceSheet={balanceSheet}
+                      onAccountClick={(accountId) => {
+                        setSelectedAccountId(accountId);
+                        setActiveTab('general-ledger');
+                      }}
+                    />
                   )}
                 </CardContent>
               </Card>
