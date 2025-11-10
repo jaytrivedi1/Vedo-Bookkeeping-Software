@@ -10063,6 +10063,45 @@ Respond in JSON format:
     }
   });
 
+  // Fetch exchange rates from API for a specific date
+  apiRouter.post("/exchange-rates/fetch", async (req: Request, res: Response) => {
+    try {
+      const { date } = req.body;
+      
+      if (!date) {
+        return res.status(400).json({ message: "date is required" });
+      }
+
+      // Get preferences to get home currency
+      const preferences = await storage.getPreferences();
+      if (!preferences?.homeCurrency) {
+        return res.status(400).json({ message: "Home currency not configured. Please set up multi-currency preferences first." });
+      }
+
+      const exchangeRateService = createExchangeRateService();
+      if (!exchangeRateService) {
+        return res.status(503).json({ message: "Exchange rate service not available. API key may not be configured." });
+      }
+
+      const requestDate = new Date(date);
+      const createdCount = await exchangeRateService.fetchAndStoreRates(
+        preferences.homeCurrency,
+        requestDate,
+        storage
+      );
+
+      res.json({ 
+        success: true, 
+        createdCount,
+        date: requestDate.toISOString().split('T')[0],
+        homeCurrency: preferences.homeCurrency
+      });
+    } catch (error) {
+      console.error("Error fetching exchange rates from API:", error);
+      res.status(500).json({ message: "Failed to fetch exchange rates from API" });
+    }
+  });
+
   // FX Revaluations - Calculate/preview unrealized gains/losses
   apiRouter.post("/fx-revaluations/calculate", async (req: Request, res: Response) => {
     try {
