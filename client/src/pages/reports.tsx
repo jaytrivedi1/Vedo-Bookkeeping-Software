@@ -621,7 +621,7 @@ export default function Reports() {
   // Handle expand/collapse all for grouped view
   const handleExpandAll = () => {
     if (groupedLedgerData?.accountGroups) {
-      const allAccountIds = new Set(groupedLedgerData.accountGroups.map((g: any) => g.account.id));
+      const allAccountIds = new Set<number>(groupedLedgerData.accountGroups.map((g: any) => g.account.id));
       setExpandedAccounts(allAccountIds);
       setExpandAll(true);
     }
