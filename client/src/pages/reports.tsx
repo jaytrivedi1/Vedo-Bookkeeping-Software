@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X, Star } from "lucide-react";
 import { useLocation } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -307,6 +307,31 @@ export default function Reports() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setLocation] = useLocation();
+  
+  // Favorites state - persisted in localStorage
+  const [favoriteReports, setFavoriteReports] = useState<Set<string>>(() => {
+    const stored = localStorage.getItem('favoriteReports');
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
+  
+  // Save favorites to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('favoriteReports', JSON.stringify(Array.from(favoriteReports)));
+  }, [favoriteReports]);
+  
+  // Toggle favorite status
+  const toggleFavorite = (reportId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setFavoriteReports(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(reportId)) {
+        newSet.delete(reportId);
+      } else {
+        newSet.add(reportId);
+      }
+      return newSet;
+    });
+  };
   
   // Grouped General Ledger state
   const [ledgerViewType, setLedgerViewType] = useState<'detailed' | 'grouped'>('detailed');
@@ -856,6 +881,10 @@ export default function Reports() {
   // Define report categories and reports
   const reportCategories = [
     {
+      id: 'favorites',
+      name: 'Favorites',
+    },
+    {
       id: 'all',
       name: 'All Reports',
     },
@@ -913,9 +942,11 @@ export default function Reports() {
   ];
   
   // Filter reports by selected category
-  const filteredReports = selectedCategory === 'all' 
-    ? allReports 
-    : allReports.filter(report => report.category === selectedCategory);
+  const filteredReports = selectedCategory === 'favorites'
+    ? allReports.filter(report => favoriteReports.has(report.id))
+    : selectedCategory === 'all' 
+      ? allReports 
+      : allReports.filter(report => report.category === selectedCategory);
   
   return (
     <div className="py-6">
@@ -1004,7 +1035,24 @@ export default function Reports() {
                           {report.description}
                         </p>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0 ml-4" />
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                        <button
+                          onClick={(e) => toggleFavorite(report.id, e)}
+                          className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
+                          data-testid={`star-${report.id}`}
+                          aria-label={favoriteReports.has(report.id) ? "Remove from favorites" : "Add to favorites"}
+                        >
+                          <Star 
+                            className={cn(
+                              "h-5 w-5 transition-colors",
+                              favoriteReports.has(report.id) 
+                                ? "fill-yellow-400 text-yellow-400" 
+                                : "text-gray-400 hover:text-yellow-400"
+                            )}
+                          />
+                        </button>
+                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />
+                      </div>
                     </div>
                   ))}
                 </div>
