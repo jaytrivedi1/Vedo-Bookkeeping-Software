@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X, Star } from "lucide-react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
@@ -297,7 +297,11 @@ function BalanceSheetReport({
 }
 
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState<string>('');
+  const searchString = useSearch();
+  const queryParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
+  const tabFromUrl = queryParams.get('tab') || '';
+  
+  const [activeTab, setActiveTab] = useState<string>(tabFromUrl);
   const [startDate, setStartDate] = useState<Date | undefined>(subMonths(new Date(), 1));
   const [endDate, setEndDate] = useState<Date | undefined>(new Date());
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
@@ -1148,7 +1152,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1177,7 +1181,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1216,7 +1220,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1255,7 +1259,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1284,7 +1288,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1388,7 +1392,7 @@ export default function Reports() {
                     <BalanceSheetReport 
                       balanceSheet={balanceSheet}
                       onAccountClick={(accountId) => {
-                        setLocation(`/accounts/${accountId}/transactions?back=/reports&backLabel=Balance Sheet`);
+                        setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=balance-sheet&backLabel=Balance Sheet`);
                       }}
                     />
                   )}
@@ -2020,7 +2024,7 @@ export default function Reports() {
                                 key={index}
                                 className="cursor-pointer hover:bg-gray-50 transition-colors"
                                 onClick={() => {
-                                  setLocation(`/accounts/${item.account.id}/transactions?back=/reports&backLabel=Trial Balance`);
+                                  setLocation(`/accounts/${item.account.id}/transactions?back=/reports?tab=trial-balance&backLabel=Trial Balance`);
                                 }}
                                 data-testid={`row-account-${item.account.id}`}
                               >
