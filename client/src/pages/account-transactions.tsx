@@ -219,7 +219,12 @@ export default function AccountTransactions() {
   const handleTransactionClick = (transactionType: string, transactionId: number) => {
     const route = getTransactionRoute(transactionType, transactionId);
     if (route) {
-      setLocation(route);
+      // Build the back URL - current page with all its query parameters
+      const currentUrl = `/accounts/${accountId}/transactions${searchString}`;
+      const accountName = ledgerData?.account.name || 'Account';
+      
+      // Navigate with back context
+      setLocation(`${route}?back=${encodeURIComponent(currentUrl)}&backLabel=${encodeURIComponent(accountName)}`);
     }
   };
 

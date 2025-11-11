@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +35,7 @@ export default function BillView() {
   const billId = params?.id;
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/bills', 'Bills');
   const [isEditMode, setIsEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
   const [vendors, setVendors] = useState<Contact[]>([]);
@@ -376,8 +378,8 @@ export default function BillView() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate("/transactions")}>
-            Back to Transactions
+          <Button variant="outline" onClick={handleBack}>
+            Back to {backLabel}
           </Button>
           {isEditMode ? (
             <>

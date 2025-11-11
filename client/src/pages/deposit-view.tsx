@@ -9,6 +9,7 @@ import {
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { toast, useToast } from "@/hooks/use-toast";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { 
   Card, 
   CardContent, 
@@ -42,6 +43,7 @@ export default function DepositView() {
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/deposits', 'Deposits');
   
   // Toast notifications
   const { toast } = useToast();
@@ -72,7 +74,7 @@ export default function DepositView() {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
-      navigate(-1);
+      handleBack();
     },
     onError: (error) => {
       toast({
@@ -170,11 +172,11 @@ export default function DepositView() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => window.history.back()}
+              onClick={handleBack}
               className="mr-4"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+              Back to {backLabel}
             </Button>
             <h1 className="text-2xl font-semibold text-gray-900">Deposit Details</h1>
           </div>

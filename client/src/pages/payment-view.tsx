@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 
 interface PaymentResponse {
   transaction: Transaction;
@@ -65,6 +66,7 @@ export default function PaymentView() {
   const [, navigate] = useLocation();
   const params = useParams();
   const paymentId = params.id;
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/payments', 'Payments');
   
   // Editing state
   const [isEditing, setIsEditing] = useState(false);
@@ -419,7 +421,7 @@ export default function PaymentView() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/payments')}
+            onClick={handleBack}
             className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />

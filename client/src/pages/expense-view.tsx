@@ -26,9 +26,11 @@ import {
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 
 export default function ExpenseView() {
   const [, navigate] = useLocation();
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/expenses', 'Expenses');
   const [expenseId, setExpenseId] = useState<number | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -155,7 +157,7 @@ export default function ExpenseView() {
       await apiRequest(`/api/transactions/${expenseId}`, 'DELETE');
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       setShowDeleteDialog(false);
-      navigate(-1);
+      handleBack();
     } catch (error) {
       console.error('Failed to delete expense:', error);
     } finally {
@@ -180,9 +182,9 @@ export default function ExpenseView() {
       <div className="max-w-4xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-4" data-testid="heading-not-found">Expense not found</h1>
         <p className="mb-4">The expense you are looking for does not exist or has been deleted.</p>
-        <Button onClick={() => navigate("/expenses")} data-testid="button-back-to-expenses">
+        <Button onClick={handleBack} data-testid="button-back-to-expenses">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Expenses
+          Back to {backLabel}
         </Button>
       </div>
     );
@@ -193,9 +195,9 @@ export default function ExpenseView() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center">
-          <Button variant="ghost" onClick={() => navigate("/expenses")} data-testid="button-back">
+          <Button variant="ghost" onClick={handleBack} data-testid="button-back">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Expenses
+            Back to {backLabel}
           </Button>
         </div>
         <div className="flex gap-2">

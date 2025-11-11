@@ -11,11 +11,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
 
 export default function ChequeView() {
   const [, navigate] = useLocation();
   const [chequeId, setChequeId] = useState<number | null>(null);
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/cheques', 'Cheques');
   
   // Extract the cheque ID from the URL
   useEffect(() => {
@@ -24,9 +26,9 @@ export default function ChequeView() {
     if (match && match[1]) {
       setChequeId(parseInt(match[1]));
     } else {
-      navigate("/cheques");
+      handleBack();
     }
-  }, [navigate]);
+  }, [handleBack]);
   
   // Define extended transaction interface
   interface ChequeWithExtras extends Transaction {
@@ -147,9 +149,9 @@ export default function ChequeView() {
       <div className="max-w-4xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-4" data-testid="heading-not-found">Cheque not found</h1>
         <p className="mb-4">The cheque you are looking for does not exist or has been deleted.</p>
-        <Button onClick={() => navigate("/cheques")} data-testid="button-back-to-cheques">
+        <Button onClick={handleBack} data-testid="button-back-to-cheques">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Cheques
+          Back to {backLabel}
         </Button>
       </div>
     );
@@ -160,9 +162,9 @@ export default function ChequeView() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center">
-          <Button variant="ghost" onClick={() => navigate("/cheques")} data-testid="button-back">
+          <Button variant="ghost" onClick={handleBack} data-testid="button-back">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Cheques
+            Back to {backLabel}
           </Button>
         </div>
         <div className="flex gap-2">

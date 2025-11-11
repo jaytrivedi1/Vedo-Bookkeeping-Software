@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
@@ -30,6 +31,7 @@ export default function InvoiceView() {
   const [, navigate] = useLocation();
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const { toast } = useToast();
+  const { backUrl, backLabel, handleBack } = useBackNavigation('/invoices', 'Invoices');
   
   // Extract the invoice ID from the URL
   useEffect(() => {
@@ -38,9 +40,9 @@ export default function InvoiceView() {
     if (match && match[1]) {
       setInvoiceId(parseInt(match[1]));
     } else {
-      navigate("/invoices");
+      handleBack();
     }
-  }, [navigate]);
+  }, [handleBack]);
   
   // Define extended transaction interface with dueDate
   interface InvoiceWithExtras extends Transaction {
@@ -209,9 +211,9 @@ export default function InvoiceView() {
       <div className="max-w-4xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-4">Invoice not found</h1>
         <p className="mb-4">The invoice you are looking for does not exist or has been deleted.</p>
-        <Button onClick={() => navigate("/invoices")}>
+        <Button onClick={handleBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Invoices
+          Back to {backLabel}
         </Button>
       </div>
     );
@@ -222,9 +224,9 @@ export default function InvoiceView() {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center">
-          <Button variant="ghost" onClick={() => navigate("/invoices")}>
+          <Button variant="ghost" onClick={handleBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Invoices
+            Back to {backLabel}
           </Button>
         </div>
         <div className="flex gap-2">
