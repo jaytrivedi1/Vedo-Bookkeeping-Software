@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X } from "lucide-react";
 import { useLocation } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -304,6 +304,8 @@ export default function Reports() {
   const [sortColumn, setSortColumn] = useState<string>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | 'current'>(new Date().getFullYear());
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setLocation] = useLocation();
   
   // Grouped General Ledger state
@@ -851,6 +853,70 @@ export default function Reports() {
     }
   };
   
+  // Define report categories and reports
+  const reportCategories = [
+    {
+      id: 'all',
+      name: 'All Reports',
+    },
+    {
+      id: 'financial-statements',
+      name: 'Financial Statements',
+    },
+    {
+      id: 'accounting-reports',
+      name: 'Accounting Reports',
+    },
+    {
+      id: 'multi-currency',
+      name: 'Multi-Currency',
+    },
+  ];
+  
+  const allReports = [
+    {
+      id: 'income-statement',
+      title: 'Income Statement',
+      description: 'View your revenues, expenses, and net income for a specific period',
+      category: 'financial-statements',
+    },
+    {
+      id: 'balance-sheet',
+      title: 'Balance Sheet',
+      description: 'Examine your assets, liabilities, and equity at a specific point in time',
+      category: 'financial-statements',
+    },
+    {
+      id: 'general-ledger',
+      title: 'General Ledger',
+      description: 'Examine all financial transactions with detailed debit and credit entries',
+      category: 'accounting-reports',
+    },
+    {
+      id: 'trial-balance',
+      title: 'Trial Balance',
+      description: 'View account balances with debit and credit columns to verify accounting equation',
+      category: 'accounting-reports',
+    },
+    {
+      id: 'journal-entries',
+      title: 'Journal Entry',
+      description: 'View all journal entries with detailed transaction records',
+      category: 'accounting-reports',
+    },
+    {
+      id: 'exchange-rates',
+      title: 'Exchange Rates',
+      description: 'View and manage exchange rates for multi-currency transactions',
+      category: 'multi-currency',
+    },
+  ];
+  
+  // Filter reports by selected category
+  const filteredReports = selectedCategory === 'all' 
+    ? allReports 
+    : allReports.filter(report => report.category === selectedCategory);
+  
   return (
     <div className="py-6">
       {/* Page header */}
@@ -864,102 +930,85 @@ export default function Reports() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="py-4">
           {activeTab === '' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("income-statement")}
-                data-testid="card-income-statement"
+            <div className="flex gap-6">
+              {/* Mobile sidebar toggle */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="md:hidden fixed top-20 left-4 z-10"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                data-testid="button-toggle-sidebar"
               >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Income Statement</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    View your revenues, expenses, and net income for a specific period
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
+                {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </Button>
 
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("balance-sheet")}
-                data-testid="card-balance-sheet"
+              {/* Left Sidebar */}
+              <div 
+                className={cn(
+                  "w-64 flex-shrink-0 border-r border-gray-200 pr-6",
+                  "fixed md:static inset-y-0 left-0 z-20 bg-white md:bg-transparent",
+                  "transform transition-transform duration-200 ease-in-out md:transform-none",
+                  sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+                  "pt-6 md:pt-0"
+                )}
               >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Balance Sheet</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    Examine your assets, liabilities, and equity at a specific point in time
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
+                <div className="space-y-1">
+                  {reportCategories.map((category) => (
+                    <button
+                      key={category.id}
+                      onClick={() => {
+                        setSelectedCategory(category.id);
+                        setSidebarOpen(false);
+                      }}
+                      className={cn(
+                        "w-full text-left px-4 py-2.5 rounded-md text-sm font-medium transition-colors",
+                        selectedCategory === category.id
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      )}
+                      data-testid={`category-${category.id}`}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("general-ledger")}
-                data-testid="card-general-ledger"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">General Ledger</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    Examine all financial transactions with detailed debit and credit entries
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
+              {/* Overlay for mobile */}
+              {sidebarOpen && (
+                <div 
+                  className="fixed inset-0 bg-black bg-opacity-50 z-10 md:hidden"
+                  onClick={() => setSidebarOpen(false)}
+                />
+              )}
 
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("journal-entries")}
-                data-testid="card-journal-entries"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Journal Entry</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    View all journal entries with detailed transaction records
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
-              
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("trial-balance")}
-                data-testid="card-trial-balance"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Trial Balance</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    View account balances with debit and credit columns to verify accounting equation
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
-
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("exchange-rates")}
-                data-testid="card-exchange-rates"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Exchange Rates</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    View and manage exchange rates for multi-currency transactions
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Rates →</Button>
-                </CardFooter>
-              </Card>
+              {/* Main Content - Report List */}
+              <div className="flex-1 min-w-0">
+                <div className="bg-white rounded-lg border border-gray-200">
+                  {filteredReports.map((report, index) => (
+                    <div
+                      key={report.id}
+                      onClick={() => setActiveTab(report.id)}
+                      className={cn(
+                        "flex items-center justify-between px-6 py-4 cursor-pointer",
+                        "hover:bg-gray-50 transition-colors group",
+                        index !== filteredReports.length - 1 && "border-b border-gray-200"
+                      )}
+                      data-testid={`report-${report.id}`}
+                    >
+                      <div className="flex-1">
+                        <h3 className="text-base font-medium text-blue-600 group-hover:text-blue-800 transition-colors">
+                          {report.title}
+                        </h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {report.description}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 flex-shrink-0 ml-4" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
