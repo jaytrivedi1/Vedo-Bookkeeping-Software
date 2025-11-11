@@ -201,6 +201,28 @@ export default function AccountTransactions() {
     return typeLabels[type] || type;
   };
 
+  // Get transaction detail route
+  const getTransactionRoute = (transactionType: string, transactionId: number): string | null => {
+    const routeMap: Record<string, string> = {
+      'invoice': `/invoices/${transactionId}`,
+      'payment': `/payments/${transactionId}`,
+      'bill': `/bills/${transactionId}`,
+      'expense': `/expenses/${transactionId}`,
+      'cheque': `/cheques/${transactionId}`,
+      'journal_entry': `/journals/${transactionId}`,
+      'deposit': `/deposits/${transactionId}`,
+    };
+    return routeMap[transactionType] || null;
+  };
+
+  // Handle transaction row click
+  const handleTransactionClick = (transactionType: string, transactionId: number) => {
+    const route = getTransactionRoute(transactionType, transactionId);
+    if (route) {
+      setLocation(route);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -346,39 +368,47 @@ export default function AccountTransactions() {
                       {formatCurrency(ledgerData.beginningBalance)}
                     </TableCell>
                   </TableRow>
-                  {filteredEntries.map((entry) => (
-                    <TableRow key={entry.id} data-testid={`row-transaction-${entry.id}`}>
-                      <TableCell data-testid={`text-date-${entry.id}`}>
-                        {format(parseISO(entry.date), 'MMM d, yyyy')}
-                      </TableCell>
-                      <TableCell data-testid={`text-type-${entry.id}`}>
-                        {entry.transactionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </TableCell>
-                      <TableCell data-testid={`text-reference-${entry.id}`}>
-                        <span className="font-medium">
-                          {entry.transactionReference || '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell data-testid={`text-contact-${entry.id}`}>
-                        {entry.contactName || '-'}
-                      </TableCell>
-                      <TableCell data-testid={`text-memo-${entry.id}`}>
-                        {entry.memo || '-'}
-                      </TableCell>
-                      <TableCell data-testid={`text-split-${entry.id}`}>
-                        {entry.splitAccountName}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-debit-${entry.id}`}>
-                        {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right" data-testid={`text-credit-${entry.id}`}>
-                        {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-medium" data-testid={`text-balance-${entry.id}`}>
-                        {formatCurrency(entry.runningBalance)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredEntries.map((entry) => {
+                    const hasDetailView = getTransactionRoute(entry.transactionType, entry.transactionId) !== null;
+                    return (
+                      <TableRow 
+                        key={entry.id} 
+                        data-testid={`row-transaction-${entry.id}`}
+                        onClick={() => handleTransactionClick(entry.transactionType, entry.transactionId)}
+                        className={hasDetailView ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}
+                      >
+                        <TableCell data-testid={`text-date-${entry.id}`}>
+                          {format(parseISO(entry.date), 'MMM d, yyyy')}
+                        </TableCell>
+                        <TableCell data-testid={`text-type-${entry.id}`}>
+                          {entry.transactionType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </TableCell>
+                        <TableCell data-testid={`text-reference-${entry.id}`}>
+                          <span className="font-medium">
+                            {entry.transactionReference || '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell data-testid={`text-contact-${entry.id}`}>
+                          {entry.contactName || '-'}
+                        </TableCell>
+                        <TableCell data-testid={`text-memo-${entry.id}`}>
+                          {entry.memo || '-'}
+                        </TableCell>
+                        <TableCell data-testid={`text-split-${entry.id}`}>
+                          {entry.splitAccountName}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-debit-${entry.id}`}>
+                          {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                        </TableCell>
+                        <TableCell className="text-right" data-testid={`text-credit-${entry.id}`}>
+                          {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium" data-testid={`text-balance-${entry.id}`}>
+                          {formatCurrency(entry.runningBalance)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                   <TableRow className="bg-muted/50 font-bold">
                     <TableCell colSpan={6}>Ending Balance</TableCell>
                     <TableCell className="text-right" colSpan={2}></TableCell>
