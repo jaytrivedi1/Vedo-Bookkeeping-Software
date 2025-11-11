@@ -334,7 +334,7 @@ export default function Reports() {
   };
   
   // Grouped General Ledger state
-  const [ledgerViewType, setLedgerViewType] = useState<'detailed' | 'grouped'>('detailed');
+  const [ledgerViewType, setLedgerViewType] = useState<'detailed' | 'grouped'>('grouped');
   const [groupedFilterAccountId, setGroupedFilterAccountId] = useState<number | null>(null);
   const [groupedFilterTransactionType, setGroupedFilterTransactionType] = useState<string>('');
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
@@ -1405,54 +1405,32 @@ export default function Reports() {
             {/* General Ledger */}
             <TabsContent value="general-ledger">
               <div className="mb-4 space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
-                    <Select 
-                      value={selectedFiscalYear.toString()} 
-                      onValueChange={handleFiscalYearChange}
-                      data-testid="fiscal-year-select-general-ledger"
-                    >
-                      <SelectTrigger className="w-[280px]">
-                        <SelectValue placeholder="Select fiscal year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fiscalYearOptions.map((option) => (
-                          <SelectItem 
-                            key={option.value} 
-                            value={option.value.toString()}
-                            data-testid={`fiscal-year-option-${option.value}`}
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Button
-                      variant={ledgerViewType === 'detailed' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setLedgerViewType('detailed')}
-                      data-testid="button-view-detailed"
-                    >
-                      Detailed View
-                    </Button>
-                    <Button
-                      variant={ledgerViewType === 'grouped' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setLedgerViewType('grouped')}
-                      data-testid="button-view-grouped"
-                    >
-                      Grouped by Account
-                    </Button>
-                  </div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                  <Select 
+                    value={selectedFiscalYear.toString()} 
+                    onValueChange={handleFiscalYearChange}
+                    data-testid="fiscal-year-select-general-ledger"
+                  >
+                    <SelectTrigger className="w-[280px]">
+                      <SelectValue placeholder="Select fiscal year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fiscalYearOptions.map((option) => (
+                        <SelectItem 
+                          key={option.value} 
+                          value={option.value.toString()}
+                          data-testid={`fiscal-year-option-${option.value}`}
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 
                 {/* Filters for Grouped View */}
-                {ledgerViewType === 'grouped' && (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 p-4 bg-gray-50 rounded-lg border">
+                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 p-4 bg-gray-50 rounded-lg border">
                     <div className="flex-1 min-w-[200px]">
                       <label className="text-sm font-medium text-gray-700 mb-1 block">Filter by Account</label>
                       <Select 
@@ -1517,8 +1495,7 @@ export default function Reports() {
                         Collapse All
                       </Button>
                     </div>
-                  </div>
-                )}
+                </div>
               </div>
               
               <div className="grid grid-cols-1 gap-6">
