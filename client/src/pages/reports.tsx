@@ -1148,8 +1148,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setSelectedAccountId(account.id);
-                                      setActiveTab('general-ledger');
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1178,8 +1177,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setSelectedAccountId(account.id);
-                                      setActiveTab('general-ledger');
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1218,8 +1216,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setSelectedAccountId(account.id);
-                                      setActiveTab('general-ledger');
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1258,8 +1255,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setSelectedAccountId(account.id);
-                                      setActiveTab('general-ledger');
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1288,8 +1284,7 @@ export default function Reports() {
                                     key={account.id} 
                                     className="cursor-pointer hover:bg-gray-50 transition-colors"
                                     onClick={() => {
-                                      setSelectedAccountId(account.id);
-                                      setActiveTab('general-ledger');
+                                      setLocation(`/accounts/${account.id}/transactions?back=/reports&backLabel=Income Statement`);
                                     }}
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
@@ -1393,8 +1388,7 @@ export default function Reports() {
                     <BalanceSheetReport 
                       balanceSheet={balanceSheet}
                       onAccountClick={(accountId) => {
-                        setSelectedAccountId(accountId);
-                        setActiveTab('general-ledger');
+                        setLocation(`/accounts/${accountId}/transactions?back=/reports&backLabel=Balance Sheet`);
                       }}
                     />
                   )}
@@ -2026,8 +2020,7 @@ export default function Reports() {
                                 key={index}
                                 className="cursor-pointer hover:bg-gray-50 transition-colors"
                                 onClick={() => {
-                                  setSelectedAccountId(item.account.id);
-                                  setActiveTab('general-ledger');
+                                  setLocation(`/accounts/${item.account.id}/transactions?back=/reports&backLabel=Trial Balance`);
                                 }}
                                 data-testid={`row-account-${item.account.id}`}
                               >

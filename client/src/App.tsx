@@ -18,6 +18,7 @@ import VendorCreditCreate from "@/pages/vendor-credit-create";
 import ChartOfAccounts from "@/pages/chart-of-accounts";
 import Reports from "@/pages/reports";
 import AccountBooks from "@/pages/account-books";
+import AccountTransactions from "@/pages/account-transactions";
 import Banking from "@/pages/banking";
 import SalesTaxes from "@/pages/sales-taxes";
 import Products from "@/pages/products";
@@ -150,6 +151,7 @@ function Router() {
               <Route path="/banking" component={Banking} />
               <Route path="/chart-of-accounts" component={ChartOfAccounts} />
               <Route path="/account-books" component={AccountBooks} />
+              <Route path="/accounts/:id/transactions" component={AccountTransactions} />
               <Route path="/sales-taxes" component={SalesTaxes} />
               <Route path="/products" component={Products} />
               <Route path="/fx-revaluation" component={FxRevaluation} />

@@ -300,6 +300,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  apiRouter.get("/accounts/:id/ledger", async (req: Request, res: Response) => {
+    try {
+      const accountId = parseInt(req.params.id);
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      
+      if (!startDateStr || !endDateStr) {
+        return res.status(400).json({ message: "startDate and endDate are required" });
+      }
+      
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+      
+      // Get account
+      const account = await storage.getAccount(accountId);
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      
+      // Determine balance calculation method based on account type
+      // For liabilities, equity, and income accounts, credit increases balance (use credit - debit)
+      // For assets and expense accounts, debit increases balance (use debit - credit)
+      const creditIncreasesBalance = [
+        'liabilities', 'current_liabilities', 'long_term_liabilities', 'accounts_payable', 'credit_card',
+        'equity',
+        'income', 'other_income'
+      ].includes(account.type);
+      
+      // Get filtered data
+      const ledgerEntriesByDateRange = await storage.getLedgerEntriesByDateRange(startDate, endDate);
+      const allLedgerEntries = await storage.getAllLedgerEntries(); // Still need for beginning balance and splits
+      const allAccounts = await storage.getAccounts();
+      const allTransactions = await storage.getTransactions();
+      const allContacts = await storage.getContacts();
+      
+      // Create lookup maps
+      const accountMap = new Map(allAccounts.map(acc => [acc.id, acc]));
+      const transactionMap = new Map(allTransactions.map(tx => [tx.id, tx]));
+      const contactMap = new Map(allContacts.map(c => [c.id, c]));
+      
+      // Calculate beginning balance (all entries before start date)
+      const beginningBalanceEntries = allLedgerEntries.filter(entry =>
+        entry.accountId === accountId && new Date(entry.date) < startDate
+      );
+      
+      let beginningBalance = 0;
+      beginningBalanceEntries.forEach(entry => {
+        const debit = Number(entry.debit || 0);
+        const credit = Number(entry.credit || 0);
+        if (creditIncreasesBalance) {
+          beginningBalance += credit - debit;
+        } else {
+          beginningBalance += debit - credit;
+        }
+      });
+      
+      // Get entries for this account within the date range
+      let accountEntries = ledgerEntriesByDateRange.filter(entry => entry.accountId === accountId);
+      
+      // Sort by date, then transaction ID, then entry ID
+      accountEntries.sort((a, b) => {
+        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        if (dateCompare !== 0) return dateCompare;
+        const txCompare = a.transactionId - b.transactionId;
+        if (txCompare !== 0) return txCompare;
+        return a.id - b.id;
+      });
+      
+      // Calculate running balance and enrich entries
+      let runningBalance = beginningBalance;
+      const enrichedEntries = accountEntries.map(entry => {
+        const transaction = transactionMap.get(entry.transactionId);
+        const contact = transaction?.contactId ? contactMap.get(transaction.contactId) : null;
+        
+        // Calculate movement
+        const debit = Number(entry.debit || 0);
+        const credit = Number(entry.credit || 0);
+        
+        // Update running balance based on account type
+        if (creditIncreasesBalance) {
+          runningBalance += credit - debit;
+        } else {
+          runningBalance += debit - credit;
+        }
+        
+        // Find the split account (other account in the same transaction)
+        const otherEntry = allLedgerEntries.find(e => 
+          e.transactionId === entry.transactionId && e.id !== entry.id
+        );
+        const splitAccount = otherEntry ? accountMap.get(otherEntry.accountId) : null;
+        
+        return {
+          id: entry.id,
+          date: entry.date,
+          transactionId: entry.transactionId,
+          transactionType: transaction?.type || '',
+          transactionReference: transaction?.reference || '',
+          contactName: contact ? (contact.displayName || contact.name) : '',
+          memo: transaction?.memo || entry.memo || '',
+          splitAccountName: splitAccount?.name || 'Split',
+          debit,
+          credit,
+          amount: debit > 0 ? debit : -credit,
+          runningBalance,
+          currency: transaction?.currency || null,
+          exchangeRate: transaction?.exchangeRate || null,
+          foreignAmount: transaction?.foreignAmount || null
+        };
+      });
+      
+      res.json({
+        account: {
+          id: account.id,
+          name: account.name,
+          code: account.code,
+          type: account.type
+        },
+        beginningBalance,
+        entries: enrichedEntries,
+        endingBalance: runningBalance
+      });
+    } catch (error) {
+      console.error("Error fetching account ledger:", error);
+      res.status(500).json({ message: "Failed to fetch account ledger" });
+    }
+  });
+
   apiRouter.post("/accounts", async (req: Request, res: Response) => {
     try {
       console.log("Request body:", req.body);
