@@ -844,10 +844,6 @@ export default function Reports() {
         return 'Journal Entry';
       case 'trial-balance':
         return 'Trial Balance';
-      case 'expense-analysis':
-        return 'Expense Analysis';
-      case 'revenue-analysis':
-        return 'Revenue Analysis';
       case 'exchange-rates':
         return 'Exchange Rates';
       default:
