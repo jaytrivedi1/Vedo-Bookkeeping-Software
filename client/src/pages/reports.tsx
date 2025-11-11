@@ -951,38 +951,6 @@ export default function Reports() {
 
               <Card 
                 className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("expense-analysis")}
-                data-testid="card-expense-analysis"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Expense Analysis</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    Break down your expenses by category to identify spending patterns
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
-
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
-                onClick={() => setActiveTab("revenue-analysis")}
-                data-testid="card-revenue-analysis"
-              >
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-xl">Revenue Analysis</CardTitle>
-                  <CardDescription className="text-sm mt-2">
-                    Analyze your revenue streams to understand your income sources
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="pt-4 flex justify-end border-t">
-                  <Button variant="ghost" size="sm" className="text-primary">View Report →</Button>
-                </CardFooter>
-              </Card>
-
-              <Card 
-                className="cursor-pointer hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary" 
                 onClick={() => setActiveTab("exchange-rates")}
                 data-testid="card-exchange-rates"
               >
