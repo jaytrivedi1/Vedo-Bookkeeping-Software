@@ -70,6 +70,11 @@ export default function Dashboard() {
   const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   
+  // Fetch default company
+  const { data: company } = useQuery({
+    queryKey: ['/api/companies/default'],
+  });
+  
   // Fetch transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
@@ -236,6 +241,27 @@ export default function Dashboard() {
 
   return (
     <div className="py-6 min-h-screen">
+      {/* Company Header */}
+      {company && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
+          <div className="flex items-center gap-4">
+            {company.logoUrl && (
+              <img 
+                src={company.logoUrl} 
+                alt={`${company.name} logo`}
+                className="h-16 w-16 object-contain rounded-lg border border-gray-200 bg-white p-2"
+                data-testid="company-logo"
+              />
+            )}
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900" data-testid="company-name">
+                {company.name}
+              </h2>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Page header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center mb-2">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Dashboard</h1>
