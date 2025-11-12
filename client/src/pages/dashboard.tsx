@@ -6,37 +6,13 @@ import {
   ShoppingCart,
   TrendingUp,
   FileText,
-  Plus,
-  CreditCard,
-  PiggyBank,
-  Receipt,
-  BookOpen,
-  ArrowLeftRight,
 } from "lucide-react";
 import SummaryCard from "@/components/dashboard/SummaryCard";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import RevenueChart from "@/components/dashboard/RevenueChart";
 import AccountBalances from "@/components/dashboard/AccountBalances";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Link } from "wouter";
 import { Transaction } from "@shared/schema";
-import TransferForm from "@/components/forms/TransferForm";
-import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
 
 // Type definition for income statement API response
 interface IncomeStatementData {
@@ -67,8 +43,6 @@ interface IncomeStatementData {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("all");
-  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
-  const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   
   // Fetch default company
   const { data: company } = useQuery({
@@ -267,131 +241,8 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Dashboard</h1>
         <div className="flex items-center space-x-3">
           <span className="text-sm text-muted-foreground font-medium">{format(new Date(), 'MMMM d, yyyy')}</span>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="text-white bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 shadow-lg hover:shadow-xl smooth-transition hover-lift glow-hover" data-testid="button-new-transaction">
-                <Plus className="h-4 w-4 mr-2" />
-                New Transaction
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <Link href="/invoices/new">
-                <DropdownMenuItem>
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>Invoice</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/payment-receive">
-                <DropdownMenuItem>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  <span>Receive Payment</span>
-                </DropdownMenuItem>
-              </Link>
-              <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
-                <Receipt className="mr-2 h-4 w-4" />
-                <span>Sales Receipt</span>
-              </DropdownMenuItem>
-              <Link href="/deposits">
-                <DropdownMenuItem>
-                  <PiggyBank className="mr-2 h-4 w-4" />
-                  <span>Deposit</span>
-                </DropdownMenuItem>
-              </Link>
-              
-              <DropdownMenuSeparator />
-              
-              <Link href="/bill-create">
-                <DropdownMenuItem>
-                  <Receipt className="mr-2 h-4 w-4" />
-                  <span>Bill</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/pay-bill">
-                <DropdownMenuItem>
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  <span>Pay Bill</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/cheques/new">
-                <DropdownMenuItem>
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  <span>Cheque</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/expenses/new">
-                <DropdownMenuItem>
-                  <ShoppingCart className="mr-2 h-4 w-4" />
-                  <span>Expense</span>
-                </DropdownMenuItem>
-              </Link>
-              
-              <DropdownMenuSeparator />
-              
-              <Link href="/journals/new">
-                <DropdownMenuItem>
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  <span>Journal Entry</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/customer-credits/new">
-                <DropdownMenuItem>
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>Customer Credit</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/vendor-credits/new">
-                <DropdownMenuItem>
-                  <Receipt className="mr-2 h-4 w-4" />
-                  <span>Vendor Credit</span>
-                </DropdownMenuItem>
-              </Link>
-              <DropdownMenuItem onClick={() => setTransferDialogOpen(true)}>
-                <ArrowLeftRight className="mr-2 h-4 w-4" />
-                <span>Transfer</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
-      
-      {/* Transfer Dialog */}
-      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>New Transfer</DialogTitle>
-            <DialogDescription>
-              Move money between balance sheet accounts (bank accounts, assets, liabilities).
-            </DialogDescription>
-          </DialogHeader>
-          <TransferForm
-            onSuccess={() => {
-              setTransferDialogOpen(false);
-              refetch();
-            }}
-            onCancel={() => setTransferDialogOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Sales Receipt Dialog */}
-      <Dialog open={salesReceiptDialogOpen} onOpenChange={setSalesReceiptDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>New Sales Receipt</DialogTitle>
-            <DialogDescription>
-              Record immediate cash sales without creating an invoice
-            </DialogDescription>
-          </DialogHeader>
-          <SalesReceiptForm
-            onSuccess={() => {
-              setSalesReceiptDialogOpen(false);
-              refetch();
-            }}
-            onCancel={() => setSalesReceiptDialogOpen(false)}
-          />
-        </DialogContent>
-      </Dialog>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         {/* Dashboard content */}

@@ -1,8 +1,34 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import Sidebar from "./Sidebar";
-import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
-import { PlusIcon, MenuIcon } from "lucide-react";
+import { GlobalTopPanel } from "@/components/GlobalTopPanel";
+import { MenuIcon } from "lucide-react";
+
+const HIDDEN_TOP_PANEL_PATTERNS = [
+  /^\/invoices\/new$/,
+  /^\/invoices\/[0-9]+\/edit$/,
+  /^\/invoices\/[0-9]+$/,
+  /^\/bill-create$/,
+  /^\/bills\/[0-9]+$/,
+  /^\/pay-bill$/,
+  /^\/payment-receive$/,
+  /^\/payments\/[0-9]+$/,
+  /^\/payments\/edit\/[0-9]+$/,
+  /^\/expenses\/new$/,
+  /^\/expenses\/[0-9]+\/edit$/,
+  /^\/expenses\/[0-9]+$/,
+  /^\/cheques\/new$/,
+  /^\/cheques\/[0-9]+\/edit$/,
+  /^\/cheques\/[0-9]+$/,
+  /^\/journals\/new$/,
+  /^\/journals\/[0-9]+\/edit$/,
+  /^\/journals\/[0-9]+$/,
+  /^\/deposits\/[0-9]+$/,
+  /^\/sales-receipts\/[0-9]+$/,
+  /^\/transfers\/[0-9]+$/,
+  /^\/customer-credits\/new$/,
+  /^\/vendor-credits\/new$/,
+];
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -10,6 +36,9 @@ interface MainLayoutProps {
 
 export default function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [location] = useLocation();
+  
+  const shouldHideTopPanel = HIDDEN_TOP_PANEL_PATTERNS.some(pattern => pattern.test(location));
   
   return (
     <div className="h-screen flex overflow-hidden bg-background">
@@ -36,6 +65,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
             </div>
           </div>
         </div>
+        
+        {/* Global Top Panel - Search and New Transaction */}
+        {!shouldHideTopPanel && <GlobalTopPanel />}
         
         {/* Page content */}
         <main className="flex-1 relative overflow-y-auto focus:outline-none bg-background">

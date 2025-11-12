@@ -16,7 +16,7 @@ import {
   reconciliations, reconciliationItems,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, lt, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -1145,6 +1145,95 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error(`Error getting ${type} transactions for contact ${contactId}:`, error);
       return [];
+    }
+  }
+
+  async getRecentTransactions(limit: number): Promise<Transaction[]> {
+    try {
+      const result = await db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            ne(transactions.type, 'customer_credit' as any),
+            ne(transactions.type, 'vendor_credit' as any)
+          )
+        )
+        .orderBy(desc(transactions.date))
+        .limit(limit);
+      
+      return result;
+    } catch (error) {
+      console.error(`Error getting recent transactions:`, error);
+      return [];
+    }
+  }
+
+  async searchAll(query: string): Promise<{
+    transactions: Transaction[];
+    contacts: Contact[];
+    accounts: Account[];
+  }> {
+    try {
+      const searchTerm = `%${query}%`;
+      
+      const [transactionsResult, contactsResult, accountsResult] = await Promise.all([
+        db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              or(
+                ilike(transactions.reference, searchTerm),
+                ilike(transactions.description, searchTerm),
+                ilike(transactions.memo, searchTerm)
+              ),
+              ne(transactions.type, 'customer_credit' as any),
+              ne(transactions.type, 'vendor_credit' as any)
+            )
+          )
+          .orderBy(desc(transactions.date))
+          .limit(20),
+        
+        db
+          .select()
+          .from(contacts)
+          .where(
+            or(
+              ilike(contacts.name, searchTerm),
+              ilike(contacts.email, searchTerm),
+              ilike(contacts.phone, searchTerm)
+            )
+          )
+          .orderBy(contacts.name)
+          .limit(10),
+        
+        db
+          .select()
+          .from(accounts)
+          .where(
+            or(
+              ilike(accounts.name, searchTerm),
+              ilike(accounts.code, searchTerm),
+              ilike(accounts.description, searchTerm)
+            )
+          )
+          .orderBy(accounts.code)
+          .limit(10)
+      ]);
+      
+      return {
+        transactions: transactionsResult,
+        contacts: contactsResult,
+        accounts: accountsResult
+      };
+    } catch (error) {
+      console.error(`Error performing global search:`, error);
+      return {
+        transactions: [],
+        contacts: [],
+        accounts: []
+      };
     }
   }
 

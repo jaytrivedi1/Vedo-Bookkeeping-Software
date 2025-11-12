@@ -5170,6 +5170,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to generate cash flow statement" });
     }
   });
+
+  // Global Search - Search across transactions, contacts, and accounts
+  apiRouter.get("/search", async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      
+      if (!query || query.trim() === "") {
+        return res.status(400).json({ message: "Search query is required" });
+      }
+      
+      const results = await storage.searchAll(query);
+      res.json(results);
+    } catch (error) {
+      console.error("Error performing search:", error);
+      res.status(500).json({ message: "Failed to perform search" });
+    }
+  });
+
+  // Recent Transactions - Get most recently modified transactions
+  apiRouter.get("/search/recent", async (req: Request, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 5;
+      const recentTransactions = await storage.getRecentTransactions(limit);
+      res.json(recentTransactions);
+    } catch (error) {
+      console.error("Error fetching recent transactions:", error);
+      res.status(500).json({ message: "Failed to fetch recent transactions" });
+    }
+  });
   
   // Ledger entries route - needed for Account Books
   apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {

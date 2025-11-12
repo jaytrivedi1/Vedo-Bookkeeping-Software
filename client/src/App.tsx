@@ -32,6 +32,8 @@ import ChequeForm from "@/pages/cheque-form";
 import ChequeView from "@/pages/cheque-view";
 import JournalEntryForm from "@/pages/journal-entry-form";
 import JournalEntryView from "@/pages/journal-entry-view";
+import SalesReceiptView from "@/pages/sales-receipt-view";
+import TransferView from "@/pages/transfer-view";
 import FxRevaluation from "@/pages/fx-revaluation";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Login from "@/pages/login";
@@ -148,6 +150,8 @@ function Router() {
               <Route path="/journals/:id" component={JournalEntryView} />
               <Route path="/deposits" component={Deposits} />
               <Route path="/deposits/:id" component={DepositView} />
+              <Route path="/sales-receipts/:id" component={SalesReceiptView} />
+              <Route path="/transfers/:id" component={TransferView} />
               <Route path="/banking" component={Banking} />
               <Route path="/chart-of-accounts" component={ChartOfAccounts} />
               <Route path="/account-books" component={AccountBooks} />

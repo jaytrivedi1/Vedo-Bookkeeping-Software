@@ -116,6 +116,14 @@ export interface IStorage {
   getTransactionsByContact(contactId: number): Promise<Transaction[]>;
   getTransactionsByDescription(searchText: string, type?: string): Promise<Transaction[]>;
   getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]>;
+  getRecentTransactions(limit: number): Promise<Transaction[]>;
+  
+  // Global Search
+  searchAll(query: string): Promise<{
+    transactions: Transaction[];
+    contacts: Contact[];
+    accounts: Account[];
+  }>;
 
   // Line Items
   getLineItemsByTransaction(transactionId: number): Promise<LineItem[]>;
