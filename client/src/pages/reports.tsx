@@ -429,6 +429,7 @@ export default function Reports() {
     // Invalidate and refetch reports
     queryClient.invalidateQueries({ queryKey: ['/api/reports/income-statement'] });
     queryClient.invalidateQueries({ queryKey: ['/api/reports/balance-sheet'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/reports/cash-flow'] });
     queryClient.invalidateQueries({ queryKey: ['/api/reports/trial-balance'] });
     queryClient.invalidateQueries({ queryKey: ['/api/ledger-entries'] });
   };
@@ -453,6 +454,17 @@ export default function Reports() {
       return response.json();
     },
     enabled: activeTab === 'balance-sheet' || activeTab === '',
+  });
+  
+  // Fetch cash flow statement data with fiscal year dates
+  const { data: cashFlowStatement, isLoading: cashFlowLoading } = useQuery({
+    queryKey: ['/api/reports/cash-flow', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO],
+    queryFn: async () => {
+      const response = await fetch(`/api/reports/cash-flow?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}`);
+      if (!response.ok) throw new Error('Failed to fetch cash flow statement');
+      return response.json();
+    },
+    enabled: activeTab === 'cash-flow',
   });
   
   // Fetch account balances (for detailed breakdowns) with fiscal year dates
@@ -869,6 +881,8 @@ export default function Reports() {
         return 'Income Statement';
       case 'balance-sheet':
         return 'Balance Sheet';
+      case 'cash-flow':
+        return 'Cash Flow Statement';
       case 'general-ledger':
         return 'General Ledger';
       case 'journal-entries':
@@ -917,6 +931,12 @@ export default function Reports() {
       id: 'balance-sheet',
       title: 'Balance Sheet',
       description: 'Examine your assets, liabilities, and equity at a specific point in time',
+      category: 'financial-statements',
+    },
+    {
+      id: 'cash-flow',
+      title: 'Cash Flow Statement',
+      description: 'Track cash inflows and outflows from operating, investing, and financing activities',
       category: 'financial-statements',
     },
     {
@@ -1395,6 +1415,161 @@ export default function Reports() {
                         setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=balance-sheet&backLabel=Balance Sheet`);
                       }}
                     />
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            {/* Cash Flow Statement */}
+            <TabsContent value="cash-flow" data-testid="content-cash-flow">
+              <div className="mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <Select 
+                      value={selectedFiscalYear.toString()} 
+                      onValueChange={handleFiscalYearChange}
+                      data-testid="fiscal-year-select-cash-flow"
+                    >
+                      <SelectTrigger className="w-[280px]">
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fiscalYearOptions.map((option) => (
+                          <SelectItem 
+                            key={option.value} 
+                            value={option.value.toString()}
+                            data-testid={`fiscal-year-option-${option.value}`}
+                          >
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Statement of Cash Flows</CardTitle>
+                  <CardDescription>
+                    For the period {format(fiscalYearBounds.fiscalYearStart, 'MMM d, yyyy')} - {format(fiscalYearBounds.fiscalYearEnd, 'MMM d, yyyy')}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {cashFlowLoading ? (
+                    <div className="text-center py-6">Loading cash flow statement...</div>
+                  ) : cashFlowStatement ? (
+                    <div className="space-y-6">
+                      {/* Operating Activities Section */}
+                      {cashFlowStatement.categories?.operating && (
+                        <div className="space-y-2">
+                          <BalanceSheetSection
+                            title="Cash Flows from Operating Activities"
+                            accounts={cashFlowStatement.categories.operating.accounts || []}
+                            subtotal={cashFlowStatement.categories.operating.total || 0}
+                            defaultOpen={true}
+                            onAccountClick={(accountId) => {
+                              setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
+                            }}
+                          />
+                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
+                            <span className="font-semibold text-gray-900">Net Cash from Operating Activities</span>
+                            <span className="font-semibold text-gray-900">
+                              {cashFlowStatement.categories.operating.total >= 0 
+                                ? formatCurrency(cashFlowStatement.categories.operating.total)
+                                : `(${formatCurrency(cashFlowStatement.categories.operating.total)})`
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Investing Activities Section */}
+                      {cashFlowStatement.categories?.investing && (
+                        <div className="space-y-2 pt-4 border-t border-gray-200">
+                          <BalanceSheetSection
+                            title="Cash Flows from Investing Activities"
+                            accounts={cashFlowStatement.categories.investing.accounts || []}
+                            subtotal={cashFlowStatement.categories.investing.total || 0}
+                            defaultOpen={true}
+                            onAccountClick={(accountId) => {
+                              setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
+                            }}
+                          />
+                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
+                            <span className="font-semibold text-gray-900">Net Cash from Investing Activities</span>
+                            <span className="font-semibold text-gray-900">
+                              {cashFlowStatement.categories.investing.total >= 0 
+                                ? formatCurrency(cashFlowStatement.categories.investing.total)
+                                : `(${formatCurrency(cashFlowStatement.categories.investing.total)})`
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Financing Activities Section */}
+                      {cashFlowStatement.categories?.financing && (
+                        <div className="space-y-2 pt-4 border-t border-gray-200">
+                          <BalanceSheetSection
+                            title="Cash Flows from Financing Activities"
+                            accounts={cashFlowStatement.categories.financing.accounts || []}
+                            subtotal={cashFlowStatement.categories.financing.total || 0}
+                            defaultOpen={true}
+                            onAccountClick={(accountId) => {
+                              setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
+                            }}
+                          />
+                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
+                            <span className="font-semibold text-gray-900">Net Cash from Financing Activities</span>
+                            <span className="font-semibold text-gray-900">
+                              {cashFlowStatement.categories.financing.total >= 0 
+                                ? formatCurrency(cashFlowStatement.categories.financing.total)
+                                : `(${formatCurrency(cashFlowStatement.categories.financing.total)})`
+                              }
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Net Change in Cash */}
+                      <div className="flex justify-between py-3 px-2 border-t-2 border-gray-400 mt-4">
+                        <span className="font-bold text-gray-900">Net Change in Cash</span>
+                        <span className="font-bold text-gray-900" data-testid="cash-flow-net-change">
+                          {cashFlowStatement.netChange >= 0 
+                            ? formatCurrency(cashFlowStatement.netChange)
+                            : `(${formatCurrency(cashFlowStatement.netChange)})`
+                          }
+                        </span>
+                      </div>
+                      
+                      {/* Cash Balances */}
+                      <div className="space-y-2 pt-4 border-t border-gray-200">
+                        <div className="flex justify-between py-1.5 px-2">
+                          <span className="text-sm text-gray-600">Cash at Beginning of Period</span>
+                          <span className="text-sm text-right">{formatCurrency(cashFlowStatement.openingCash || 0)}</span>
+                        </div>
+                        <div className="flex justify-between py-1.5 px-2">
+                          <span className="text-sm text-gray-600">Net Change in Cash</span>
+                          <span className="text-sm text-right">
+                            {cashFlowStatement.netChange >= 0 
+                              ? formatCurrency(cashFlowStatement.netChange)
+                              : `(${formatCurrency(cashFlowStatement.netChange)})`
+                            }
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300">
+                          <span className="font-bold text-gray-900">Cash at End of Period</span>
+                          <span className="font-bold text-gray-900" data-testid="cash-flow-closing-cash">
+                            {formatCurrency(cashFlowStatement.closingCash || 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">No cash flow data available</div>
                   )}
                 </CardContent>
               </Card>

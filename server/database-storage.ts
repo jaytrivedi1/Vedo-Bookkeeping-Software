@@ -1378,6 +1378,151 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{
+    period: { startDate: Date | null; endDate: Date | null };
+    categories: {
+      operating: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      investing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      financing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+    };
+    netChange: number;
+    openingCash: number;
+    closingCash: number;
+  }> {
+    // Get all accounts
+    const allAccounts = await this.getAccounts();
+    const accountMap = new Map(allAccounts.map(acc => [acc.id, acc]));
+    
+    // Identify cash accounts (bank type)
+    const cashAccounts = allAccounts.filter(acc => acc.type === 'bank');
+    const cashAccountIds = new Set(cashAccounts.map(acc => acc.id));
+    
+    // Get ledger entries for the date range
+    const entries = await this.getLedgerEntriesByDateRange(startDate, endDate);
+    
+    // Group entries by transaction ID for efficient lookup
+    const entriesByTransaction = new Map<number, LedgerEntry[]>();
+    for (const entry of entries) {
+      if (!entriesByTransaction.has(entry.transactionId)) {
+        entriesByTransaction.set(entry.transactionId, []);
+      }
+      entriesByTransaction.get(entry.transactionId)!.push(entry);
+    }
+    
+    // Group cash flows by category and account
+    const cashFlowsByCategory = {
+      operating: new Map<number, number>(),
+      investing: new Map<number, number>(),
+      financing: new Map<number, number>()
+    };
+    
+    // Process each transaction once
+    for (const [transactionId, transactionEntries] of entriesByTransaction) {
+      // Identify cash and non-cash entries in this transaction
+      const cashEntries = transactionEntries.filter(e => cashAccountIds.has(e.accountId));
+      const nonCashEntries = transactionEntries.filter(e => !cashAccountIds.has(e.accountId));
+      
+      // Skip if no cash movement
+      if (cashEntries.length === 0) continue;
+      
+      // Calculate net cash effect (debits increase cash, credits decrease cash)
+      const netCashDelta = cashEntries.reduce((sum, e) => sum + e.debit - e.credit, 0);
+      
+      // Skip if net cash delta is very close to zero
+      if (Math.abs(netCashDelta) < 0.001) continue;
+      
+      // If all non-cash accounts lack categories, this is likely a bank-to-bank transfer
+      // or uncategorized transaction - we need to decide how to handle it
+      const categorizedNonCashEntries = nonCashEntries.filter(e => {
+        const account = accountMap.get(e.accountId);
+        return account && account.cashFlowCategory && account.cashFlowCategory !== 'none';
+      });
+      
+      if (categorizedNonCashEntries.length === 0 && nonCashEntries.length > 0) {
+        // All non-cash entries are uncategorized - skip this transaction
+        // In a real system, you might want to flag these for review
+        continue;
+      }
+      
+      // Calculate total absolute value of categorized non-cash entries to use for proportional allocation
+      const totalCategorizedAmount = categorizedNonCashEntries.reduce((sum, e) => 
+        sum + Math.abs(e.debit - e.credit), 0
+      );
+      
+      if (totalCategorizedAmount === 0) continue;
+      
+      // Distribute net cash delta proportionally across categorized non-cash accounts
+      for (const nonCashEntry of categorizedNonCashEntries) {
+        const account = accountMap.get(nonCashEntry.accountId);
+        if (!account || !account.cashFlowCategory || account.cashFlowCategory === 'none') continue;
+        
+        const category = account.cashFlowCategory as 'operating' | 'investing' | 'financing';
+        
+        // Calculate this entry's proportion of the total categorized amount
+        const entryAmount = Math.abs(nonCashEntry.debit - nonCashEntry.credit);
+        const proportion = entryAmount / totalCategorizedAmount;
+        
+        // Allocate proportional share of net cash delta
+        // The cash delta already has the correct sign (positive = cash inflow, negative = cash outflow)
+        // We just need to distribute it proportionally
+        const allocatedCashDelta = netCashDelta * proportion;
+        
+        // Accumulate in the category map
+        const currentAmount = cashFlowsByCategory[category].get(nonCashEntry.accountId) || 0;
+        cashFlowsByCategory[category].set(nonCashEntry.accountId, currentAmount + allocatedCashDelta);
+      }
+    }
+    
+    // Build the result structure
+    const buildCategoryResult = (categoryMap: Map<number, number>) => {
+      const accounts: Array<{ account: Account; amount: number }> = [];
+      let total = 0;
+      
+      for (const [accountId, amount] of categoryMap.entries()) {
+        const account = accountMap.get(accountId);
+        if (account) {
+          accounts.push({ account, amount });
+          total += amount;
+        }
+      }
+      
+      // Sort by account code
+      accounts.sort((a, b) => a.account.code.localeCompare(b.account.code));
+      
+      return { total, accounts };
+    };
+    
+    const categories = {
+      operating: buildCategoryResult(cashFlowsByCategory.operating),
+      investing: buildCategoryResult(cashFlowsByCategory.investing),
+      financing: buildCategoryResult(cashFlowsByCategory.financing)
+    };
+    
+    // Calculate net change from actual cash movements in the date range
+    const netChange = entries
+      .filter(e => cashAccountIds.has(e.accountId))
+      .reduce((sum, e) => sum + e.debit - e.credit, 0);
+    
+    // Calculate opening cash balance (all cash account balances before startDate)
+    let openingCash = 0;
+    if (startDate) {
+      const openingEntries = await this.getLedgerEntriesUpToDate(new Date(startDate.getTime() - 1));
+      openingCash = openingEntries
+        .filter(e => cashAccountIds.has(e.accountId))
+        .reduce((sum, e) => sum + e.debit - e.credit, 0);
+    }
+    
+    const closingCash = openingCash + netChange;
+    
+    return {
+      period: { startDate: startDate || null, endDate: endDate || null },
+      categories,
+      netChange,
+      openingCash,
+      closingCash
+    };
+  }
+
   async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
     const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
     

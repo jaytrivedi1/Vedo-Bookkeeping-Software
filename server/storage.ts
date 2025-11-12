@@ -133,6 +133,17 @@ export interface IStorage {
   getAccountBalances(): Promise<{ account: Account; balance: number }[]>;
   getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
   getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
+  getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{
+    period: { startDate: Date | null; endDate: Date | null };
+    categories: {
+      operating: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      investing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      financing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+    };
+    netChange: number;
+    openingCash: number;
+    closingCash: number;
+  }>;
   
   // Accounting helpers for Retained Earnings and Net Income
   calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;
@@ -703,6 +714,30 @@ export class MemStorage implements IStorage {
     const equity = equityAccounts.reduce((sum, account) => sum + account.balance, 0);
     
     return { assets, liabilities, equity };
+  }
+
+  async getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{
+    period: { startDate: Date | null; endDate: Date | null };
+    categories: {
+      operating: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      investing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+      financing: { total: number; accounts: Array<{ account: Account; amount: number }> };
+    };
+    netChange: number;
+    openingCash: number;
+    closingCash: number;
+  }> {
+    return {
+      period: { startDate: startDate || null, endDate: endDate || null },
+      categories: {
+        operating: { total: 0, accounts: [] },
+        investing: { total: 0, accounts: [] },
+        financing: { total: 0, accounts: [] }
+      },
+      netChange: 0,
+      openingCash: 0,
+      closingCash: 0
+    };
   }
 
   async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {

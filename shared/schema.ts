@@ -43,6 +43,10 @@ export const reconciliationStatusEnum = pgEnum('reconciliation_status', [
   'in_progress', 'completed', 'cancelled'
 ]);
 
+export const cashFlowCategoryEnum = pgEnum('cash_flow_category', [
+  'operating', 'investing', 'financing', 'none'
+]);
+
 // Chart of Accounts
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
@@ -53,6 +57,7 @@ export const accounts = pgTable('accounts', {
   salesTaxType: text('sales_tax_type'),
   balance: doublePrecision('balance').notNull().default(0),
   isActive: boolean('is_active').notNull().default(true),
+  cashFlowCategory: cashFlowCategoryEnum('cash_flow_category').default('none'),
 });
 
 // Relations are defined through foreign keys in the table definitions

@@ -5151,6 +5151,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Cash Flow Statement report
+  apiRouter.get("/reports/cash-flow", async (req: Request, res: Response) => {
+    try {
+      // Get date range from query params
+      const startDateStr = req.query.startDate as string | undefined;
+      const endDateStr = req.query.endDate as string | undefined;
+      
+      const startDate = startDateStr ? new Date(startDateStr) : undefined;
+      const endDate = endDateStr ? new Date(endDateStr) : undefined;
+      
+      // Get cash flow statement from storage
+      const cashFlowStatement = await storage.getCashFlowStatement(startDate, endDate);
+      
+      res.json(cashFlowStatement);
+    } catch (error) {
+      console.error("Error generating cash flow statement:", error);
+      res.status(500).json({ message: "Failed to generate cash flow statement" });
+    }
+  });
+  
   // Ledger entries route - needed for Account Books
   apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {
     try {
