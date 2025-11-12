@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
-import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X, Star } from "lucide-react";
+import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X, Star, Search } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Collapsible,
   CollapsibleContent,
@@ -370,6 +371,19 @@ export default function Reports() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [, setLocation] = useLocation();
+  
+  // Search state
+  const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
+  const [debouncedReportSearch, setDebouncedReportSearch] = useState<string>('');
+  
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedReportSearch(reportSearchQuery);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [reportSearchQuery]);
   
   // Favorites state - persisted in localStorage
   const [favoriteReports, setFavoriteReports] = useState<Set<string>>(() => {
@@ -1024,12 +1038,25 @@ export default function Reports() {
     },
   ];
   
-  // Filter reports by selected category
-  const filteredReports = selectedCategory === 'favorites'
-    ? allReports.filter(report => favoriteReports.has(report.id))
-    : selectedCategory === 'all' 
-      ? allReports 
-      : allReports.filter(report => report.category === selectedCategory);
+  // Filter reports by selected category and search query
+  const filteredReports = useMemo(() => {
+    let reports = selectedCategory === 'favorites'
+      ? allReports.filter(report => favoriteReports.has(report.id))
+      : selectedCategory === 'all' 
+        ? allReports 
+        : allReports.filter(report => report.category === selectedCategory);
+    
+    // Apply search filter if there's a search query
+    if (debouncedReportSearch.trim()) {
+      const searchLower = debouncedReportSearch.toLowerCase();
+      reports = reports.filter(report => 
+        report.title.toLowerCase().includes(searchLower) ||
+        report.description.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    return reports;
+  }, [selectedCategory, debouncedReportSearch, favoriteReports]);
   
   return (
     <div className="py-6">
@@ -1066,6 +1093,19 @@ export default function Reports() {
                   "pt-6 md:pt-0"
                 )}
               >
+                {/* Search Input */}
+                <div className="mb-4 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search reports..."
+                    value={reportSearchQuery}
+                    onChange={(e) => setReportSearchQuery(e.target.value)}
+                    className="pl-9 w-full"
+                    data-testid="input-search-reports"
+                  />
+                </div>
+                
                 <div className="space-y-1">
                   {reportCategories.map((category) => (
                     <button
