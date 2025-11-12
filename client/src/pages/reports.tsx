@@ -136,6 +136,65 @@ function BalanceSheetSection({
   );
 }
 
+// Collapsible Cash Flow Section Component
+function CashFlowSection({ 
+  title, 
+  accounts, 
+  subtotal,
+  defaultOpen = true,
+  onAccountClick
+}: { 
+  title: string; 
+  accounts: Array<{ account: any; amount: number }>; 
+  subtotal: number;
+  defaultOpen?: boolean;
+  onAccountClick?: (accountId: number) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  
+  if (accounts.length === 0) return null;
+  
+  return (
+    <>
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between py-2 hover:bg-gray-50 px-2 rounded">
+            <div className="flex items-center gap-2">
+              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              <span className="font-medium text-sm text-gray-700">{title}</span>
+            </div>
+            <span className="font-semibold text-sm">
+              {subtotal >= 0 ? formatCurrency(subtotal) : `(${formatCurrency(subtotal)})`}
+            </span>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-6 space-y-1">
+            {accounts.map((item) => (
+              <div 
+                key={item.account.id} 
+                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onAccountClick) {
+                    onAccountClick(item.account.id);
+                  }
+                }}
+                data-testid={`cash-flow-account-${item.account.id}`}
+              >
+                <span className="text-sm text-gray-600 hover:text-blue-600">{item.account.name}</span>
+                <span className="text-sm text-right">
+                  {item.amount >= 0 ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </>
+  );
+}
+
 // Main Balance Sheet Report Component
 function BalanceSheetReport({ 
   balanceSheet, 
@@ -1465,7 +1524,7 @@ export default function Reports() {
                       {/* Operating Activities Section */}
                       {cashFlowStatement.categories?.operating && (
                         <div className="space-y-2">
-                          <BalanceSheetSection
+                          <CashFlowSection
                             title="Cash Flows from Operating Activities"
                             accounts={cashFlowStatement.categories.operating.accounts || []}
                             subtotal={cashFlowStatement.categories.operating.total || 0}
@@ -1489,7 +1548,7 @@ export default function Reports() {
                       {/* Investing Activities Section */}
                       {cashFlowStatement.categories?.investing && (
                         <div className="space-y-2 pt-4 border-t border-gray-200">
-                          <BalanceSheetSection
+                          <CashFlowSection
                             title="Cash Flows from Investing Activities"
                             accounts={cashFlowStatement.categories.investing.accounts || []}
                             subtotal={cashFlowStatement.categories.investing.total || 0}
@@ -1513,7 +1572,7 @@ export default function Reports() {
                       {/* Financing Activities Section */}
                       {cashFlowStatement.categories?.financing && (
                         <div className="space-y-2 pt-4 border-t border-gray-200">
-                          <BalanceSheetSection
+                          <CashFlowSection
                             title="Cash Flows from Financing Activities"
                             accounts={cashFlowStatement.categories.financing.accounts || []}
                             subtotal={cashFlowStatement.categories.financing.total || 0}
