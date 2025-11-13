@@ -101,11 +101,12 @@ export interface IStorage {
   deleteProduct(id: number): Promise<boolean>;
 
   // Contacts
-  getContacts(): Promise<Contact[]>;
+  getContacts(includeInactive?: boolean): Promise<Contact[]>;
   getContact(id: number): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: number, contact: Partial<Contact>): Promise<Contact | undefined>;
   deleteContact(id: number): Promise<boolean>;
+  hasContactTransactions(contactId: number): Promise<boolean>;
 
   // Transactions
   getTransactions(): Promise<Transaction[]>;
@@ -478,8 +479,12 @@ export class MemStorage implements IStorage {
   }
 
   // Contact Methods
-  async getContacts(): Promise<Contact[]> {
-    return Array.from(this.contacts.values());
+  async getContacts(includeInactive = false): Promise<Contact[]> {
+    const allContacts = Array.from(this.contacts.values());
+    if (includeInactive) {
+      return allContacts;
+    }
+    return allContacts.filter(contact => contact.isActive !== false);
   }
 
   async getContact(id: number): Promise<Contact | undefined> {
@@ -488,7 +493,7 @@ export class MemStorage implements IStorage {
 
   async createContact(contact: InsertContact): Promise<Contact> {
     const id = this.contactIdCounter++;
-    const newContact: Contact = { ...contact, id };
+    const newContact: Contact = { ...contact, id, isActive: contact.isActive !== undefined ? contact.isActive : true };
     this.contacts.set(id, newContact);
     return newContact;
   }
@@ -505,6 +510,11 @@ export class MemStorage implements IStorage {
   async deleteContact(id: number): Promise<boolean> {
     if (!this.contacts.has(id)) return false;
     return this.contacts.delete(id);
+  }
+
+  async hasContactTransactions(contactId: number): Promise<boolean> {
+    const transactions = Array.from(this.transactions.values());
+    return transactions.some(tx => tx.contactId === contactId);
   }
 
   // Transaction Methods

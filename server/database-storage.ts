@@ -71,8 +71,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Contacts
-  async getContacts(): Promise<Contact[]> {
-    return await db.select().from(contacts).orderBy(contacts.name);
+  async getContacts(includeInactive = false): Promise<Contact[]> {
+    if (includeInactive) {
+      return await db.select().from(contacts).orderBy(contacts.name);
+    }
+    return await db.select().from(contacts).where(eq(contacts.isActive, true)).orderBy(contacts.name);
   }
 
   async getContact(id: number): Promise<Contact | undefined> {
@@ -117,6 +120,15 @@ export class DatabaseStorage implements IStorage {
       console.error(`Error deleting contact with ID ${id}:`, error);
       return false;
     }
+  }
+
+  async hasContactTransactions(contactId: number): Promise<boolean> {
+    const result = await db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(eq(transactions.contactId, contactId))
+      .limit(1);
+    return result.length > 0;
   }
 
   // Transactions

@@ -466,7 +466,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Contacts routes
   apiRouter.get("/contacts", async (req: Request, res: Response) => {
     try {
-      const contacts = await storage.getContacts();
+      const includeInactive = req.query.includeInactive === 'true';
+      const contacts = await storage.getContacts(includeInactive);
       res.json(contacts);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch contacts" });
@@ -529,6 +530,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating contact:", error);
       res.status(500).json({ message: "Failed to update contact" });
+    }
+  });
+
+  // Delete contact (only if no transactions)
+  apiRouter.delete("/contacts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const contact = await storage.getContact(id);
+      
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+      
+      // Check if contact has any transactions
+      const hasTransactions = await storage.hasContactTransactions(id);
+      if (hasTransactions) {
+        return res.status(409).json({ 
+          message: "Cannot delete contact with existing transactions. Mark as inactive instead.",
+          error: "HAS_TRANSACTIONS"
+        });
+      }
+      
+      const deleted = await storage.deleteContact(id);
+      if (deleted) {
+        res.json({ message: "Contact deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete contact" });
+      }
+    } catch (error) {
+      console.error("Error deleting contact:", error);
+      res.status(500).json({ message: "Failed to delete contact" });
     }
   });
 
