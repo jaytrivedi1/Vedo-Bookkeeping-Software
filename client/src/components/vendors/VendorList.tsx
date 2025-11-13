@@ -35,6 +35,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +61,7 @@ interface VendorListProps {
 
 export default function VendorList({ className }: VendorListProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -70,7 +73,8 @@ export default function VendorList({ className }: VendorListProps) {
   
   // Fetch vendors
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+    queryKey: ['/api/contacts', { includeInactive }],
+    queryFn: () => apiRequest(`/api/contacts?includeInactive=${includeInactive}`, 'GET'),
   });
   
   // Fetch transactions
@@ -212,15 +216,30 @@ export default function VendorList({ className }: VendorListProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Search bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search vendors..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Search bar and toggle */}
+          <div className="space-y-4 mb-4">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search vendors..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                data-testid="input-search-vendors"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="show-inactive-vendors"
+                checked={includeInactive}
+                onCheckedChange={setIncludeInactive}
+                data-testid="switch-show-inactive-vendors"
+              />
+              <Label htmlFor="show-inactive-vendors" className="text-sm text-gray-600">
+                Show inactive vendors
+              </Label>
+            </div>
           </div>
           
           {/* Vendors list */}
@@ -242,9 +261,17 @@ export default function VendorList({ className }: VendorListProps) {
                     key={vendor.id}
                     className="p-3 rounded-md border hover:bg-gray-50 cursor-pointer flex justify-between items-center"
                     onClick={() => handleVendorClick(vendor)}
+                    data-testid={`vendor-row-${vendor.id}`}
                   >
                     <div>
-                      <h3 className="font-medium">{vendor.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">{vendor.name}</h3>
+                        {vendor.isActive === false && (
+                          <Badge variant="secondary" className="text-xs" data-testid={`badge-inactive-${vendor.id}`}>
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
                       {vendor.email && <p className="text-sm text-gray-500">{vendor.email}</p>}
                       {vendor.phone && (
                         <p className="text-sm text-gray-500">{vendor.phone}</p>

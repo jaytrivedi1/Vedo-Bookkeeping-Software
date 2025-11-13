@@ -297,15 +297,30 @@ export default function CustomerList({ className }: CustomerListProps) {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* Search bar */}
-          <div className="relative mb-4">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search customers..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          {/* Search bar and toggle */}
+          <div className="space-y-4 mb-4">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search customers..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                data-testid="input-search-customers"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="show-inactive-customers"
+                checked={includeInactive}
+                onCheckedChange={setIncludeInactive}
+                data-testid="switch-show-inactive-customers"
+              />
+              <Label htmlFor="show-inactive-customers" className="text-sm text-gray-600">
+                Show inactive customers
+              </Label>
+            </div>
           </div>
           
           {/* Customers list */}
@@ -327,9 +342,17 @@ export default function CustomerList({ className }: CustomerListProps) {
                     key={customer.id}
                     className="p-3 rounded-md border hover:bg-gray-50 cursor-pointer flex justify-between items-center"
                     onClick={() => handleCustomerClick(customer)}
+                    data-testid={`customer-row-${customer.id}`}
                   >
                     <div>
-                      <h3 className="font-medium">{customer.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium">{customer.name}</h3>
+                        {customer.isActive === false && (
+                          <Badge variant="secondary" className="text-xs" data-testid={`badge-inactive-${customer.id}`}>
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
                       {customer.email && <p className="text-sm text-gray-500">{customer.email}</p>}
                       {customer.phone && (
                         <p className="text-sm text-gray-500">{customer.phone}</p>
