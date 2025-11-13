@@ -35,6 +35,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -62,6 +64,7 @@ export default function CustomerList({ className }: CustomerListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [includeInactive, setIncludeInactive] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -72,7 +75,8 @@ export default function CustomerList({ className }: CustomerListProps) {
   
   // Fetch customers
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+    queryKey: ['/api/contacts', { includeInactive }],
+    queryFn: () => apiRequest(`/api/contacts?includeInactive=${includeInactive}`, 'GET'),
   });
   
   // Fetch transactions

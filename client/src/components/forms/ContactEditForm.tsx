@@ -7,7 +7,7 @@ import { queryClient } from "@/lib/queryClient";
 import { Contact } from "@shared/schema";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Upload } from "lucide-react";
+import { Upload, Trash2, XCircle, CheckCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,17 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -109,13 +120,79 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
         title: "Success",
         description: `${contact.type === 'vendor' ? 'Vendor' : 'Customer'} updated successfully`,
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'], exact: false });
       if (onSuccess) onSuccess();
     },
     onError: (error) => {
       toast({
         title: "Error",
         description: `Failed to update ${contact.type === 'vendor' ? 'vendor' : 'customer'}. ` + error,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation for deleting the contact
+  const deleteContact = useMutation({
+    mutationFn: async () => {
+      return apiRequest(`/api/contacts/${contact.id}`, 'DELETE');
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `${contact.type === 'vendor' ? 'Vendor' : 'Customer'} deleted successfully`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'], exact: false });
+      if (onSuccess) onSuccess();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || `Failed to delete ${contact.type === 'vendor' ? 'vendor' : 'customer'}`,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation for marking contact as inactive
+  const deactivateContact = useMutation({
+    mutationFn: async () => {
+      return apiRequest(`/api/contacts/${contact.id}`, 'PATCH', { isActive: false });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `${contact.type === 'vendor' ? 'Vendor' : 'Customer'} marked as inactive`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'], exact: false });
+      if (onSuccess) onSuccess();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to deactivate ${contact.type === 'vendor' ? 'vendor' : 'customer'}. ` + error,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation for reactivating contact
+  const reactivateContact = useMutation({
+    mutationFn: async () => {
+      return apiRequest(`/api/contacts/${contact.id}`, 'PATCH', { isActive: true });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: `${contact.type === 'vendor' ? 'Vendor' : 'Customer'} reactivated`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'], exact: false });
+      if (onSuccess) onSuccess();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to reactivate ${contact.type === 'vendor' ? 'vendor' : 'customer'}. ` + error,
         variant: "destructive",
       });
     }
@@ -310,20 +387,129 @@ export default function ContactEditForm({ contact, onSuccess, onCancel }: Contac
           </div>
         </div>
         
-        <div className="flex justify-end space-x-2 pt-4">
-          <Button 
-            type="button" 
-            variant="outline" 
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit"
-            disabled={updateContact.isPending}
-          >
-            {updateContact.isPending ? 'Saving...' : 'Save Changes'}
-          </Button>
+        <div className="flex justify-between items-center pt-4">
+          {/* Left side - Destructive actions */}
+          <div>
+            {contact.isActive === false ? (
+              // Reactivate button for inactive contacts
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    disabled={reactivateContact.isPending || (contactTransactions === undefined)}
+                    data-testid="button-reactivate-contact"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Reactivate
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reactivate {contact.type === 'vendor' ? 'Vendor' : 'Customer'}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will make {contact.name} active again and visible in transaction dropdowns.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => reactivateContact.mutate()}
+                      disabled={reactivateContact.isPending}
+                    >
+                      {reactivateContact.isPending ? 'Reactivating...' : 'Reactivate'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : contactTransactions && contactTransactions.length > 0 ? (
+              // Mark as inactive button (when transactions exist)
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="destructive"
+                    disabled={deactivateContact.isPending || (contactTransactions === undefined)}
+                    data-testid="button-deactivate-contact"
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Mark as Inactive
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Mark as Inactive?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {contact.name} has {contactTransactions.length} existing transaction(s) and cannot be deleted. 
+                      Marking as inactive will hide this {contact.type} from new transactions while preserving historical data.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => deactivateContact.mutate()}
+                      disabled={deactivateContact.isPending}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deactivateContact.isPending ? 'Marking Inactive...' : 'Mark Inactive'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              // Delete button (when no transactions)
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    type="button" 
+                    variant="destructive"
+                    disabled={deleteContact.isPending || (contactTransactions === undefined)}
+                    data-testid="button-delete-contact"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {contact.type === 'vendor' ? 'Vendor' : 'Customer'}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to permanently delete {contact.name}? This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => deleteContact.mutate()}
+                      disabled={deleteContact.isPending}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteContact.isPending ? 'Deleting...' : 'Delete'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+
+          {/* Right side - Save/Cancel buttons */}
+          <div className="flex space-x-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onCancel}
+              data-testid="button-cancel"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit"
+              disabled={updateContact.isPending}
+              data-testid="button-save-contact"
+            >
+              {updateContact.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
         </div>
       </form>
     </Form>
