@@ -49,6 +49,8 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
   const [salesTaxId, setSalesTaxId] = useState<string>("");
   const [contactName, setContactName] = useState("");
   const [memo, setMemo] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [removeAttachment, setRemoveAttachment] = useState(false);
 
   // Fetch accounts
   const { data: accounts = [] } = useQuery<GLAccount[]>({
@@ -96,6 +98,8 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setSalesTaxId(rule.salesTaxId?.toString() || "");
       setContactName(rule.actions?.contactName || "");
       setMemo(rule.actions?.memo || "");
+      setSelectedFile(null);
+      setRemoveAttachment(false);
     } else {
       // Reset form for new rule
       setName("");
@@ -106,17 +110,29 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setSalesTaxId("");
       setContactName("");
       setMemo("");
+      setSelectedFile(null);
+      setRemoveAttachment(false);
     }
   }, [rule, open]);
 
   // Create/update rule mutation
   const saveRuleMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (rule?.id) {
-        return await apiRequest(`/api/categorization-rules/${rule.id}`, 'PATCH', data);
-      } else {
-        return await apiRequest('/api/categorization-rules', 'POST', data);
+    mutationFn: async (formData: FormData) => {
+      const url = rule?.id ? `/api/categorization-rules/${rule.id}` : '/api/categorization-rules';
+      const method = rule?.id ? 'PATCH' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        body: formData,
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || `Failed to ${method === 'POST' ? 'create' : 'update'} rule`);
       }
+      
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
@@ -187,18 +203,33 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       actions.memo = memo.trim();
     }
 
-    const ruleData: any = {
-      name: name.trim(),
-      conditions,
-      actions,
-    };
-
-    // Add salesTaxId if selected
+    // Create FormData
+    const formData = new FormData();
+    formData.append('name', name.trim());
+    formData.append('conditions', JSON.stringify(conditions));
+    formData.append('actions', JSON.stringify(actions));
+    
+    // Preserve existing values for isEnabled and priority when editing, or use defaults for new rules
+    const isEnabled = rule?.isEnabled !== undefined ? rule.isEnabled : true;
+    const priority = rule?.priority !== undefined ? rule.priority : 0;
+    formData.append('isEnabled', JSON.stringify(isEnabled));
+    formData.append('priority', String(priority));
+    
     if (salesTaxId) {
-      ruleData.salesTaxId = parseInt(salesTaxId);
+      formData.append('salesTaxId', salesTaxId);
+    }
+    
+    // Add file if selected
+    if (selectedFile) {
+      formData.append('attachment', selectedFile);
+    }
+    
+    // Remove attachment if requested
+    if (removeAttachment && rule?.attachmentPath) {
+      formData.append('attachmentPath', '');
     }
 
-    saveRuleMutation.mutate(ruleData);
+    saveRuleMutation.mutate(formData);
   };
 
   return (
@@ -335,6 +366,77 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
                   />
                   <p className="text-xs text-gray-500">
                     This will be saved in the transaction's description
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="attachment">Document Attachment (Optional)</Label>
+                  
+                  {/* Show existing attachment if present and not being removed */}
+                  {rule?.attachmentPath && !removeAttachment && !selectedFile && (
+                    <div className="flex items-center gap-2 p-2 border rounded">
+                      <span className="text-sm flex-1 truncate">{rule.attachmentPath.split('/').pop()}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          window.open(`/api/categorization-rules/${rule.id}/attachment`, '_blank');
+                        }}
+                        data-testid="button-view-attachment"
+                      >
+                        View
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          setRemoveAttachment(true);
+                          setSelectedFile(null);
+                        }}
+                        data-testid="button-remove-attachment"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* Show file input if no existing attachment or removing it */}
+                  {(!rule?.attachmentPath || removeAttachment) && (
+                    <Input
+                      id="attachment"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,.csv,.docx"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setSelectedFile(file);
+                          setRemoveAttachment(false);
+                        }
+                      }}
+                      data-testid="input-attachment"
+                    />
+                  )}
+                  
+                  {/* Show selected file name */}
+                  {selectedFile && (
+                    <div className="flex items-center gap-2 p-2 border rounded bg-muted">
+                      <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedFile(null)}
+                        data-testid="button-clear-file"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-gray-500">
+                    Attach supporting documents (PDF, PNG, JPG, CSV, DOCX, max 10MB)
                   </p>
                 </div>
               </div>

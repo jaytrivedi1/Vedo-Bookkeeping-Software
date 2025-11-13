@@ -10120,7 +10120,8 @@ Respond in JSON format:
         conditions = typeof req.body.conditions === 'string' ? JSON.parse(req.body.conditions) : req.body.conditions;
         actions = typeof req.body.actions === 'string' ? JSON.parse(req.body.actions) : req.body.actions;
         salesTaxId = req.body.salesTaxId;
-        isEnabled = req.body.isEnabled;
+        // Parse boolean from string for isEnabled
+        isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true;
         priority = req.body.priority;
       }
       
@@ -10181,6 +10182,10 @@ Respond in JSON format:
         }
         if (req.body.actions && typeof req.body.actions === 'string') {
           updateData.actions = JSON.parse(req.body.actions);
+        }
+        // Parse boolean from string for isEnabled
+        if (req.body.isEnabled !== undefined) {
+          updateData.isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true;
         }
       }
       
