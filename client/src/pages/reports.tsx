@@ -375,6 +375,9 @@ export default function Reports() {
   // Search state
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
   const [debouncedReportSearch, setDebouncedReportSearch] = useState<string>('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number>(-1);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   
   // Debounce search input
   useEffect(() => {
@@ -384,6 +387,19 @@ export default function Reports() {
     
     return () => clearTimeout(timer);
   }, [reportSearchQuery]);
+  
+  // Click outside handler to close suggestions
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   // Favorites state - persisted in localStorage
   const [favoriteReports, setFavoriteReports] = useState<Set<string>>(() => {
@@ -1038,6 +1054,17 @@ export default function Reports() {
     },
   ];
   
+  // Suggestions for autocomplete (searches across all reports)
+  const suggestions = useMemo(() => {
+    if (!reportSearchQuery.trim()) return [];
+    
+    const searchLower = reportSearchQuery.toLowerCase();
+    return allReports.filter(report => 
+      report.title.toLowerCase().includes(searchLower) ||
+      report.description.toLowerCase().includes(searchLower)
+    ).slice(0, 5); // Limit to 5 suggestions
+  }, [reportSearchQuery]);
+  
   // Filter reports by selected category and search query
   const filteredReports = useMemo(() => {
     let reports = selectedCategory === 'favorites'
@@ -1057,6 +1084,43 @@ export default function Reports() {
     
     return reports;
   }, [selectedCategory, debouncedReportSearch, favoriteReports]);
+  
+  // Handle keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => 
+          prev < suggestions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+          handleSelectSuggestion(suggestions[selectedSuggestionIndex]);
+        }
+        break;
+      case 'Escape':
+        setShowSuggestions(false);
+        setSelectedSuggestionIndex(-1);
+        break;
+    }
+  };
+  
+  // Handle selecting a suggestion
+  const handleSelectSuggestion = (report: typeof allReports[0]) => {
+    setActiveTab(report.id);
+    setReportSearchQuery('');
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    setSidebarOpen(false);
+  };
   
   return (
     <div className="py-6">
@@ -1093,17 +1157,54 @@ export default function Reports() {
                   "pt-6 md:pt-0"
                 )}
               >
-                {/* Search Input */}
-                <div className="mb-4 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                {/* Search Input with Autocomplete */}
+                <div className="mb-4 relative" ref={searchContainerRef}>
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
                   <Input
                     type="text"
                     placeholder="Search reports..."
                     value={reportSearchQuery}
-                    onChange={(e) => setReportSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setReportSearchQuery(e.target.value);
+                      setShowSuggestions(true);
+                      setSelectedSuggestionIndex(-1);
+                    }}
+                    onFocus={() => {
+                      if (reportSearchQuery.trim()) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    onKeyDown={handleKeyDown}
                     className="pl-9 w-full"
                     data-testid="input-search-reports"
                   />
+                  
+                  {/* Suggestions Dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+                      {suggestions.map((suggestion, index) => (
+                        <div
+                          key={suggestion.id}
+                          onClick={() => handleSelectSuggestion(suggestion)}
+                          onMouseEnter={() => setSelectedSuggestionIndex(index)}
+                          className={cn(
+                            "px-4 py-3 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0",
+                            index === selectedSuggestionIndex
+                              ? "bg-blue-50"
+                              : "hover:bg-gray-50"
+                          )}
+                          data-testid={`suggestion-${suggestion.id}`}
+                        >
+                          <div className="font-medium text-sm text-gray-900">
+                            {suggestion.title}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                            {suggestion.description}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 
                 <div className="space-y-1">
