@@ -709,6 +709,7 @@ export const categorizationRulesSchema = pgTable('categorization_rules', {
   conditions: json('conditions').notNull(), // Array of {field, operator, value}
   actions: json('actions').notNull(), // {accountId, contactId, description, memo}
   salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id), // Optional sales tax to apply
+  attachmentPath: text('attachment_path'), // Optional document attachment path
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
