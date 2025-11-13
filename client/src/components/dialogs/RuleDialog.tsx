@@ -34,6 +34,7 @@ interface SalesTax {
   name: string;
   rate: number;
   isActive: boolean;
+  parentId: number | null;
 }
 
 export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
@@ -284,15 +285,12 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
                 <div className="space-y-2">
                   <Label>Sales Tax (Optional)</Label>
                   <SearchableSelect
-                    items={[
-                      { value: "", label: "+ None" },
-                      ...salesTaxes
-                        .filter(tax => tax.isActive)
-                        .map((tax) => ({
-                          value: tax.id.toString(),
-                          label: `${tax.name} (${tax.rate}%)`,
-                        }))
-                    ]}
+                    items={salesTaxes
+                      .filter(tax => tax.isActive && !tax.parentId)
+                      .map((tax) => ({
+                        value: tax.id.toString(),
+                        label: `${tax.name} (${tax.rate}%)`,
+                      }))}
                     value={salesTaxId}
                     onValueChange={setSalesTaxId}
                     placeholder="Select sales tax..."
