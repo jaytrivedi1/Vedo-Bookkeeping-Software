@@ -74,6 +74,7 @@ export const contacts = pgTable('contacts', {
   currency: text('currency').default('USD'), // Default currency for this contact
   defaultTaxRate: doublePrecision('default_tax_rate').default(0), // Default sales tax rate
   documentIds: text('document_ids').array(), // Array of document IDs for attachments
+  isActive: boolean('is_active').notNull().default(true), // Active status for filtering
 });
 
 // Transaction Headers
