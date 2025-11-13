@@ -67,7 +67,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
     // Get all enabled rules ordered by priority
     const rules = await storage.getCategorizationRules();
     const enabledRules = rules
-      .filter(rule => rule.enabled)
+      .filter(rule => rule.isEnabled)
       .sort((a, b) => a.priority - b.priority);
 
     // Test each rule against the transaction
@@ -10039,6 +10039,44 @@ Respond in JSON format:
     }
   });
 
+  // ==================== CATEGORIZATION RULE ATTACHMENTS CONFIGURATION ====================
+  
+  // Configure multer for rule attachment uploads
+  const ruleAttachmentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), 'uploads', 'rule-attachments');
+      
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const timestamp = Date.now();
+      const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const ruleId = req.params.id || 'new';
+      cb(null, `${ruleId}-${timestamp}-${sanitizedName}`);
+    }
+  });
+
+  const ruleAttachmentUpload = multer({ 
+    storage: ruleAttachmentStorage,
+    limits: {
+      fileSize: 10 * 1024 * 1024
+    },
+    fileFilter: (req, file, cb) => {
+      const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.csv', '.docx'];
+      const ext = path.extname(file.originalname).toLowerCase();
+      
+      if (allowedExtensions.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Invalid file type. Allowed extensions: ${allowedExtensions.join(', ')}`));
+      }
+    }
+  });
+
   // Categorization Rules routes
   apiRouter.get("/categorization-rules", async (req: Request, res: Response) => {
     try {
@@ -10065,48 +10103,143 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/categorization-rules", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
-      const { name, conditions, actions, salesTaxId, isEnabled = true, priority = 0 } = req.body;
+      let name, conditions, actions, salesTaxId, isEnabled, priority;
+      
+      if (req.body.name && typeof req.body.name === 'string' && req.body.name.startsWith('{')) {
+        const parsedBody = JSON.parse(req.body.name);
+        name = parsedBody.name;
+        conditions = parsedBody.conditions;
+        actions = parsedBody.actions;
+        salesTaxId = parsedBody.salesTaxId;
+        isEnabled = parsedBody.isEnabled;
+        priority = parsedBody.priority;
+      } else {
+        name = req.body.name;
+        conditions = typeof req.body.conditions === 'string' ? JSON.parse(req.body.conditions) : req.body.conditions;
+        actions = typeof req.body.actions === 'string' ? JSON.parse(req.body.actions) : req.body.actions;
+        salesTaxId = req.body.salesTaxId;
+        isEnabled = req.body.isEnabled;
+        priority = req.body.priority;
+      }
       
       if (!name || !conditions || !actions) {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
         return res.status(400).json({ message: "Name, conditions, and actions are required" });
       }
       
-      const rule = await storage.createCategorizationRule({
+      const ruleData: any = {
         name,
         conditions,
         actions,
         salesTaxId: salesTaxId || null,
-        isEnabled,
-        priority
-      });
+        isEnabled: isEnabled !== undefined ? isEnabled : true,
+        priority: priority || 0
+      };
+      
+      if (req.file) {
+        ruleData.attachmentPath = req.file.path;
+      }
+      
+      const rule = await storage.createCategorizationRule(ruleData);
       
       res.json(rule);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating categorization rule:", error);
-      res.status(500).json({ message: "Failed to create categorization rule" });
+      
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
+      res.status(500).json({ message: error.message || "Failed to create categorization rule" });
     }
   });
 
-  apiRouter.patch("/categorization-rules/:id", async (req: Request, res: Response) => {
+  apiRouter.patch("/categorization-rules/:id", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
-      const updatedRule = await storage.updateCategorizationRule(Number(req.params.id), req.body);
+      const ruleId = Number(req.params.id);
+      
+      const existingRule = await storage.getCategorizationRule(ruleId);
+      if (!existingRule) {
+        if (req.file && fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      let updateData: any = {};
+      
+      if (req.body.name && typeof req.body.name === 'string' && req.body.name.startsWith('{')) {
+        updateData = JSON.parse(req.body.name);
+      } else {
+        updateData = { ...req.body };
+        if (req.body.conditions && typeof req.body.conditions === 'string') {
+          updateData.conditions = JSON.parse(req.body.conditions);
+        }
+        if (req.body.actions && typeof req.body.actions === 'string') {
+          updateData.actions = JSON.parse(req.body.actions);
+        }
+      }
+      
+      if (req.file) {
+        if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
+          try {
+            fs.unlinkSync(existingRule.attachmentPath);
+          } catch (err) {
+            console.error('Error deleting old attachment:', err);
+          }
+        }
+        updateData.attachmentPath = req.file.path;
+      } else if (updateData.attachmentPath === null || updateData.attachmentPath === '') {
+        if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
+          try {
+            fs.unlinkSync(existingRule.attachmentPath);
+          } catch (err) {
+            console.error('Error deleting attachment:', err);
+          }
+        }
+        updateData.attachmentPath = null;
+      }
+      
+      const updatedRule = await storage.updateCategorizationRule(ruleId, updateData);
       
       if (!updatedRule) {
         return res.status(404).json({ message: "Rule not found" });
       }
       
       res.json(updatedRule);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating categorization rule:", error);
-      res.status(500).json({ message: "Failed to update categorization rule" });
+      
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      
+      res.status(500).json({ message: error.message || "Failed to update categorization rule" });
     }
   });
 
   apiRouter.delete("/categorization-rules/:id", async (req: Request, res: Response) => {
     try {
-      const deleted = await storage.deleteCategorizationRule(Number(req.params.id));
+      const ruleId = Number(req.params.id);
+      
+      const existingRule = await storage.getCategorizationRule(ruleId);
+      if (!existingRule) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
+        try {
+          fs.unlinkSync(existingRule.attachmentPath);
+        } catch (err) {
+          console.error('Error deleting attachment file:', err);
+        }
+      }
+      
+      const deleted = await storage.deleteCategorizationRule(ruleId);
       
       if (!deleted) {
         return res.status(404).json({ message: "Rule not found" });
@@ -10116,6 +10249,42 @@ Respond in JSON format:
     } catch (error) {
       console.error("Error deleting categorization rule:", error);
       res.status(500).json({ message: "Failed to delete categorization rule" });
+    }
+  });
+
+  apiRouter.get("/categorization-rules/:id/attachment", async (req: Request, res: Response) => {
+    try {
+      const ruleId = Number(req.params.id);
+      
+      const rule = await storage.getCategorizationRule(ruleId);
+      
+      if (!rule) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+      
+      if (!rule.attachmentPath) {
+        return res.status(404).json({ message: "No attachment found for this rule" });
+      }
+      
+      if (!fs.existsSync(rule.attachmentPath)) {
+        return res.status(404).json({ message: "Attachment file not found on disk" });
+      }
+      
+      const fileName = path.basename(rule.attachmentPath);
+      
+      res.download(rule.attachmentPath, fileName, (err) => {
+        if (err) {
+          console.error('Error downloading attachment:', err);
+          if (!res.headersSent) {
+            res.status(500).json({ message: "Failed to download attachment" });
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error serving rule attachment:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to serve attachment" });
+      }
     }
   });
 
