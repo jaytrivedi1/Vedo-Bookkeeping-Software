@@ -26,7 +26,7 @@ interface GLAccount {
 interface Contact {
   id: number;
   name: string;
-  contactType: string;
+  type: string;
 }
 
 interface SalesTax {
@@ -77,6 +77,13 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
              type === 'other_income';
     }
   );
+
+  // Transform contacts for SearchableSelect
+  const contactItems: SearchableSelectItem[] = contacts.map(contact => ({
+    value: contact.name,
+    label: contact.name,
+    subtitle: `· ${contact.type}`
+  }));
 
   // Initialize form when editing
   useEffect(() => {
@@ -302,13 +309,15 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="contact-name">Contact/Vendor Name (Optional)</Label>
-                  <Input
-                    id="contact-name"
+                  <Label>Contact Name (Optional)</Label>
+                  <SearchableSelect
+                    items={contactItems}
                     value={contactName}
-                    onChange={(e) => setContactName(e.target.value)}
-                    placeholder="e.g., 'ABC Corp' or 'John Doe'"
-                    data-testid="input-contact-name"
+                    onValueChange={setContactName}
+                    placeholder="Select contact..."
+                    searchPlaceholder="Search contacts..."
+                    emptyText="No contacts found"
+                    data-testid="select-contact-name"
                   />
                   <p className="text-xs text-gray-500">
                     This will be saved in the transaction's Name field
