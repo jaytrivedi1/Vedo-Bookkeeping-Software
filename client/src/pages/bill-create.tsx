@@ -765,7 +765,6 @@ export default function BillCreate() {
                                             <SelectValue placeholder="Select tax" />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="0">None</SelectItem>
                                             {salesTaxes?.filter(tax => !tax.parentId).map((tax: any) => (
                                               <SelectItem key={tax.id} value={tax.id.toString()}>
                                                 {tax.name} ({tax.rate}%)

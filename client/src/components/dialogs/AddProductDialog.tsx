@@ -76,14 +76,12 @@ export default function AddProductDialog({
     subtitle: undefined
   }));
 
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'No tax', subtitle: undefined },
-    ...salesTaxes.map((tax: any) => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    }))
-  ];
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = salesTaxes.filter((tax: any) => !tax.parentId).map((tax: any) => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  }));
 
   const form = useForm<AddProductFormData>({
     resolver: zodResolver(addProductSchema),

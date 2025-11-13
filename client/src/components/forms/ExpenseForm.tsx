@@ -121,14 +121,11 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   });
 
   // Transform sales taxes for SearchableSelect (filter main taxes only)
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'None', subtitle: undefined },
-    ...(salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    })) || [])
-  ];
+  const taxItems: SearchableSelectItem[] = salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  })) || [];
   
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],

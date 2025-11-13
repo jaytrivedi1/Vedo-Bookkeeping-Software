@@ -98,15 +98,12 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
     subtitle: undefined
   })) || [];
 
-  // Transform sales taxes for SearchableSelect
-  const taxItems: SearchableSelectItem[] = [
-    { value: 'none', label: 'Exempt', subtitle: undefined },
-    ...(salesTaxes?.map(tax => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    })) || [])
-  ];
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  })) || [];
 
   const form = useForm<JournalEntry>({
     resolver: zodResolver(journalEntrySchema),

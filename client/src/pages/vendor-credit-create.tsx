@@ -534,10 +534,9 @@ export default function VendorCreditCreate() {
                                       }}
                                     >
                                       <SelectTrigger className="w-[150px]">
-                                        <SelectValue placeholder="None" />
+                                        <SelectValue placeholder="Select tax" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="0">None</SelectItem>
                                         {salesTaxes?.filter(tax => !tax.parentId).map((tax) => (
                                           <SelectItem key={tax.id} value={tax.id.toString()}>
                                             {tax.name} ({tax.rate}%)

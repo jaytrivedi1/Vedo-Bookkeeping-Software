@@ -55,15 +55,12 @@ export function ProductDialog({ open, onOpenChange, product, defaultType = "prod
     queryKey: ['/api/sales-taxes'],
   });
 
-  // Transform sales taxes for SearchableSelect
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'No tax', subtitle: undefined },
-    ...salesTaxes.map((tax: any) => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    }))
-  ];
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = salesTaxes.filter((tax: any) => !tax.parentId).map((tax: any) => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  }));
 
   // Filter only revenue accounts - show only primary revenue accounts
   // (excluding other income and liability accounts)

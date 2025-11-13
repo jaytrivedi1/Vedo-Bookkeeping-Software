@@ -117,15 +117,12 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
   // Get home currency from preferences
   const homeCurrency = preferences?.homeCurrency || 'USD';
 
-  // Transform sales taxes for SearchableSelect
-  const taxItems: SearchableSelectItem[] = [
-    { value: '0', label: 'No tax', subtitle: undefined },
-    ...(salesTaxes?.map(tax => ({
-      value: tax.id.toString(),
-      label: tax.name,
-      subtitle: tax.rate ? `· ${tax.rate}%` : undefined
-    })) || [])
-  ];
+  // Transform sales taxes for SearchableSelect (filter main taxes only)
+  const taxItems: SearchableSelectItem[] = salesTaxes?.filter(tax => !tax.parentId).map(tax => ({
+    value: tax.id.toString(),
+    label: tax.name,
+    subtitle: tax.rate ? `· ${tax.rate}%` : undefined
+  })) || [];
 
   // Filter bank and credit accounts
   const bankAccounts = accounts?.filter(account => 
