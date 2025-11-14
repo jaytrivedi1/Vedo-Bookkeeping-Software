@@ -1,17 +1,26 @@
+import { useQuery } from "@tanstack/react-query";
+import type { SelectCompany } from "@shared/schema";
+
 interface InvoiceTemplatePreviewProps {
   template: string;
 }
 
 export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePreviewProps) {
+  const { data: company } = useQuery<SelectCompany>({
+    queryKey: ["/api/companies/default"],
+  });
+
+  const addressParts = company?.address ? company.address.split(',') : [];
   const sampleData = {
     invoiceNumber: "INV-001",
     date: "January 15, 2025",
     dueDate: "February 14, 2025",
-    companyName: "Your Company",
-    companyAddress: "123 Business Street",
-    companyCityState: "City, State 12345",
-    companyEmail: "contact@yourcompany.com",
-    companyPhone: "(555) 123-4567",
+    companyName: company?.name || "Your Company",
+    companyAddress: addressParts[0] || "123 Business Street",
+    companyCityState: addressParts.length > 1 ? addressParts.slice(1).join(',').trim() : "City, State 12345",
+    companyEmail: company?.email || "contact@yourcompany.com",
+    companyPhone: company?.phone || "(555) 123-4567",
+    companyLogo: company?.logoUrl || null,
     customerName: "Acme Corporation",
     customerAddress: "456 Client Avenue",
     customerCityState: "Client City, State 67890",
@@ -38,6 +47,15 @@ export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePrev
           </div>
         </div>
         <div className="text-right">
+          {sampleData.companyLogo && (
+            <div className="mb-3 flex justify-end">
+              <img 
+                src={sampleData.companyLogo} 
+                alt={sampleData.companyName}
+                className="h-12 w-auto object-contain"
+              />
+            </div>
+          )}
           <div className="font-bold text-lg text-gray-900">{sampleData.companyName}</div>
           <div className="text-sm text-gray-600 mt-2">
             <div>{sampleData.companyAddress}</div>
@@ -110,9 +128,18 @@ export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePrev
       {/* Full-Width Colored Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-10 py-8 text-white">
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-5xl font-black tracking-tight">INVOICE</h1>
-            <div className="text-blue-100 mt-2 text-lg">#{sampleData.invoiceNumber}</div>
+          <div className="flex items-center gap-6">
+            {sampleData.companyLogo && (
+              <img 
+                src={sampleData.companyLogo} 
+                alt={sampleData.companyName}
+                className="h-16 w-auto object-contain bg-white rounded px-2 py-1"
+              />
+            )}
+            <div>
+              <h1 className="text-5xl font-black tracking-tight">INVOICE</h1>
+              <div className="text-blue-100 mt-2 text-lg">#{sampleData.invoiceNumber}</div>
+            </div>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold">{sampleData.companyName}</div>
@@ -193,6 +220,15 @@ export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePrev
     <div className="bg-white p-12">
       {/* Centered Minimal Header */}
       <div className="text-center mb-12">
+        {sampleData.companyLogo && (
+          <div className="flex justify-center mb-6">
+            <img 
+              src={sampleData.companyLogo} 
+              alt={sampleData.companyName}
+              className="h-14 w-auto object-contain"
+            />
+          </div>
+        )}
         <h1 className="text-3xl font-light tracking-widest text-gray-900 mb-4">INVOICE</h1>
         <div className="text-gray-500 text-sm">{sampleData.invoiceNumber}</div>
       </div>
@@ -276,13 +312,22 @@ export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePrev
     <div className="bg-white p-6 border border-gray-400">
       {/* Two-Column Header */}
       <div className="grid grid-cols-2 gap-6 mb-6 pb-4 border-b border-gray-400">
-        <div>
-          <div className="font-bold text-base text-gray-900 mb-1">{sampleData.companyName}</div>
-          <div className="text-xs text-gray-600 leading-tight">
-            <div>{sampleData.companyAddress}</div>
-            <div>{sampleData.companyCityState}</div>
-            <div className="mt-1">{sampleData.companyEmail}</div>
-            <div>{sampleData.companyPhone}</div>
+        <div className="flex gap-3">
+          {sampleData.companyLogo && (
+            <img 
+              src={sampleData.companyLogo} 
+              alt={sampleData.companyName}
+              className="h-10 w-auto object-contain"
+            />
+          )}
+          <div>
+            <div className="font-bold text-base text-gray-900 mb-1">{sampleData.companyName}</div>
+            <div className="text-xs text-gray-600 leading-tight">
+              <div>{sampleData.companyAddress}</div>
+              <div>{sampleData.companyCityState}</div>
+              <div className="mt-1">{sampleData.companyEmail}</div>
+              <div>{sampleData.companyPhone}</div>
+            </div>
           </div>
         </div>
         <div className="text-right">

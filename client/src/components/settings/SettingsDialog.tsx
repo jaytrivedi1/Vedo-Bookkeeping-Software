@@ -320,15 +320,62 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     savePreferences.mutate(settings);
   };
   
-  // Upload company logo
-  const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Logo upload mutation
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      // Handle file upload logic here
+    if (!file) return;
+    
+    if (!companyQuery.data) {
+      toast({
+        title: "Error",
+        description: "Company information not loaded",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsUploadingLogo(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+      
+      const companyId = (companyQuery.data as any).id;
+      const response = await fetch(`/api/companies/${companyId}/logo`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Upload failed');
+      }
+      
+      const updatedCompany = await response.json();
+      
+      // Invalidate relevant queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
+      
       toast({
         title: "Logo uploaded",
         description: "Your company logo has been uploaded successfully.",
       });
+      
+      // Reset file input
+      event.target.value = '';
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload logo",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingLogo(false);
     }
   };
   
@@ -376,17 +423,31 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                   <div>
                     <FormLabel>Company Logo</FormLabel>
                     <div className="mt-2 flex items-center gap-4">
-                      <div className="h-16 w-16 rounded-md border flex items-center justify-center bg-gray-50">
-                        <Settings className="h-8 w-8 text-gray-400" />
+                      <div className="h-16 w-16 rounded-md border flex items-center justify-center bg-gray-50 overflow-hidden">
+                        {(companyQuery.data as any)?.logoUrl ? (
+                          <img 
+                            src={(companyQuery.data as any).logoUrl} 
+                            alt="Company logo" 
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <Settings className="h-8 w-8 text-gray-400" />
+                        )}
                       </div>
-                      <Button variant="outline" type="button" className="relative">
+                      <Button 
+                        variant="outline" 
+                        type="button" 
+                        className="relative"
+                        disabled={isUploadingLogo}
+                      >
                         <input
                           type="file"
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           accept="image/*"
                           onChange={handleLogoUpload}
+                          disabled={isUploadingLogo}
                         />
-                        Upload logo
+                        {isUploadingLogo ? "Uploading..." : "Upload logo"}
                       </Button>
                     </div>
                   </div>
