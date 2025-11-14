@@ -120,7 +120,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   
   // Query company settings
   const companyQuery = useQuery({
-    queryKey: ['/api/settings/company'],
+    queryKey: ['/api/companies/default'],
     enabled: open,
   });
   
@@ -219,7 +219,8 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     },
     onSuccess: () => {
       // Invalidate company settings query to refetch the data
-      queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       
       toast({
         title: "Company details saved",
@@ -358,7 +359,6 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       // Invalidate relevant queries to refresh the UI
       await queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
-      await queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
       
       // Force immediate refetch to update the logo thumbnail
       await companyQuery.refetch();
