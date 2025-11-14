@@ -356,9 +356,12 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       const updatedCompany = await response.json();
       
       // Invalidate relevant queries to refresh the UI
-      queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/settings/company'] });
+      
+      // Force immediate refetch to update the logo thumbnail
+      await companyQuery.refetch();
       
       toast({
         title: "Logo uploaded",
