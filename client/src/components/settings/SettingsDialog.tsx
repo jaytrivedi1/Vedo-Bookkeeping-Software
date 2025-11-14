@@ -39,7 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Info, Languages, Moon, Sun, DollarSign } from "lucide-react";
+import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
 
@@ -66,7 +66,35 @@ interface SettingsState {
   multiCurrencyEnabled: boolean;
   homeCurrency: string | null;
   multiCurrencyEnabledAt: Date | null;
+  invoiceTemplate?: string;
 }
+
+const templates = [
+  {
+    id: "classic",
+    name: "Classic",
+    description: "Traditional invoice layout with detailed formatting",
+    icon: FileText,
+  },
+  {
+    id: "modern",
+    name: "Modern",
+    description: "Clean, contemporary design with bold typography",
+    icon: Sparkles,
+  },
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Simple, uncluttered layout focused on essentials",
+    icon: Minimize2,
+  },
+  {
+    id: "compact",
+    name: "Compact",
+    description: "Space-efficient design for single-page invoices",
+    icon: LayoutTemplate,
+  },
+];
 
 // Define props for the component
 interface SettingsDialogProps {
@@ -78,13 +106,15 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("company");
   const [selectedHomeCurrency, setSelectedHomeCurrency] = useState<string>("USD");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("classic");
   
   // Initialize state for settings
   const [settings, setSettings] = useState<SettingsState>({
     darkMode: false,
     multiCurrencyEnabled: false,
     homeCurrency: null,
-    multiCurrencyEnabledAt: null
+    multiCurrencyEnabledAt: null,
+    invoiceTemplate: "classic"
   });
   
   // Query company settings
@@ -109,12 +139,17 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   useEffect(() => {
     if (preferencesQuery.data && Object.keys(preferencesQuery.data).length > 0) {
       const data = preferencesQuery.data as any;
+      const template = data.invoiceTemplate || "classic";
       setSettings({
         darkMode: data.darkMode || false,
         multiCurrencyEnabled: data.multiCurrencyEnabled || false,
         homeCurrency: data.homeCurrency || null,
-        multiCurrencyEnabledAt: data.multiCurrencyEnabledAt ? new Date(data.multiCurrencyEnabledAt) : null
+        multiCurrencyEnabledAt: data.multiCurrencyEnabledAt ? new Date(data.multiCurrencyEnabledAt) : null,
+        invoiceTemplate: template
       });
+      
+      // Set selected template
+      setSelectedTemplate(template);
       
       // Set selected home currency if available
       if (data.homeCurrency) {
@@ -217,11 +252,17 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         homeCurrency: data?.homeCurrency ?? variables.homeCurrency,
         multiCurrencyEnabledAt: data?.multiCurrencyEnabledAt 
           ? new Date(data.multiCurrencyEnabledAt) 
-          : variables.multiCurrencyEnabledAt
+          : variables.multiCurrencyEnabledAt,
+        invoiceTemplate: data?.invoiceTemplate ?? variables.invoiceTemplate
       };
       
       // Update local state with the final computed settings
       setSettings(finalSettings);
+      
+      // Update selected template to match saved value
+      if (finalSettings.invoiceTemplate) {
+        setSelectedTemplate(finalSettings.invoiceTemplate);
+      }
       
       // Apply theme change immediately using the final computed value
       if (finalDarkMode) {
@@ -304,7 +345,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-3 mb-6">
+          <TabsList className="grid grid-cols-4 mb-6">
             <TabsTrigger value="company" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
               <span>Company</span>
@@ -312,6 +353,10 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
             <TabsTrigger value="preferences" className="flex items-center gap-2">
               <Sun className="h-4 w-4" />
               <span>Preferences</span>
+            </TabsTrigger>
+            <TabsTrigger value="invoices" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>Invoices</span>
             </TabsTrigger>
             <TabsTrigger value="currency" className="flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
@@ -501,6 +546,89 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                   className="w-full"
                 >
                   {savePreferences.isPending ? "Saving..." : "Save Preferences"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* Invoices Tab */}
+          <TabsContent value="invoices">
+            <Card>
+              <CardHeader>
+                <CardTitle>Invoice Templates</CardTitle>
+                <CardDescription>Choose how your invoices will look when printed or sent to customers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  {templates.map((template) => {
+                    const Icon = template.icon;
+                    const isSelected = selectedTemplate === template.id;
+                    
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => setSelectedTemplate(template.id)}
+                        className={`relative flex items-start gap-4 p-4 border-2 rounded-lg transition-all ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-md'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className={`p-3 rounded-lg ${
+                          isSelected ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          <Icon className="h-6 w-6" />
+                        </div>
+                        
+                        <div className="flex-1 text-left">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-base">{template.name}</h3>
+                            {isSelected && (
+                              <Check className="h-5 w-5 text-primary" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">{template.description}</p>
+                          
+                          {/* Template Preview */}
+                          <div className="mt-3 p-3 bg-white border border-gray-200 rounded text-xs">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <div className="font-bold text-gray-700">INVOICE</div>
+                                <div className="text-gray-500">#INV-001</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold text-gray-700">Your Company</div>
+                                <div className="text-gray-500">Date: Jan 1, 2025</div>
+                              </div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-2 mt-2">
+                              <div className="flex justify-between text-gray-600">
+                                <span>Service Item</span>
+                                <span>$100.00</span>
+                              </div>
+                            </div>
+                            <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-bold text-gray-700">
+                              <span>Total</span>
+                              <span>$100.00</span>
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                
+                <Button 
+                  onClick={() => {
+                    const newSettings = { ...settings, invoiceTemplate: selectedTemplate };
+                    setSettings(newSettings);
+                    savePreferences.mutate(newSettings);
+                  }}
+                  disabled={savePreferences.isPending || selectedTemplate === settings.invoiceTemplate}
+                  className="w-full"
+                >
+                  {savePreferences.isPending ? "Saving..." : "Save Template Selection"}
                 </Button>
               </CardContent>
             </Card>
