@@ -259,25 +259,24 @@ export default function VendorList({ className }: VendorListProps) {
                 {filteredVendors.map((vendor) => (
                   <div
                     key={vendor.id}
-                    className="p-3 rounded-md border hover:bg-gray-50 cursor-pointer flex justify-between items-center"
+                    className="group p-4 rounded-lg border border-gray-200 hover:border-primary hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-3"
                     onClick={() => handleVendorClick(vendor)}
                     data-testid={`vendor-row-${vendor.id}`}
                   >
-                    <div>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/10 to-primary/20 flex items-center justify-center flex-shrink-0">
+                      <Building className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{vendor.name}</h3>
+                        <h3 className="font-medium text-gray-900 truncate">{vendor.name}</h3>
                         {vendor.isActive === false && (
                           <Badge variant="secondary" className="text-xs" data-testid={`badge-inactive-${vendor.id}`}>
                             Inactive
                           </Badge>
                         )}
                       </div>
-                      {vendor.email && <p className="text-sm text-gray-500">{vendor.email}</p>}
-                      {vendor.phone && (
-                        <p className="text-sm text-gray-500">{vendor.phone}</p>
-                      )}
                     </div>
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                    <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-primary transition-colors flex-shrink-0" />
                   </div>
                 ))}
               </div>
