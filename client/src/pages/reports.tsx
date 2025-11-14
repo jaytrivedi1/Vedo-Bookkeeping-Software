@@ -104,10 +104,10 @@ function BalanceSheetSection({
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between py-2 hover:bg-gray-50 px-2 rounded">
+          <div className="flex items-center justify-between py-2 hover:bg-primary/5 px-2 rounded">
             <div className="flex items-center gap-2">
               {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              <span className="font-medium text-sm text-gray-700">{title}</span>
+              <span className="font-medium text-sm text-foreground">{title}</span>
             </div>
             <span className="font-semibold text-sm">{formatCurrency(subtotal)}</span>
           </div>
@@ -117,7 +117,7 @@ function BalanceSheetSection({
             {accounts.map((account) => (
               <div 
                 key={account.id} 
-                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded cursor-pointer transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (onAccountClick) {
@@ -126,7 +126,7 @@ function BalanceSheetSection({
                 }}
                 data-testid={`balance-sheet-account-${account.id}`}
               >
-                <span className="text-sm text-gray-600 hover:text-blue-600">{account.name}</span>
+                <span className="text-sm text-muted-foreground hover:text-primary">{account.name}</span>
                 <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
               </div>
             ))}
@@ -159,10 +159,10 @@ function CashFlowSection({
     <>
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between py-2 hover:bg-gray-50 px-2 rounded">
+          <div className="flex items-center justify-between py-2 hover:bg-primary/5 px-2 rounded">
             <div className="flex items-center gap-2">
               {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              <span className="font-medium text-sm text-gray-700">{title}</span>
+              <span className="font-medium text-sm text-foreground">{title}</span>
             </div>
             <span className="font-semibold text-sm">
               {subtotal >= 0 ? formatCurrency(subtotal) : `(${formatCurrency(subtotal)})`}
@@ -174,7 +174,7 @@ function CashFlowSection({
             {accounts.map((item) => (
               <div 
                 key={item.account.id} 
-                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded cursor-pointer transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (onAccountClick) {
@@ -183,7 +183,7 @@ function CashFlowSection({
                 }}
                 data-testid={`cash-flow-account-${item.account.id}`}
               >
-                <span className="text-sm text-gray-600 hover:text-blue-600">{item.account.name}</span>
+                <span className="text-sm text-muted-foreground hover:text-primary">{item.account.name}</span>
                 <span className="text-sm text-right">
                   {item.amount >= 0 ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
                 </span>
@@ -205,7 +205,7 @@ function BalanceSheetReport({
   onAccountClick?: (accountId: number) => void;
 }) {
   if (!balanceSheet) {
-    return <div className="text-center py-6 text-gray-500">No balance sheet data available</div>;
+    return <div className="text-center py-6 text-muted-foreground">No balance sheet data available</div>;
   }
 
   // Group asset accounts by type
@@ -251,7 +251,7 @@ function BalanceSheetReport({
     <div className="space-y-6">
       {/* ASSETS SECTION */}
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">ASSETS</h3>
+        <h3 className="text-lg font-semibold text-foreground mb-3">ASSETS</h3>
         
         {/* Current Assets */}
         <BalanceSheetSection
@@ -272,15 +272,15 @@ function BalanceSheetReport({
         />
         
         {/* Total Assets */}
-        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
-          <span className="font-bold text-gray-900">Total Assets</span>
-          <span className="font-bold text-gray-900">{formatCurrency(totalAssets)}</span>
+        <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
+          <span className="font-bold text-foreground">Total Assets</span>
+          <span className="font-bold text-foreground">{formatCurrency(totalAssets)}</span>
         </div>
       </div>
       
       {/* LIABILITIES SECTION */}
-      <div className="space-y-2 pt-4 border-t border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">LIABILITIES</h3>
+      <div className="space-y-2 pt-4 border-t border-border">
+        <h3 className="text-lg font-semibold text-foreground mb-3">LIABILITIES</h3>
         
         {/* Current Liabilities */}
         <BalanceSheetSection
@@ -301,15 +301,15 @@ function BalanceSheetReport({
         />
         
         {/* Total Liabilities */}
-        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
-          <span className="font-bold text-gray-900">Total Liabilities</span>
-          <span className="font-bold text-gray-900">{formatCurrency(totalLiabilities)}</span>
+        <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
+          <span className="font-bold text-foreground">Total Liabilities</span>
+          <span className="font-bold text-foreground">{formatCurrency(totalLiabilities)}</span>
         </div>
       </div>
       
       {/* EQUITY SECTION */}
-      <div className="space-y-2 pt-4 border-t border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">EQUITY</h3>
+      <div className="space-y-2 pt-4 border-t border-border">
+        <h3 className="text-lg font-semibold text-foreground mb-3">EQUITY</h3>
         
         {/* Other Equity Accounts */}
         {equityAccounts.length > 0 && (
@@ -317,11 +317,11 @@ function BalanceSheetReport({
             {equityAccounts.map((account: any) => (
               <div 
                 key={account.id} 
-                className="flex justify-between py-1.5 px-2 hover:bg-blue-50 rounded cursor-pointer transition-colors"
+                className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded cursor-pointer transition-colors"
                 onClick={() => onAccountClick && onAccountClick(account.id)}
                 data-testid={`balance-sheet-account-${account.id}`}
               >
-                <span className="text-sm text-gray-600 hover:text-blue-600">{account.name}</span>
+                <span className="text-sm text-muted-foreground hover:text-primary">{account.name}</span>
                 <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
               </div>
             ))}
@@ -329,28 +329,28 @@ function BalanceSheetReport({
         )}
         
         {/* Retained Earnings */}
-        <div className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
-          <span className="text-sm text-gray-600">Retained Earnings</span>
+        <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
+          <span className="text-sm text-muted-foreground">Retained Earnings</span>
           <span className="text-sm text-right">{formatCurrency(retainedEarnings)}</span>
         </div>
         
         {/* Current Year Net Income */}
-        <div className="flex justify-between py-1.5 px-2 hover:bg-gray-50 rounded">
-          <span className="text-sm text-gray-600">Net Income (Current Year)</span>
+        <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
+          <span className="text-sm text-muted-foreground">Net Income (Current Year)</span>
           <span className="text-sm text-right">{formatCurrency(currentYearNetIncome)}</span>
         </div>
         
         {/* Total Equity */}
-        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300 mt-2">
-          <span className="font-bold text-gray-900">Total Equity</span>
-          <span className="font-bold text-gray-900" data-testid="balance-sheet-equity-total">{formatCurrency(totalEquity)}</span>
+        <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
+          <span className="font-bold text-foreground">Total Equity</span>
+          <span className="font-bold text-foreground" data-testid="balance-sheet-equity-total">{formatCurrency(totalEquity)}</span>
         </div>
       </div>
       
       {/* TOTAL LIABILITIES & EQUITY */}
-      <div className="flex justify-between py-3 px-2 border-t-4 border-double border-gray-400 mt-4">
-        <span className="font-bold text-lg text-gray-900">Total Liabilities & Equity</span>
-        <span className="font-bold text-lg text-gray-900" data-testid="balance-sheet-liabilities-equity-total">{formatCurrency(totalLiabilitiesAndEquity)}</span>
+      <div className="flex justify-between py-3 px-2 border-t-4 border-double border-border mt-4">
+        <span className="font-bold text-lg text-foreground">Total Liabilities & Equity</span>
+        <span className="font-bold text-lg text-foreground" data-testid="balance-sheet-liabilities-equity-total">{formatCurrency(totalLiabilitiesAndEquity)}</span>
       </div>
     </div>
   );
@@ -1301,7 +1301,7 @@ export default function Reports() {
               <div className="mb-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                   <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
                     <Select 
                       value={selectedFiscalYear.toString()} 
                       onValueChange={handleFiscalYearChange}
@@ -1366,13 +1366,13 @@ export default function Reports() {
                             {/* Revenue Section */}
                             {incomeStatement?.revenue && incomeStatement.revenue.accounts.length > 0 && (
                               <>
-                                <TableRow className="bg-gray-50">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={2} className="font-semibold text-sm">REVENUE</TableCell>
                                 </TableRow>
                                 {incomeStatement.revenue.accounts.map((account: any) => (
                                   <TableRow 
                                     key={account.id} 
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
                                     onClick={() => {
                                       setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
@@ -1395,13 +1395,13 @@ export default function Reports() {
                             {/* Cost of Goods Sold Section */}
                             {incomeStatement?.costOfGoodsSold && incomeStatement.costOfGoodsSold.accounts.length > 0 && (
                               <>
-                                <TableRow className="bg-gray-50">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={2} className="font-semibold text-sm">COST OF GOODS SOLD</TableCell>
                                 </TableRow>
                                 {incomeStatement.costOfGoodsSold.accounts.map((account: any) => (
                                   <TableRow 
                                     key={account.id} 
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
                                     onClick={() => {
                                       setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
@@ -1434,13 +1434,13 @@ export default function Reports() {
                             {/* Operating Expenses Section */}
                             {incomeStatement?.operatingExpenses && incomeStatement.operatingExpenses.accounts.length > 0 && (
                               <>
-                                <TableRow className="bg-gray-50">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={2} className="font-semibold text-sm">OPERATING EXPENSES</TableCell>
                                 </TableRow>
                                 {incomeStatement.operatingExpenses.accounts.map((account: any) => (
                                   <TableRow 
                                     key={account.id} 
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
                                     onClick={() => {
                                       setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
@@ -1473,13 +1473,13 @@ export default function Reports() {
                             {/* Other Income */}
                             {incomeStatement?.otherIncome && incomeStatement.otherIncome.accounts.length > 0 && (
                               <>
-                                <TableRow className="bg-gray-50">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={2} className="font-semibold text-sm">OTHER INCOME</TableCell>
                                 </TableRow>
                                 {incomeStatement.otherIncome.accounts.map((account: any) => (
                                   <TableRow 
                                     key={account.id} 
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
                                     onClick={() => {
                                       setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
@@ -1502,13 +1502,13 @@ export default function Reports() {
                             {/* Other Expense */}
                             {incomeStatement?.otherExpense && incomeStatement.otherExpense.accounts.length > 0 && (
                               <>
-                                <TableRow className="bg-gray-50">
+                                <TableRow className="bg-muted/30">
                                   <TableCell colSpan={2} className="font-semibold text-sm">OTHER EXPENSE</TableCell>
                                 </TableRow>
                                 {incomeStatement.otherExpense.accounts.map((account: any) => (
                                   <TableRow 
                                     key={account.id} 
-                                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
                                     onClick={() => {
                                       setLocation(`/accounts/${account.id}/transactions?back=/reports?tab=income-statement&backLabel=Income Statement`);
                                     }}
@@ -1550,7 +1550,7 @@ export default function Reports() {
               <div className="mb-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                   <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
                     <Select 
                       value={selectedFiscalYear.toString()} 
                       onValueChange={handleFiscalYearChange}
@@ -1627,7 +1627,7 @@ export default function Reports() {
               <div className="mb-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                   <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
                     <Select 
                       value={selectedFiscalYear.toString()} 
                       onValueChange={handleFiscalYearChange}
@@ -1676,9 +1676,9 @@ export default function Reports() {
                               setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
                             }}
                           />
-                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
-                            <span className="font-semibold text-gray-900">Net Cash from Operating Activities</span>
-                            <span className="font-semibold text-gray-900">
+                          <div className="flex justify-between py-2 px-2 border-t border-border">
+                            <span className="font-semibold text-foreground">Net Cash from Operating Activities</span>
+                            <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.operating.total >= 0 
                                 ? formatCurrency(cashFlowStatement.categories.operating.total)
                                 : `(${formatCurrency(cashFlowStatement.categories.operating.total)})`
@@ -1690,7 +1690,7 @@ export default function Reports() {
                       
                       {/* Investing Activities Section */}
                       {cashFlowStatement.categories?.investing && (
-                        <div className="space-y-2 pt-4 border-t border-gray-200">
+                        <div className="space-y-2 pt-4 border-t border-border">
                           <CashFlowSection
                             title="Cash Flows from Investing Activities"
                             accounts={cashFlowStatement.categories.investing.accounts || []}
@@ -1700,9 +1700,9 @@ export default function Reports() {
                               setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
                             }}
                           />
-                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
-                            <span className="font-semibold text-gray-900">Net Cash from Investing Activities</span>
-                            <span className="font-semibold text-gray-900">
+                          <div className="flex justify-between py-2 px-2 border-t border-border">
+                            <span className="font-semibold text-foreground">Net Cash from Investing Activities</span>
+                            <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.investing.total >= 0 
                                 ? formatCurrency(cashFlowStatement.categories.investing.total)
                                 : `(${formatCurrency(cashFlowStatement.categories.investing.total)})`
@@ -1714,7 +1714,7 @@ export default function Reports() {
                       
                       {/* Financing Activities Section */}
                       {cashFlowStatement.categories?.financing && (
-                        <div className="space-y-2 pt-4 border-t border-gray-200">
+                        <div className="space-y-2 pt-4 border-t border-border">
                           <CashFlowSection
                             title="Cash Flows from Financing Activities"
                             accounts={cashFlowStatement.categories.financing.accounts || []}
@@ -1724,9 +1724,9 @@ export default function Reports() {
                               setLocation(`/accounts/${accountId}/transactions?back=/reports?tab=cash-flow&backLabel=Cash Flow Statement`);
                             }}
                           />
-                          <div className="flex justify-between py-2 px-2 border-t border-gray-300">
-                            <span className="font-semibold text-gray-900">Net Cash from Financing Activities</span>
-                            <span className="font-semibold text-gray-900">
+                          <div className="flex justify-between py-2 px-2 border-t border-border">
+                            <span className="font-semibold text-foreground">Net Cash from Financing Activities</span>
+                            <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.financing.total >= 0 
                                 ? formatCurrency(cashFlowStatement.categories.financing.total)
                                 : `(${formatCurrency(cashFlowStatement.categories.financing.total)})`
@@ -1737,9 +1737,9 @@ export default function Reports() {
                       )}
                       
                       {/* Net Change in Cash */}
-                      <div className="flex justify-between py-3 px-2 border-t-2 border-gray-400 mt-4">
-                        <span className="font-bold text-gray-900">Net Change in Cash</span>
-                        <span className="font-bold text-gray-900" data-testid="cash-flow-net-change">
+                      <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-4">
+                        <span className="font-bold text-foreground">Net Change in Cash</span>
+                        <span className="font-bold text-foreground" data-testid="cash-flow-net-change">
                           {cashFlowStatement.netChange >= 0 
                             ? formatCurrency(cashFlowStatement.netChange)
                             : `(${formatCurrency(cashFlowStatement.netChange)})`
@@ -1748,13 +1748,13 @@ export default function Reports() {
                       </div>
                       
                       {/* Cash Balances */}
-                      <div className="space-y-2 pt-4 border-t border-gray-200">
+                      <div className="space-y-2 pt-4 border-t border-border">
                         <div className="flex justify-between py-1.5 px-2">
-                          <span className="text-sm text-gray-600">Cash at Beginning of Period</span>
+                          <span className="text-sm text-muted-foreground">Cash at Beginning of Period</span>
                           <span className="text-sm text-right">{formatCurrency(cashFlowStatement.openingCash || 0)}</span>
                         </div>
                         <div className="flex justify-between py-1.5 px-2">
-                          <span className="text-sm text-gray-600">Net Change in Cash</span>
+                          <span className="text-sm text-muted-foreground">Net Change in Cash</span>
                           <span className="text-sm text-right">
                             {cashFlowStatement.netChange >= 0 
                               ? formatCurrency(cashFlowStatement.netChange)
@@ -1762,16 +1762,16 @@ export default function Reports() {
                             }
                           </span>
                         </div>
-                        <div className="flex justify-between py-3 px-2 border-t-2 border-gray-300">
-                          <span className="font-bold text-gray-900">Cash at End of Period</span>
-                          <span className="font-bold text-gray-900" data-testid="cash-flow-closing-cash">
+                        <div className="flex justify-between py-3 px-2 border-t-2 border-border">
+                          <span className="font-bold text-foreground">Cash at End of Period</span>
+                          <span className="font-bold text-foreground" data-testid="cash-flow-closing-cash">
                             {formatCurrency(cashFlowStatement.closingCash || 0)}
                           </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-gray-500">No cash flow data available</div>
+                    <div className="text-center py-6 text-muted-foreground">No cash flow data available</div>
                   )}
                 </CardContent>
               </Card>
@@ -1781,7 +1781,7 @@ export default function Reports() {
             <TabsContent value="general-ledger">
               <div className="mb-4 space-y-4">
                 <div className="flex-1">
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                  <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
                   <Select 
                     value={selectedFiscalYear.toString()} 
                     onValueChange={handleFiscalYearChange}
@@ -1805,9 +1805,9 @@ export default function Reports() {
                 </div>
                 
                 {/* Filters for Grouped View */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 p-4 bg-gray-50 rounded-lg border">
+                <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 p-4 bg-muted/30 rounded-lg border-border border">
                     <div className="flex-1 min-w-[200px]">
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Filter by Account</label>
+                      <label className="text-sm font-medium text-foreground mb-1 block">Filter by Account</label>
                       <Select 
                         value={groupedFilterAccountId?.toString() || 'all'} 
                         onValueChange={(value) => setGroupedFilterAccountId(value === 'all' ? null : parseInt(value))}
@@ -1828,7 +1828,7 @@ export default function Reports() {
                     </div>
                     
                     <div className="flex-1 min-w-[200px]">
-                      <label className="text-sm font-medium text-gray-700 mb-1 block">Filter by Type</label>
+                      <label className="text-sm font-medium text-foreground mb-1 block">Filter by Type</label>
                       <Select 
                         value={groupedFilterTransactionType || 'all'} 
                         onValueChange={(value) => setGroupedFilterTransactionType(value === 'all' ? '' : value)}
@@ -1911,7 +1911,7 @@ export default function Reports() {
                           <TableHeader>
                             <TableRow>
                               <TableHead 
-                                className="cursor-pointer select-none hover:bg-gray-100"
+                                className="cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('date')}
                                 data-testid="header-date"
                               >
@@ -1924,7 +1924,7 @@ export default function Reports() {
                                 Type
                               </TableHead>
                               <TableHead 
-                                className="cursor-pointer select-none hover:bg-gray-100"
+                                className="cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('referenceNumber')}
                                 data-testid="header-reference-number"
                               >
@@ -1934,7 +1934,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="cursor-pointer select-none hover:bg-gray-100"
+                                className="cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('name')}
                                 data-testid="header-name"
                               >
@@ -1944,7 +1944,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="cursor-pointer select-none hover:bg-gray-100"
+                                className="cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('description')}
                                 data-testid="header-description"
                               >
@@ -1954,7 +1954,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="cursor-pointer select-none hover:bg-gray-100"
+                                className="cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('account')}
                                 data-testid="header-account"
                               >
@@ -1964,7 +1964,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                className="text-right cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('debit')}
                                 data-testid="header-debit"
                               >
@@ -1974,7 +1974,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                className="text-right cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('credit')}
                                 data-testid="header-credit"
                               >
@@ -1984,7 +1984,7 @@ export default function Reports() {
                                 </div>
                               </TableHead>
                               <TableHead 
-                                className="text-right cursor-pointer select-none hover:bg-gray-100"
+                                className="text-right cursor-pointer select-none hover:bg-primary/5"
                                 onClick={() => handleSort('balance')}
                                 data-testid="header-balance"
                               >
@@ -2001,7 +2001,7 @@ export default function Reports() {
                               !isBalanceSheetAccount(selectedAccount.type) || 
                               (openingBalanceData !== undefined && startingBalance === 0)) ? (
                               <TableRow>
-                                <TableCell colSpan={9} className="text-center py-6 text-gray-500">
+                                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
                                   {selectedAccountId ? 'No entries found for this account' : 'No entries found in the general ledger'}
                                 </TableCell>
                               </TableRow>
@@ -2027,7 +2027,7 @@ export default function Reports() {
                                   return (
                                     <TableRow 
                                       key={entry.id}
-                                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                      className="cursor-pointer hover:bg-primary/5 transition-colors"
                                       onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
                                       data-testid={`transaction-row-${entry.transactionId}`}
                                     >
@@ -2054,7 +2054,7 @@ export default function Reports() {
                                   );
                                 })}
                                 {ledgerEntriesWithBalance && ledgerEntriesWithBalance.length > 0 && (
-                                  <TableRow className="border-t-2 border-gray-300 font-bold bg-gray-50">
+                                  <TableRow className="border-t-2 border-border font-bold bg-muted/30">
                                     <TableCell colSpan={6} className="text-right">Total</TableCell>
                                     <TableCell className="text-right" data-testid="total-debits">
                                       {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebits)}
@@ -2077,7 +2077,7 @@ export default function Reports() {
                       ) : groupedLedgerData && groupedLedgerData.accountGroups ? (
                         <div className="space-y-6">
                           {groupedLedgerData.accountGroups.length === 0 ? (
-                            <div className="text-center py-6 text-gray-500">
+                            <div className="text-center py-6 text-muted-foreground">
                               No accounts found with activity in the selected period
                             </div>
                           ) : (
@@ -2093,20 +2093,20 @@ export default function Reports() {
                                     data-testid={`account-group-${group.account.id}`}
                                   >
                                     <div className="border rounded-lg overflow-hidden">
-                                      <CollapsibleTrigger className="w-full hover:bg-gray-50 transition-colors">
-                                        <div className="flex items-center justify-between p-4 bg-gray-100">
+                                      <CollapsibleTrigger className="w-full hover:bg-primary/5 transition-colors">
+                                        <div className="flex items-center justify-between p-4 bg-muted/50">
                                           <div className="flex items-center gap-2">
                                             {isExpanded ? (
-                                              <ChevronUp className="h-5 w-5 text-gray-600" />
+                                              <ChevronUp className="h-5 w-5 text-muted-foreground" />
                                             ) : (
-                                              <ChevronDown className="h-5 w-5 text-gray-600" />
+                                              <ChevronDown className="h-5 w-5 text-muted-foreground" />
                                             )}
                                             <span className="font-semibold text-left">
                                               {group.account.code} - {group.account.name}
                                             </span>
                                           </div>
                                           <div className="flex items-center gap-4">
-                                            <span className="text-sm text-gray-600">
+                                            <span className="text-sm text-muted-foreground">
                                               {group.entries.length} transaction{group.entries.length !== 1 ? 's' : ''}
                                             </span>
                                             <span className="font-medium">
@@ -2147,7 +2147,7 @@ export default function Reports() {
                                               {group.entries.map((entry: any) => (
                                                 <TableRow
                                                   key={entry.id}
-                                                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                                  className="cursor-pointer hover:bg-primary/5 transition-colors"
                                                   onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
                                                   data-testid={`grouped-transaction-${entry.transactionId}`}
                                                 >
@@ -2172,7 +2172,7 @@ export default function Reports() {
                                               ))}
                                               
                                               {/* Total Row */}
-                                              <TableRow className="border-t-2 border-gray-300 font-bold bg-gray-50">
+                                              <TableRow className="border-t-2 border-border font-bold bg-muted/30">
                                                 <TableCell colSpan={6} className="text-right">
                                                   Total for {group.account.name}
                                                 </TableCell>
@@ -2194,24 +2194,24 @@ export default function Reports() {
                               })}
                               
                               {/* Grand Total */}
-                              <div className="border-t-4 border-double border-gray-400 pt-4">
-                                <div className="flex justify-between items-center p-4 bg-gray-100 rounded-lg">
+                              <div className="border-t-4 border-double border-border pt-4">
+                                <div className="flex justify-between items-center p-4 bg-muted/50 rounded-lg">
                                   <div className="font-bold text-lg">Grand Total</div>
                                   <div className="flex gap-6">
                                     <div className="text-right">
-                                      <div className="text-sm text-gray-600">Total Debits</div>
+                                      <div className="text-sm text-muted-foreground">Total Debits</div>
                                       <div className="font-bold" data-testid="grand-total-debits">
                                         {formatCurrency(groupedLedgerData.grandTotalDebit)}
                                       </div>
                                     </div>
                                     <div className="text-right">
-                                      <div className="text-sm text-gray-600">Total Credits</div>
+                                      <div className="text-sm text-muted-foreground">Total Credits</div>
                                       <div className="font-bold" data-testid="grand-total-credits">
                                         {formatCurrency(groupedLedgerData.grandTotalCredit)}
                                       </div>
                                     </div>
                                     <div className="text-right">
-                                      <div className="text-sm text-gray-600">Accounts</div>
+                                      <div className="text-sm text-muted-foreground">Accounts</div>
                                       <div className="font-bold">{groupedLedgerData.totalAccounts}</div>
                                     </div>
                                   </div>
@@ -2221,7 +2221,7 @@ export default function Reports() {
                           )}
                         </div>
                       ) : (
-                        <div className="text-center py-6 text-gray-500">
+                        <div className="text-center py-6 text-muted-foreground">
                           No data available
                         </div>
                       )
@@ -2256,7 +2256,7 @@ export default function Reports() {
               <div className="mb-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                   <div className="flex-1">
-                    <label className="text-sm font-medium text-gray-700 mb-1 block">Fiscal Year</label>
+                    <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
                     <Select 
                       value={selectedFiscalYear.toString()} 
                       onValueChange={handleFiscalYearChange}
@@ -2399,7 +2399,7 @@ export default function Reports() {
                             {trialBalanceData.map((item: any, index: number) => (
                               <TableRow 
                                 key={index}
-                                className="cursor-pointer hover:bg-gray-50 transition-colors"
+                                className="cursor-pointer hover:bg-primary/5 transition-colors"
                                 onClick={() => {
                                   setLocation(`/accounts/${item.account.id}/transactions?back=/reports?tab=trial-balance&backLabel=Trial Balance`);
                                 }}
