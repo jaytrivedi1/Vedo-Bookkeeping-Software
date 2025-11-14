@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
+import InvoiceTemplatePreview from "./InvoiceTemplatePreview";
 
 // Define schema for company details
 const companyFormSchema = z.object({
@@ -333,7 +334,9 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+      <DialogContent className={`max-h-[80vh] overflow-y-auto ${
+        activeTab === 'invoices' ? 'max-w-[95vw] lg:max-w-[1200px]' : 'sm:max-w-[600px]'
+      }`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Settings className="h-5 w-5" />
@@ -553,85 +556,79 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
           
           {/* Invoices Tab */}
           <TabsContent value="invoices">
-            <Card>
-              <CardHeader>
-                <CardTitle>Invoice Templates</CardTitle>
-                <CardDescription>Choose how your invoices will look when printed or sent to customers</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 gap-4">
-                  {templates.map((template) => {
-                    const Icon = template.icon;
-                    const isSelected = selectedTemplate === template.id;
-                    
-                    return (
-                      <button
-                        key={template.id}
-                        type="button"
-                        onClick={() => setSelectedTemplate(template.id)}
-                        className={`relative flex items-start gap-4 p-4 border-2 rounded-lg transition-all ${
-                          isSelected
-                            ? 'border-primary bg-primary/5 shadow-md'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className={`p-3 rounded-lg ${
-                          isSelected ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          <Icon className="h-6 w-6" />
-                        </div>
-                        
-                        <div className="flex-1 text-left">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-base">{template.name}</h3>
-                            {isSelected && (
-                              <Check className="h-5 w-5 text-primary" />
-                            )}
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold mb-1">Invoice Templates</h3>
+                <p className="text-sm text-muted-foreground">Choose how your invoices will look when printed or sent to customers</p>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+                {/* Left Column: Template Selection */}
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    {templates.map((template) => {
+                      const Icon = template.icon;
+                      const isSelected = selectedTemplate === template.id;
+                      
+                      return (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => setSelectedTemplate(template.id)}
+                          className={`w-full flex items-start gap-3 p-4 border-2 rounded-lg transition-all text-left ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 shadow-md'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className={`p-2 rounded-lg flex-shrink-0 ${
+                            isSelected ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            <Icon className="h-5 w-5" />
                           </div>
-                          <p className="text-sm text-gray-600">{template.description}</p>
                           
-                          {/* Template Preview */}
-                          <div className="mt-3 p-3 bg-white border border-gray-200 rounded text-xs">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <div className="font-bold text-gray-700">INVOICE</div>
-                                <div className="text-gray-500">#INV-001</div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-semibold text-gray-700">Your Company</div>
-                                <div className="text-gray-500">Date: Jan 1, 2025</div>
-                              </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold text-sm">{template.name}</h4>
+                              {isSelected && (
+                                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                              )}
                             </div>
-                            <div className="border-t border-gray-200 pt-2 mt-2">
-                              <div className="flex justify-between text-gray-600">
-                                <span>Service Item</span>
-                                <span>$100.00</span>
-                              </div>
-                            </div>
-                            <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-bold text-gray-700">
-                              <span>Total</span>
-                              <span>$100.00</span>
-                            </div>
+                            <p className="text-xs text-gray-600">{template.description}</p>
                           </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  <Button 
+                    onClick={() => {
+                      const newSettings = { ...settings, invoiceTemplate: selectedTemplate };
+                      setSettings(newSettings);
+                      savePreferences.mutate(newSettings);
+                    }}
+                    disabled={savePreferences.isPending || selectedTemplate === settings.invoiceTemplate}
+                    className="w-full"
+                  >
+                    {savePreferences.isPending ? "Saving..." : "Save Template Selection"}
+                  </Button>
                 </div>
-                
-                <Button 
-                  onClick={() => {
-                    const newSettings = { ...settings, invoiceTemplate: selectedTemplate };
-                    setSettings(newSettings);
-                    savePreferences.mutate(newSettings);
-                  }}
-                  disabled={savePreferences.isPending || selectedTemplate === settings.invoiceTemplate}
-                  className="w-full"
-                >
-                  {savePreferences.isPending ? "Saving..." : "Save Template Selection"}
-                </Button>
-              </CardContent>
-            </Card>
+
+                {/* Right Column: Live Preview */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-4">
+                    <h4 className="text-sm font-semibold mb-3 text-gray-700">Preview</h4>
+                    <InvoiceTemplatePreview template={selectedTemplate} />
+                  </div>
+                </div>
+
+                {/* Mobile Preview */}
+                <div className="lg:hidden">
+                  <h4 className="text-sm font-semibold mb-3 text-gray-700">Preview</h4>
+                  <InvoiceTemplatePreview template={selectedTemplate} />
+                </div>
+              </div>
+            </div>
           </TabsContent>
           
           {/* Currency Tab */}
