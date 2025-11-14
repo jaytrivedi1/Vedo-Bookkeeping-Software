@@ -441,6 +441,7 @@ export const preferencesSchema = pgTable('preferences', {
   multiCurrencyEnabled: boolean('multi_currency_enabled').default(false), // one-time enable, cannot disable
   homeCurrency: varchar('home_currency', { length: 3 }).default('USD'), // primary currency for business
   multiCurrencyEnabledAt: timestamp('multi_currency_enabled_at'), // track when multi-currency was enabled
+  invoiceTemplate: text('invoice_template').default('classic'), // default invoice template (classic, modern, minimal, compact)
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 

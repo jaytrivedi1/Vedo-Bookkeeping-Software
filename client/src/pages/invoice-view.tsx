@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
+import { useInvoiceTemplate } from "@/hooks/use-invoice-template";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
@@ -32,6 +33,7 @@ export default function InvoiceView() {
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const { toast } = useToast();
   const { backUrl, backLabel, handleBack } = useBackNavigation('/invoices', 'Invoices');
+  const { template } = useInvoiceTemplate();
   
   // Extract the invoice ID from the URL
   useEffect(() => {
@@ -269,6 +271,12 @@ export default function InvoiceView() {
             <p className="text-gray-500">
               {invoice.date ? format(new Date(invoice.date), 'MMMM d, yyyy') : 'No date'}
             </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-gray-400">Template:</span>
+              <Badge variant="outline" className="text-xs capitalize">
+                {template}
+              </Badge>
+            </div>
           </div>
           <Badge 
             className={`px-3 py-1 text-sm ${getStatusColor(invoice.status)}`}

@@ -1,0 +1,183 @@
+import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Check, FileText, Sparkles, LayoutTemplate, Minimize2 } from "lucide-react";
+
+interface Preferences {
+  id?: number;
+  invoiceTemplate?: string;
+  darkMode?: boolean;
+  multiCurrencyEnabled?: boolean;
+  homeCurrency?: string;
+}
+
+const templates = [
+  {
+    id: "classic",
+    name: "Classic",
+    description: "Traditional invoice layout with detailed formatting",
+    icon: FileText,
+  },
+  {
+    id: "modern",
+    name: "Modern",
+    description: "Clean, contemporary design with bold typography",
+    icon: Sparkles,
+  },
+  {
+    id: "minimal",
+    name: "Minimal",
+    description: "Simple, uncluttered layout focused on essentials",
+    icon: Minimize2,
+  },
+  {
+    id: "compact",
+    name: "Compact",
+    description: "Space-efficient design for single-page invoices",
+    icon: LayoutTemplate,
+  },
+];
+
+export default function Settings() {
+  const { toast } = useToast();
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("classic");
+
+  // Fetch preferences
+  const { data: preferences, isLoading } = useQuery<Preferences>({
+    queryKey: ["/api/settings/preferences"],
+  });
+
+  // Update selected template when preferences load
+  useEffect(() => {
+    if (preferences?.invoiceTemplate) {
+      setSelectedTemplate(preferences.invoiceTemplate);
+    }
+  }, [preferences?.invoiceTemplate]);
+
+  // Update preferences mutation
+  const updatePreferences = useMutation({
+    mutationFn: async (template: string) => {
+      return apiRequest("/api/settings/preferences", "POST", {
+        invoiceTemplate: template,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Settings saved",
+        description: "Invoice template updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/preferences"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to save settings: ${error}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    updatePreferences.mutate(templateId);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-500 mt-1">Manage your application preferences</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Invoice Template</CardTitle>
+          <CardDescription>
+            Choose a default template for all your invoices
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {templates.map((template) => {
+              const Icon = template.icon;
+              const isSelected = selectedTemplate === template.id;
+
+              return (
+                <button
+                  key={template.id}
+                  onClick={() => handleTemplateSelect(template.id)}
+                  className={`
+                    relative p-6 rounded-lg border-2 transition-all duration-200 text-left
+                    ${
+                      isSelected
+                        ? "border-primary bg-primary/5 shadow-md"
+                        : "border-gray-200 hover:border-primary/50 hover:shadow-sm"
+                    }
+                  `}
+                  data-testid={`template-option-${template.id}`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`
+                      w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0
+                      ${
+                        isSelected
+                          ? "bg-primary text-white"
+                          : "bg-gray-100 text-gray-600"
+                      }
+                    `}
+                    >
+                      <Icon className="h-6 w-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-semibold text-lg text-gray-900">
+                          {template.name}
+                        </h3>
+                        {isSelected && (
+                          <div className="flex-shrink-0 ml-2">
+                            <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-4 w-4 text-white" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        {template.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {updatePreferences.isPending && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              Saving...
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

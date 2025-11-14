@@ -18,7 +18,8 @@ import {
   DollarSignIcon,
   LogOutIcon,
   TrendingUpIcon,
-  ShieldIcon
+  ShieldIcon,
+  SettingsIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +53,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/products", label: "Products & Services", icon: <PackageIcon className="w-5 h-5 mr-3" /> },
     { path: "/fx-revaluation", label: "FX Revaluation", icon: <TrendingUpIcon className="w-5 h-5 mr-3" /> },
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-5 h-5 mr-3" /> },
+    { path: "/settings", label: "Settings", icon: <SettingsIcon className="w-5 h-5 mr-3" /> },
   ];
 
   // Add Admin Dashboard for admin users only
