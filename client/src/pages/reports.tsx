@@ -1125,9 +1125,11 @@ export default function Reports() {
   return (
     <div className="py-6">
       {/* Page header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Financial Reports</h1>
-        <p className="mt-1 text-sm text-gray-500">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+          Financial Reports
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
           View and analyze your financial data
         </p>
       </div>
@@ -1150,8 +1152,8 @@ export default function Reports() {
               {/* Left Sidebar */}
               <div 
                 className={cn(
-                  "w-64 flex-shrink-0 border-r border-gray-200 pr-6",
-                  "fixed md:static inset-y-0 left-0 z-20 bg-white md:bg-transparent",
+                  "w-64 flex-shrink-0 border-r border-border pr-6",
+                  "fixed md:static inset-y-0 left-0 z-20 bg-background md:bg-transparent",
                   "transform transition-transform duration-200 ease-in-out md:transform-none",
                   sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
                   "pt-6 md:pt-0"
@@ -1159,7 +1161,7 @@ export default function Reports() {
               >
                 {/* Search Input with Autocomplete */}
                 <div className="mb-4 relative" ref={searchContainerRef}>
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 z-10" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                   <Input
                     type="text"
                     placeholder="Search reports..."
@@ -1181,24 +1183,24 @@ export default function Reports() {
                   
                   {/* Suggestions Dropdown */}
                   {showSuggestions && suggestions.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
                       {suggestions.map((suggestion, index) => (
                         <div
                           key={suggestion.id}
                           onClick={() => handleSelectSuggestion(suggestion)}
                           onMouseEnter={() => setSelectedSuggestionIndex(index)}
                           className={cn(
-                            "px-4 py-3 cursor-pointer transition-colors border-b border-gray-100 last:border-b-0",
+                            "px-4 py-3 cursor-pointer transition-colors border-b border-border last:border-b-0",
                             index === selectedSuggestionIndex
-                              ? "bg-blue-50"
-                              : "hover:bg-gray-50"
+                              ? "bg-primary/10"
+                              : "hover:bg-primary/5"
                           )}
                           data-testid={`suggestion-${suggestion.id}`}
                         >
-                          <div className="font-medium text-sm text-gray-900">
+                          <div className="font-medium text-sm text-foreground">
                             {suggestion.title}
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
                             {suggestion.description}
                           </div>
                         </div>
@@ -1218,8 +1220,8 @@ export default function Reports() {
                       className={cn(
                         "w-full text-left px-4 py-2.5 rounded-md text-sm font-medium transition-colors",
                         selectedCategory === category.id
-                          ? "bg-blue-50 text-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
+                          ? "bg-primary/10 text-primary border border-primary/20"
+                          : "text-foreground hover:bg-primary/5 hover:text-primary"
                       )}
                       data-testid={`category-${category.id}`}
                     >
@@ -1239,45 +1241,45 @@ export default function Reports() {
 
               {/* Main Content - Report List */}
               <div className="flex-1 min-w-0">
-                <div className="bg-white rounded-lg border border-gray-200">
-                  {filteredReports.map((report, index) => (
-                    <div
+                <div className="space-y-3">
+                  {filteredReports.map((report) => (
+                    <Card
                       key={report.id}
+                      className="cursor-pointer transition-all hover:shadow-md hover:border-primary/40 group"
                       onClick={() => setActiveTab(report.id)}
-                      className={cn(
-                        "flex items-center justify-between px-6 py-4 cursor-pointer",
-                        "hover:bg-gray-50 transition-colors group",
-                        index !== filteredReports.length - 1 && "border-b border-gray-200"
-                      )}
                       data-testid={`report-${report.id}`}
                     >
-                      <div className="flex-1">
-                        <h3 className="text-base font-medium text-blue-600 group-hover:text-blue-800 transition-colors">
-                          {report.title}
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {report.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                        <button
-                          onClick={(e) => toggleFavorite(report.id, e)}
-                          className="p-1.5 hover:bg-gray-100 rounded-full transition-colors"
-                          data-testid={`star-${report.id}`}
-                          aria-label={favoriteReports.has(report.id) ? "Remove from favorites" : "Add to favorites"}
-                        >
-                          <Star 
-                            className={cn(
-                              "h-5 w-5 transition-colors",
-                              favoriteReports.has(report.id) 
-                                ? "fill-yellow-400 text-yellow-400" 
-                                : "text-gray-400 hover:text-yellow-400"
-                            )}
-                          />
-                        </button>
-                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600" />
-                      </div>
-                    </div>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg font-semibold text-primary group-hover:text-primary/90 transition-colors">
+                              {report.title}
+                            </CardTitle>
+                            <CardDescription className="mt-1.5">
+                              {report.description}
+                            </CardDescription>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                            <button
+                              onClick={(e) => toggleFavorite(report.id, e)}
+                              className="p-1.5 hover:bg-primary/10 rounded-full transition-colors"
+                              data-testid={`star-${report.id}`}
+                              aria-label={favoriteReports.has(report.id) ? "Remove from favorites" : "Add to favorites"}
+                            >
+                              <Star 
+                                className={cn(
+                                  "h-5 w-5 transition-colors",
+                                  favoriteReports.has(report.id) 
+                                    ? "fill-yellow-400 text-yellow-400" 
+                                    : "text-muted-foreground hover:text-yellow-400"
+                                )}
+                              />
+                            </button>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </Card>
                   ))}
                 </div>
               </div>
