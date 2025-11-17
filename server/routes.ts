@@ -271,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Address Autocomplete routes
-  apiRouter.get("/address/autocomplete", async (req: Request, res: Response) => {
+  apiRouter.get("/address/autocomplete", requireAuth, async (req: Request, res: Response) => {
     try {
       const query = req.query.query as string;
       
