@@ -233,7 +233,11 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
   // Handle saving company details
   const saveCompanyDetails = useMutation({
     mutationFn: async (values: z.infer<typeof companyFormSchema>) => {
-      return await apiRequest('/api/settings/company', 'POST', values);
+      const companyId = (companyQuery.data as any)?.id;
+      if (!companyId) {
+        throw new Error("Company ID not found");
+      }
+      return await apiRequest(`/api/companies/${companyId}`, 'PATCH', values);
     },
     onSuccess: () => {
       // Invalidate company settings query to refetch the data
@@ -678,7 +682,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 
                 <Button 
                   type="submit" 
-                  disabled={saveCompanyDetails.isPending}
+                  disabled={saveCompanyDetails.isPending || companyQuery.isLoading || !companyQuery.data}
                   className="w-full"
                 >
                   {saveCompanyDetails.isPending ? "Saving..." : "Save Company Details"}
