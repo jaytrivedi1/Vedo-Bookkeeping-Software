@@ -39,7 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check } from "lucide-react";
+import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
 import InvoiceTemplatePreview from "./InvoiceTemplatePreview";
@@ -67,6 +67,27 @@ const companyFormSchema = z.object({
   ]).optional(),
   taxId: z.string().optional(),
   fiscalYearStartMonth: z.number().min(1).max(12),
+});
+
+// Define schema for password change
+const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, { message: "Current password is required" }),
+  newPassword: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+// Define schema for profile update
+const profileUpdateSchema = z.object({
+  username: z.string().min(1, { message: "Username is required" }),
+  email: z.union([
+    z.string().email({ message: "Please enter a valid email address." }),
+    z.literal("")
+  ]).optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
 
 // Define settings for preferences
@@ -144,6 +165,12 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     enabled: open
   });
   
+  // Query current user
+  const userQuery = useQuery({
+    queryKey: ['/api/user'],
+    enabled: open
+  });
+  
   // Process preferences data when it loads
   useEffect(() => {
     if (preferencesQuery.data && Object.keys(preferencesQuery.data).length > 0) {
@@ -192,6 +219,40 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       fiscalYearStartMonth: 1,
     },
   });
+  
+  // Setup form for password change
+  const passwordForm = useForm<z.infer<typeof passwordChangeSchema>>({
+    resolver: zodResolver(passwordChangeSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
+  
+  // Setup form for profile update
+  const profileForm = useForm<z.infer<typeof profileUpdateSchema>>({
+    resolver: zodResolver(profileUpdateSchema),
+    defaultValues: {
+      username: "",
+      email: "",
+      firstName: "",
+      lastName: "",
+    },
+  });
+  
+  // Update profile form when user data is loaded
+  useEffect(() => {
+    if (userQuery.data && Object.keys(userQuery.data).length > 0) {
+      const data = userQuery.data as any;
+      profileForm.reset({
+        username: data.username || "",
+        email: data.email || "",
+        firstName: data.firstName || "",
+        lastName: data.lastName || "",
+      });
+    }
+  }, [userQuery.data, profileForm]);
   
   // Transform month options for SearchableSelect
   const monthItems: SearchableSelectItem[] = MONTH_OPTIONS.map(month => ({
@@ -309,6 +370,54 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     }
   });
   
+  // Handle password change
+  const changePassword = useMutation({
+    mutationFn: async (values: z.infer<typeof passwordChangeSchema>) => {
+      return await apiRequest('/api/user/change-password', 'POST', {
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      });
+    },
+    onSuccess: () => {
+      passwordForm.reset();
+      toast({
+        title: "Password changed",
+        description: "Your password has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error changing password",
+        description: error?.message || "There was a problem changing your password.",
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Handle profile update
+  const updateProfile = useMutation({
+    mutationFn: async (values: z.infer<typeof profileUpdateSchema>) => {
+      return await apiRequest('/api/user/profile', 'PATCH', values);
+    },
+    onSuccess: (data) => {
+      // Update the cache with the new user data
+      queryClient.setQueryData(['/api/user'], data);
+      // Also invalidate to ensure any other components refresh
+      queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      toast({
+        title: "Profile updated",
+        description: "Your account information has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating profile",
+        description: error?.message || "There was a problem updating your profile.",
+        variant: "destructive",
+      });
+    }
+  });
+  
   // Handle theme toggle
   const handleThemeToggle = () => {
     setSettings(prev => ({ ...prev, darkMode: !prev.darkMode }));
@@ -420,10 +529,14 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-4 mb-6">
+          <TabsList className="grid grid-cols-5 mb-6">
             <TabsTrigger value="company" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
               <span>Company</span>
+            </TabsTrigger>
+            <TabsTrigger value="account" className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              <span>Account</span>
             </TabsTrigger>
             <TabsTrigger value="preferences" className="flex items-center gap-2">
               <Sun className="h-4 w-4" />
@@ -689,6 +802,144 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                 </Button>
               </form>
             </Form>
+          </TabsContent>
+          
+          {/* Account Tab */}
+          <TabsContent value="account">
+            <div className="space-y-6">
+              {/* Change Password Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5" />
+                    Change Password
+                  </CardTitle>
+                  <CardDescription>Update your password to keep your account secure</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...passwordForm}>
+                    <form onSubmit={passwordForm.handleSubmit((values) => changePassword.mutate(values))} className="space-y-4">
+                      <FormField
+                        control={passwordForm.control}
+                        name="currentPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Current Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} data-testid="input-current-password" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={passwordForm.control}
+                        name="newPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>New Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} data-testid="input-new-password" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={passwordForm.control}
+                        name="confirmPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Confirm New Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" {...field} data-testid="input-confirm-password" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="submit" disabled={changePassword.isPending} className="w-full" data-testid="button-change-password">
+                        {changePassword.isPending ? "Changing..." : "Change Password"}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+              
+              {/* Update Profile Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Account Information
+                  </CardTitle>
+                  <CardDescription>Update your account details</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...profileForm}>
+                    <form onSubmit={profileForm.handleSubmit((values) => updateProfile.mutate(values))} className="space-y-4">
+                      <FormField
+                        control={profileForm.control}
+                        name="username"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Username</FormLabel>
+                            <FormControl>
+                              <Input {...field} data-testid="input-username" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={profileForm.control}
+                        name="email"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email</FormLabel>
+                            <FormControl>
+                              <Input type="email" {...field} data-testid="input-profile-email" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={profileForm.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>First Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} data-testid="input-first-name" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={profileForm.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Last Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} data-testid="input-last-name" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <Button type="submit" disabled={updateProfile.isPending} className="w-full" data-testid="button-update-profile">
+                        {updateProfile.isPending ? "Updating..." : "Update Profile"}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
           
           {/* Preferences Tab */}

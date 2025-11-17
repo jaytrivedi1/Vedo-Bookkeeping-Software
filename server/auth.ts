@@ -189,6 +189,105 @@ export function setupAuth(app: Express): void {
     });
   });
 
+  // Change password endpoint
+  app.post("/api/user/change-password", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "New password must be at least 6 characters long" });
+      }
+
+      // Get the current user from storage
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Validate current password
+      const isValidPassword = await storage.validatePassword(user.password, currentPassword);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const hashedPassword = await storage.hashPassword(newPassword);
+
+      // Update user password
+      await storage.updateUser(user.id, { password: hashedPassword });
+
+      return res.status(200).json({ message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      return res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Update user profile endpoint
+  app.patch("/api/user/profile", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const { username, email, firstName, lastName } = req.body;
+      const updates: Partial<SchemaUser> = {};
+
+      // Only update fields that are provided
+      if (username !== undefined) {
+        if (!username || username.trim().length === 0) {
+          return res.status(400).json({ message: "Username cannot be empty" });
+        }
+        
+        // Check if username is already taken by another user
+        const existingUser = await storage.getUserByUsername(username);
+        if (existingUser && existingUser.id !== req.user.id) {
+          return res.status(409).json({ message: "Username is already taken" });
+        }
+        updates.username = username;
+      }
+
+      if (email !== undefined) {
+        if (email && email.includes('@')) {
+          updates.email = email;
+        } else if (email) {
+          return res.status(400).json({ message: "Invalid email format" });
+        }
+      }
+
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (lastName !== undefined) updates.lastName = lastName;
+
+      // Update user
+      const updatedUser = await storage.updateUser(req.user.id, updates);
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      return res.status(200).json({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      return res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
   // Middleware to check if user is authenticated
   app.use("/api/auth-required", (req: Request, res: Response, next: NextFunction) => {
     if (!req.isAuthenticated()) {
