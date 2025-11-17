@@ -43,13 +43,19 @@ import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, M
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
 import InvoiceTemplatePreview from "./InvoiceTemplatePreview";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 // Define schema for company details
 const companyFormSchema = z.object({
   name: z.string().min(1, {
     message: "Company name is required.",
   }),
-  address: z.string().optional(),
+  street1: z.string().optional(),
+  street2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().email({
     message: "Please enter a valid email address.",
@@ -171,7 +177,12 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     resolver: zodResolver(companyFormSchema),
     defaultValues: {
       name: "Your Company Name",
-      address: "123 Business Street, City, State, ZIP",
+      street1: "",
+      street2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "",
       phone: "+1 (555) 123-4567",
       email: "info@yourcompany.com",
       website: "https://yourcompany.com",
@@ -202,7 +213,12 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
       const data = companyQuery.data as any;
       form.reset({
         name: data.name || "Your Company Name",
-        address: data.address || "",
+        street1: data.street1 || "",
+        street2: data.street2 || "",
+        city: data.city || "",
+        state: data.state || "",
+        postalCode: data.postalCode || "",
+        country: data.country || "",
         phone: data.phone || "",
         email: data.email || "",
         website: data.website || "",
@@ -470,20 +486,106 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                     )}
                   />
                   
-                  {/* Address */}
+                  {/* Address with Autocomplete */}
                   <FormField
                     control={form.control}
-                    name="address"
+                    name="street1"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Address</FormLabel>
+                        <FormLabel>Street Address</FormLabel>
                         <FormControl>
-                          <Textarea {...field} />
+                          <AddressAutocomplete
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                            onSelect={(address) => {
+                              form.setValue("street1", address.street1);
+                              form.setValue("street2", address.street2);
+                              form.setValue("city", address.city);
+                              form.setValue("state", address.state);
+                              form.setValue("postalCode", address.postalCode);
+                              form.setValue("country", address.country);
+                            }}
+                            placeholder="Start typing your address..."
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+
+                  <FormField
+                    control={form.control}
+                    name="street2"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Apartment, Suite, etc. (Optional)</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Apartment, suite, unit, etc." />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="city"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>City</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="state"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>State / Province</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="postalCode"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Postal Code</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="country"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Country</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
                   
                   {/* Contact Information */}
                   <div className="grid grid-cols-2 gap-4">
