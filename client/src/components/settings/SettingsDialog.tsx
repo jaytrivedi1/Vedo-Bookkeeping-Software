@@ -57,14 +57,16 @@ const companyFormSchema = z.object({
   postalCode: z.string().optional(),
   country: z.string().optional(),
   phone: z.string().optional(),
-  email: z.string().email({
-    message: "Please enter a valid email address.",
-  }).optional(),
-  website: z.string().url({
-    message: "Please enter a valid URL.",
-  }).optional(),
+  email: z.union([
+    z.string().email({ message: "Please enter a valid email address." }),
+    z.literal("")
+  ]).optional(),
+  website: z.union([
+    z.string().url({ message: "Please enter a valid URL." }),
+    z.literal("")
+  ]).optional(),
   taxId: z.string().optional(),
-  fiscalYearStartMonth: z.number().min(1).max(12).optional(),
+  fiscalYearStartMonth: z.number().min(1).max(12),
 });
 
 // Define settings for preferences
