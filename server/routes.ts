@@ -269,6 +269,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // Address Autocomplete routes
+  apiRouter.get("/address/autocomplete", async (req: Request, res: Response) => {
+    try {
+      const query = req.query.query as string;
+      
+      if (!query || query.length < 3) {
+        return res.json([]);
+      }
+
+      const radarApiKey = process.env.RADAR_API_KEY;
+      if (!radarApiKey) {
+        return res.status(500).json({ error: "Radar API key not configured" });
+      }
+
+      // Call Radar autocomplete API
+      const response = await fetch(
+        `https://api.radar.io/v1/search/autocomplete?query=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            'Authorization': radarApiKey
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Radar API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Transform Radar response to our format
+      const suggestions = data.addresses?.map((address: any) => ({
+        formattedAddress: address.formattedAddress,
+        street1: address.addressLabel || address.formattedAddress?.split(',')[0]?.trim() || '',
+        street2: '',
+        city: address.city || '',
+        state: address.state || address.stateCode || '',
+        postalCode: address.postalCode || '',
+        country: address.country || address.countryCode || ''
+      })) || [];
+
+      res.json(suggestions);
+    } catch (error: any) {
+      console.error("Address autocomplete error:", error);
+      res.status(500).json({ error: "Failed to fetch address suggestions" });
+    }
+  });
   
   // Accounts routes
   apiRouter.get("/accounts", async (req: Request, res: Response) => {
