@@ -76,6 +76,9 @@ import {
   type InsertFxRevaluation,
   type CurrencyLock,
   type InsertCurrencyLock,
+  activityLogsSchema,
+  type ActivityLog,
+  type InsertActivityLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -294,6 +297,18 @@ export interface IStorage {
   getCurrencyLocks(): Promise<CurrencyLock[]>;
   getCurrencyLockByEntity(entityType: string, entityId: number): Promise<CurrencyLock | undefined>;
   createCurrencyLock(currencyLock: InsertCurrencyLock): Promise<CurrencyLock>;
+  
+  // Activity Logs
+  getActivityLogs(filters?: {
+    userId?: number;
+    entityType?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<ActivityLog[]>;
+  getActivityLog(id: number): Promise<ActivityLog | undefined>;
+  createActivityLog(activityLog: InsertActivityLog): Promise<ActivityLog>;
 }
 
 export class MemStorage implements IStorage {
