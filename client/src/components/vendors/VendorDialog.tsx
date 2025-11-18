@@ -42,7 +42,7 @@ export default function VendorDialog({
           {buttonLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Vendor</DialogTitle>
           <DialogDescription>
