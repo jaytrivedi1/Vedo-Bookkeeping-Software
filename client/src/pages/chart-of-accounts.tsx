@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon, Edit2Icon, Trash2Icon } from "lucide-react";
+import { PlusIcon, Edit2Icon, Trash2Icon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { Account, insertAccountSchema } from "@shared/schema";
@@ -55,8 +55,22 @@ export default function ChartOfAccounts() {
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   
   const { toast } = useToast();
+  
+  // Handle column header click for sorting
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      // Toggle direction if clicking the same column
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // Set new column and default to ascending
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
   
   // Fetch all accounts
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
@@ -131,7 +145,61 @@ export default function ChartOfAccounts() {
     updateAccount.mutate(data);
   };
   
-  // Filter accounts
+  // Define the chronological sort order for account types
+  const getAccountTypeSortOrder = (type: string): number => {
+    switch (type) {
+      // Bank / Cash Accounts
+      case 'bank': return 1;
+      
+      // Current Assets (AR is a current asset)
+      case 'accounts_receivable': return 2;
+      case 'current_assets': return 3;
+      
+      // Other Current Assets (can be considered as current_assets variants)
+      // Currently no specific type for this category
+      
+      // Fixed Assets
+      case 'property_plant_equipment': return 4;
+      
+      // Other Assets
+      case 'long_term_assets': return 5;
+      
+      // Current Liabilities
+      case 'accounts_payable': return 6;
+      case 'credit_card': return 7;
+      case 'other_current_liabilities': return 8;
+      
+      // Other Liabilities
+      case 'long_term_liabilities': return 9;
+      
+      // Equity
+      case 'equity': return 10;
+      
+      // Income
+      case 'income': return 11;
+      
+      // Cost of Goods Sold
+      case 'cost_of_goods_sold': return 12;
+      
+      // Expenses
+      case 'expenses': return 13;
+      
+      // Other Income
+      case 'other_income': return 14;
+      
+      // Other Expenses
+      case 'other_expense': return 15;
+      
+      // Legacy types (place at end)
+      case 'asset': return 16;
+      case 'liability': return 17;
+      case 'expense': return 18;
+      
+      default: return 99; // Unknown types go to the end
+    }
+  };
+  
+  // Filter and sort accounts
   const filteredAccounts = accounts
     ? accounts
         .filter((account) => {
@@ -147,6 +215,49 @@ export default function ChartOfAccounts() {
             (account.salesTaxType && account.salesTaxType.toLowerCase().includes(query)) ||
             (account.currency && account.currency.toLowerCase().includes(query))
           );
+        })
+        .sort((a, b) => {
+          // If user has selected a column to sort by, use that
+          if (sortColumn) {
+            let compareValue = 0;
+            
+            switch (sortColumn) {
+              case 'code':
+                compareValue = a.code.localeCompare(b.code);
+                break;
+              case 'name':
+                compareValue = a.name.localeCompare(b.name);
+                break;
+              case 'type':
+                const typeOrderA = getAccountTypeSortOrder(a.type);
+                const typeOrderB = getAccountTypeSortOrder(b.type);
+                compareValue = typeOrderA - typeOrderB;
+                break;
+              case 'currency':
+                compareValue = (a.currency || '').localeCompare(b.currency || '');
+                break;
+              case 'balance':
+                const balanceA = accountBalances?.find(ab => ab.account.id === a.id)?.balance || 0;
+                const balanceB = accountBalances?.find(ab => ab.account.id === b.id)?.balance || 0;
+                compareValue = balanceA - balanceB;
+                break;
+              default:
+                compareValue = 0;
+            }
+            
+            return sortDirection === "asc" ? compareValue : -compareValue;
+          }
+          
+          // Default sort: by account type (chronological order), then by code
+          const typeOrderA = getAccountTypeSortOrder(a.type);
+          const typeOrderB = getAccountTypeSortOrder(b.type);
+          
+          if (typeOrderA !== typeOrderB) {
+            return typeOrderA - typeOrderB;
+          }
+          
+          // Secondary sort: by account code (within the same type)
+          return a.code.localeCompare(b.code);
         })
     : [];
   
@@ -374,12 +485,77 @@ export default function ChartOfAccounts() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Currency</TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('code')}
+                      className="flex items-center gap-1 hover:text-gray-900 font-medium"
+                      data-testid="sort-code"
+                    >
+                      Code
+                      {sortColumn === 'code' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-40" />
+                      )}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('name')}
+                      className="flex items-center gap-1 hover:text-gray-900 font-medium"
+                      data-testid="sort-name"
+                    >
+                      Name
+                      {sortColumn === 'name' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-40" />
+                      )}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('type')}
+                      className="flex items-center gap-1 hover:text-gray-900 font-medium"
+                      data-testid="sort-type"
+                    >
+                      Type
+                      {sortColumn === 'type' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-40" />
+                      )}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => handleSort('currency')}
+                      className="flex items-center gap-1 hover:text-gray-900 font-medium"
+                      data-testid="sort-currency"
+                    >
+                      Currency
+                      {sortColumn === 'currency' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-40" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead>Sales Tax Type</TableHead>
-                  <TableHead className="text-right">Balance</TableHead>
+                  <TableHead className="text-right">
+                    <button
+                      onClick={() => handleSort('balance')}
+                      className="flex items-center gap-1 hover:text-gray-900 font-medium ml-auto"
+                      data-testid="sort-balance"
+                    >
+                      Balance
+                      {sortColumn === 'balance' ? (
+                        sortDirection === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                      ) : (
+                        <ArrowUpDown className="h-4 w-4 opacity-40" />
+                      )}
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
