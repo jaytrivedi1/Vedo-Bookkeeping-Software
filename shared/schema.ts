@@ -523,6 +523,19 @@ export const rolePermissionsSchema = pgTable('role_permissions', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Activity Log schema for audit trail
+export const activityLogsSchema = pgTable('activity_logs', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => usersSchema.id),
+  action: text('action').notNull(), // e.g., "created", "updated", "deleted", "logged_in"
+  entityType: text('entity_type'), // e.g., "invoice", "account", "customer", "payment"
+  entityId: integer('entity_id'), // ID of the entity affected
+  details: json('details'), // Additional context (old values, new values, etc.)
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Create schemas
 export const insertUserSchema = createInsertSchema(usersSchema).omit({ 
   id: true, 
@@ -546,6 +559,11 @@ export const insertRolePermissionSchema = createInsertSchema(rolePermissionsSche
   createdAt: true
 });
 
+export const insertActivityLogSchema = createInsertSchema(activityLogsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
 // Define types
 export type User = typeof usersSchema.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -558,6 +576,9 @@ export type InsertPermission = z.infer<typeof insertPermissionSchema>;
 
 export type RolePermission = typeof rolePermissionsSchema.$inferSelect;
 export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+
+export type ActivityLog = typeof activityLogsSchema.$inferSelect;
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 
 // Bank Connections (for Plaid integration)
 export const bankConnectionsSchema = pgTable('bank_connections', {
