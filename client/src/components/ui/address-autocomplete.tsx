@@ -20,6 +20,7 @@ interface AddressAutocompleteProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  "data-testid"?: string;
 }
 
 export function AddressAutocomplete({
@@ -28,7 +29,8 @@ export function AddressAutocomplete({
   onSelect,
   placeholder = "Start typing an address...",
   className,
-  disabled
+  disabled,
+  "data-testid": dataTestId = "address-autocomplete-input"
 }: AddressAutocompleteProps) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -110,7 +112,7 @@ export function AddressAutocomplete({
           placeholder={placeholder}
           className={className}
           disabled={disabled}
-          data-testid="address-autocomplete-input"
+          data-testid={dataTestId}
         />
         {isLoading && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2">

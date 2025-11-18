@@ -21,8 +21,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 // Extended schema with validation
 const vendorFormSchema = insertContactSchema.extend({
@@ -31,7 +31,12 @@ const vendorFormSchema = insertContactSchema.extend({
   currency: z.string().min(1, "Currency is required"),
   contactName: z.string().optional(),
   phone: z.string().optional(),
-  address: z.string().optional(),
+  street1: z.string().optional(),
+  street2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
   defaultTaxRate: z.number().optional(),
   documentIds: z.array(z.string()).optional(),
   // Type is always "vendor"
@@ -72,7 +77,12 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
       contactName: "",
       email: "",
       phone: "",
-      address: "",
+      street1: "",
+      street2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "",
       type: "vendor",
       currency: "USD",
       defaultTaxRate: 0,
@@ -129,7 +139,7 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
               <FormItem>
                 <FormLabel>Company Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter company name" {...field} />
+                  <Input placeholder="Enter company name" {...field} data-testid="input-vendor-name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -143,7 +153,7 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
               <FormItem>
                 <FormLabel>Contact Person Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter primary contact's name" {...field} />
+                  <Input placeholder="Enter primary contact's name" {...field} data-testid="input-vendor-contact-name" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -158,7 +168,7 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
                 <FormItem>
                   <FormLabel>Email Address</FormLabel>
                   <FormControl>
-                    <Input type="email" placeholder="email@example.com" {...field} />
+                    <Input type="email" placeholder="email@example.com" {...field} data-testid="input-vendor-email" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -172,7 +182,7 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
                 <FormItem>
                   <FormLabel>Phone Number</FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter phone number" {...field} />
+                    <Input placeholder="Enter phone number" {...field} data-testid="input-vendor-phone" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -182,21 +192,104 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
           
           <FormField
             control={form.control}
-            name="address"
+            name="street1"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Address</FormLabel>
+                <FormLabel>Street Address 1</FormLabel>
                 <FormControl>
-                  <Textarea 
-                    placeholder="Enter full address" 
-                    {...field} 
-                    rows={3}
+                  <AddressAutocomplete
+                    value={field.value || ""}
+                    onChange={field.onChange}
+                    onSelect={(address) => {
+                      form.setValue("street1", address.street1 || "");
+                      form.setValue("street2", address.street2 || "");
+                      form.setValue("city", address.city || "");
+                      form.setValue("state", address.state || "");
+                      form.setValue("postalCode", address.postalCode || "");
+                      form.setValue("country", address.country || "");
+                    }}
+                    placeholder="Start typing address..."
+                    data-testid="input-vendor-street1"
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+          
+          <FormField
+            control={form.control}
+            name="street2"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Street Address 2</FormLabel>
+                <FormControl>
+                  <Input placeholder="Apartment, suite, etc. (optional)" {...field} data-testid="input-vendor-street2" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>City</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter city" {...field} data-testid="input-vendor-city" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="state"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>State/Province</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter state/province" {...field} data-testid="input-vendor-state" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="postalCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Postal Code</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter postal code" {...field} data-testid="input-vendor-postal-code" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="country"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Country</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter country" {...field} data-testid="input-vendor-country" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
@@ -233,6 +326,7 @@ export default function VendorForm({ onSuccess, onCancel }: VendorFormProps) {
                       placeholder="0.0"
                       {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      data-testid="input-vendor-tax-rate"
                     />
                   </FormControl>
                   <FormMessage />
