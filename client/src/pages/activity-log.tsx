@@ -30,7 +30,7 @@ import { CalendarIcon, FilterIcon, XIcon } from "lucide-react";
 import type { ActivityLog } from "@shared/schema";
 
 export default function ActivityLogPage() {
-  const [entityTypeFilter, setEntityTypeFilter] = useState<string>("");
+  const [entityTypeFilter, setEntityTypeFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>();
   const [dateTo, setDateTo] = useState<Date | undefined>();
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -38,7 +38,7 @@ export default function ActivityLogPage() {
   // Build query params
   const buildQueryParams = () => {
     const params = new URLSearchParams();
-    if (entityTypeFilter) params.append("entityType", entityTypeFilter);
+    if (entityTypeFilter && entityTypeFilter !== "all") params.append("entityType", entityTypeFilter);
     if (dateFrom) params.append("dateFrom", dateFrom.toISOString());
     if (dateTo) params.append("dateTo", dateTo.toISOString());
     params.append("limit", "200"); // Fetch more logs
@@ -69,7 +69,7 @@ export default function ActivityLogPage() {
 
   // Clear all filters
   const clearFilters = () => {
-    setEntityTypeFilter("");
+    setEntityTypeFilter("all");
     setDateFrom(undefined);
     setDateTo(undefined);
     setSearchQuery("");
@@ -129,7 +129,7 @@ export default function ActivityLogPage() {
                   <SelectValue placeholder="All types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All types</SelectItem>
+                  <SelectItem value="all">All types</SelectItem>
                   {entityTypes.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type.charAt(0).toUpperCase() + type.slice(1)}
