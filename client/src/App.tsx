@@ -35,6 +35,7 @@ import JournalEntryView from "@/pages/journal-entry-view";
 import SalesReceiptView from "@/pages/sales-receipt-view";
 import TransferView from "@/pages/transfer-view";
 import FxRevaluation from "@/pages/fx-revaluation";
+import ActivityLogPage from "@/pages/activity-log";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
@@ -159,6 +160,7 @@ function Router() {
               <Route path="/sales-taxes" component={SalesTaxes} />
               <Route path="/products" component={Products} />
               <Route path="/fx-revaluation" component={FxRevaluation} />
+              <Route path="/activity-log" component={ActivityLogPage} />
               <Route path="/reports" component={Reports} />
               <Route path="/admin">
                 {() => <AdminRoute component={AdminDashboard} />}
