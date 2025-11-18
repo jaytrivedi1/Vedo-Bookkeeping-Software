@@ -2836,4 +2836,63 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return newLock;
   }
+
+  // Activity Logs
+  async getActivityLogs(filters?: {
+    userId?: number;
+    entityType?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<ActivityLog[]> {
+    let query = db.select().from(activityLogsSchema);
+
+    // Apply filters
+    const conditions = [];
+    if (filters?.userId) {
+      conditions.push(eq(activityLogsSchema.userId, filters.userId));
+    }
+    if (filters?.entityType) {
+      conditions.push(eq(activityLogsSchema.entityType, filters.entityType));
+    }
+    if (filters?.dateFrom) {
+      conditions.push(gte(activityLogsSchema.createdAt, filters.dateFrom));
+    }
+    if (filters?.dateTo) {
+      conditions.push(lte(activityLogsSchema.createdAt, filters.dateTo));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    // Order by most recent first
+    query = query.orderBy(desc(activityLogsSchema.createdAt)) as any;
+
+    // Apply pagination
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    return await query;
+  }
+
+  async getActivityLog(id: number): Promise<ActivityLog | undefined> {
+    const [log] = await db.select()
+      .from(activityLogsSchema)
+      .where(eq(activityLogsSchema.id, id))
+      .limit(1);
+    return log;
+  }
+
+  async createActivityLog(activityLog: InsertActivityLog): Promise<ActivityLog> {
+    const [newLog] = await db.insert(activityLogsSchema)
+      .values(activityLog)
+      .returning();
+    return newLog;
+  }
 }
