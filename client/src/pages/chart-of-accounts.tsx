@@ -283,7 +283,7 @@ export default function ChartOfAccounts() {
             
             switch (sortColumn) {
               case 'code':
-                compareValue = a.code.localeCompare(b.code);
+                compareValue = (a.code || '').localeCompare(b.code || '');
                 break;
               case 'name':
                 compareValue = a.name.localeCompare(b.name);
@@ -317,7 +317,7 @@ export default function ChartOfAccounts() {
           }
           
           // Secondary sort: by account code (within the same type)
-          return a.code.localeCompare(b.code);
+          return (a.code || '').localeCompare(b.code || '');
         })
     : [];
   
