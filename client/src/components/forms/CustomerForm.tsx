@@ -26,8 +26,8 @@ import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 // Extended schema with validation
 const customerFormSchema = insertContactSchema.extend({
-  // Make these fields required for customers
-  email: z.string().email("Invalid email address").min(1, "Email is required"),
+  // Validate email format when provided, but make it optional
+  email: z.union([z.string().email("Invalid email address"), z.literal("")]).optional(),
   currency: z.string().min(1, "Currency is required"),
   contactName: z.string().optional(),
   phone: z.string().optional(),
