@@ -27,6 +27,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -57,6 +67,8 @@ export default function ChartOfAccounts() {
   const [showInactive, setShowInactive] = useState<boolean>(false);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [editAccountOpen, setEditAccountOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -146,6 +158,46 @@ export default function ChartOfAccounts() {
       data.salesTaxType = "";
     }
     updateAccount.mutate(data);
+  };
+
+  // Delete account mutation
+  const deleteAccount = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await apiRequest(`/api/accounts/${id}`, 'DELETE', null);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reports/account-balances'] });
+      setDeleteDialogOpen(false);
+      setAccountToDelete(null);
+      toast({
+        title: "Account deleted",
+        description: "The account has been deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || "This account has existing transactions. Please deactivate it instead.";
+      toast({
+        title: "Cannot delete account",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setDeleteDialogOpen(false);
+    },
+  });
+
+  // Handle delete button click
+  const handleDeleteAccount = (account: Account) => {
+    setAccountToDelete(account);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirm deletion
+  const confirmDelete = () => {
+    if (accountToDelete) {
+      deleteAccount.mutate(accountToDelete.id);
+    }
   };
   
   // Define the chronological sort order for account types
@@ -611,13 +663,24 @@ export default function ChartOfAccounts() {
                         {formatAccountBalance(account, 0)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => handleEditAccount(account)}
-                        >
-                          <Edit2Icon className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleEditAccount(account)}
+                            data-testid={`button-edit-account-${account.id}`}
+                          >
+                            <Edit2Icon className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleDeleteAccount(account)}
+                            data-testid={`button-delete-account-${account.id}`}
+                          >
+                            <Trash2Icon className="h-4 w-4 text-red-600" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -818,6 +881,29 @@ export default function ChartOfAccounts() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent data-testid="dialog-delete-account">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Account</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{accountToDelete?.name}"? This action cannot be undone.
+              Note: You can only delete accounts that have no transactions.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

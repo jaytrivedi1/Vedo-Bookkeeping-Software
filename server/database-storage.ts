@@ -70,6 +70,25 @@ export class DatabaseStorage implements IStorage {
     return updatedAccount;
   }
 
+  async deleteAccount(id: number): Promise<boolean> {
+    // Check if account has any ledger entries (transactions)
+    const hasTransactions = await this.hasAccountTransactions(id);
+    if (hasTransactions) {
+      throw new Error('Cannot delete account with existing transactions');
+    }
+
+    const result = await db.delete(accounts).where(eq(accounts.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async hasAccountTransactions(accountId: number): Promise<boolean> {
+    const entries = await db.select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.accountId, accountId))
+      .limit(1);
+    return entries.length > 0;
+  }
+
   // Helper methods for currency-specific AR/AP accounts
   private async findARAccountForCurrency(currency: string): Promise<Account | undefined> {
     const accountName = `Accounts Receivable - ${currency}`;

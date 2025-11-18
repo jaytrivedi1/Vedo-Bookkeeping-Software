@@ -511,6 +511,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  apiRouter.delete("/accounts/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if account exists
+      const account = await storage.getAccount(id);
+      if (!account) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      
+      // Try to delete the account (will throw error if it has transactions)
+      const deleted = await storage.deleteAccount(id);
+      
+      if (deleted) {
+        res.json({ message: "Account deleted successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to delete account" });
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Cannot delete account with existing transactions') {
+        return res.status(400).json({ message: "Cannot delete account with existing transactions. Please deactivate it instead." });
+      }
+      console.error("Error deleting account:", error);
+      res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
+
   // Contacts routes
   apiRouter.get("/contacts", async (req: Request, res: Response) => {
     try {

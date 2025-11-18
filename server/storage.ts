@@ -85,6 +85,8 @@ export interface IStorage {
   getAccountByCode(code: string): Promise<Account | undefined>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: number, account: Partial<Account>): Promise<Account | undefined>;
+  deleteAccount(id: number): Promise<boolean>;
+  hasAccountTransactions(accountId: number): Promise<boolean>;
 
   // Sales Taxes
   getSalesTaxes(): Promise<SalesTax[]>;
