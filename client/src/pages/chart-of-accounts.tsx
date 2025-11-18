@@ -47,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ChartOfAccounts() {
@@ -759,15 +760,35 @@ export default function ChartOfAccounts() {
                 />
               </div>
               
+              <FormField
+                control={editForm.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
+                    <div className="space-y-0.5">
+                      <FormLabel>Active</FormLabel>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-is-active-edit"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              
               <DialogFooter>
                 <Button 
                   type="button" 
                   variant="outline" 
                   onClick={() => setEditAccountOpen(false)}
+                  data-testid="button-cancel-edit"
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={updateAccount.isPending}>
+                <Button type="submit" disabled={updateAccount.isPending} data-testid="button-update-account">
                   {updateAccount.isPending ? "Updating..." : "Update Account"}
                 </Button>
               </DialogFooter>

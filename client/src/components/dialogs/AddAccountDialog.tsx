@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 
 interface AddAccountDialogProps {
   open: boolean;
@@ -53,7 +52,7 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
       type: "current_assets" as const,
       currency: "CAD",
       salesTaxType: "",
-      isActive: true,
+      isActive: true, // New accounts are always active by default
     },
   });
 
@@ -245,25 +244,6 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
                 )}
               />
             </div>
-            
-            <FormField
-              control={form.control}
-              name="isActive"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                  <div className="space-y-0.5">
-                    <FormLabel>Active</FormLabel>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      data-testid="switch-is-active"
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
             
             <DialogFooter>
               <Button 
