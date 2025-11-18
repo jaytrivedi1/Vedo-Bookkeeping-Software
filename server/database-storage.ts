@@ -70,6 +70,71 @@ export class DatabaseStorage implements IStorage {
     return updatedAccount;
   }
 
+  // Helper methods for currency-specific AR/AP accounts
+  private async findARAccountForCurrency(currency: string): Promise<Account | undefined> {
+    const accountName = `Accounts Receivable - ${currency}`;
+    
+    // First check by exact name match
+    const byName = await db.select().from(accounts).where(eq(accounts.name, accountName));
+    if (byName.length > 0) {
+      return byName[0];
+    }
+    
+    // If not found by name, check by type and currency
+    const byTypeAndCurrency = await db.select().from(accounts).where(
+      and(
+        eq(accounts.type, 'accounts_receivable'),
+        eq(accounts.currency, currency)
+      )
+    );
+    return byTypeAndCurrency[0];
+  }
+
+  private async findAPAccountForCurrency(currency: string): Promise<Account | undefined> {
+    const accountName = `Accounts Payable - ${currency}`;
+    
+    // First check by exact name match
+    const byName = await db.select().from(accounts).where(eq(accounts.name, accountName));
+    if (byName.length > 0) {
+      return byName[0];
+    }
+    
+    // If not found by name, check by type and currency
+    const byTypeAndCurrency = await db.select().from(accounts).where(
+      and(
+        eq(accounts.type, 'accounts_payable'),
+        eq(accounts.currency, currency)
+      )
+    );
+    return byTypeAndCurrency[0];
+  }
+
+  private async ensureCurrencyARAccount(currency: string): Promise<void> {
+    const existingAccount = await this.findARAccountForCurrency(currency);
+    if (!existingAccount) {
+      await this.createAccount({
+        code: `AR-${currency}`,
+        name: `Accounts Receivable - ${currency}`,
+        type: 'accounts_receivable',
+        currency: currency,
+        isActive: true
+      });
+    }
+  }
+
+  private async ensureCurrencyAPAccount(currency: string): Promise<void> {
+    const existingAccount = await this.findAPAccountForCurrency(currency);
+    if (!existingAccount) {
+      await this.createAccount({
+        code: `AP-${currency}`,
+        name: `Accounts Payable - ${currency}`,
+        type: 'accounts_payable',
+        currency: currency,
+        isActive: true
+      });
+    }
+  }
+
   // Contacts
   async getContacts(includeInactive = false): Promise<Contact[]> {
     if (includeInactive) {
@@ -85,6 +150,20 @@ export class DatabaseStorage implements IStorage {
 
   async createContact(contact: InsertContact): Promise<Contact> {
     const [newContact] = await db.insert(contacts).values(contact).returning();
+    
+    // Auto-create currency-specific AR/AP accounts for foreign currency contacts
+    const preferences = await this.getPreferences();
+    const homeCurrency = preferences?.homeCurrency || 'USD';
+    
+    if (contact.currency && contact.currency !== homeCurrency) {
+      if (contact.type === 'customer' || contact.type === 'both') {
+        await this.ensureCurrencyARAccount(contact.currency);
+      }
+      if (contact.type === 'vendor' || contact.type === 'both') {
+        await this.ensureCurrencyAPAccount(contact.currency);
+      }
+    }
+    
     return newContact;
   }
 
@@ -93,6 +172,22 @@ export class DatabaseStorage implements IStorage {
       .set(contactUpdate)
       .where(eq(contacts.id, id))
       .returning();
+    
+    // Auto-create currency-specific AR/AP accounts if currency changed to foreign currency
+    if (contactUpdate.currency && updatedContact) {
+      const preferences = await this.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'USD';
+      
+      if (contactUpdate.currency !== homeCurrency) {
+        if (updatedContact.type === 'customer' || updatedContact.type === 'both') {
+          await this.ensureCurrencyARAccount(contactUpdate.currency);
+        }
+        if (updatedContact.type === 'vendor' || updatedContact.type === 'both') {
+          await this.ensureCurrencyAPAccount(contactUpdate.currency);
+        }
+      }
+    }
+    
     return updatedContact;
   }
   
