@@ -28,13 +28,19 @@ import {
 } from "@/components/ui/form";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
+import { AddressAutocomplete } from "@/components/ui/address-autocomplete";
 
 const vendorFormSchema = insertContactSchema.extend({
   email: z.string().email("Invalid email address").min(1, "Email is required"),
   currency: z.string().min(1, "Currency is required"),
   contactName: z.string().optional(),
   phone: z.string().optional(),
-  address: z.string().optional(),
+  street1: z.string().optional(),
+  street2: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
   defaultTaxRate: z.number().optional(),
   documentIds: z.array(z.string()).optional(),
   type: z.literal("vendor"),
@@ -113,7 +119,12 @@ export default function AddVendorDialog({
       contactName: "",
       email: "",
       phone: "",
-      address: "",
+      street1: "",
+      street2: "",
+      city: "",
+      state: "",
+      postalCode: "",
+      country: "",
       type: "vendor",
       currency: "USD",
       defaultTaxRate: 0,
@@ -231,22 +242,104 @@ export default function AddVendorDialog({
               
               <FormField
                 control={form.control}
-                name="address"
+                name="street1"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Address</FormLabel>
+                    <FormLabel>Street Address 1</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Enter full address" 
-                        {...field} 
-                        rows={3}
-                        data-testid="input-vendor-address"
+                      <AddressAutocomplete
+                        value={field.value || ""}
+                        onValueChange={field.onChange}
+                        onAddressSelect={(address) => {
+                          form.setValue("street1", address.street1 || "");
+                          form.setValue("street2", address.street2 || "");
+                          form.setValue("city", address.city || "");
+                          form.setValue("state", address.state || "");
+                          form.setValue("postalCode", address.postalCode || "");
+                          form.setValue("country", address.country || "");
+                        }}
+                        placeholder="Start typing address..."
+                        data-testid="input-vendor-street1"
                       />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              
+              <FormField
+                control={form.control}
+                name="street2"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Street Address 2</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Apartment, suite, etc. (optional)" {...field} data-testid="input-vendor-street2" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="city"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>City</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter city" {...field} data-testid="input-vendor-city" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State/Province</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter state/province" {...field} data-testid="input-vendor-state" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="postalCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Postal Code</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter postal code" {...field} data-testid="input-vendor-postal-code" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Country</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter country" {...field} data-testid="input-vendor-country" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
