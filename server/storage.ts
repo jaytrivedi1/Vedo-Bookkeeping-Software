@@ -478,6 +478,69 @@ export class MemStorage implements IStorage {
     return this.salesTaxes.delete(id);
   }
 
+  // Helper methods for currency-specific AR/AP accounts
+  private async findARAccountForCurrency(currency: string): Promise<Account | undefined> {
+    const accounts = Array.from(this.accounts.values());
+    const accountName = `Accounts Receivable - ${currency}`;
+    
+    // First check by exact name match
+    let account = accounts.find(a => a.name === accountName);
+    
+    // If not found by name, check by type and currency
+    if (!account) {
+      account = accounts.find(a => 
+        a.type === 'accounts_receivable' && 
+        a.currency === currency
+      );
+    }
+    
+    return account;
+  }
+
+  private async findAPAccountForCurrency(currency: string): Promise<Account | undefined> {
+    const accounts = Array.from(this.accounts.values());
+    const accountName = `Accounts Payable - ${currency}`;
+    
+    // First check by exact name match
+    let account = accounts.find(a => a.name === accountName);
+    
+    // If not found by name, check by type and currency
+    if (!account) {
+      account = accounts.find(a => 
+        a.type === 'accounts_payable' && 
+        a.currency === currency
+      );
+    }
+    
+    return account;
+  }
+
+  private async ensureCurrencyARAccount(currency: string): Promise<void> {
+    const existingAccount = await this.findARAccountForCurrency(currency);
+    if (!existingAccount) {
+      await this.createAccount({
+        code: `AR-${currency}`,
+        name: `Accounts Receivable - ${currency}`,
+        type: 'accounts_receivable',
+        currency: currency,
+        isActive: true
+      });
+    }
+  }
+
+  private async ensureCurrencyAPAccount(currency: string): Promise<void> {
+    const existingAccount = await this.findAPAccountForCurrency(currency);
+    if (!existingAccount) {
+      await this.createAccount({
+        code: `AP-${currency}`,
+        name: `Accounts Payable - ${currency}`,
+        type: 'accounts_payable',
+        currency: currency,
+        isActive: true
+      });
+    }
+  }
+
   // Contact Methods
   async getContacts(includeInactive = false): Promise<Contact[]> {
     const allContacts = Array.from(this.contacts.values());
@@ -495,6 +558,20 @@ export class MemStorage implements IStorage {
     const id = this.contactIdCounter++;
     const newContact: Contact = { ...contact, id, isActive: contact.isActive !== undefined ? contact.isActive : true };
     this.contacts.set(id, newContact);
+    
+    // Auto-create currency-specific AR/AP accounts for foreign currency contacts
+    const preferences = await this.getPreferences();
+    const homeCurrency = preferences?.homeCurrency || 'USD';
+    
+    if (contact.currency && contact.currency !== homeCurrency) {
+      if (contact.type === 'customer' || contact.type === 'both') {
+        await this.ensureCurrencyARAccount(contact.currency);
+      }
+      if (contact.type === 'vendor' || contact.type === 'both') {
+        await this.ensureCurrencyAPAccount(contact.currency);
+      }
+    }
+    
     return newContact;
   }
 
