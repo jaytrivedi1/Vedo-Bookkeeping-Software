@@ -11035,6 +11035,44 @@ Respond in JSON format:
     }
   });
 
+  // Global Search endpoints
+  apiRouter.get("/search", async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      
+      if (!query || query.trim().length === 0) {
+        return res.json({
+          transactions: [],
+          contacts: [],
+          accounts: []
+        });
+      }
+
+      const results = await storage.searchAll(query);
+      res.json(results);
+    } catch (error) {
+      console.error("Error performing search:", error);
+      res.status(500).json({ message: "Failed to perform search" });
+    }
+  });
+
+  apiRouter.get("/search/recent", async (req: Request, res: Response) => {
+    try {
+      let limit = 5;
+      if (req.query.limit) {
+        const parsedLimit = parseInt(req.query.limit as string);
+        if (!isNaN(parsedLimit) && parsedLimit > 0 && parsedLimit <= 100) {
+          limit = parsedLimit;
+        }
+      }
+      const recentTransactions = await storage.getRecentTransactions(limit);
+      res.json(recentTransactions);
+    } catch (error) {
+      console.error("Error fetching recent transactions:", error);
+      res.status(500).json({ message: "Failed to fetch recent transactions" });
+    }
+  });
+
   // Activity Logs endpoints
   apiRouter.get("/activity-logs", async (req: Request, res: Response) => {
     try {

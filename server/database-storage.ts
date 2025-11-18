@@ -4,17 +4,17 @@ import {
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem,
-  Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule,
+  Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
-  InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule,
+  InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
-  currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema
+  currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
