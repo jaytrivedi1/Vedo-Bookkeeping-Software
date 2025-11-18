@@ -612,6 +612,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Utility endpoint to fix existing foreign currency contacts - creates missing AR/AP accounts
+  apiRouter.post("/contacts/fix-currency-accounts", async (req: Request, res: Response) => {
+    try {
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'USD';
+      const contacts = await storage.getContacts(true); // Include inactive
+      const accounts = await storage.getAccounts(); // Fetch accounts once
+      
+      let accountsCreated = 0;
+      const createdAccounts: string[] = [];
+      const currenciesProcessed = new Set<string>(); // Track currencies we've already processed
+      
+      for (const contact of contacts) {
+        if (contact.currency && contact.currency !== homeCurrency && !currenciesProcessed.has(contact.currency)) {
+          currenciesProcessed.add(contact.currency);
+          
+          // Check for AR account for this currency
+          const arAccountName = `Accounts Receivable - ${contact.currency}`;
+          const hasARAccount = accounts.some(a => 
+            a.name === arAccountName || 
+            (a.type === 'accounts_receivable' && a.currency === contact.currency)
+          );
+          
+          if (!hasARAccount) {
+            await storage.createAccount({
+              code: `AR-${contact.currency}`,
+              name: arAccountName,
+              type: 'accounts_receivable',
+              currency: contact.currency,
+              isActive: true
+            });
+            accountsCreated++;
+            createdAccounts.push(arAccountName);
+          }
+          
+          // Check for AP account for this currency
+          const apAccountName = `Accounts Payable - ${contact.currency}`;
+          const hasAPAccount = accounts.some(a => 
+            a.name === apAccountName || 
+            (a.type === 'accounts_payable' && a.currency === contact.currency)
+          );
+          
+          if (!hasAPAccount) {
+            await storage.createAccount({
+              code: `AP-${contact.currency}`,
+              name: apAccountName,
+              type: 'accounts_payable',
+              currency: contact.currency,
+              isActive: true
+            });
+            accountsCreated++;
+            createdAccounts.push(apAccountName);
+          }
+        }
+      }
+      
+      res.json({ 
+        success: true,
+        accountsCreated,
+        createdAccounts,
+        message: accountsCreated > 0 
+          ? `Created ${accountsCreated} missing currency-specific account(s)`
+          : 'All currency-specific accounts already exist'
+      });
+    } catch (error) {
+      console.error("Error fixing currency accounts:", error);
+      res.status(500).json({ message: "Failed to fix currency accounts" });
+    }
+  });
+
   // Get transactions for a specific contact
   apiRouter.get("/contacts/:id/transactions", async (req: Request, res: Response) => {
     try {
