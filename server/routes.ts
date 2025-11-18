@@ -622,44 +622,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let accountsCreated = 0;
       const createdAccounts: string[] = [];
-      const currenciesProcessed = new Set<string>(); // Track currencies we've already processed
       
+      // Track which contact types exist for each currency
+      const currencyContactTypes = new Map<string, { hasCustomer: boolean; hasVendor: boolean }>();
+      
+      // First pass: identify which currencies need AR/AP accounts
       for (const contact of contacts) {
-        if (contact.currency && contact.currency !== homeCurrency && !currenciesProcessed.has(contact.currency)) {
-          currenciesProcessed.add(contact.currency);
+        if (contact.currency && contact.currency !== homeCurrency) {
+          if (!currencyContactTypes.has(contact.currency)) {
+            currencyContactTypes.set(contact.currency, { hasCustomer: false, hasVendor: false });
+          }
           
-          // Check for AR account for this currency
-          const arAccountName = `Accounts Receivable - ${contact.currency}`;
+          const types = currencyContactTypes.get(contact.currency)!;
+          if (contact.type === 'customer' || contact.type === 'both') {
+            types.hasCustomer = true;
+          }
+          if (contact.type === 'vendor' || contact.type === 'both') {
+            types.hasVendor = true;
+          }
+        }
+      }
+      
+      // Second pass: create missing accounts only for needed types
+      for (const [currency, types] of currencyContactTypes.entries()) {
+        // Only create AR account if there are customers in this currency
+        if (types.hasCustomer) {
+          const arAccountName = `Accounts Receivable - ${currency}`;
           const hasARAccount = accounts.some(a => 
             a.name === arAccountName || 
-            (a.type === 'accounts_receivable' && a.currency === contact.currency)
+            (a.type === 'accounts_receivable' && a.currency === currency)
           );
           
           if (!hasARAccount) {
             await storage.createAccount({
-              code: `AR-${contact.currency}`,
+              code: `AR-${currency}`,
               name: arAccountName,
               type: 'accounts_receivable',
-              currency: contact.currency,
+              currency: currency,
               isActive: true
             });
             accountsCreated++;
             createdAccounts.push(arAccountName);
           }
-          
-          // Check for AP account for this currency
-          const apAccountName = `Accounts Payable - ${contact.currency}`;
+        }
+        
+        // Only create AP account if there are vendors in this currency
+        if (types.hasVendor) {
+          const apAccountName = `Accounts Payable - ${currency}`;
           const hasAPAccount = accounts.some(a => 
             a.name === apAccountName || 
-            (a.type === 'accounts_payable' && a.currency === contact.currency)
+            (a.type === 'accounts_payable' && a.currency === currency)
           );
           
           if (!hasAPAccount) {
             await storage.createAccount({
-              code: `AP-${contact.currency}`,
+              code: `AP-${currency}`,
               name: apAccountName,
               type: 'accounts_payable',
-              currency: contact.currency,
+              currency: currency,
               isActive: true
             });
             accountsCreated++;
