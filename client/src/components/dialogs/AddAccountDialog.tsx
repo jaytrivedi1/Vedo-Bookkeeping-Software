@@ -96,6 +96,10 @@ export function AddAccountDialog({ open, onOpenChange, onAccountCreated }: AddAc
     if (data.salesTaxType === "none") {
       data.salesTaxType = "";
     }
+    // Convert empty code to undefined so database stores NULL instead of empty string
+    if (data.code === "" || data.code === null) {
+      data.code = undefined;
+    }
     createAccount.mutate(data);
   };
 

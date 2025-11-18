@@ -50,7 +50,7 @@ export const cashFlowCategoryEnum = pgEnum('cash_flow_category', [
 // Chart of Accounts
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
-  code: text('code').notNull().unique(),
+  code: text('code').unique(),
   name: text('name').notNull(),
   type: accountTypeEnum('type').notNull(),
   currency: text('currency').default('USD'),
@@ -159,7 +159,9 @@ export const reconciliationItems = pgTable('reconciliation_items', {
 });
 
 // Create insert schemas
-export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, balance: true });
+export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true, balance: true }).extend({
+  code: z.string().optional()
+});
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true });
 export const insertLineItemSchema = createInsertSchema(lineItems).omit({ id: true });

@@ -113,7 +113,6 @@ export class DatabaseStorage implements IStorage {
     const existingAccount = await this.findARAccountForCurrency(currency);
     if (!existingAccount) {
       await this.createAccount({
-        code: `AR-${currency}`,
         name: `Accounts Receivable - ${currency}`,
         type: 'accounts_receivable',
         currency: currency,
@@ -126,7 +125,6 @@ export class DatabaseStorage implements IStorage {
     const existingAccount = await this.findAPAccountForCurrency(currency);
     if (!existingAccount) {
       await this.createAccount({
-        code: `AP-${currency}`,
         name: `Accounts Payable - ${currency}`,
         type: 'accounts_payable',
         currency: currency,
@@ -1682,8 +1680,8 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Sort by account code
-      accounts.sort((a, b) => a.account.code.localeCompare(b.account.code));
+      // Sort by account code (handle null codes)
+      accounts.sort((a, b) => (a.account.code || '').localeCompare(b.account.code || ''));
       
       return { total, accounts };
     };

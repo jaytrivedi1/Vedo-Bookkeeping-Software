@@ -655,7 +655,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (!hasARAccount) {
             await storage.createAccount({
-              code: `AR-${currency}`,
               name: arAccountName,
               type: 'accounts_receivable',
               currency: currency,
@@ -676,7 +675,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           if (!hasAPAccount) {
             await storage.createAccount({
-              code: `AP-${currency}`,
               name: apAccountName,
               type: 'accounts_payable',
               currency: currency,
