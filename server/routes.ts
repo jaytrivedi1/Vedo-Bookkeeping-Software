@@ -11035,6 +11035,56 @@ Respond in JSON format:
     }
   });
 
+  // Activity Logs endpoints
+  apiRouter.get("/activity-logs", async (req: Request, res: Response) => {
+    try {
+      const filters: any = {};
+      
+      if (req.query.userId) {
+        filters.userId = parseInt(req.query.userId as string);
+      }
+      if (req.query.entityType) {
+        filters.entityType = req.query.entityType as string;
+      }
+      if (req.query.dateFrom) {
+        filters.dateFrom = new Date(req.query.dateFrom as string);
+      }
+      if (req.query.dateTo) {
+        filters.dateTo = new Date(req.query.dateTo as string);
+      }
+      if (req.query.limit) {
+        filters.limit = parseInt(req.query.limit as string);
+      } else {
+        filters.limit = 100; // Default limit
+      }
+      if (req.query.offset) {
+        filters.offset = parseInt(req.query.offset as string);
+      }
+
+      const logs = await storage.getActivityLogs(filters);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching activity logs:", error);
+      res.status(500).json({ message: "Failed to fetch activity logs" });
+    }
+  });
+
+  apiRouter.get("/activity-logs/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const log = await storage.getActivityLog(id);
+      
+      if (!log) {
+        return res.status(404).json({ message: "Activity log not found" });
+      }
+      
+      res.json(log);
+    } catch (error) {
+      console.error("Error fetching activity log:", error);
+      res.status(500).json({ message: "Failed to fetch activity log" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);
