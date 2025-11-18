@@ -48,11 +48,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ChartOfAccounts() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [showInactive, setShowInactive] = useState<boolean>(false);
   const [newAccountOpen, setNewAccountOpen] = useState(false);
   const [editAccountOpen, setEditAccountOpen] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<Account | null>(null);
@@ -204,6 +206,11 @@ export default function ChartOfAccounts() {
   const filteredAccounts = accounts
     ? accounts
         .filter((account) => {
+          // Filter by active status (hide inactive accounts by default)
+          if (!showInactive && !account.isActive) return false;
+          return true;
+        })
+        .filter((account) => {
           if (typeFilter === "all") return true;
           return account.type === typeFilter;
         })
@@ -211,7 +218,7 @@ export default function ChartOfAccounts() {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
           return (
-            account.code.toLowerCase().includes(query) ||
+            (account.code || '').toLowerCase().includes(query) ||
             account.name.toLowerCase().includes(query) ||
             (account.salesTaxType && account.salesTaxType.toLowerCase().includes(query)) ||
             (account.currency && account.currency.toLowerCase().includes(query))
@@ -479,6 +486,21 @@ export default function ChartOfAccounts() {
                 </SelectGroup>
               </SelectContent>
             </Select>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="show-inactive"
+                checked={showInactive}
+                onCheckedChange={(checked) => setShowInactive(checked as boolean)}
+                data-testid="checkbox-show-inactive"
+              />
+              <label
+                htmlFor="show-inactive"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Show Inactive Accounts
+              </label>
+            </div>
           </div>
           
           {/* Accounts Table */}
