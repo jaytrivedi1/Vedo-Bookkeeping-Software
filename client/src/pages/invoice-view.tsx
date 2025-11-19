@@ -10,7 +10,15 @@ import {
   Edit2,
   Mail,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Link as LinkIcon,
+  Send,
+  Eye,
+  Check,
+  FileEdit,
+  AlertCircle,
+  Clock,
+  XCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,6 +30,18 @@ import {
   CardTitle 
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { useInvoiceTemplate } from "@/hooks/use-invoice-template";
@@ -34,6 +54,13 @@ export default function InvoiceView() {
   const { toast } = useToast();
   const { backUrl, backLabel, handleBack } = useBackNavigation('/invoices', 'Invoices');
   const { template } = useInvoiceTemplate();
+  
+  // Send invoice dialog state
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientName, setRecipientName] = useState("");
+  const [personalMessage, setPersonalMessage] = useState("");
+  const [includePdfAttachment, setIncludePdfAttachment] = useState(true);
   
   // Extract the invoice ID from the URL
   useEffect(() => {
@@ -48,10 +75,7 @@ export default function InvoiceView() {
   
   // Define extended transaction interface with dueDate
   interface InvoiceWithExtras extends Transaction {
-    dueDate?: Date;
-    subTotal?: number;
-    taxAmount?: number;
-    paymentTerms?: string;
+    dueDate: Date | null;
   }
 
   // Define payment history interfaces
@@ -72,6 +96,16 @@ export default function InvoiceView() {
     }
   }
   
+  // Define invoice activity interface
+  interface InvoiceActivity {
+    id: number;
+    invoiceId: number;
+    activityType: 'created' | 'sent' | 'viewed' | 'paid' | 'edited' | 'overdue' | 'reminder_sent' | 'cancelled';
+    timestamp: string;
+    userId?: number;
+    metadata?: any;
+  }
+  
   // Add a mutation for recalculating the invoice balance
   const recalculateBalanceMutation = useMutation({
     mutationFn: async () => {
@@ -79,14 +113,10 @@ export default function InvoiceView() {
         throw new Error('No invoice ID available');
       }
       const response = await apiRequest(
-        'POST', 
-        `/api/transactions/${invoiceId}/recalculate`
+        `/api/transactions/${invoiceId}/recalculate`,
+        'POST'
       );
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to recalculate balance');
-      }
-      return response.json();
+      return response;
     },
     onSuccess: () => {
       // Invalidate relevant queries to refresh the data
@@ -101,6 +131,77 @@ export default function InvoiceView() {
     onError: (error: Error) => {
       toast({
         title: "Failed to recalculate",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Mutation for sending invoice via email
+  const sendInvoiceMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoiceId) {
+        throw new Error('No invoice ID available');
+      }
+      const response = await apiRequest(
+        `/api/invoices/${invoiceId}/send-email`,
+        'POST',
+        {
+          recipientEmail,
+          recipientName,
+          message: personalMessage,
+          includeAttachment: includePdfAttachment
+        }
+      );
+      return response;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'activities'] });
+      toast({
+        title: "Invoice sent",
+        description: data.publicLink 
+          ? `Invoice sent successfully. Public link: ${data.publicLink}` 
+          : "Invoice sent successfully",
+        variant: "default"
+      });
+      setSendDialogOpen(false);
+      resetSendForm();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to send invoice",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Mutation for generating public token
+  const generateTokenMutation = useMutation({
+    mutationFn: async () => {
+      if (!invoiceId) {
+        throw new Error('No invoice ID available');
+      }
+      const response = await apiRequest(
+        `/api/invoices/${invoiceId}/generate-token`,
+        'POST'
+      );
+      return response;
+    },
+    onSuccess: (data) => {
+      const publicLink = data.publicLink || '';
+      if (publicLink) {
+        navigator.clipboard.writeText(publicLink);
+        toast({
+          title: "Link copied",
+          description: "Public invoice link copied to clipboard",
+          variant: "default"
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to generate link",
         description: error.message,
         variant: "destructive"
       });
@@ -141,12 +242,64 @@ export default function InvoiceView() {
     enabled: !!invoiceId
   });
   
+  // Fetch invoice activities
+  const { data: activities = [], isLoading: activitiesLoading } = useQuery<InvoiceActivity[]>({
+    queryKey: ['/api/invoices', invoiceId, 'activities'],
+    enabled: !!invoiceId
+  });
+  
   // Extract data once fetched
   const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
   const lineItems: LineItem[] = invoiceData?.lineItems || [];
   
   // Find customer
   const customer = contacts?.find(c => c.id === invoice?.contactId);
+  
+  // Helper function to reset send form
+  const resetSendForm = () => {
+    setRecipientEmail(customer?.email || "");
+    setRecipientName(customer?.name || "");
+    setPersonalMessage("");
+    setIncludePdfAttachment(true);
+  };
+  
+  // Pre-fill customer data when customer changes or send dialog opens
+  useEffect(() => {
+    if (sendDialogOpen && customer) {
+      setRecipientEmail(customer.email || "");
+      setRecipientName(customer.name || "");
+    }
+  }, [sendDialogOpen, customer]);
+  
+  // Helper function to get activity icon
+  const getActivityIcon = (activityType: string) => {
+    switch (activityType) {
+      case 'sent':
+      case 'reminder_sent':
+        return <Mail className="h-4 w-4" />;
+      case 'viewed':
+        return <Eye className="h-4 w-4" />;
+      case 'paid':
+        return <Check className="h-4 w-4" />;
+      case 'edited':
+      case 'created':
+        return <FileEdit className="h-4 w-4" />;
+      case 'overdue':
+        return <AlertCircle className="h-4 w-4" />;
+      case 'cancelled':
+        return <XCircle className="h-4 w-4" />;
+      default:
+        return <Clock className="h-4 w-4" />;
+    }
+  };
+  
+  // Helper function to format activity type
+  const formatActivityType = (activityType: string) => {
+    return activityType
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
   
   // Use saved totals from the transaction (respects manual tax overrides)
   // Fallback to calculating from line items if not saved
@@ -196,7 +349,7 @@ export default function InvoiceView() {
     }
   };
   
-  if (invoiceLoading || contactsLoading || taxesLoading || paymentsLoading) {
+  if (invoiceLoading || contactsLoading || taxesLoading || paymentsLoading || activitiesLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="animate-pulse">
@@ -232,33 +385,31 @@ export default function InvoiceView() {
           </Button>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Printer className="mr-2 h-4 w-4" />
-            Print
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setSendDialogOpen(true)}
+            data-testid="button-send-invoice"
+          >
+            <Send className="mr-2 h-4 w-4" />
+            Send Invoice
           </Button>
-          <Button variant="outline" size="sm">
-            <FileDown className="mr-2 h-4 w-4" />
-            Download
-          </Button>
-          <Button variant="outline" size="sm">
-            <Mail className="mr-2 h-4 w-4" />
-            Send by Email
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => generateTokenMutation.mutate()}
+            disabled={generateTokenMutation.isPending}
+            data-testid="button-copy-link"
+          >
+            <LinkIcon className="mr-2 h-4 w-4" />
+            Copy Link
           </Button>
           <Link href={`/invoices/${invoice.id}/edit`}>
-            <Button size="sm">
+            <Button size="sm" data-testid="button-edit-invoice">
               <Edit2 className="mr-2 h-4 w-4" />
               Edit
             </Button>
           </Link>
-          <Button 
-            size="sm"
-            variant="outline"
-            onClick={() => recalculateBalanceMutation.mutate()}
-            disabled={recalculateBalanceMutation.isPending}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${recalculateBalanceMutation.isPending ? 'animate-spin' : ''}`} />
-            Recalculate Balance
-          </Button>
         </div>
       </div>
       
@@ -501,6 +652,145 @@ export default function InvoiceView() {
           Thank you for your business!
         </div>
       </div>
+      
+      {/* Activity Timeline */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Activity Timeline</CardTitle>
+          <CardDescription>Track all actions performed on this invoice</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {activities.length === 0 ? (
+            <div className="text-center py-8 text-gray-500" data-testid="text-no-activity">
+              <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No activity yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {activities.map((activity, index) => (
+                <div 
+                  key={activity.id} 
+                  className="flex gap-4 items-start"
+                  data-testid={`activity-item-${index}`}
+                >
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    {getActivityIcon(activity.activityType)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-sm" data-testid={`activity-type-${index}`}>
+                        {formatActivityType(activity.activityType)}
+                      </p>
+                      <p className="text-xs text-gray-500" data-testid={`activity-timestamp-${index}`}>
+                        {format(new Date(activity.timestamp), 'MMM d, yyyy h:mm a')}
+                      </p>
+                    </div>
+                    {activity.metadata?.email && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Sent to {activity.metadata.email}
+                      </p>
+                    )}
+                    {activity.userId && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        By user #{activity.userId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Send Invoice Dialog */}
+      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]" data-testid="dialog-send-invoice" aria-describedby="send-invoice-description">
+          <DialogHeader>
+            <DialogTitle>Send Invoice</DialogTitle>
+            <DialogDescription id="send-invoice-description">
+              Send this invoice via email to the customer
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="recipientEmail">Recipient Email *</Label>
+              <Input
+                id="recipientEmail"
+                type="email"
+                placeholder="customer@example.com"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                data-testid="input-recipient-email"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="recipientName">Recipient Name</Label>
+              <Input
+                id="recipientName"
+                type="text"
+                placeholder="Customer Name"
+                value={recipientName}
+                onChange={(e) => setRecipientName(e.target.value)}
+                data-testid="input-recipient-name"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="personalMessage">Personal Message (Optional)</Label>
+              <Textarea
+                id="personalMessage"
+                placeholder="Add a personal message to include in the email..."
+                value={personalMessage}
+                onChange={(e) => setPersonalMessage(e.target.value)}
+                rows={4}
+                data-testid="textarea-personal-message"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="includePdf"
+                checked={includePdfAttachment}
+                onCheckedChange={(checked) => setIncludePdfAttachment(checked === true)}
+                data-testid="checkbox-include-pdf"
+              />
+              <Label htmlFor="includePdf" className="cursor-pointer">
+                Include PDF attachment
+              </Label>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSendDialogOpen(false)}
+              data-testid="button-cancel-send"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => sendInvoiceMutation.mutate()}
+              disabled={!recipientEmail || sendInvoiceMutation.isPending}
+              data-testid="button-submit-send"
+            >
+              {sendInvoiceMutation.isPending ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Invoice
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
