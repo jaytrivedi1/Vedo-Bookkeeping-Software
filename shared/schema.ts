@@ -203,6 +203,10 @@ export const invoiceSchema = z.object({
   totalAmount: z.number().optional(),
   dueDate: z.date().optional(),
   paymentTerms: z.string().optional(),
+  // Multi-currency fields
+  currency: z.string().optional(),
+  exchangeRate: z.union([z.string(), z.number()]).optional(),
+  foreignAmount: z.number().optional(),
 });
 
 export const expenseSchema = z.object({

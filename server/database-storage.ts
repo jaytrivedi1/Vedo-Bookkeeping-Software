@@ -294,10 +294,54 @@ export class DatabaseStorage implements IStorage {
     lineItemsData: InsertLineItem[],
     ledgerEntriesData: InsertLedgerEntry[]
   ): Promise<Transaction> {
+    // Helper function to round to 2 decimals
+    const roundTo2Decimals = (num: number): number => Math.round(num * 100) / 100;
+    
+    // Get home currency from preferences
+    const preferencesData = await this.getPreferences();
+    const homeCurrency = preferencesData?.homeCurrency || 'CAD';
+    
+    // Check if this is a foreign currency transaction
+    const transactionCurrency = (transaction as any).currency;
+    const isForeignCurrency = transactionCurrency && transactionCurrency !== homeCurrency;
+    const exchangeRate = (transaction as any).exchangeRate ? 
+      parseFloat((transaction as any).exchangeRate.toString()) : 1;
+    
+    console.log(`[createTransaction] Transaction type: ${transaction.type}, Currency: ${transactionCurrency || homeCurrency}, isForeignCurrency: ${isForeignCurrency}, exchangeRate: ${exchangeRate}`);
+    
+    // If this is a foreign currency transaction, convert ledger entry amounts to CAD
+    let processedLedgerEntries = ledgerEntriesData;
+    if (isForeignCurrency && exchangeRate > 0) {
+      console.log(`[createTransaction] Converting foreign currency ledger entries to ${homeCurrency}`);
+      
+      processedLedgerEntries = ledgerEntriesData.map(entry => {
+        const foreignDebit = entry.debit || 0;
+        const foreignCredit = entry.credit || 0;
+        
+        // Convert to CAD
+        const cadDebit = roundTo2Decimals(foreignDebit * exchangeRate);
+        const cadCredit = roundTo2Decimals(foreignCredit * exchangeRate);
+        
+        console.log(`[createTransaction] Ledger entry: ${foreignDebit} debit, ${foreignCredit} credit in ${transactionCurrency} -> ${cadDebit} debit, ${cadCredit} credit in ${homeCurrency}`);
+        
+        // Create updated entry with CAD amounts and foreign currency metadata
+        return {
+          ...entry,
+          debit: cadDebit,
+          credit: cadCredit,
+          currency: transactionCurrency,
+          exchangeRate: exchangeRate.toString(),
+          foreignAmount: foreignDebit > 0 ? foreignDebit : (foreignCredit > 0 ? foreignCredit : null)
+        };
+      });
+    }
+    
     // Use a transaction to ensure all operations succeed or fail together
     const [newTransaction] = await db.transaction(async (tx) => {
       // Insert transaction
       const [newTx] = await tx.insert(transactions).values(transaction).returning();
+      
+      console.log(`[createTransaction] Created transaction #${newTx.id} (${newTx.reference})`);
       
       // Insert line items with the transaction ID
       if (lineItemsData.length > 0) {
@@ -307,20 +351,22 @@ export class DatabaseStorage implements IStorage {
             transactionId: newTx.id
           }))
         );
+        console.log(`[createTransaction] Inserted ${lineItemsData.length} line items`);
       }
       
-      // Insert ledger entries with the transaction ID
-      if (ledgerEntriesData.length > 0) {
+      // Insert ledger entries with the transaction ID (using processed entries with CAD amounts)
+      if (processedLedgerEntries.length > 0) {
         await tx.insert(ledgerEntries).values(
-          ledgerEntriesData.map(entry => ({
+          processedLedgerEntries.map(entry => ({
             ...entry,
             transactionId: newTx.id
           }))
         );
+        console.log(`[createTransaction] Inserted ${processedLedgerEntries.length} ledger entries`);
       }
       
-      // Update account balances based on ledger entries
-      for (const entry of ledgerEntriesData) {
+      // Update account balances based on ledger entries (using CAD amounts)
+      for (const entry of processedLedgerEntries) {
         const account = await tx.select().from(accounts).where(eq(accounts.id, entry.accountId));
         if (account.length > 0) {
           let newBalance = account[0].balance;

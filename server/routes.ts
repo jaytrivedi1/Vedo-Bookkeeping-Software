@@ -393,21 +393,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transactionMap = new Map(allTransactions.map(tx => [tx.id, tx]));
       const contactMap = new Map(allContacts.map(c => [c.id, c]));
       
-      // Calculate beginning balance (all entries before start date)
-      const beginningBalanceEntries = allLedgerEntries.filter(entry =>
-        entry.accountId === accountId && new Date(entry.date) < startDate
-      );
+      // Calculate beginning balance
+      // IMPORTANT: Income and Expense accounts should NEVER have beginning balances
+      // They reset to $0 at the start of each fiscal period
+      // Only Balance Sheet accounts (Assets, Liabilities, Equity) carry forward balances
+      const isIncomeOrExpenseAccount = [
+        'income', 'other_income',  // Income accounts
+        'expense', 'other_expense', 'cost_of_goods_sold'  // Expense accounts
+      ].includes(account.type);
       
       let beginningBalance = 0;
-      beginningBalanceEntries.forEach(entry => {
-        const debit = Number(entry.debit || 0);
-        const credit = Number(entry.credit || 0);
-        if (creditIncreasesBalance) {
-          beginningBalance += credit - debit;
-        } else {
-          beginningBalance += debit - credit;
-        }
-      });
+      
+      if (!isIncomeOrExpenseAccount) {
+        // For Balance Sheet accounts, calculate beginning balance from entries before start date
+        const beginningBalanceEntries = allLedgerEntries.filter(entry =>
+          entry.accountId === accountId && new Date(entry.date) < startDate
+        );
+        
+        beginningBalanceEntries.forEach(entry => {
+          const debit = Number(entry.debit || 0);
+          const credit = Number(entry.credit || 0);
+          if (creditIncreasesBalance) {
+            beginningBalance += credit - debit;
+          } else {
+            beginningBalance += debit - credit;
+          }
+        });
+      }
+      // else: Income/Expense accounts always start at $0
       
       // Get entries for this account within the date range
       let accountEntries = ledgerEntriesByDateRange.filter(entry => entry.accountId === accountId);
@@ -1509,48 +1522,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isForeignCurrency = invoiceData.currency && invoiceData.currency !== homeCurrency;
       const exchangeRate = invoiceData.exchangeRate ? parseFloat(invoiceData.exchangeRate.toString()) : 1;
       
-      // For foreign currency: amounts in transaction header are in HOME currency (CAD)
-      // foreignAmount stores the original foreign currency amount
-      let transactionAmountCAD = totalAmount;
-      let subTotalCAD = subTotal;
-      let taxAmountCAD = taxAmount;
+      console.log(`Creating invoice - Currency: ${invoiceData.currency || homeCurrency}, isForeignCurrency: ${isForeignCurrency}, exchangeRate: ${exchangeRate}`);
       
-      if (isForeignCurrency && invoiceData.foreignAmount && exchangeRate > 0) {
-        // Convert foreign amount to CAD
-        const foreignTotal = parseFloat(invoiceData.foreignAmount.toString());
-        transactionAmountCAD = roundTo2Decimals(foreignTotal * exchangeRate);
-        
-        // Proportionally calculate subTotal and tax in CAD
-        const foreignSubTotal = invoiceData.subTotal || foreignTotal;
-        const foreignTaxAmount = invoiceData.taxAmount || 0;
-        
-        subTotalCAD = roundTo2Decimals(foreignSubTotal * exchangeRate);
-        taxAmountCAD = roundTo2Decimals(foreignTaxAmount * exchangeRate);
-        
-        console.log(`Foreign currency invoice: ${foreignTotal} ${invoiceData.currency} × ${exchangeRate} = ${transactionAmountCAD} CAD`);
-      }
-      
-      // Create transaction
+      // Create transaction (createTransaction will handle CAD conversion)
       const transaction: any = {
         reference: invoiceData.reference,
         type: 'invoice' as const,
         date: invoiceData.date,
         description: invoiceData.description,
-        amount: transactionAmountCAD,  // Always in CAD (home currency)
-        subTotal: subTotalCAD,          // Always in CAD
-        taxAmount: taxAmountCAD,        // Always in CAD
-        balance: transactionAmountCAD,  // Always in CAD
+        amount: totalAmount,  // Will be converted to CAD by createTransaction if foreign currency
+        subTotal: subTotal,
+        taxAmount: taxAmount,
+        balance: totalAmount,
         contactId: invoiceData.contactId,
         status: invoiceData.status,
         dueDate: invoiceData.dueDate,
         paymentTerms: invoiceData.paymentTerms
       };
       
-      // Add multi-currency fields if applicable
+      // Add multi-currency fields if applicable (createTransaction needs these)
       if (isForeignCurrency) {
         transaction.currency = invoiceData.currency;
         transaction.exchangeRate = exchangeRate.toString();
-        transaction.foreignAmount = invoiceData.foreignAmount;
+        transaction.foreignAmount = totalAmount;  // Store original foreign amount
       }
       
       console.log('Transaction object to be saved:', JSON.stringify({
@@ -1615,41 +1609,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
       
-      // Create base ledger entries (always in CAD, with foreign currency metadata)
-      const baseLedgerEntry: any = {
-        date: transaction.date,
-        transactionId: 0 // Will be set by createTransaction
-      };
-      
-      // Add foreign currency metadata if applicable
-      if (isForeignCurrency) {
-        baseLedgerEntry.currency = invoiceData.currency;
-        baseLedgerEntry.exchangeRate = exchangeRate.toString();
-      }
-      
+      // Create ledger entries with foreign amounts (createTransaction will convert to CAD)
       const ledgerEntries = [
         {
-          ...baseLedgerEntry,
           accountId: receivableAccount.id,
           description: `Invoice ${transaction.reference}`,
-          debit: transactionAmountCAD,  // ALWAYS in CAD (converted if foreign currency)
+          debit: totalAmount,  // Foreign amount - createTransaction will convert
           credit: 0,
-          foreignAmount: isForeignCurrency ? invoiceData.foreignAmount : null
+          date: transaction.date,
+          transactionId: 0 // Will be set by createTransaction
         },
         {
-          ...baseLedgerEntry,
           accountId: revenueAccount.id,
           description: `Invoice ${transaction.reference} - Revenue`,
           debit: 0,
-          credit: subTotalCAD,  // ALWAYS in CAD (converted if foreign currency)
-          foreignAmount: isForeignCurrency ? (invoiceData.subTotal || 0) : null
+          credit: subTotal,  // Foreign amount - createTransaction will convert
+          date: transaction.date,
+          transactionId: 0 // Will be set by createTransaction
         }
       ];
       
       // Handle tax allocation - use provided taxAmount from frontend (respects manual overrides)
       // but distribute it proportionally across correct tax liability accounts
-      if (taxAmountCAD > 0) {
-        console.log(`Using provided tax amount from frontend: ${taxAmountCAD} CAD`);
+      if (taxAmount > 0) {
+        console.log(`Using provided tax amount from frontend: ${taxAmount}`);
         
         // Calculate what the tax components WOULD be to get proportions
         const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
@@ -1716,10 +1699,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Now distribute the manual taxAmount (in CAD) proportionally across the accounts
+        // Now distribute the manual taxAmount proportionally across the accounts
         if (taxComponents.size > 0 && totalCalculatedTax > 0) {
           // Distribute the manual tax amount proportionally
-          let remainingTax = taxAmountCAD;
+          let remainingTax = taxAmount;
           const componentArray = Array.from(taxComponents.values());
           
           componentArray.forEach((component, index) => {
@@ -1730,33 +1713,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
               proportionalAmount = remainingTax;
             } else {
               // Calculate proportional amount based on original calculation
-              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmountCAD);
+              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
               remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
             }
             
-            const taxLedgerEntry: any = {
-              ...baseLedgerEntry,
+            ledgerEntries.push({
               accountId: component.accountId,
               description: `Invoice ${transaction.reference} - Sales Tax`,
               debit: 0,
-              credit: proportionalAmount,  // ALWAYS in CAD
-              foreignAmount: isForeignCurrency ? roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * (invoiceData.taxAmount || 0)) : null
-            };
-            
-            ledgerEntries.push(taxLedgerEntry);
+              credit: proportionalAmount,  // Foreign amount - createTransaction will convert
+              date: transaction.date,
+              transactionId: 0
+            });
           });
         } else {
           // Fallback: no tax components found, use default account
-          const fallbackTaxEntry: any = {
-            ...baseLedgerEntry,
+          ledgerEntries.push({
             accountId: taxPayableAccount.id,
             description: `Invoice ${transaction.reference} - Sales Tax`,
             debit: 0,
-            credit: taxAmountCAD,  // ALWAYS in CAD
-            foreignAmount: isForeignCurrency ? (invoiceData.taxAmount || 0) : null
-          };
-          
-          ledgerEntries.push(fallbackTaxEntry);
+            credit: taxAmount,  // Foreign amount - createTransaction will convert
+            date: transaction.date,
+            transactionId: 0
+          });
         }
       }
       
