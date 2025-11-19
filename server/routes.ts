@@ -11824,17 +11824,24 @@ Respond in JSON format:
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
       
-      // Tenant scoping: Auto-set companyId or firmId based on req.user's organization
+      // Tenant scoping: Auto-set companyId or firmId based on req.user's organization and invitation role
       let invitationData = { ...req.body };
       
-      if (req.user?.role === 'admin' && req.user.companyId) {
-        // Admins create invitations for their company
-        invitationData.companyId = req.user.companyId;
-        invitationData.firmId = null;
-      } else if (req.user?.role === 'accountant' && req.user.firmId) {
-        // Accountants create invitations for their firm
+      // If inviting an accountant, assign to firm
+      if (invitationData.role === 'accountant') {
+        if (!req.user?.firmId) {
+          return res.status(400).json({ error: "Only accounting firm users can invite accountants" });
+        }
         invitationData.firmId = req.user.firmId;
         invitationData.companyId = null;
+      }
+      // If inviting a company user (admin, staff, read_only), assign to company
+      else {
+        if (!req.user?.companyId) {
+          return res.status(400).json({ error: "Company association required to invite company users" });
+        }
+        invitationData.companyId = req.user.companyId;
+        invitationData.firmId = null;
       }
       
       // Validate request body
@@ -11910,7 +11917,7 @@ Respond in JSON format:
       // Hash password
       const hashedPassword = await storage.hashPassword(password);
       
-      // Create user
+      // Create user with correct tenant assignment
       const user = await storage.createUser({
         username,
         password: hashedPassword,
@@ -11919,17 +11926,9 @@ Respond in JSON format:
         firstName: firstName || '',
         lastName: lastName || '',
         firmId: invitation.firmId || null,
+        companyId: invitation.companyId || null,
         isActive: true,
       });
-      
-      // If invitation is for a company, assign user to that company
-      if (invitation.companyId) {
-        await storage.assignUserToCompany({
-          userId: user.id,
-          companyId: invitation.companyId,
-          role: invitation.role,
-        });
-      }
       
       // Mark invitation as accepted
       await storage.acceptUserInvitation(token);
