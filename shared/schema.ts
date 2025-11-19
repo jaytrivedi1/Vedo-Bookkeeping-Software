@@ -127,6 +127,11 @@ export const ledgerEntries = pgTable('ledger_entries', {
   debit: doublePrecision('debit').notNull().default(0),
   credit: doublePrecision('credit').notNull().default(0),
   date: timestamp('date').notNull().defaultNow(),
+  // Multi-currency support - stores foreign currency metadata for reference
+  // Note: debit/credit amounts are ALWAYS in home currency (CAD)
+  currency: varchar('currency', { length: 3 }),  // ISO currency code (e.g., EUR, USD)
+  exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6 }),  // Exchange rate used for conversion
+  foreignAmount: decimal('foreign_amount', { precision: 15, scale: 2 }),  // Original amount in foreign currency
 });
 
 // Payment Applications (tracks which payments are applied to which invoices)
