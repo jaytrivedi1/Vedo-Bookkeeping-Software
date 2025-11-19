@@ -862,10 +862,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get invoice activities
-  apiRouter.get("/invoices/:id/activities", async (req: Request, res: Response) => {
+  // Get invoice activities (requires authentication)
+  apiRouter.get("/invoices/:id/activities", requireAuth, async (req: Request, res: Response) => {
     try {
       const invoiceId = parseInt(req.params.id);
+      
+      // Verify invoice exists and user has access to it
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
       const activities = await storage.getInvoiceActivities(invoiceId);
       res.json(activities);
     } catch (error) {
@@ -874,35 +881,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create invoice activity
-  apiRouter.post("/invoices/:id/activity", async (req: Request, res: Response) => {
-    try {
-      const invoiceId = parseInt(req.params.id);
-      const { activityType, metadata } = req.body;
-      
-      // Validate activity type
-      const validTypes = ['created', 'sent', 'viewed', 'paid', 'edited', 'overdue', 'reminder_sent', 'cancelled'];
-      if (!validTypes.includes(activityType)) {
-        return res.status(400).json({ message: "Invalid activity type" });
-      }
-      
-      const activity = await storage.createInvoiceActivity({
-        invoiceId,
-        activityType,
-        userId: req.user?.id || null, // null if activity from client (public view)
-        metadata: metadata || {},
-        timestamp: new Date()
-      });
-      
-      res.json(activity);
-    } catch (error) {
-      console.error("Error creating invoice activity:", error);
-      res.status(500).json({ message: "Failed to create activity" });
-    }
-  });
-
-  // Generate or retrieve secure token for invoice
-  apiRouter.post("/invoices/:id/generate-token", async (req: Request, res: Response) => {
+  // Generate or retrieve secure token for invoice (requires authentication)
+  apiRouter.post("/invoices/:id/generate-token", requireAuth, async (req: Request, res: Response) => {
     try {
       const invoiceId = parseInt(req.params.id);
       const invoice = await storage.getTransaction(invoiceId);
@@ -923,9 +903,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to generate token" });
     }
   });
+  
+  // Public endpoint: Track invoice view by secure token
+  apiRouter.post("/invoices/public/:token/track-view", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.params;
+      
+      // Find invoice by secure token
+      const transactions = await storage.getTransactions();
+      const invoice = transactions.find(t => t.secureToken === token && t.type === 'invoice');
+      
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // Create view activity
+      await storage.createInvoiceActivity({
+        invoiceId: invoice.id,
+        activityType: 'viewed',
+        userId: null, // Public view, no user
+        metadata: {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          viewedAt: new Date().toISOString()
+        },
+        timestamp: new Date()
+      });
+      
+      res.json({ message: "View tracked successfully" });
+    } catch (error) {
+      console.error("Error tracking invoice view:", error);
+      res.status(500).json({ message: "Failed to track view" });
+    }
+  });
 
-  // Send invoice via email
-  apiRouter.post("/invoices/:id/send-email", async (req: Request, res: Response) => {
+  // Send invoice via email (requires authentication)
+  apiRouter.post("/invoices/:id/send-email", requireAuth, async (req: Request, res: Response) => {
     try {
       const invoiceId = parseInt(req.params.id);
       const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;

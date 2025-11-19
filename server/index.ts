@@ -25,6 +25,7 @@ import { migrateImportedTransactionsAccountId } from "./migrate-imported-transac
 import { migrateBankMultiMatch } from "./migrate-bank-multi-match";
 import { addMultiCurrencySupport } from "./migrations/add-multi-currency";
 import { fetchYesterdayRates } from "./startup-exchange-rates";
+import { migrateInvoiceActivities } from "./migrations/add-invoice-activities";
 
 const app = express();
 app.use(express.json());
@@ -129,6 +130,9 @@ app.use((req, res, next) => {
     
     // Add multi-match support for bank feeds
     await migrateBankMultiMatch();
+    
+    // Add invoice activities and secure token support
+    await migrateInvoiceActivities();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }

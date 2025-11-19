@@ -54,21 +54,14 @@ export default function InvoicePublicView() {
     enabled: !!token
   });
 
-  // Track "viewed" activity
+  // Track "viewed" activity using secure public endpoint
   const trackViewMutation = useMutation({
-    mutationFn: async (invoiceId: number) => {
-      const response = await fetch(`/api/invoices/${invoiceId}/activity`, {
+    mutationFn: async (publicToken: string) => {
+      const response = await fetch(`/api/invoices/public/${publicToken}/track-view`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          activityType: 'viewed',
-          metadata: {
-            source: 'public_link',
-            timestamp: new Date().toISOString()
-          }
-        })
+        }
       });
       if (!response.ok) {
         throw new Error('Failed to track view');
@@ -79,11 +72,11 @@ export default function InvoicePublicView() {
 
   // Track view when invoice data is loaded (only once)
   useEffect(() => {
-    if (invoiceData?.transaction && !viewTracked) {
-      trackViewMutation.mutate(invoiceData.transaction.id);
+    if (invoiceData?.transaction && !viewTracked && token) {
+      trackViewMutation.mutate(token);
       setViewTracked(true);
     }
-  }, [invoiceData, viewTracked, trackViewMutation]);
+  }, [invoiceData, viewTracked, token, trackViewMutation]);
 
   const invoice = invoiceData?.transaction;
   const lineItems = invoiceData?.lineItems || [];

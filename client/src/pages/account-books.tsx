@@ -159,7 +159,7 @@ export default function AccountBooks() {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         return (
-          account.code.toLowerCase().includes(query) ||
+          (account.code || '').toLowerCase().includes(query) ||
           account.name.toLowerCase().includes(query) ||
           (account.currency && account.currency.toLowerCase().includes(query)) ||
           (account.salesTaxType && account.salesTaxType.toLowerCase().includes(query))
@@ -168,7 +168,7 @@ export default function AccountBooks() {
       
       return true;
     })
-    .sort((a, b) => a.code.localeCompare(b.code)); // Sort by account code
+    .sort((a, b) => (a.code || '').localeCompare(b.code || '')); // Sort by account code
   
   // Toggle account expansion
   const toggleAccount = (accountId: number) => {
@@ -516,7 +516,7 @@ export default function AccountBooks() {
                                 const accountA = accountBooks.find(acc => acc.id === a.accountId);
                                 const accountB = accountBooks.find(acc => acc.id === b.accountId);
                                 if (!accountA || !accountB) return 0;
-                                return accountA.code.localeCompare(accountB.code);
+                                return (accountA.code || '').localeCompare(accountB.code || '');
                               });
                             
                             // Skip if entriesForTransaction is undefined
