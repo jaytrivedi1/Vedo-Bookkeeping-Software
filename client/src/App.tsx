@@ -40,6 +40,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import ManageUsers from "@/pages/manage-users";
 import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
+import InvoicePublicView from "@/pages/invoice-public-view";
 import MainLayout from "@/components/layout/MainLayout";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -112,7 +113,7 @@ function Router() {
     );
   }
 
-  const isPublicRoute = location === '/login' || location.startsWith('/accept-invitation/');
+  const isPublicRoute = location === '/login' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
   
   if (!user && !isPublicRoute) {
     return <Redirect to="/login" />;
@@ -126,6 +127,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/accept-invitation/:token" component={AcceptInvitation} />
+      <Route path="/invoice/public/:token" component={InvoicePublicView} />
       <Route>
         {() => (
           <MainLayout>

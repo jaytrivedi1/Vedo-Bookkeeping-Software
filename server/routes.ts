@@ -828,6 +828,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Invoice routes
+  // Get public invoice by secure token (no auth required)
+  apiRouter.get("/invoices/public/:token", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      const invoice = await storage.getInvoiceByToken(token);
+      
+      if (!invoice) {
+        return res.status(404).json({ message: "Invoice not found or link has expired" });
+      }
+      
+      // Get related data
+      const lineItems = await storage.getLineItemsByTransaction(invoice.id);
+      const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
+      const company = await storage.getDefaultCompany();
+      
+      // Get sales taxes for line items
+      const salesTaxIds = lineItems.map(item => item.salesTaxId).filter(id => id != null);
+      const salesTaxes = salesTaxIds.length > 0 
+        ? await Promise.all(salesTaxIds.map(id => storage.getSalesTax(id!)))
+        : [];
+      
+      res.json({
+        transaction: invoice,
+        lineItems,
+        customer,
+        company,
+        salesTaxes: salesTaxes.filter(tax => tax != null)
+      });
+    } catch (error) {
+      console.error("Error fetching public invoice:", error);
+      res.status(500).json({ message: "Failed to fetch invoice" });
+    }
+  });
+
+  // Get invoice activities
+  apiRouter.get("/invoices/:id/activities", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+      const activities = await storage.getInvoiceActivities(invoiceId);
+      res.json(activities);
+    } catch (error) {
+      console.error("Error fetching invoice activities:", error);
+      res.status(500).json({ message: "Failed to fetch invoice activities" });
+    }
+  });
+
+  // Create invoice activity
+  apiRouter.post("/invoices/:id/activity", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+      const { activityType, metadata } = req.body;
+      
+      // Validate activity type
+      const validTypes = ['created', 'sent', 'viewed', 'paid', 'edited', 'overdue', 'reminder_sent', 'cancelled'];
+      if (!validTypes.includes(activityType)) {
+        return res.status(400).json({ message: "Invalid activity type" });
+      }
+      
+      const activity = await storage.createInvoiceActivity({
+        invoiceId,
+        activityType,
+        userId: req.user?.id || null, // null if activity from client (public view)
+        metadata: metadata || {},
+        timestamp: new Date()
+      });
+      
+      res.json(activity);
+    } catch (error) {
+      console.error("Error creating invoice activity:", error);
+      res.status(500).json({ message: "Failed to create activity" });
+    }
+  });
+
+  // Generate or retrieve secure token for invoice
+  apiRouter.post("/invoices/:id/generate-token", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+      const invoice = await storage.getTransaction(invoiceId);
+      
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // If invoice already has a token, return it; otherwise generate new one
+      let token = invoice.secureToken;
+      if (!token) {
+        token = await storage.generateSecureToken(invoiceId);
+      }
+      
+      res.json({ token });
+    } catch (error) {
+      console.error("Error generating invoice token:", error);
+      res.status(500).json({ message: "Failed to generate token" });
+    }
+  });
+
   // Update an existing invoice
   apiRouter.patch("/invoices/:id", async (req: Request, res: Response) => {
     try {
