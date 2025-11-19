@@ -338,8 +338,22 @@ export class DatabaseStorage implements IStorage {
     
     // Use a transaction to ensure all operations succeed or fail together
     const [newTransaction] = await db.transaction(async (tx) => {
+      // Prepare transaction object with currency fields
+      const transactionData: any = {
+        ...transaction
+      };
+      
+      // CRITICAL: Explicitly add currency metadata for foreign currency transactions
+      // This ensures the currency fields are not filtered out during database insert
+      if (isForeignCurrency) {
+        transactionData.currency = transactionCurrency;
+        transactionData.exchangeRate = exchangeRate.toString(); // Convert to string for decimal column
+        transactionData.foreignAmount = (transaction as any).foreignAmount ? 
+          (transaction as any).foreignAmount.toString() : null;
+      }
+      
       // Insert transaction
-      const [newTx] = await tx.insert(transactions).values(transaction).returning();
+      const [newTx] = await tx.insert(transactions).values(transactionData).returning();
       
       console.log(`[createTransaction] Created transaction #${newTx.id} (${newTx.reference})`);
       
