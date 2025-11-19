@@ -11835,13 +11835,29 @@ Respond in JSON format:
         invitationData.firmId = req.user.firmId;
         invitationData.companyId = null;
       }
-      // If inviting a company user (admin, staff, read_only), assign to company
+      // If inviting a company user (admin, staff, read_only)
       else {
-        if (!req.user?.companyId) {
+        // Company admins can invite users to their own company
+        if (req.user?.companyId) {
+          invitationData.companyId = req.user.companyId;
+          invitationData.firmId = null;
+        }
+        // Accountants can invite users to client companies
+        else if (req.user?.firmId && invitationData.companyId) {
+          // Verify the accountant has access to this client company
+          const clientAccess = await storage.getFirmClientAccess(req.user.firmId);
+          const hasAccess = clientAccess.some(
+            access => access.companyId === invitationData.companyId && access.isActive
+          );
+          if (!hasAccess) {
+            return res.status(403).json({ error: "No access to this client company" });
+          }
+          // Keep the provided companyId, clear firmId
+          invitationData.firmId = null;
+        }
+        else {
           return res.status(400).json({ error: "Company association required to invite company users" });
         }
-        invitationData.companyId = req.user.companyId;
-        invitationData.firmId = null;
       }
       
       // Validate request body
