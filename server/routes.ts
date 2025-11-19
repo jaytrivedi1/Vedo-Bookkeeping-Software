@@ -1501,25 +1501,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subTotal = roundTo2Decimals(invoiceData.subTotal || totalAmount);
       const taxAmount = roundTo2Decimals(invoiceData.taxAmount || 0);
       
+      // Get home currency from preferences
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'CAD';
+      
+      // Check if this is a foreign currency transaction
+      const isForeignCurrency = invoiceData.currency && invoiceData.currency !== homeCurrency;
+      const exchangeRate = invoiceData.exchangeRate ? parseFloat(invoiceData.exchangeRate.toString()) : 1;
+      
+      // For foreign currency: amounts in transaction header are in HOME currency (CAD)
+      // foreignAmount stores the original foreign currency amount
+      let transactionAmountCAD = totalAmount;
+      let subTotalCAD = subTotal;
+      let taxAmountCAD = taxAmount;
+      
+      if (isForeignCurrency && invoiceData.foreignAmount && exchangeRate > 0) {
+        // Convert foreign amount to CAD
+        const foreignTotal = parseFloat(invoiceData.foreignAmount.toString());
+        transactionAmountCAD = roundTo2Decimals(foreignTotal * exchangeRate);
+        
+        // Proportionally calculate subTotal and tax in CAD
+        const foreignSubTotal = invoiceData.subTotal || foreignTotal;
+        const foreignTaxAmount = invoiceData.taxAmount || 0;
+        
+        subTotalCAD = roundTo2Decimals(foreignSubTotal * exchangeRate);
+        taxAmountCAD = roundTo2Decimals(foreignTaxAmount * exchangeRate);
+        
+        console.log(`Foreign currency invoice: ${foreignTotal} ${invoiceData.currency} × ${exchangeRate} = ${transactionAmountCAD} CAD`);
+      }
+      
       // Create transaction
-      const transaction = {
+      const transaction: any = {
         reference: invoiceData.reference,
         type: 'invoice' as const,
         date: invoiceData.date,
         description: invoiceData.description,
-        amount: totalAmount,
-        subTotal: subTotal,
-        taxAmount: taxAmount,
-        balance: totalAmount, // Set the initial balance to match the total amount (already rounded)
+        amount: transactionAmountCAD,  // Always in CAD (home currency)
+        subTotal: subTotalCAD,          // Always in CAD
+        taxAmount: taxAmountCAD,        // Always in CAD
+        balance: transactionAmountCAD,  // Always in CAD
         contactId: invoiceData.contactId,
         status: invoiceData.status,
         dueDate: invoiceData.dueDate,
         paymentTerms: invoiceData.paymentTerms
       };
       
+      // Add multi-currency fields if applicable
+      if (isForeignCurrency) {
+        transaction.currency = invoiceData.currency;
+        transaction.exchangeRate = exchangeRate.toString();
+        transaction.foreignAmount = invoiceData.foreignAmount;
+      }
+      
       console.log('Transaction object to be saved:', JSON.stringify({
         dueDate: transaction.dueDate,
-        paymentTerms: transaction.paymentTerms
+        paymentTerms: transaction.paymentTerms,
+        currency: transaction.currency,
+        exchangeRate: transaction.exchangeRate,
+        foreignAmount: transaction.foreignAmount,
+        amount: transaction.amount
       }));
       
       // Create line items with proper handling of salesTaxId and productId
@@ -1548,8 +1588,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Create ledger entries - Double Entry Accounting
-      // Debit Accounts Receivable, Credit Revenue and Sales Tax Payable accounts
-      const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
+      // For foreign currency invoices, use currency-specific AR account
+      let receivableAccount;
+      if (isForeignCurrency) {
+        // Use findARAccountForCurrency to get currency-specific AR account
+        receivableAccount = await (storage as any).findARAccountForCurrency(invoiceData.currency);
+        
+        // If not found, create it
+        if (!receivableAccount) {
+          await (storage as any).ensureCurrencyARAccount(invoiceData.currency);
+          receivableAccount = await (storage as any).findARAccountForCurrency(invoiceData.currency);
+        }
+        
+        console.log(`Using currency-specific AR account for ${invoiceData.currency}:`, receivableAccount?.name);
+      } else {
+        // Use generic Accounts Receivable for home currency
+        receivableAccount = await storage.getAccountByCode('1100');
+      }
+      
       const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
       
       // Get the default sales tax payable account
@@ -1559,30 +1615,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
       
-      // Create base ledger entries (will add tax entries after)
+      // Create base ledger entries (always in CAD, with foreign currency metadata)
+      const baseLedgerEntry: any = {
+        date: transaction.date,
+        transactionId: 0 // Will be set by createTransaction
+      };
+      
+      // Add foreign currency metadata if applicable
+      if (isForeignCurrency) {
+        baseLedgerEntry.currency = invoiceData.currency;
+        baseLedgerEntry.exchangeRate = exchangeRate.toString();
+      }
+      
       const ledgerEntries = [
         {
+          ...baseLedgerEntry,
           accountId: receivableAccount.id,
           description: `Invoice ${transaction.reference}`,
-          debit: totalAmount,  // Total invoice amount including tax
+          debit: transactionAmountCAD,  // ALWAYS in CAD (converted if foreign currency)
           credit: 0,
-          date: transaction.date,
-          transactionId: 0 // Will be set by createTransaction
+          foreignAmount: isForeignCurrency ? invoiceData.foreignAmount : null
         },
         {
+          ...baseLedgerEntry,
           accountId: revenueAccount.id,
           description: `Invoice ${transaction.reference} - Revenue`,
           debit: 0,
-          credit: subTotal,  // Revenue amount (subtotal)
-          date: transaction.date,
-          transactionId: 0 // Will be set by createTransaction
+          credit: subTotalCAD,  // ALWAYS in CAD (converted if foreign currency)
+          foreignAmount: isForeignCurrency ? (invoiceData.subTotal || 0) : null
         }
       ];
       
       // Handle tax allocation - use provided taxAmount from frontend (respects manual overrides)
       // but distribute it proportionally across correct tax liability accounts
-      if (taxAmount > 0) {
-        console.log(`Using provided tax amount from frontend: ${taxAmount}`);
+      if (taxAmountCAD > 0) {
+        console.log(`Using provided tax amount from frontend: ${taxAmountCAD} CAD`);
         
         // Calculate what the tax components WOULD be to get proportions
         const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
@@ -1649,10 +1716,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
-        // Now distribute the manual taxAmount proportionally across the accounts
+        // Now distribute the manual taxAmount (in CAD) proportionally across the accounts
         if (taxComponents.size > 0 && totalCalculatedTax > 0) {
           // Distribute the manual tax amount proportionally
-          let remainingTax = taxAmount;
+          let remainingTax = taxAmountCAD;
           const componentArray = Array.from(taxComponents.values());
           
           componentArray.forEach((component, index) => {
@@ -1663,29 +1730,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               proportionalAmount = remainingTax;
             } else {
               // Calculate proportional amount based on original calculation
-              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmount);
+              proportionalAmount = roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * taxAmountCAD);
               remainingTax = roundTo2Decimals(remainingTax - proportionalAmount);
             }
             
-            ledgerEntries.push({
+            const taxLedgerEntry: any = {
+              ...baseLedgerEntry,
               accountId: component.accountId,
               description: `Invoice ${transaction.reference} - Sales Tax`,
               debit: 0,
-              credit: proportionalAmount,
-              date: transaction.date,
-              transactionId: 0
-            });
+              credit: proportionalAmount,  // ALWAYS in CAD
+              foreignAmount: isForeignCurrency ? roundTo2Decimals((component.calculatedAmount / totalCalculatedTax) * (invoiceData.taxAmount || 0)) : null
+            };
+            
+            ledgerEntries.push(taxLedgerEntry);
           });
         } else {
           // Fallback: no tax components found, use default account
-          ledgerEntries.push({
+          const fallbackTaxEntry: any = {
+            ...baseLedgerEntry,
             accountId: taxPayableAccount.id,
             description: `Invoice ${transaction.reference} - Sales Tax`,
             debit: 0,
-            credit: taxAmount,
-            date: transaction.date,
-            transactionId: 0
-          });
+            credit: taxAmountCAD,  // ALWAYS in CAD
+            foreignAmount: isForeignCurrency ? (invoiceData.taxAmount || 0) : null
+          };
+          
+          ledgerEntries.push(fallbackTaxEntry);
         }
       }
       
