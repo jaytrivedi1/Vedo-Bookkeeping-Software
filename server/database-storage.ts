@@ -309,12 +309,60 @@ export class DatabaseStorage implements IStorage {
     
     console.log(`[createTransaction] Transaction type: ${transaction.type}, Currency: ${transactionCurrency || homeCurrency}, isForeignCurrency: ${isForeignCurrency}, exchangeRate: ${exchangeRate}`);
     
-    // If this is a foreign currency transaction, convert ledger entry amounts to CAD
+    // CRITICAL: For foreign currency transactions, swap generic AR/AP accounts to currency-specific ones
     let processedLedgerEntries = ledgerEntriesData;
+    if (isForeignCurrency) {
+      // Get all accounts to find the generic AR/AP accounts and currency-specific ones
+      const allAccounts = await this.getAccounts();
+      
+      // Find generic AR and AP accounts (no currency in name, base types)
+      const genericAR = allAccounts.find(a => 
+        a.type === 'accounts_receivable' && 
+        a.name === 'Accounts Receivable'
+      );
+      const genericAP = allAccounts.find(a => 
+        a.type === 'accounts_payable' && 
+        a.name === 'Accounts Payable'
+      );
+      
+      // Find currency-specific AR and AP accounts for this transaction's currency
+      const currencyAR = allAccounts.find(a => 
+        a.type === 'accounts_receivable' && 
+        a.name === `Accounts Receivable - ${transactionCurrency}`
+      );
+      const currencyAP = allAccounts.find(a => 
+        a.type === 'accounts_payable' && 
+        a.name === `Accounts Payable - ${transactionCurrency}`
+      );
+      
+      // Remap ledger entries from generic to currency-specific accounts
+      processedLedgerEntries = ledgerEntriesData.map(entry => {
+        let newAccountId = entry.accountId;
+        
+        // Swap generic AR to currency-specific AR
+        if (genericAR && entry.accountId === genericAR.id && currencyAR) {
+          console.log(`[createTransaction] Swapping account: ${genericAR.name} -> ${currencyAR.name}`);
+          newAccountId = currencyAR.id;
+        }
+        
+        // Swap generic AP to currency-specific AP
+        if (genericAP && entry.accountId === genericAP.id && currencyAP) {
+          console.log(`[createTransaction] Swapping account: ${genericAP.name} -> ${currencyAP.name}`);
+          newAccountId = currencyAP.id;
+        }
+        
+        return {
+          ...entry,
+          accountId: newAccountId
+        };
+      });
+    }
+    
+    // Convert foreign currency amounts to CAD
     if (isForeignCurrency && exchangeRate > 0) {
       console.log(`[createTransaction] Converting foreign currency ledger entries to ${homeCurrency}`);
       
-      processedLedgerEntries = ledgerEntriesData.map(entry => {
+      processedLedgerEntries = processedLedgerEntries.map(entry => {
         const foreignDebit = entry.debit || 0;
         const foreignCredit = entry.credit || 0;
         
