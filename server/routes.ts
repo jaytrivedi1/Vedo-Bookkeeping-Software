@@ -924,6 +924,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send invoice via email
+  apiRouter.post("/invoices/:id/send-email", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+      const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;
+      
+      if (!recipientEmail) {
+        return res.status(400).json({ message: "Recipient email is required" });
+      }
+      
+      // Get invoice data
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+      
+      // Get related data
+      const lineItems = await storage.getLineItemsByTransaction(invoiceId);
+      const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
+      const company = await storage.getDefaultCompany();
+      
+      // Generate or get secure token
+      let token = invoice.secureToken;
+      if (!token) {
+        token = await storage.generateSecureToken(invoiceId);
+      }
+      
+      // Generate public invoice link
+      const baseUrl = process.env.REPL_SLUG 
+        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : `http://localhost:${process.env.PORT || 5000}`;
+      const invoiceLink = `${baseUrl}/invoice/public/${token}`;
+      
+      // Generate PDF if attachment requested
+      let pdfAttachment = null;
+      if (includeAttachment) {
+        const { generateInvoicePDF } = await import('./invoice-pdf-generator');
+        const pdfBuffer = await generateInvoicePDF({
+          transaction: invoice,
+          lineItems,
+          customer,
+          company
+        });
+        
+        pdfAttachment = {
+          filename: `invoice-${invoice.reference || invoice.id}.pdf`,
+          content: pdfBuffer
+        };
+      }
+      
+      // Send email via Resend
+      const { getUncachableResendClient } = await import('./resend-client');
+      const { client, fromEmail } = await getUncachableResendClient();
+      
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+            .invoice-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .button { display: inline-block; background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">Invoice from ${company.name}</h1>
+            </div>
+            <div class="content">
+              <p>Dear ${recipientName || (customer?.name) || 'Valued Customer'},</p>
+              
+              ${message ? `<p>${message}</p>` : '<p>Please find your invoice details below.</p>'}
+              
+              <div class="invoice-details">
+                <h3 style="margin-top: 0; color: #1f2937;">Invoice Details</h3>
+                <p><strong>Invoice Number:</strong> ${invoice.reference || 'N/A'}</p>
+                <p><strong>Invoice Date:</strong> ${format(new Date(invoice.date), 'MMMM dd, yyyy')}</p>
+                ${invoice.dueDate ? `<p><strong>Due Date:</strong> ${format(new Date(invoice.dueDate), 'MMMM dd, yyyy')}</p>` : ''}
+                <p><strong>Amount Due:</strong> $${(invoice.balance || invoice.amount || 0).toFixed(2)}</p>
+              </div>
+              
+              <div style="text-align: center;">
+                <a href="${invoiceLink}" class="button">View Invoice Online</a>
+              </div>
+              
+              <p style="font-size: 14px; color: #6b7280;">
+                You can view and download your invoice by clicking the button above. 
+                ${includeAttachment ? 'The invoice is also attached to this email as a PDF.' : ''}
+              </p>
+              
+              ${invoice.paymentTerms ? `<p style="font-size: 14px;"><strong>Payment Terms:</strong> ${invoice.paymentTerms}</p>` : ''}
+              
+              <div class="footer">
+                <p>Thank you for your business!</p>
+                <p>${company.name}<br>
+                ${company.email ? `${company.email}<br>` : ''}
+                ${company.phone ? `${company.phone}` : ''}</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const emailData: any = {
+        from: fromEmail,
+        to: recipientEmail,
+        subject: `Invoice ${invoice.reference || invoice.id} from ${company.name}`,
+        html: emailHtml
+      };
+      
+      if (pdfAttachment) {
+        emailData.attachments = [pdfAttachment];
+      }
+      
+      await client.emails.send(emailData);
+      
+      // Log activity
+      await storage.createInvoiceActivity({
+        invoiceId,
+        activityType: 'sent',
+        userId: req.user?.id || null,
+        metadata: {
+          recipientEmail,
+          recipientName,
+          sentAt: new Date().toISOString()
+        },
+        timestamp: new Date()
+      });
+      
+      // Track with activity logger
+      await logActivity({
+        userId: req.user?.id,
+        action: 'invoice_sent',
+        entityType: 'invoice',
+        entityId: invoiceId,
+        details: `Sent invoice ${invoice.reference} to ${recipientEmail}`
+      });
+      
+      res.json({ 
+        message: "Invoice sent successfully",
+        invoiceLink
+      });
+    } catch (error) {
+      console.error("Error sending invoice email:", error);
+      res.status(500).json({ 
+        message: "Failed to send invoice email",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Update an existing invoice
   apiRouter.patch("/invoices/:id", async (req: Request, res: Response) => {
     try {
