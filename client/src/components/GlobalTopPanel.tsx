@@ -28,9 +28,10 @@ import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
 import type { Transaction, Contact, Account } from "@shared/schema";
 
 interface SearchResults {
-  transactions: Transaction[];
+  transactions: (Transaction & { contactName?: string })[];
   contacts: Contact[];
   accounts: Account[];
+  products: any[];
 }
 
 export function GlobalTopPanel() {
@@ -108,7 +109,8 @@ export function GlobalTopPanel() {
   const hasResults = searchResults && (
     searchResults.transactions.length > 0 ||
     searchResults.contacts.length > 0 ||
-    searchResults.accounts.length > 0
+    searchResults.accounts.length > 0 ||
+    searchResults.products.length > 0
   );
 
   return (
@@ -121,7 +123,7 @@ export function GlobalTopPanel() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder="Search transactions, contacts, accounts..."
+                  placeholder="Search by name, amount, ref #, memo..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={() => setShowResults(true)}
@@ -172,13 +174,18 @@ export function GlobalTopPanel() {
                               className="w-full px-3 py-2 text-left hover:bg-gray-100 rounded flex items-center justify-between"
                               data-testid={`search-result-transaction-${transaction.id}`}
                             >
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{transaction.reference}</span>
+                              <div className="flex flex-col flex-1">
+                                <span className="text-sm font-medium">{transaction.reference || 'No Ref'}</span>
                                 <span className="text-xs text-gray-500">
-                                  {transaction.type} • {transaction.description}
+                                  {transaction.type.replace('_', ' ')}
+                                  {transaction.contactName && ` • ${transaction.contactName}`}
+                                  {transaction.description && ` • ${transaction.description}`}
                                 </span>
+                                {transaction.memo && (
+                                  <span className="text-xs text-gray-400 italic mt-0.5">{transaction.memo}</span>
+                                )}
                               </div>
-                              <span className="text-sm font-medium">${transaction.amount.toFixed(2)}</span>
+                              <span className="text-sm font-medium whitespace-nowrap ml-2">${transaction.amount.toFixed(2)}</span>
                             </button>
                           ))}
                         </div>
@@ -223,6 +230,31 @@ export function GlobalTopPanel() {
                                 <span className="text-sm font-medium">{account.name}</span>
                                 <span className="text-xs text-gray-500">
                                   {account.code} • {account.type}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {searchResults.products && searchResults.products.length > 0 && (
+                        <div className="mt-2">
+                          <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase">
+                            Products ({searchResults.products.length})
+                          </div>
+                          {searchResults.products.map((product) => (
+                            <button
+                              key={product.id}
+                              onClick={() => handleNavigate(`/products`)}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-100 rounded"
+                              data-testid={`search-result-product-${product.id}`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="text-sm font-medium">{product.name}</span>
+                                <span className="text-xs text-gray-500">
+                                  {product.sku && `${product.sku} • `}
+                                  ${product.price?.toFixed(2) || '0.00'}
+                                  {product.description && ` • ${product.description.substring(0, 50)}`}
                                 </span>
                               </div>
                             </button>

@@ -1297,30 +1297,52 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchAll(query: string): Promise<{
-    transactions: Transaction[];
+    transactions: any[];
     contacts: Contact[];
     accounts: Account[];
+    products: any[];
   }> {
     try {
       const searchTerm = `%${query}%`;
+      const numericQuery = parseFloat(query);
+      const isNumeric = !isNaN(numericQuery);
       
-      const [transactionsResult, contactsResult, accountsResult] = await Promise.all([
-        db
-          .select()
-          .from(transactions)
-          .where(
-            and(
-              or(
-                ilike(transactions.reference, searchTerm),
-                ilike(transactions.description, searchTerm),
-                ilike(transactions.memo, searchTerm)
-              ),
-              ne(transactions.type, 'customer_credit' as any),
-              ne(transactions.type, 'vendor_credit' as any)
-            )
+      // Search transactions with contact names joined
+      const transactionsWithContactsQuery = db
+        .select({
+          id: transactions.id,
+          reference: transactions.reference,
+          type: transactions.type,
+          date: transactions.date,
+          description: transactions.description,
+          amount: transactions.amount,
+          balance: transactions.balance,
+          contactId: transactions.contactId,
+          status: transactions.status,
+          memo: transactions.memo,
+          contactName: contacts.name,
+        })
+        .from(transactions)
+        .leftJoin(contacts, eq(transactions.contactId, contacts.id))
+        .where(
+          and(
+            or(
+              ilike(transactions.reference, searchTerm),
+              ilike(transactions.description, searchTerm),
+              ilike(transactions.memo, searchTerm),
+              ilike(contacts.name, searchTerm),
+              // Search by amount (exact or partial)
+              isNumeric ? sql`CAST(${transactions.amount} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
+            ),
+            ne(transactions.type, 'customer_credit' as any),
+            ne(transactions.type, 'vendor_credit' as any)
           )
-          .orderBy(desc(transactions.date))
-          .limit(20),
+        )
+        .orderBy(desc(transactions.date))
+        .limit(25);
+
+      const [transactionsResult, contactsResult, accountsResult, productsResult] = await Promise.all([
+        transactionsWithContactsQuery,
         
         db
           .select()
@@ -1329,11 +1351,13 @@ export class DatabaseStorage implements IStorage {
             or(
               ilike(contacts.name, searchTerm),
               ilike(contacts.email, searchTerm),
-              ilike(contacts.phone, searchTerm)
+              ilike(contacts.phone, searchTerm),
+              ilike(contacts.address, searchTerm),
+              ilike(contacts.contactName, searchTerm)
             )
           )
           .orderBy(contacts.name)
-          .limit(10),
+          .limit(15),
         
         db
           .select()
@@ -1341,25 +1365,42 @@ export class DatabaseStorage implements IStorage {
           .where(
             or(
               ilike(accounts.name, searchTerm),
-              ilike(accounts.code, searchTerm),
-              ilike(accounts.description, searchTerm)
+              ilike(accounts.code, searchTerm)
             )
           )
           .orderBy(accounts.code)
+          .limit(10),
+        
+        // Search products
+        db
+          .select()
+          .from(productsSchema)
+          .where(
+            or(
+              ilike(productsSchema.name, searchTerm),
+              ilike(productsSchema.sku, searchTerm),
+              ilike(productsSchema.description, searchTerm),
+              // Search by price
+              isNumeric ? sql`CAST(${productsSchema.price} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
+            )
+          )
+          .orderBy(productsSchema.name)
           .limit(10)
       ]);
       
       return {
         transactions: transactionsResult,
         contacts: contactsResult,
-        accounts: accountsResult
+        accounts: accountsResult,
+        products: productsResult
       };
     } catch (error) {
       console.error(`Error performing global search:`, error);
       return {
         transactions: [],
         contacts: [],
-        accounts: []
+        accounts: [],
+        products: []
       };
     }
   }
