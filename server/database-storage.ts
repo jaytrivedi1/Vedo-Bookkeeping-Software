@@ -5,19 +5,19 @@ import {
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
-  AccountingFirm, FirmClientAccess, UserInvitation,
+  AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
-  InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation,
+  InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
-  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema
+  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -3098,5 +3098,47 @@ export class DatabaseStorage implements IStorage {
     const result = await db.delete(userInvitationsSchema)
       .where(eq(userInvitationsSchema.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Invoice Activities
+  async getInvoiceActivities(invoiceId: number): Promise<InvoiceActivity[]> {
+    return await db.select()
+      .from(invoiceActivitiesSchema)
+      .where(eq(invoiceActivitiesSchema.invoiceId, invoiceId))
+      .orderBy(desc(invoiceActivitiesSchema.timestamp));
+  }
+
+  async createInvoiceActivity(activity: InsertInvoiceActivity): Promise<InvoiceActivity> {
+    const [newActivity] = await db.insert(invoiceActivitiesSchema)
+      .values(activity)
+      .returning();
+    return newActivity;
+  }
+
+  // Generate secure token for public invoice access
+  async generateSecureToken(invoiceId: number): Promise<string> {
+    // Generate a cryptographically secure random token
+    const token = randomBytes(32).toString('hex');
+    
+    // Update the invoice with the secure token
+    await db.update(transactions)
+      .set({ secureToken: token })
+      .where(eq(transactions.id, invoiceId));
+    
+    return token;
+  }
+
+  // Get invoice by secure token (for public view)
+  async getInvoiceByToken(token: string): Promise<Transaction | undefined> {
+    const [invoice] = await db.select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.secureToken, token),
+          eq(transactions.type, 'invoice' as any)
+        )
+      )
+      .limit(1);
+    return invoice;
   }
 }
