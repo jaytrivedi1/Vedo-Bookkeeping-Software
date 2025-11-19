@@ -5,16 +5,19 @@ import {
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
+  AccountingFirm, FirmClientAccess, UserInvitation,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
+  InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
-  currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema
+  currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
+  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -1997,18 +2000,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Management Methods
-  async getUsers(): Promise<User[]> {
-    return await db.select({
-      id: usersSchema.id,
-      username: usersSchema.username,
-      email: usersSchema.email,
-      fullName: usersSchema.fullName,
-      role: usersSchema.role,
-      isActive: usersSchema.isActive,
-      lastLogin: usersSchema.lastLogin,
-      createdAt: usersSchema.createdAt,
-      updatedAt: usersSchema.updatedAt
-    }).from(usersSchema);
+  async getUsers(filters?: { companyId?: number; firmId?: number; includeInactive?: boolean }): Promise<User[]> {
+    let query = db.select().from(usersSchema);
+
+    const conditions = [];
+    if (filters?.companyId) {
+      conditions.push(eq(usersSchema.companyId, filters.companyId));
+    }
+    if (filters?.firmId) {
+      conditions.push(eq(usersSchema.firmId, filters.firmId));
+    }
+    if (!filters?.includeInactive) {
+      conditions.push(eq(usersSchema.isActive, true));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    return await query;
   }
 
   async getUser(id: number): Promise<User | undefined> {
@@ -2894,5 +2904,158 @@ export class DatabaseStorage implements IStorage {
       .values(activityLog)
       .returning();
     return newLog;
+  }
+
+  // Accounting Firms
+  async getAccountingFirms(): Promise<AccountingFirm[]> {
+    return await db.select()
+      .from(accountingFirmsSchema)
+      .where(eq(accountingFirmsSchema.isActive, true))
+      .orderBy(accountingFirmsSchema.name);
+  }
+
+  async getAccountingFirm(id: number): Promise<AccountingFirm | undefined> {
+    const [firm] = await db.select()
+      .from(accountingFirmsSchema)
+      .where(eq(accountingFirmsSchema.id, id))
+      .limit(1);
+    return firm;
+  }
+
+  async createAccountingFirm(firm: InsertAccountingFirm): Promise<AccountingFirm> {
+    const [newFirm] = await db.insert(accountingFirmsSchema)
+      .values(firm)
+      .returning();
+    return newFirm;
+  }
+
+  async updateAccountingFirm(id: number, firm: Partial<AccountingFirm>): Promise<AccountingFirm | undefined> {
+    const [updatedFirm] = await db.update(accountingFirmsSchema)
+      .set({ ...firm, updatedAt: new Date() })
+      .where(eq(accountingFirmsSchema.id, id))
+      .returning();
+    return updatedFirm;
+  }
+
+  async deleteAccountingFirm(id: number): Promise<boolean> {
+    const result = await db.delete(accountingFirmsSchema)
+      .where(eq(accountingFirmsSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Firm Client Access
+  async getFirmClientAccess(firmId: number): Promise<FirmClientAccess[]> {
+    return await db.select()
+      .from(firmClientAccessSchema)
+      .where(
+        and(
+          eq(firmClientAccessSchema.firmId, firmId),
+          eq(firmClientAccessSchema.isActive, true)
+        )
+      )
+      .orderBy(firmClientAccessSchema.createdAt);
+  }
+
+  async getClientFirms(companyId: number): Promise<FirmClientAccess[]> {
+    return await db.select()
+      .from(firmClientAccessSchema)
+      .where(
+        and(
+          eq(firmClientAccessSchema.companyId, companyId),
+          eq(firmClientAccessSchema.isActive, true)
+        )
+      )
+      .orderBy(firmClientAccessSchema.createdAt);
+  }
+
+  async createFirmClientAccess(access: InsertFirmClientAccess): Promise<FirmClientAccess> {
+    const [newAccess] = await db.insert(firmClientAccessSchema)
+      .values(access)
+      .returning();
+    return newAccess;
+  }
+
+  async revokeFirmClientAccess(id: number): Promise<boolean> {
+    const [updated] = await db.update(firmClientAccessSchema)
+      .set({ isActive: false })
+      .where(eq(firmClientAccessSchema.id, id))
+      .returning();
+    return !!updated;
+  }
+
+  // User Invitations
+  async getUserInvitations(filters?: { companyId?: number; firmId?: number; pending?: boolean }): Promise<UserInvitation[]> {
+    let query = db.select().from(userInvitationsSchema);
+
+    const conditions = [];
+    if (filters?.companyId) {
+      conditions.push(eq(userInvitationsSchema.companyId, filters.companyId));
+    }
+    if (filters?.firmId) {
+      conditions.push(eq(userInvitationsSchema.firmId, filters.firmId));
+    }
+    if (filters?.pending) {
+      conditions.push(isNull(userInvitationsSchema.acceptedAt));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    query = query.orderBy(desc(userInvitationsSchema.createdAt)) as any;
+
+    return await query;
+  }
+
+  async getUserInvitation(id: number): Promise<UserInvitation | undefined> {
+    const [invitation] = await db.select()
+      .from(userInvitationsSchema)
+      .where(eq(userInvitationsSchema.id, id))
+      .limit(1);
+    return invitation;
+  }
+
+  async getUserInvitationByToken(token: string): Promise<UserInvitation | undefined> {
+    const [invitation] = await db.select()
+      .from(userInvitationsSchema)
+      .where(eq(userInvitationsSchema.token, token))
+      .limit(1);
+    return invitation;
+  }
+
+  async createUserInvitation(invitation: InsertUserInvitation): Promise<UserInvitation> {
+    const [newInvitation] = await db.insert(userInvitationsSchema)
+      .values(invitation)
+      .returning();
+    return newInvitation;
+  }
+
+  async acceptUserInvitation(token: string): Promise<UserInvitation | undefined> {
+    const invitation = await this.getUserInvitationByToken(token);
+    
+    if (!invitation) {
+      return undefined;
+    }
+
+    if (new Date() > new Date(invitation.expiresAt)) {
+      return undefined;
+    }
+
+    if (invitation.acceptedAt) {
+      return undefined;
+    }
+
+    const [acceptedInvitation] = await db.update(userInvitationsSchema)
+      .set({ acceptedAt: new Date() })
+      .where(eq(userInvitationsSchema.token, token))
+      .returning();
+
+    return acceptedInvitation;
+  }
+
+  async deleteUserInvitation(id: number): Promise<boolean> {
+    const result = await db.delete(userInvitationsSchema)
+      .where(eq(userInvitationsSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }

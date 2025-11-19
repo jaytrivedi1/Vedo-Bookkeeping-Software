@@ -37,6 +37,8 @@ import TransferView from "@/pages/transfer-view";
 import FxRevaluation from "@/pages/fx-revaluation";
 import ActivityLogPage from "@/pages/activity-log";
 import AdminDashboard from "@/pages/AdminDashboard";
+import ManageUsers from "@/pages/manage-users";
+import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
 import MainLayout from "@/components/layout/MainLayout";
 
@@ -110,7 +112,9 @@ function Router() {
     );
   }
 
-  if (!user && location !== '/login') {
+  const isPublicRoute = location === '/login' || location.startsWith('/accept-invitation/');
+  
+  if (!user && !isPublicRoute) {
     return <Redirect to="/login" />;
   }
 
@@ -121,6 +125,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/accept-invitation/:token" component={AcceptInvitation} />
       <Route>
         {() => (
           <MainLayout>
@@ -162,6 +167,7 @@ function Router() {
               <Route path="/fx-revaluation" component={FxRevaluation} />
               <Route path="/activity-log" component={ActivityLogPage} />
               <Route path="/reports" component={Reports} />
+              <Route path="/manage-users" component={ManageUsers} />
               <Route path="/admin">
                 {() => <AdminRoute component={AdminDashboard} />}
               </Route>

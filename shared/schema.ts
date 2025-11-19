@@ -480,7 +480,19 @@ export type Company = typeof companiesSchema.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompaniesSchema>;
 
 // Role-based access control (RBAC)
-export const roleEnum = pgEnum('role', ['admin', 'accountant', 'bookkeeper', 'viewer']);
+export const roleEnum = pgEnum('role', ['admin', 'staff', 'read_only', 'accountant']);
+
+// Accounting Firms schema - for accounting firms that manage multiple client companies
+export const accountingFirmsSchema = pgTable('accounting_firms', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  address: text('address'),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
 
 // Users schema
 export const usersSchema = pgTable('users', {
@@ -490,12 +502,38 @@ export const usersSchema = pgTable('users', {
   password: text('password').notNull(),
   firstName: text('first_name'),
   lastName: text('last_name'),
-  role: roleEnum('role').notNull().default('viewer'),
+  role: roleEnum('role').notNull().default('read_only'),
   isActive: boolean('is_active').notNull().default(true),
   lastLogin: timestamp('last_login'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
   companyId: integer('company_id').references(() => companiesSchema.id),
+  firmId: integer('firm_id').references(() => accountingFirmsSchema.id), // For accountants belonging to a firm
+  currentCompanyId: integer('current_company_id').references(() => companiesSchema.id), // Track which company context accountant is viewing
+});
+
+// Firm-Client Access - grants accounting firm users access to client companies
+export const firmClientAccessSchema = pgTable('firm_client_access', {
+  id: serial('id').primaryKey(),
+  firmId: integer('firm_id').notNull().references(() => accountingFirmsSchema.id),
+  companyId: integer('company_id').notNull().references(() => companiesSchema.id),
+  grantedBy: integer('granted_by').references(() => usersSchema.id), // Company admin who granted access
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// User Invitations - for inviting new users to join
+export const userInvitationsSchema = pgTable('user_invitations', {
+  id: serial('id').primaryKey(),
+  email: text('email').notNull(),
+  token: text('token').notNull().unique(), // Unique secure token for accepting invitation
+  role: roleEnum('role').notNull(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // For company users
+  firmId: integer('firm_id').references(() => accountingFirmsSchema.id), // For firm users
+  invitedBy: integer('invited_by').notNull().references(() => usersSchema.id),
+  expiresAt: timestamp('expires_at').notNull(), // Invitation expiration
+  acceptedAt: timestamp('accepted_at'), // When invitation was accepted
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 // Define company-user many-to-many relationship
@@ -503,7 +541,7 @@ export const userCompaniesSchema = pgTable('user_companies', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').notNull().references(() => usersSchema.id),
   companyId: integer('company_id').notNull().references(() => companiesSchema.id),
-  role: roleEnum('role').notNull().default('viewer'), // Role can be specific to a company
+  role: roleEnum('role').notNull().default('read_only'), // Role can be specific to a company
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -537,11 +575,27 @@ export const activityLogsSchema = pgTable('activity_logs', {
 });
 
 // Create schemas
+export const insertAccountingFirmSchema = createInsertSchema(accountingFirmsSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertUserSchema = createInsertSchema(usersSchema).omit({ 
   id: true, 
   lastLogin: true, 
   createdAt: true, 
   updatedAt: true 
+});
+
+export const insertFirmClientAccessSchema = createInsertSchema(firmClientAccessSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export const insertUserInvitationSchema = createInsertSchema(userInvitationsSchema).omit({
+  id: true,
+  createdAt: true
 });
 
 export const insertUserCompanySchema = createInsertSchema(userCompaniesSchema).omit({
@@ -565,8 +619,17 @@ export const insertActivityLogSchema = createInsertSchema(activityLogsSchema).om
 });
 
 // Define types
+export type AccountingFirm = typeof accountingFirmsSchema.$inferSelect;
+export type InsertAccountingFirm = z.infer<typeof insertAccountingFirmSchema>;
+
 export type User = typeof usersSchema.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type FirmClientAccess = typeof firmClientAccessSchema.$inferSelect;
+export type InsertFirmClientAccess = z.infer<typeof insertFirmClientAccessSchema>;
+
+export type UserInvitation = typeof userInvitationsSchema.$inferSelect;
+export type InsertUserInvitation = z.infer<typeof insertUserInvitationSchema>;
 
 export type UserCompany = typeof userCompaniesSchema.$inferSelect;
 export type InsertUserCompany = z.infer<typeof insertUserCompanySchema>;

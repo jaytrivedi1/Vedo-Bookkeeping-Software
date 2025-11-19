@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Link } from "wouter";
 import { 
   Dialog, 
   DialogContent, 
@@ -39,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock } from "lucide-react";
+import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock, Users } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
 import InvoiceTemplatePreview from "./InvoiceTemplatePreview";
@@ -529,7 +530,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-5 mb-6">
+          <TabsList className="grid grid-cols-6 mb-6">
             <TabsTrigger value="company" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
               <span>Company</span>
@@ -549,6 +550,10 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
             <TabsTrigger value="currency" className="flex items-center gap-2">
               <DollarSign className="h-4 w-4" />
               <span>Currency</span>
+            </TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              <span>Users</span>
             </TabsTrigger>
           </TabsList>
           
@@ -1154,6 +1159,38 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                     </div>
                   </>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <Card>
+              <CardHeader>
+                <CardTitle>User Management</CardTitle>
+                <CardDescription>
+                  Manage users, roles, and access permissions for your organization
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Control who has access to your accounting system and what they can do.
+                  </p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                    <li>Invite new users to join your organization</li>
+                    <li>Assign roles and permissions</li>
+                    <li>Manage user accounts and access</li>
+                    <li>View pending invitations</li>
+                  </ul>
+                </div>
+                
+                <Link href="/manage-users">
+                  <Button className="w-full" data-testid="button-open-manage-users">
+                    <Users className="mr-2 h-4 w-4" />
+                    Open User Management
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </TabsContent>

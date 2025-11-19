@@ -24,7 +24,10 @@ import {
   insertPreferencesSchema,
   insertUserSchema,
   insertPermissionSchema,
-  insertRolePermissionSchema, 
+  insertRolePermissionSchema,
+  insertAccountingFirmSchema,
+  insertFirmClientAccessSchema,
+  insertUserInvitationSchema,
   invoiceSchema,
   billSchema,
   expenseSchema,
@@ -56,6 +59,8 @@ import { adminRouter } from "./admin-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
 import { CountryCode, Products } from 'plaid';
+import { logActivity } from "./activity-logger";
+import crypto from 'crypto';
 import multer from 'multer';
 import Papa from 'papaparse';
 import path from 'path';
@@ -6434,10 +6439,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.use("/companies", companyRouter);
   apiRouter.use("/admin", adminRouter);
 
-  // User Management Routes (Protected with requireAdmin middleware)
-  apiRouter.get("/users", requireAdmin, async (req: Request, res: Response) => {
+  // User Management Routes (Protected with requireAuth middleware + tenant scoping)
+  apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
     try {
-      const users = await storage.getUsers();
+      if (!req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Enforce tenant scoping based on user's role and organization
+      let users: any[] = [];
+      const includeInactive = req.query.includeInactive === 'true';
+      
+      // Admins can only see users in their own company
+      if (req.user.role === 'admin' && req.user.companyId) {
+        users = await storage.getUsers({ 
+          companyId: req.user.companyId,
+          includeInactive 
+        });
+      }
+      // Accountants can see users in their own firm AND in their client companies
+      else if (req.user.role === 'accountant' && req.user.firmId) {
+        // Get firm users
+        const firmUsers = await storage.getUsers({ 
+          firmId: req.user.firmId,
+          includeInactive 
+        });
+        
+        // Get client companies for this firm
+        const clientAccess = await storage.getFirmClientAccess(req.user.firmId);
+        const clientCompanyIds = clientAccess.filter(access => access.isActive).map(access => access.companyId);
+        
+        // Get users from client companies
+        let clientUsers: any[] = [];
+        if (clientCompanyIds.length > 0) {
+          for (const companyId of clientCompanyIds) {
+            const companyUsers = await storage.getUsers({ 
+              companyId,
+              includeInactive 
+            });
+            clientUsers.push(...companyUsers);
+          }
+        }
+        
+        // Combine and deduplicate
+        const allUsers = [...firmUsers, ...clientUsers];
+        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.id, u])).values());
+        users = uniqueUsers;
+      }
+      // Other roles (staff, read_only) can only see users in their company
+      else if (req.user.companyId) {
+        users = await storage.getUsers({ 
+          companyId: req.user.companyId,
+          includeInactive 
+        });
+      }
+      else {
+        // If user has no company/firm association, they can't see any users
+        return res.json([]);
+      }
+      
       // Don't send password hashes to the client
       const sanitizedUsers = users.map(user => ({
         id: user.id,
@@ -6450,7 +6510,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastLogin: user.lastLogin,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
-        companyId: user.companyId
+        companyId: user.companyId,
+        firmId: user.firmId
       }));
       res.json(sanitizedUsers);
     } catch (error) {
@@ -6493,8 +6554,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Create the new user
+      // Auto-assign tenant based on requester's organization
       const userData = insertUserSchema.parse(req.body);
+      
+      // Prevent manually setting companyId or firmId - these must be inherited from requester
+      if (!req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      // If creating an accountant, assign to requester's firm
+      if (userData.role === 'accountant') {
+        if (!req.user.firmId) {
+          return res.status(400).json({ message: "Only accounting firm users can create accountants" });
+        }
+        userData.firmId = req.user.firmId;
+        userData.companyId = null;
+      }
+      // If creating a company user (admin, staff, read_only), assign to requester's company
+      else {
+        if (!req.user.companyId) {
+          return res.status(400).json({ message: "Company association required to create company users" });
+        }
+        userData.companyId = req.user.companyId;
+        userData.firmId = null;
+      }
+      
       const user = await storage.createUser(userData);
       
       // Don't send password hash to the client
@@ -11120,6 +11204,793 @@ Respond in JSON format:
     } catch (error) {
       console.error("Error fetching activity log:", error);
       res.status(500).json({ message: "Failed to fetch activity log" });
+    }
+  });
+
+  // ====================
+  // User Management Routes
+  // ====================
+
+  // GET /api/users - Get all users (with optional query params)
+  apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
+    try {
+      let users = await storage.getUsers();
+      
+      // Filter by companyId if provided
+      if (req.query.companyId) {
+        const companyId = parseInt(req.query.companyId as string);
+        const companyUsers = await storage.getCompanyUsers(companyId);
+        const userIds = companyUsers.map(cu => cu.userId);
+        users = users.filter(u => userIds.includes(u.id));
+      }
+      
+      // Filter by firmId if provided
+      if (req.query.firmId) {
+        const firmId = parseInt(req.query.firmId as string);
+        users = users.filter(u => u.firmId === firmId);
+      }
+      
+      // Filter by active status (default to active only)
+      const includeInactive = req.query.includeInactive === 'true';
+      if (!includeInactive) {
+        users = users.filter(u => u.isActive);
+      }
+      
+      // Don't return passwords
+      const sanitizedUsers = users.map(u => ({
+        id: u.id,
+        username: u.username,
+        email: u.email,
+        role: u.role,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        isActive: u.isActive,
+        firmId: u.firmId,
+        currentCompanyId: u.currentCompanyId,
+        lastLogin: u.lastLogin,
+        createdAt: u.createdAt,
+      }));
+      
+      res.json(sanitizedUsers);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // GET /api/users/:id - Get specific user
+  apiRouter.get("/users/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Tenant scoping: Verify user belongs to same company/firm as req.user
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        if (user.companyId !== req.user.companyId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        if (user.firmId !== req.user.firmId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      
+      // Don't return password
+      const sanitizedUser = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isActive: user.isActive,
+        firmId: user.firmId,
+        currentCompanyId: user.currentCompanyId,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt,
+      };
+      
+      res.json(sanitizedUser);
+    } catch (error: any) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // POST /api/users - Create new user
+  apiRouter.post("/users", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Validate request body
+      const validatedData = insertUserSchema.parse(req.body);
+      
+      // Tenant scoping: Auto-set companyId or firmId based on req.user's organization
+      // Don't allow creating users in other organizations
+      let userData = { ...validatedData };
+      
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        // Admins create users in their own company
+        userData.companyId = req.user.companyId;
+        userData.firmId = null;
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        // Accountants create users in their own firm
+        userData.firmId = req.user.firmId;
+        userData.companyId = null;
+      }
+      
+      // Check if username already exists
+      const existingUsername = await storage.getUserByUsername(userData.username);
+      if (existingUsername) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(userData.email);
+      if (existingEmail) {
+        return res.status(400).json({ error: "Email already exists" });
+      }
+      
+      // Hash password before storing
+      const hashedPassword = await storage.hashPassword(userData.password);
+      
+      // Create user
+      const user = await storage.createUser({
+        ...userData,
+        password: hashedPassword,
+      });
+      
+      // Log activity
+      await logActivity(storage, req, "user_created", "user", user.id, {
+        username: user.username,
+        role: user.role,
+      });
+      
+      // Don't return password
+      const sanitizedUser = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isActive: user.isActive,
+        firmId: user.firmId,
+        currentCompanyId: user.currentCompanyId,
+      };
+      
+      res.status(201).json(sanitizedUser);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error creating user:", error);
+      res.status(500).json({ error: "Failed to create user" });
+    }
+  });
+
+  // PUT /api/users/:id - Update user
+  apiRouter.put("/users/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if user exists
+      const existingUser = await storage.getUser(id);
+      if (!existingUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Tenant scoping: Verify user belongs to same company/firm as req.user
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        if (existingUser.companyId !== req.user.companyId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        if (existingUser.firmId !== req.user.firmId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      
+      // Validate request body (partial update)
+      const validatedData = insertUserSchema.partial().parse(req.body);
+      
+      // Security: Don't allow changing companyId or firmId
+      const updateData = { ...validatedData };
+      delete updateData.companyId;
+      delete updateData.firmId;
+      
+      // If updating username, check it doesn't already exist
+      if (updateData.username && updateData.username !== existingUser.username) {
+        const usernameExists = await storage.getUserByUsername(updateData.username);
+        if (usernameExists) {
+          return res.status(400).json({ error: "Username already exists" });
+        }
+      }
+      
+      // If updating email, check it doesn't already exist
+      if (updateData.email && updateData.email !== existingUser.email) {
+        const emailExists = await storage.getUserByEmail(updateData.email);
+        if (emailExists) {
+          return res.status(400).json({ error: "Email already exists" });
+        }
+      }
+      
+      // If updating password, hash it
+      if (updateData.password) {
+        updateData.password = await storage.hashPassword(updateData.password);
+      }
+      
+      // Update user
+      const updatedUser = await storage.updateUser(id, updateData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "user_updated", "user", id, {
+        updatedFields: Object.keys(validatedData),
+      });
+      
+      // Don't return password
+      const sanitizedUser = {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        isActive: updatedUser.isActive,
+        firmId: updatedUser.firmId,
+        currentCompanyId: updatedUser.currentCompanyId,
+      };
+      
+      res.json(sanitizedUser);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error updating user:", error);
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // DELETE /api/users/:id - Delete/deactivate user
+  apiRouter.delete("/users/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Tenant scoping: Verify user belongs to same company/firm as req.user
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        if (user.companyId !== req.user.companyId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        if (user.firmId !== req.user.firmId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+      
+      // Deactivate user instead of deleting
+      const deactivatedUser = await storage.updateUser(id, { isActive: false });
+      
+      if (!deactivatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "user_deactivated", "user", id, {
+        username: user.username,
+      });
+      
+      res.json({ message: "User deactivated successfully" });
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ error: "Failed to delete user" });
+    }
+  });
+
+  // PUT /api/users/:id/role - Update user role
+  apiRouter.put("/users/:id/role", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Validate role
+      const roleSchema = z.object({
+        role: z.enum(['admin', 'staff', 'read_only', 'accountant']),
+      });
+      const { role } = roleSchema.parse(req.body);
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Update role
+      const updatedUser = await storage.updateUser(id, { role });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "user_role_changed", "user", id, {
+        username: user.username,
+        oldRole: user.role,
+        newRole: role,
+      });
+      
+      // Don't return password
+      const sanitizedUser = {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        isActive: updatedUser.isActive,
+      };
+      
+      res.json(sanitizedUser);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error updating user role:", error);
+      res.status(500).json({ error: "Failed to update user role" });
+    }
+  });
+
+  // ====================
+  // Accounting Firm Routes
+  // ====================
+
+  // GET /api/firms - Get all accounting firms
+  apiRouter.get("/firms", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const firms = await storage.getAccountingFirms();
+      res.json(firms);
+    } catch (error: any) {
+      console.error("Error fetching firms:", error);
+      res.status(500).json({ error: "Failed to fetch accounting firms" });
+    }
+  });
+
+  // GET /api/firms/:id - Get specific firm
+  apiRouter.get("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const firm = await storage.getAccountingFirm(id);
+      
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      res.json(firm);
+    } catch (error: any) {
+      console.error("Error fetching firm:", error);
+      res.status(500).json({ error: "Failed to fetch accounting firm" });
+    }
+  });
+
+  // POST /api/firms - Create new firm
+  apiRouter.post("/firms", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Validate request body
+      const validatedData = insertAccountingFirmSchema.parse(req.body);
+      
+      // Create firm
+      const firm = await storage.createAccountingFirm(validatedData);
+      
+      // Log activity
+      await logActivity(storage, req, "firm_created", "accounting_firm", firm.id, {
+        name: firm.name,
+      });
+      
+      res.status(201).json(firm);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error creating firm:", error);
+      res.status(500).json({ error: "Failed to create accounting firm" });
+    }
+  });
+
+  // PUT /api/firms/:id - Update firm
+  apiRouter.put("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Validate request body (partial update)
+      const validatedData = insertAccountingFirmSchema.partial().parse(req.body);
+      
+      // Update firm
+      const updatedFirm = await storage.updateAccountingFirm(id, validatedData);
+      
+      if (!updatedFirm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "firm_updated", "accounting_firm", id, {
+        updatedFields: Object.keys(validatedData),
+      });
+      
+      res.json(updatedFirm);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error updating firm:", error);
+      res.status(500).json({ error: "Failed to update accounting firm" });
+    }
+  });
+
+  // DELETE /api/firms/:id - Delete firm
+  apiRouter.delete("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if firm exists
+      const firm = await storage.getAccountingFirm(id);
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      // Delete firm
+      const deleted = await storage.deleteAccountingFirm(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "firm_deleted", "accounting_firm", id, {
+        name: firm.name,
+      });
+      
+      res.json({ message: "Accounting firm deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting firm:", error);
+      res.status(500).json({ error: "Failed to delete accounting firm" });
+    }
+  });
+
+  // GET /api/firms/:id/clients - Get firm's client companies
+  apiRouter.get("/firms/:id/clients", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const firmId = parseInt(req.params.id);
+      
+      // Check if firm exists
+      const firm = await storage.getAccountingFirm(firmId);
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      // Get client access records
+      const clientAccess = await storage.getFirmClientAccess(firmId);
+      res.json(clientAccess);
+    } catch (error: any) {
+      console.error("Error fetching firm clients:", error);
+      res.status(500).json({ error: "Failed to fetch firm clients" });
+    }
+  });
+
+  // POST /api/firms/:id/clients - Grant firm access to a company
+  apiRouter.post("/firms/:id/clients", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const firmId = parseInt(req.params.id);
+      
+      // Check if firm exists
+      const firm = await storage.getAccountingFirm(firmId);
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+      
+      // Validate request body
+      const validatedData = insertFirmClientAccessSchema.parse({
+        ...req.body,
+        firmId,
+        grantedBy: req.user?.id,
+      });
+      
+      // Create access grant
+      const access = await storage.createFirmClientAccess(validatedData);
+      
+      // Log activity
+      await logActivity(storage, req, "firm_access_granted", "firm_client_access", access.id, {
+        firmId,
+        companyId: access.companyId,
+      });
+      
+      res.status(201).json(access);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error granting firm access:", error);
+      res.status(500).json({ error: "Failed to grant firm access" });
+    }
+  });
+
+  // DELETE /api/firms/clients/:accessId - Revoke firm access
+  apiRouter.delete("/firms/clients/:accessId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const accessId = parseInt(req.params.accessId);
+      
+      // Revoke access
+      const revoked = await storage.revokeFirmClientAccess(accessId);
+      
+      if (!revoked) {
+        return res.status(404).json({ error: "Firm client access not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "firm_access_revoked", "firm_client_access", accessId, {});
+      
+      res.json({ message: "Firm access revoked successfully" });
+    } catch (error: any) {
+      console.error("Error revoking firm access:", error);
+      res.status(500).json({ error: "Failed to revoke firm access" });
+    }
+  });
+
+  // ====================
+  // User Invitation Routes
+  // ====================
+
+  // GET /api/invitations - Get invitations
+  apiRouter.get("/invitations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const filters: {
+        companyId?: number;
+        firmId?: number;
+        pending?: boolean;
+      } = {};
+      
+      // Tenant scoping: Enforce filtering by req.user's organization
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        // Admins can only see invitations for their company
+        filters.companyId = req.user.companyId;
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        // Accountants can only see invitations for their firm
+        filters.firmId = req.user.firmId;
+      }
+      
+      if (req.query.pending === 'true') {
+        filters.pending = true;
+      }
+      
+      const invitations = await storage.getUserInvitations(filters);
+      res.json(invitations);
+    } catch (error: any) {
+      console.error("Error fetching invitations:", error);
+      res.status(500).json({ error: "Failed to fetch invitations" });
+    }
+  });
+
+  // GET /api/invitations/:token/validate - Validate invitation token
+  apiRouter.get("/invitations/:token/validate", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      const invitation = await storage.getUserInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found", valid: false });
+      }
+      
+      // Check if already accepted
+      if (invitation.acceptedAt) {
+        return res.status(400).json({ error: "Invitation already accepted", valid: false });
+      }
+      
+      // Check if expired
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ error: "Invitation expired", valid: false });
+      }
+      
+      res.json({
+        valid: true,
+        invitation: {
+          email: invitation.email,
+          role: invitation.role,
+          companyId: invitation.companyId,
+          firmId: invitation.firmId,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error validating invitation:", error);
+      res.status(500).json({ error: "Failed to validate invitation" });
+    }
+  });
+
+  // POST /api/invitations - Create invitation
+  apiRouter.post("/invitations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Generate secure random token
+      const token = crypto.randomBytes(32).toString('hex');
+      
+      // Set expiration to 7 days from now
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      
+      // Tenant scoping: Auto-set companyId or firmId based on req.user's organization
+      let invitationData = { ...req.body };
+      
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        // Admins create invitations for their company
+        invitationData.companyId = req.user.companyId;
+        invitationData.firmId = null;
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        // Accountants create invitations for their firm
+        invitationData.firmId = req.user.firmId;
+        invitationData.companyId = null;
+      }
+      
+      // Validate request body
+      const validatedData = insertUserInvitationSchema.parse({
+        ...invitationData,
+        token,
+        expiresAt,
+        invitedBy: req.user?.id,
+      });
+      
+      // Create invitation
+      const invitation = await storage.createUserInvitation(validatedData);
+      
+      // Log activity
+      await logActivity(storage, req, "invitation_created", "user_invitation", invitation.id, {
+        email: invitation.email,
+        role: invitation.role,
+      });
+      
+      res.status(201).json(invitation);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error creating invitation:", error);
+      res.status(500).json({ error: "Failed to create invitation" });
+    }
+  });
+
+  // POST /api/invitations/:token/accept - Accept invitation
+  apiRouter.post("/invitations/:token/accept", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      
+      // Validate request body
+      const acceptSchema = z.object({
+        username: z.string().min(1, "Username is required"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+      });
+      const { username, password, firstName, lastName } = acceptSchema.parse(req.body);
+      
+      // Get invitation
+      const invitation = await storage.getUserInvitationByToken(token);
+      
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+      
+      // Check if already accepted
+      if (invitation.acceptedAt) {
+        return res.status(400).json({ error: "Invitation already accepted" });
+      }
+      
+      // Check if expired
+      if (new Date() > new Date(invitation.expiresAt)) {
+        return res.status(400).json({ error: "Invitation expired" });
+      }
+      
+      // Check if username already exists
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(400).json({ error: "Username already exists" });
+      }
+      
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(invitation.email);
+      if (existingEmail) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+      
+      // Hash password
+      const hashedPassword = await storage.hashPassword(password);
+      
+      // Create user
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+        email: invitation.email,
+        role: invitation.role,
+        firstName: firstName || '',
+        lastName: lastName || '',
+        firmId: invitation.firmId || null,
+        isActive: true,
+      });
+      
+      // If invitation is for a company, assign user to that company
+      if (invitation.companyId) {
+        await storage.assignUserToCompany({
+          userId: user.id,
+          companyId: invitation.companyId,
+          role: invitation.role,
+        });
+      }
+      
+      // Mark invitation as accepted
+      await storage.acceptUserInvitation(token);
+      
+      // Log activity
+      await logActivity(storage, req, "invitation_accepted", "user_invitation", invitation.id, {
+        userId: user.id,
+        username: user.username,
+      });
+      
+      // Don't return password
+      const sanitizedUser = {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        isActive: user.isActive,
+      };
+      
+      res.status(201).json({
+        message: "Invitation accepted successfully",
+        user: sanitizedUser,
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error accepting invitation:", error);
+      res.status(500).json({ error: "Failed to accept invitation" });
+    }
+  });
+
+  // DELETE /api/invitations/:id - Delete invitation
+  apiRouter.delete("/invitations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if invitation exists
+      const invitation = await storage.getUserInvitation(id);
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+      
+      // Delete invitation
+      const deleted = await storage.deleteUserInvitation(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+      
+      // Log activity
+      await logActivity(storage, req, "invitation_deleted", "user_invitation", id, {
+        email: invitation.email,
+      });
+      
+      res.json({ message: "Invitation deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting invitation:", error);
+      res.status(500).json({ error: "Failed to delete invitation" });
     }
   });
 

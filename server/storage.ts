@@ -79,6 +79,15 @@ import {
   activityLogsSchema,
   type ActivityLog,
   type InsertActivityLog,
+  accountingFirmsSchema,
+  type AccountingFirm,
+  type InsertAccountingFirm,
+  firmClientAccessSchema,
+  type FirmClientAccess,
+  type InsertFirmClientAccess,
+  userInvitationsSchema,
+  type UserInvitation,
+  type InsertUserInvitation,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -309,6 +318,36 @@ export interface IStorage {
   }): Promise<ActivityLog[]>;
   getActivityLog(id: number): Promise<ActivityLog | undefined>;
   createActivityLog(activityLog: InsertActivityLog): Promise<ActivityLog>;
+  
+  // User Management
+  getUsers(filters?: { companyId?: number; firmId?: number; includeInactive?: boolean }): Promise<User[]>;
+  getUser(id: number): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<boolean>;
+  
+  // Accounting Firms
+  getAccountingFirms(): Promise<AccountingFirm[]>;
+  getAccountingFirm(id: number): Promise<AccountingFirm | undefined>;
+  createAccountingFirm(firm: InsertAccountingFirm): Promise<AccountingFirm>;
+  updateAccountingFirm(id: number, firm: Partial<AccountingFirm>): Promise<AccountingFirm | undefined>;
+  deleteAccountingFirm(id: number): Promise<boolean>;
+  
+  // Firm Client Access
+  getFirmClientAccess(firmId: number): Promise<FirmClientAccess[]>;
+  getClientFirms(companyId: number): Promise<FirmClientAccess[]>;
+  createFirmClientAccess(access: InsertFirmClientAccess): Promise<FirmClientAccess>;
+  revokeFirmClientAccess(id: number): Promise<boolean>;
+  
+  // User Invitations
+  getUserInvitations(filters?: { companyId?: number; firmId?: number; pending?: boolean }): Promise<UserInvitation[]>;
+  getUserInvitation(id: number): Promise<UserInvitation | undefined>;
+  getUserInvitationByToken(token: string): Promise<UserInvitation | undefined>;
+  createUserInvitation(invitation: InsertUserInvitation): Promise<UserInvitation>;
+  acceptUserInvitation(token: string): Promise<UserInvitation | undefined>;
+  deleteUserInvitation(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
