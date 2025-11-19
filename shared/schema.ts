@@ -101,6 +101,8 @@ export const transactions = pgTable('transactions', {
   currency: varchar('currency', { length: 3 }), // Foreign currency code (null = home currency)
   exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6 }), // Rate used for conversion
   foreignAmount: decimal('foreign_amount', { precision: 15, scale: 2 }), // Original amount in foreign currency
+  // Public invoice access
+  secureToken: varchar('secure_token', { length: 64 }).unique(), // Secure token for public invoice view
 });
 
 // Line Items
@@ -927,3 +929,26 @@ export type InsertFxRevaluation = z.infer<typeof insertFxRevaluationSchema>;
 
 export type CurrencyLock = typeof currencyLocksSchema.$inferSelect;
 export type InsertCurrencyLock = z.infer<typeof insertCurrencyLockSchema>;
+
+// Invoice Activities - track invoice lifecycle events
+export const activityTypeEnum = pgEnum('activity_type', [
+  'created', 'sent', 'viewed', 'paid', 'edited', 'overdue', 'reminder_sent', 'cancelled'
+]);
+
+export const invoiceActivitiesSchema = pgTable('invoice_activities', {
+  id: serial('id').primaryKey(),
+  invoiceId: integer('invoice_id').notNull().references(() => transactions.id),
+  activityType: activityTypeEnum('activity_type').notNull(),
+  timestamp: timestamp('timestamp').notNull().defaultNow(),
+  userId: integer('user_id').references(() => usersSchema.id), // null if activity from client
+  metadata: json('metadata'), // Additional context: email, IP address, etc.
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const insertInvoiceActivitySchema = createInsertSchema(invoiceActivitiesSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+export type InvoiceActivity = typeof invoiceActivitiesSchema.$inferSelect;
+export type InsertInvoiceActivity = z.infer<typeof insertInvoiceActivitySchema>;
