@@ -8,6 +8,7 @@ import { expenseSchema, Contact, SalesTax, Account, Transaction } from "@shared/
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { CURRENCIES } from "@shared/currencies";
+import { formatContactName } from "@/lib/currencyUtils";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
 import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
@@ -149,7 +150,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   // Transform contacts into SearchableSelectItem format
   const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
     value: contact.id.toString(),
-    label: contact.name,
+    label: formatContactName(contact.name, contact.currency, homeCurrency),
     subtitle: `· ${contact.type}`
   })) || [];
 

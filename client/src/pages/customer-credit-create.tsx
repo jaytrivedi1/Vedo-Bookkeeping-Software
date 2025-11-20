@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 
 import { Contact, Account, SalesTax } from "@shared/schema";
+import { formatContactName } from "@/lib/currencyUtils";
 import {
   Form,
   FormField,
@@ -72,6 +73,13 @@ export default function CustomerCreditCreate() {
     queryKey: ["/api/sales-taxes"],
   });
 
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<any>({
+    queryKey: ["/api/preferences"],
+  });
+
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+
   useEffect(() => {
     if (allContacts) {
       const customerContacts = allContacts.filter(
@@ -100,7 +108,7 @@ export default function CustomerCreditCreate() {
   // Transform customers for SearchableSelect
   const customerItems: SearchableSelectItem[] = customers.map((customer) => ({
     value: customer.id.toString(),
-    label: customer.name,
+    label: formatContactName(customer.name, customer.currency, homeCurrency),
     subtitle: undefined
   }));
 

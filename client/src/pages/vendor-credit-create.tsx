@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 
 import { Contact, Account, SalesTax } from "@shared/schema";
+import { formatContactName } from "@/lib/currencyUtils";
 import {
   Form,
   FormField,
@@ -72,6 +73,13 @@ export default function VendorCreditCreate() {
     queryKey: ["/api/sales-taxes"],
   });
 
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<any>({
+    queryKey: ["/api/preferences"],
+  });
+
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+
   useEffect(() => {
     if (allContacts) {
       const vendorContacts = allContacts.filter(
@@ -100,7 +108,7 @@ export default function VendorCreditCreate() {
   // Transform vendors for SearchableSelect
   const vendorItems: SearchableSelectItem[] = vendors.map((vendor) => ({
     value: vendor.id.toString(),
-    label: vendor.name,
+    label: formatContactName(vendor.name, vendor.currency, homeCurrency),
     subtitle: undefined
   }));
 

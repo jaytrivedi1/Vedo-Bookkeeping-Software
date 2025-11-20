@@ -8,6 +8,7 @@ import { chequeSchema, Contact, SalesTax, Account, Transaction } from "@shared/s
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { formatContactName } from "@/lib/currencyUtils";
 import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
 import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 import { CalendarIcon, Plus, Trash2, XIcon, Upload } from "lucide-react";
@@ -147,7 +148,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   // Transform contacts into SearchableSelectItem format
   const contactItems: SearchableSelectItem[] = contacts?.map(contact => ({
     value: contact.id.toString(),
-    label: contact.name,
+    label: formatContactName(contact.name, contact.currency, homeCurrency),
     subtitle: `· ${contact.type}`
   })) || [];
 

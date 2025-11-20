@@ -6,6 +6,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Contact, SalesTax, Product, Account } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { CURRENCIES } from "@shared/currencies";
+import { formatContactName } from "@/lib/currencyUtils";
 import { CalendarIcon, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
@@ -132,7 +133,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     .filter((contact: Contact) => contact.type === 'customer' || contact.type === 'both')
     .map((contact: Contact) => ({
       value: contact.id.toString(),
-      label: contact.name,
+      label: formatContactName(contact.name, contact.currency, homeCurrency),
       subtitle: `· ${contact.type}`
     }));
 

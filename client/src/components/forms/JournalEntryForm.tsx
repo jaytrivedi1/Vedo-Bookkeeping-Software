@@ -6,6 +6,7 @@ import { queryClient } from "@/lib/queryClient";
 import { JournalEntry, journalEntrySchema, Account, Contact, SalesTax } from "@shared/schema";
 import { validateAccountContactRequirement, hasAccountsPayableOrReceivable } from "@/lib/accountValidation";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { formatContactName } from "@/lib/currencyUtils";
 import AddCustomerDialog from "@/components/dialogs/AddCustomerDialog";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
 import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
@@ -86,7 +87,7 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
     { value: 'ADD_NEW_VENDOR', label: '+ Add New Vendor', subtitle: undefined },
     ...(contacts?.map(contact => ({
       value: contact.id.toString(),
-      label: contact.name,
+      label: formatContactName(contact.name, contact.currency, homeCurrency),
       subtitle: `· ${contact.type}`
     })) || [])
   ];

@@ -7,6 +7,7 @@ import { queryClient } from "@/lib/queryClient";
 import { Invoice as BaseInvoice, invoiceSchema, Contact, SalesTax, Product, Transaction as BaseTransaction } from "@shared/schema";
 import { roundTo2Decimals, formatCurrency } from "@shared/utils";
 import { CURRENCIES } from "@shared/currencies";
+import { formatContactName } from "@/lib/currencyUtils";
 
 // Extend the Transaction type to include appliedAmount for credits
 interface Transaction extends BaseTransaction {
@@ -244,7 +245,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
     ?.filter(contact => contact.type === 'customer' || contact.type === 'both')
     .map(contact => ({
       value: contact.id.toString(),
-      label: contact.name,
+      label: formatContactName(contact.name, contact.currency, homeCurrency),
       subtitle: `· ${contact.type}`
     })) || [];
 

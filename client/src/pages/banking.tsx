@@ -612,7 +612,7 @@ export default function Banking() {
   // Transform contacts for SearchableSelect
   const contactItems: SearchableSelectItem[] = contacts.map(contact => ({
     value: contact.name,
-    label: contact.name,
+    label: formatContactName(contact.name, contact.currency, homeCurrency),
     subtitle: `· ${contact.type}`
   }));
 
