@@ -7,6 +7,7 @@ import { Search, User, ChevronRight, X, Eye, Trash2, AlertTriangle, Edit, PenLin
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { 
   Card, 
   CardContent,
@@ -96,6 +97,13 @@ export default function CustomerList({ className }: CustomerListProps) {
     queryKey: ['/api/accounts'],
   });
   
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
+  
   const handleCustomerClick = (customer: Contact) => {
     setSelectedCustomer(customer);
     setSidebarOpen(true);
@@ -158,18 +166,6 @@ export default function CustomerList({ className }: CustomerListProps) {
   const customerExpenses = customerTransactions
     ? customerTransactions.filter(transaction => transaction.type === 'expense')
     : [];
-    
-  // Format currency
-  const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
-    // In the activity feed, all amounts display as positive for clarity
-    // Color coding handles visual distinction (green for money in, blue for money out)
-    const displayAmount = Math.abs(amount);
-    
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(displayAmount);
-  };
   
   // Get status badge styles
   const getStatusBadge = (status: string) => {
@@ -614,11 +610,11 @@ export default function CustomerList({ className }: CustomerListProps) {
                                                 ? 'text-blue-900'
                                                 : 'text-gray-900'
                                           }`}>
-                                            {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                            {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
                                           </div>
                                           {showBalance && transaction.balance !== null && (
                                             <div className="text-sm text-gray-500 mt-1">
-                                              Balance: {formatCurrency(transaction.balance)}
+                                              Balance: {formatCurrency(Math.abs(transaction.balance), transaction.currency, homeCurrency)}
                                             </div>
                                           )}
                                         </div>
@@ -706,13 +702,13 @@ export default function CustomerList({ className }: CustomerListProps) {
                             ? i.balance 
                             : i.amount;
                           return sum + outstandingAmount;
-                        }, 0))}
+                        }, 0), homeCurrency, homeCurrency)}
                       </p>
                     </div>
                     <div>
                       <h3 className="text-sm font-medium text-gray-500">Unapplied Credits</h3>
                       <p className="text-xl font-semibold text-blue-700">
-                        {formatCurrency(customerUnappliedCredits.reduce((sum, credit) => {
+                        {formatCurrency(Math.abs(customerUnappliedCredits.reduce((sum, credit) => {
                           // Keep the balance as negative for consistency
                           // This ensures unapplied credits always show as negative throughout the app
                           const creditAmount = (credit.balance !== null && credit.balance !== undefined) 
@@ -721,7 +717,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                           
                           console.log(`Credit #${credit.id}: balance=${credit.balance}, amount=${credit.amount}, using ${creditAmount}`);
                           return sum + creditAmount;
-                        }, 0))}
+                        }, 0)), homeCurrency, homeCurrency)}
                       </p>
                     </div>
                   </div>
@@ -813,7 +809,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                       <div>
                         <h3 className="text-sm font-medium text-gray-500">Amount</h3>
                         <p className="text-base font-semibold text-green-700">
-                          {formatCurrency(selectedTransaction.amount, selectedTransaction.type, selectedTransaction.status)}
+                          {formatCurrency(Math.abs(selectedTransaction.amount), selectedTransaction.currency, homeCurrency)}
                         </p>
                       </div>
                       
@@ -821,7 +817,7 @@ export default function CustomerList({ className }: CustomerListProps) {
                         <div>
                           <h3 className="text-sm font-medium text-gray-500">Balance Due</h3>
                           <p className="text-base font-semibold text-blue-700">
-                            {formatCurrency(typeof selectedTransaction.balance === 'number' ? selectedTransaction.balance : 0)}
+                            {formatCurrency(typeof selectedTransaction.balance === 'number' ? Math.abs(selectedTransaction.balance) : 0, selectedTransaction.currency, homeCurrency)}
                           </p>
                         </div>
                       )}
@@ -859,8 +855,8 @@ export default function CustomerList({ className }: CustomerListProps) {
                               {accounts?.find(a => a.id === entry.accountId)?.name || `Account #${entry.accountId}`}
                             </TableCell>
                             <TableCell>{entry.description}</TableCell>
-                            <TableCell className="text-right">{entry.debit > 0 ? formatCurrency(entry.debit) : ''}</TableCell>
-                            <TableCell className="text-right">{entry.credit > 0 ? formatCurrency(entry.credit) : ''}</TableCell>
+                            <TableCell className="text-right">{entry.debit > 0 ? formatCurrency(entry.debit, homeCurrency, homeCurrency) : ''}</TableCell>
+                            <TableCell className="text-right">{entry.credit > 0 ? formatCurrency(entry.credit, homeCurrency, homeCurrency) : ''}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

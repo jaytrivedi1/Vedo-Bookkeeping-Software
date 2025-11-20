@@ -6,6 +6,7 @@ import { Search, Building, ChevronRight, X, Edit, Eye, Trash2, FileText, DollarS
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { formatCurrency } from "@/lib/currencyUtils";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import { 
   Card, 
@@ -82,6 +83,13 @@ export default function VendorList({ className }: VendorListProps) {
     queryKey: ['/api/transactions'],
   });
   
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
+  
   const handleVendorClick = (vendor: Contact) => {
     setSelectedVendor(vendor);
     setSidebarOpen(true);
@@ -125,17 +133,17 @@ export default function VendorList({ className }: VendorListProps) {
     ? vendorTransactions.filter(transaction => transaction.type === 'invoice')
     : [];
     
-  // Format currency
-  const formatCurrency = (amount: number, transactionType?: string, status?: string) => {
-    // In the activity feed, all amounts display as positive for clarity
-    // Color coding handles visual distinction (green for payments out, orange/gray for expenses)
-    const displayAmount = Math.abs(amount);
+  // Filter just bills (for outstanding balance calculation)
+  const vendorBills = vendorTransactions
+    ? vendorTransactions.filter(transaction => transaction.type === 'bill')
+    : [];
     
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(displayAmount);
-  };
+  // Filter unapplied payments (payments with status 'unapplied_credit')
+  const vendorUnappliedPayments = vendorTransactions
+    ? vendorTransactions.filter(transaction => 
+        (transaction.type === 'payment' || transaction.type === 'cheque') && 
+        transaction.status === 'unapplied_credit')
+    : [];
   
   // Get status badge styles
   const getStatusBadge = (status: string) => {
@@ -443,11 +451,11 @@ export default function VendorList({ className }: VendorListProps) {
                                                     ? 'text-gray-900'
                                                     : 'text-gray-900'
                                             }`}>
-                                              {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                              {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
                                             </div>
                                             {showBalance && transaction.balance !== null && (
                                               <div className="text-sm text-gray-500 mt-1">
-                                                Balance: {formatCurrency(Math.abs(transaction.balance))}
+                                                Balance: {formatCurrency(Math.abs(transaction.balance), transaction.currency, homeCurrency)}
                                               </div>
                                             )}
                                           </div>
@@ -577,11 +585,11 @@ export default function VendorList({ className }: VendorListProps) {
                                           {/* Amount */}
                                           <div className="text-right">
                                             <div className="text-lg font-semibold text-blue-900">
-                                              {formatCurrency(transaction.amount, transaction.type, transaction.status)}
+                                              {formatCurrency(transaction.amount, transaction.currency, homeCurrency)}
                                             </div>
                                             {showBalance && transaction.balance !== null && (
                                               <div className="text-sm text-gray-500 mt-1">
-                                                Balance: {formatCurrency(Math.abs(transaction.balance))}
+                                                Balance: {formatCurrency(Math.abs(transaction.balance), transaction.currency, homeCurrency)}
                                               </div>
                                             )}
                                           </div>
@@ -643,15 +651,27 @@ export default function VendorList({ className }: VendorListProps) {
               <div className="border-t mt-6 p-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Expenses</h3>
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(vendorExpenses.reduce((sum, e) => sum + e.amount, 0))}
+                    <h3 className="text-sm font-medium text-gray-500">Outstanding Balance</h3>
+                    <p className="text-xl font-semibold text-orange-700">
+                      {formatCurrency(vendorBills.reduce((sum, b) => {
+                        // Add balance to the sum if it exists, otherwise add the full amount
+                        const outstandingAmount = (b.balance !== null && b.balance !== undefined) 
+                          ? b.balance 
+                          : b.amount;
+                        return sum + outstandingAmount;
+                      }, 0), homeCurrency, homeCurrency)}
                     </p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Total Invoices</h3>
-                    <p className="text-xl font-semibold">
-                      {formatCurrency(vendorInvoices.reduce((sum, i) => sum + i.amount, 0))}
+                    <h3 className="text-sm font-medium text-gray-500">Unapplied Payments</h3>
+                    <p className="text-xl font-semibold text-green-700">
+                      {formatCurrency(Math.abs(vendorUnappliedPayments.reduce((sum, payment) => {
+                        // Keep the balance as negative for consistency
+                        const paymentAmount = (payment.balance !== null && payment.balance !== undefined) 
+                          ? payment.balance 
+                          : -Math.abs(payment.amount);
+                        return sum + paymentAmount;
+                      }, 0)), homeCurrency, homeCurrency)}
                     </p>
                   </div>
                 </div>
