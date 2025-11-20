@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
 export default function SalesReceiptView() {
@@ -49,6 +50,13 @@ export default function SalesReceiptView() {
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Extract data once fetched
   const salesReceipt: Transaction | undefined = salesReceiptData?.transaction;
@@ -249,10 +257,10 @@ export default function SalesReceiptView() {
                         {item.quantity}
                       </td>
                       <td className="px-4 py-3 text-right" data-testid={`text-item-rate-${index}`}>
-                        ${item.unitPrice.toFixed(2)}
+                        {formatCurrency(item.unitPrice, salesReceipt.currency, homeCurrency)}
                       </td>
                       <td className="px-4 py-3 text-right font-medium" data-testid={`text-item-amount-${index}`}>
-                        ${item.amount.toFixed(2)}
+                        {formatCurrency(item.amount, salesReceipt.currency, homeCurrency)}
                       </td>
                     </tr>
                   ))}
@@ -269,7 +277,7 @@ export default function SalesReceiptView() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Subtotal:</span>
                 <span className="font-medium" data-testid="text-subtotal">
-                  ${subtotal.toFixed(2)}
+                  {formatCurrency(subtotal, salesReceipt.currency, homeCurrency)}
                 </span>
               </div>
               
@@ -279,7 +287,7 @@ export default function SalesReceiptView() {
                     Tax {taxNames.length > 0 && `(${taxNames.join(', ')})`}:
                   </span>
                   <span className="font-medium" data-testid="text-tax">
-                    ${totalTaxAmount.toFixed(2)}
+                    {formatCurrency(totalTaxAmount, salesReceipt.currency, homeCurrency)}
                   </span>
                 </div>
               )}
@@ -288,7 +296,7 @@ export default function SalesReceiptView() {
               
               <div className="flex justify-between text-lg font-bold">
                 <span>Total:</span>
-                <span data-testid="text-total">${total.toFixed(2)}</span>
+                <span data-testid="text-total">{formatCurrency(total, salesReceipt.currency, homeCurrency)}</span>
               </div>
             </div>
           </div>

@@ -26,6 +26,7 @@ import {
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
 
 export default function ExpenseView() {
@@ -73,6 +74,13 @@ export default function ExpenseView() {
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Fetch accounts for account names
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({
@@ -326,7 +334,7 @@ export default function ExpenseView() {
               )}
               <div className="flex justify-between font-medium pt-2">
                 <span>Total Amount:</span>
-                <span data-testid="text-total-amount">${expense.amount?.toFixed(2)}</span>
+                <span data-testid="text-total-amount">{formatCurrency(expense.amount || 0, expense.currency, homeCurrency)}</span>
               </div>
             </div>
           </div>
@@ -359,7 +367,7 @@ export default function ExpenseView() {
                         <div className="col-span-2 text-center" data-testid={`text-tax-${index}`}>
                           {tax ? `${tax.name} (${tax.rate}%)` : 'None'}
                         </div>
-                        <div className="col-span-2 text-right" data-testid={`text-amount-${index}`}>${item.amount.toFixed(2)}</div>
+                        <div className="col-span-2 text-right" data-testid={`text-amount-${index}`}>{formatCurrency(item.amount, expense.currency, homeCurrency)}</div>
                       </div>
                     );
                   })}
@@ -377,7 +385,7 @@ export default function ExpenseView() {
             <div className="w-72">
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <div className="text-gray-500">Subtotal:</div>
-                <div className="text-right" data-testid="text-subtotal">${subtotal.toFixed(2)}</div>
+                <div className="text-right" data-testid="text-subtotal">{formatCurrency(subtotal, expense.currency, homeCurrency)}</div>
                 
                 {totalTaxAmount > 0 && (
                   <>
@@ -386,12 +394,12 @@ export default function ExpenseView() {
                         ? taxNames.join(', ')  
                         : 'Tax'}:
                     </div>
-                    <div className="text-right" data-testid="text-tax">${totalTaxAmount.toFixed(2)}</div>
+                    <div className="text-right" data-testid="text-tax">{formatCurrency(totalTaxAmount, expense.currency, homeCurrency)}</div>
                   </>
                 )}
                 
                 <div className="text-gray-800 font-medium pt-2 border-t">Total:</div>
-                <div className="text-right font-medium pt-2 border-t" data-testid="text-total">${total.toFixed(2)}</div>
+                <div className="text-right font-medium pt-2 border-t" data-testid="text-total">{formatCurrency(total, expense.currency, homeCurrency)}</div>
               </div>
             </div>
           </div>

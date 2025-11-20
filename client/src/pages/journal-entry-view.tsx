@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Transaction, LedgerEntry, Contact, Account } from "@shared/schema";
 
 interface LedgerEntryWithExtras extends LedgerEntry {
@@ -57,6 +58,13 @@ export default function JournalEntryView() {
     queryKey: ['/api/accounts'],
   });
   
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
+  
   // Extract data once fetched
   const journalEntry: Transaction | undefined = journalData?.transaction;
   const ledgerEntries: LedgerEntry[] = journalData?.ledgerEntries || [];
@@ -90,15 +98,6 @@ export default function JournalEntryView() {
       default:
         return 'bg-gray-100 text-gray-800';
     }
-  };
-  
-  // Format currency
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
   
   if (journalLoading || contactsLoading || accountsLoading) {
@@ -248,12 +247,12 @@ export default function JournalEntryView() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="text-sm text-gray-900" data-testid={`text-debit-${entry.id}`}>
-                          {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                          {entry.debit > 0 ? formatCurrency(entry.debit, journalEntry.currency, homeCurrency) : '-'}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="text-sm text-gray-900" data-testid={`text-credit-${entry.id}`}>
-                          {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                          {entry.credit > 0 ? formatCurrency(entry.credit, journalEntry.currency, homeCurrency) : '-'}
                         </div>
                       </td>
                     </tr>
@@ -266,12 +265,12 @@ export default function JournalEntryView() {
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="text-sm font-bold text-gray-900" data-testid="text-total-debits">
-                        {formatCurrency(totalDebits)}
+                        {formatCurrency(totalDebits, journalEntry.currency, homeCurrency)}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="text-sm font-bold text-gray-900" data-testid="text-total-credits">
-                        {formatCurrency(totalCredits)}
+                        {formatCurrency(totalCredits, journalEntry.currency, homeCurrency)}
                       </div>
                     </td>
                   </tr>
@@ -284,7 +283,7 @@ export default function JournalEntryView() {
                         </span>
                       ) : (
                         <span className="text-sm text-red-600 font-medium" data-testid="text-balance-status">
-                          ⚠ Out of balance by {formatCurrency(Math.abs(totalDebits - totalCredits))}
+                          ⚠ Out of balance by {formatCurrency(Math.abs(totalDebits - totalCredits), journalEntry.currency, homeCurrency)}
                         </span>
                       )}
                     </td>

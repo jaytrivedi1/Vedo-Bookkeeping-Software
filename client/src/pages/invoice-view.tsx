@@ -46,6 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { useInvoiceTemplate } from "@/hooks/use-invoice-template";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
 export default function InvoiceView() {
@@ -229,6 +230,13 @@ export default function InvoiceView() {
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Fetch payment history for this invoice
   const { data: paymentHistory, isLoading: paymentsLoading } = useQuery<PaymentHistory>({
@@ -486,7 +494,7 @@ export default function InvoiceView() {
               </div>
               <div className="flex justify-between font-medium pt-2">
                 <span>Amount Due:</span>
-                <span>${invoice.amount?.toFixed(2)}</span>
+                <span>{formatCurrency(invoice.amount || 0, invoice.currency, homeCurrency)}</span>
               </div>
             </div>
           </div>
@@ -514,11 +522,11 @@ export default function InvoiceView() {
                           <p className="font-medium">{item.description}</p>
                         </div>
                         <div className="col-span-1 text-center">{item.quantity}</div>
-                        <div className="col-span-1 text-center">${item.unitPrice.toFixed(2)}</div>
+                        <div className="col-span-1 text-center">{formatCurrency(item.unitPrice, invoice.currency, homeCurrency)}</div>
                         <div className="col-span-1 text-center">
                           {tax ? `${tax.name} (${tax.rate}%)` : 'None'}
                         </div>
-                        <div className="col-span-2 text-right">${item.amount.toFixed(2)}</div>
+                        <div className="col-span-2 text-right">{formatCurrency(item.amount, invoice.currency, homeCurrency)}</div>
                       </div>
                     );
                   })}
@@ -536,7 +544,7 @@ export default function InvoiceView() {
             <div className="w-72">
               <div className="grid grid-cols-2 gap-2 mb-4">
                 <div className="text-gray-500">Subtotal:</div>
-                <div className="text-right">${subtotal.toFixed(2)}</div>
+                <div className="text-right">{formatCurrency(subtotal, invoice.currency, homeCurrency)}</div>
                 
                 {totalTaxAmount > 0 && (
                   <>
@@ -545,30 +553,32 @@ export default function InvoiceView() {
                         ? taxNames.join(', ')  
                         : 'Tax'}:
                     </div>
-                    <div className="text-right">${totalTaxAmount.toFixed(2)}</div>
+                    <div className="text-right">{formatCurrency(totalTaxAmount, invoice.currency, homeCurrency)}</div>
                   </>
                 )}
                 
                 <div className="text-gray-800 font-medium pt-2 border-t">Total:</div>
-                <div className="text-right font-medium pt-2 border-t">${total.toFixed(2)}</div>
+                <div className="text-right font-medium pt-2 border-t">{formatCurrency(total, invoice.currency, homeCurrency)}</div>
                 
                 {/* Use payment history values for accurate numbers */}
                 <div className="text-gray-800 font-medium">Amount Paid:</div>
                 <div className="text-right font-medium">
-                  ${paymentHistory?.summary?.totalPaid?.toFixed(2) || '0.00'}
+                  {formatCurrency(paymentHistory?.summary?.totalPaid || 0, invoice.currency, homeCurrency)}
                 </div>
                 
                 <div className="text-gray-800 font-bold">Balance Due:</div>
                 <div className="text-right font-bold">
-                  ${
+                  {formatCurrency(
                     // Calculate balance due as follows:
                     // 1. Start with invoice total
                     // 2. Subtract any payments from payment history
                     // 3. Subtract any applied credits
                     invoice.balance !== null && invoice.balance !== undefined 
-                    ? Math.max(0, invoice.balance).toFixed(2) 
-                    : Math.max(0, (total - (paymentHistory?.summary?.totalPaid || 0))).toFixed(2)
-                  }
+                    ? Math.max(0, invoice.balance) 
+                    : Math.max(0, (total - (paymentHistory?.summary?.totalPaid || 0))),
+                    invoice.currency,
+                    homeCurrency
+                  )}
                 </div>
                 
                 {paymentHistory && paymentHistory.summary && (
@@ -607,7 +617,7 @@ export default function InvoiceView() {
                         {payment.description}
                       </div>
                       <div className="col-span-2 text-right font-medium">
-                        ${payment.amountApplied.toFixed(2)}
+                        {formatCurrency(payment.amountApplied, invoice.currency, homeCurrency)}
                       </div>
                     </div>
                   ))}
@@ -616,7 +626,7 @@ export default function InvoiceView() {
                 {/* Summary row */}
                 <div className="px-4 py-3 bg-gray-100 grid grid-cols-12 gap-4 font-medium">
                   <div className="col-span-10 text-right">Total Applied:</div>
-                  <div className="col-span-2 text-right">${paymentHistory.summary.totalPaid.toFixed(2)}</div>
+                  <div className="col-span-2 text-right">{formatCurrency(paymentHistory.summary.totalPaid, invoice.currency, homeCurrency)}</div>
                 </div>
               </div>
               
@@ -624,14 +634,14 @@ export default function InvoiceView() {
               <div className="mt-4 bg-blue-50 p-4 rounded-md">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="text-gray-700">Original Amount:</div>
-                  <div className="text-right">${paymentHistory.summary.originalAmount.toFixed(2)}</div>
+                  <div className="text-right">{formatCurrency(paymentHistory.summary.originalAmount, invoice.currency, homeCurrency)}</div>
                   
                   <div className="text-gray-700">Total Payments:</div>
-                  <div className="text-right">- ${paymentHistory.summary.totalPaid.toFixed(2)}</div>
+                  <div className="text-right">- {formatCurrency(paymentHistory.summary.totalPaid, invoice.currency, homeCurrency)}</div>
                   
                   <div className="text-gray-800 font-medium pt-2 border-t border-blue-200">Current Balance:</div>
                   <div className="text-right font-medium pt-2 border-t border-blue-200">
-                    ${paymentHistory.summary.remainingBalance.toFixed(2)}
+                    {formatCurrency(paymentHistory.summary.remainingBalance, invoice.currency, homeCurrency)}
                   </div>
                 </div>
               </div>

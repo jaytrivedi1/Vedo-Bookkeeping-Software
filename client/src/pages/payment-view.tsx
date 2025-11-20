@@ -17,6 +17,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
+import { formatCurrency } from "@/lib/currencyUtils";
 
 interface PaymentResponse {
   transaction: Transaction;
@@ -99,6 +100,13 @@ export default function PaymentView() {
   const { data: contacts } = useQuery<Contact[]>({ queryKey: ['/api/contacts'] });
   const { data: accounts } = useQuery<Account[]>({ queryKey: ['/api/accounts'] });
   const { data: transactions } = useQuery<Transaction[]>({ queryKey: ['/api/transactions'] });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Pre-fetch customer deposits
   const { data: allDeposits = [] } = useQuery({
@@ -287,15 +295,6 @@ export default function PaymentView() {
     
     initializedRef.current = true;
   }, [data, payment, ledgerEntries, customerDeposits, transactions]);
-  
-  // Format currency for display
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2
-    }).format(amount);
-  };
   
   // Format date for display
   const formatDate = (date: Date | null | undefined) => {
@@ -599,7 +598,7 @@ export default function PaymentView() {
                   className="border-0 h-7 p-0 shadow-none focus:ring-0"
                 />
               ) : (
-                formatCurrency(payment?.amount || 0)
+                formatCurrency(payment?.amount || 0, payment?.currency || 'CAD', homeCurrency)
               )}
             </div>
             {totalDepositCreditsBeingApplied > 0 && (
@@ -654,7 +653,7 @@ export default function PaymentView() {
                   return (
                     <tr key={index} className="border-b">
                       <td className="py-3 px-4">{billRef}</td>
-                      <td className="py-3 px-4 text-right">{formatCurrency(item.amount || 0)}</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(item.amount || 0, payment?.currency || 'CAD', homeCurrency)}</td>
                     </tr>
                   );
                 })}
@@ -716,7 +715,7 @@ export default function PaymentView() {
                     <td className="py-3 px-4">{invoice.invoiceReference}</td>
                     <td className="py-3 px-4">{formatDate(invoice.date)}</td>
                     <td className="py-3 px-4">{formatDate(invoice.dueDate) || 'N/A'}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(invoice.originalTotal)}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(invoice.originalTotal, payment?.currency || 'CAD', homeCurrency)}</td>
                     <td className="py-3 px-4 text-right">
                       {isEditing ? (
                         <Input
@@ -737,7 +736,7 @@ export default function PaymentView() {
                           disabled={updatePaymentMutation.isPending || !invoice.selected}
                         />
                       ) : (
-                        formatCurrency(invoice.amount)
+                        formatCurrency(invoice.amount, payment?.currency || 'CAD', homeCurrency)
                       )}
                     </td>
                   </tr>
@@ -828,7 +827,7 @@ export default function PaymentView() {
                     <td className="py-3 px-4">{deposit.reference}</td>
                     <td className="py-3 px-4">{formatDate(new Date(deposit.date))}</td>
                     <td className="py-3 px-4 max-w-[200px] truncate">{deposit.description || ''}</td>
-                    <td className="py-3 px-4 text-right">{formatCurrency(deposit.amount)}</td>
+                    <td className="py-3 px-4 text-right">{formatCurrency(deposit.amount, deposit.currency || payment?.currency || 'CAD', homeCurrency)}</td>
                     <td className="py-3 px-4 text-right">
                       {isEditing ? (
                         <Input
@@ -872,7 +871,9 @@ export default function PaymentView() {
                           ledgerEntries.find(entry => 
                             entry.description?.includes(`from deposit #${deposit.reference}`) && 
                             entry.debit > 0
-                          )?.debit || 0
+                          )?.debit || 0,
+                          payment?.currency || 'CAD',
+                          homeCurrency
                         )
                       )}
                     </td>
@@ -898,21 +899,21 @@ export default function PaymentView() {
           <div className="flex justify-between items-center py-1">
             <span>Amount Received:</span>
             <span>
-              {formatCurrency(safeAmountReceived)}
+              {formatCurrency(safeAmountReceived, payment?.currency || 'CAD', homeCurrency)}
             </span>
           </div>
           
           <div className="flex justify-between items-center py-1">
             <span>Total Applied to Invoices:</span>
             <span>
-              {formatCurrency(totalInvoicePayments)}
+              {formatCurrency(totalInvoicePayments, payment?.currency || 'CAD', homeCurrency)}
             </span>
           </div>
           
           <div className="flex justify-between items-center py-1">
             <span>Total Credits Applied:</span>
             <span>
-              {formatCurrency(effectiveCreditAmount || (payment?.id === 160 ? totalInvoicePayments : 0))}
+              {formatCurrency(effectiveCreditAmount || (payment?.id === 160 ? totalInvoicePayments : 0), payment?.currency || 'CAD', homeCurrency)}
             </span>
           </div>
           
@@ -920,7 +921,7 @@ export default function PaymentView() {
             <div className="flex justify-between items-center font-medium">
               <span>Net Balance Due:</span>
               <span className={actualBalance < 0 ? "text-red-600" : ""}>
-                {payment?.id === 160 ? formatCurrency(0) : formatCurrency(actualBalance)}
+                {payment?.id === 160 ? formatCurrency(0, payment?.currency || 'CAD', homeCurrency) : formatCurrency(actualBalance, payment?.currency || 'CAD', homeCurrency)}
                 {actualBalance < 0 && (
                   <span className="ml-1 text-xs font-normal">(Overpaid)</span>
                 )}

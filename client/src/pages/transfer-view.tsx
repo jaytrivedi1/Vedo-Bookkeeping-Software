@@ -18,6 +18,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Account, Transaction } from "@shared/schema";
 
 // Transaction response type
@@ -50,6 +51,13 @@ export default function TransferView() {
   const { data: accounts, isLoading: accountsLoading } = useQuery<Account[]>({ 
     queryKey: ['/api/accounts'] 
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Loading state
   if (isLoading || accountsLoading) {
@@ -207,7 +215,7 @@ export default function TransferView() {
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-1">Amount</h3>
               <p className="text-2xl font-bold text-primary" data-testid="text-amount">
-                ${transfer.amount.toFixed(2)}
+                {formatCurrency(transfer.amount, transfer.currency, homeCurrency)}
               </p>
             </div>
             
@@ -268,10 +276,10 @@ export default function TransferView() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-right" data-testid={`text-entry-debit-${index}`}>
-                              {entry.debit > 0 ? `$${entry.debit.toFixed(2)}` : '-'}
+                              {entry.debit > 0 ? formatCurrency(entry.debit, transfer.currency, homeCurrency) : '-'}
                             </td>
                             <td className="px-4 py-3 text-right" data-testid={`text-entry-credit-${index}`}>
-                              {entry.credit > 0 ? `$${entry.credit.toFixed(2)}` : '-'}
+                              {entry.credit > 0 ? formatCurrency(entry.credit, transfer.currency, homeCurrency) : '-'}
                             </td>
                           </tr>
                         );

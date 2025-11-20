@@ -25,6 +25,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2, Edit, Eye, Save, X } from "lucide-react";
@@ -70,6 +71,13 @@ export default function BillView() {
     queryKey: ["/api/accounts"],
     select: (data: Account[]) => data,
   });
+
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
 
   // Fetch sales tax options
   const { data: salesTaxes, isLoading: isLoadingSalesTaxes } = useQuery<SalesTax[]>({
@@ -335,13 +343,6 @@ export default function BillView() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
-
   if (isLoadingBill || isLoadingContacts || isLoadingAccounts) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -373,7 +374,7 @@ export default function BillView() {
           <div className="flex items-center gap-2 mt-2">
             {getStatusBadge(bill.status)}
             <span className="text-sm text-muted-foreground">
-              Balance: {formatCurrency(bill.balance || 0)}
+              Balance: {formatCurrency(bill.balance || 0, bill.currency, homeCurrency)}
             </span>
           </div>
         </div>
@@ -751,19 +752,19 @@ export default function BillView() {
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
                         <span className="font-semibold">
-                          {formatCurrency(form.watch("subTotal") || 0)}
+                          {formatCurrency(form.watch("subTotal") || 0, bill.currency, homeCurrency)}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Tax:</span>
                         <span className="font-semibold">
-                          {formatCurrency(form.watch("taxAmount") || 0)}
+                          {formatCurrency(form.watch("taxAmount") || 0, bill.currency, homeCurrency)}
                         </span>
                       </div>
                       <Separator />
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total:</span>
-                        <span>{formatCurrency(form.watch("totalAmount") || 0)}</span>
+                        <span>{formatCurrency(form.watch("totalAmount") || 0, bill.currency, homeCurrency)}</span>
                       </div>
                     </div>
                   </div>

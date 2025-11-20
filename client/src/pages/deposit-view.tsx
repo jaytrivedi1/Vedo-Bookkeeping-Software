@@ -7,6 +7,7 @@ import {
   ArrowLeft, Edit, Save, X, PlusCircle, Trash2, Receipt, DollarSign
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { Button } from "@/components/ui/button";
 import { toast, useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
@@ -61,6 +62,13 @@ export default function DepositView() {
   const { data: contacts } = useQuery<Contact[]>({ queryKey: ['/api/contacts'] });
   const { data: accounts } = useQuery<Account[]>({ queryKey: ['/api/accounts'] });
   const { data: salesTaxes } = useQuery<SalesTax[]>({ queryKey: ['/api/sales-taxes'] });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<{ homeCurrency?: string }>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Delete deposit mutation
   const deleteDepositMutation = useMutation({
@@ -241,10 +249,7 @@ export default function DepositView() {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-1">Amount</h3>
-                  <p className="text-base font-semibold">{new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD'
-                  }).format(deposit.amount)}</p>
+                  <p className="text-base font-semibold">{formatCurrency(deposit.amount, deposit.currency, homeCurrency)}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-1">Status</h3>
@@ -306,19 +311,13 @@ export default function DepositView() {
                           <td className="px-4 py-3">{entry.description}</td>
                           <td className="px-4 py-3 text-right">
                             {entry.debit 
-                              ? new Intl.NumberFormat('en-US', { 
-                                  style: 'currency', 
-                                  currency: 'USD' 
-                                }).format(entry.debit)
+                              ? formatCurrency(entry.debit, deposit.currency, homeCurrency)
                               : '-'
                             }
                           </td>
                           <td className="px-4 py-3 text-right">
                             {entry.credit
-                              ? new Intl.NumberFormat('en-US', { 
-                                  style: 'currency', 
-                                  currency: 'USD' 
-                                }).format(entry.credit)
+                              ? formatCurrency(entry.credit, deposit.currency, homeCurrency)
                               : '-'
                             }
                           </td>
@@ -330,19 +329,17 @@ export default function DepositView() {
                     <tr className="bg-muted/30">
                       <td colSpan={2} className="px-4 py-3 text-right font-semibold">Total</td>
                       <td className="px-4 py-3 text-right font-semibold">
-                        {new Intl.NumberFormat('en-US', { 
-                          style: 'currency', 
-                          currency: 'USD' 
-                        }).format(
-                          data.ledgerEntries?.reduce((sum, entry) => sum + (entry.debit || 0), 0) || 0
+                        {formatCurrency(
+                          data.ledgerEntries?.reduce((sum, entry) => sum + (entry.debit || 0), 0) || 0,
+                          deposit.currency,
+                          homeCurrency
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold">
-                        {new Intl.NumberFormat('en-US', { 
-                          style: 'currency', 
-                          currency: 'USD' 
-                        }).format(
-                          data.ledgerEntries?.reduce((sum, entry) => sum + (entry.credit || 0), 0) || 0
+                        {formatCurrency(
+                          data.ledgerEntries?.reduce((sum, entry) => sum + (entry.credit || 0), 0) || 0,
+                          deposit.currency,
+                          homeCurrency
                         )}
                       </td>
                     </tr>
