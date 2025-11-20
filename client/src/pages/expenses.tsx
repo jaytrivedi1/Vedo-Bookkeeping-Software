@@ -59,7 +59,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Transaction, Contact } from "@shared/schema";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { CalendarIcon } from "lucide-react";
@@ -424,7 +424,11 @@ export default function Expenses() {
                                 {format(new Date(expense.date), 'MMM dd, yyyy')}
                               </TableCell>
                               <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-payee-${expense.id}`}>
-                                {getContactName(expense.contactId)}
+                                {(() => {
+                                  const contact = contacts?.find(c => c.id === expense.contactId);
+                                  const contactName = getContactName(expense.contactId);
+                                  return formatContactName(contactName, contact?.currency, homeCurrency);
+                                })()}
                               </TableCell>
                               <TableCell className="text-sm text-gray-500" data-testid={`text-payment-method-${expense.id}`}>
                                 {getPaymentMethodLabel(expense.paymentMethod)}
@@ -551,7 +555,11 @@ export default function Expenses() {
                                 {format(new Date(bill.date), 'MMM dd, yyyy')}
                               </TableCell>
                               <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-bill-vendor-${bill.id}`}>
-                                {getContactName(bill.contactId)}
+                                {(() => {
+                                  const contact = contacts?.find(c => c.id === bill.contactId);
+                                  const contactName = getContactName(bill.contactId);
+                                  return formatContactName(contactName, contact?.currency, homeCurrency);
+                                })()}
                               </TableCell>
                               <TableCell className="text-sm text-gray-500" data-testid={`text-bill-payment-method-${bill.id}`}>
                                 {getPaymentMethodLabel(bill.paymentMethod)}

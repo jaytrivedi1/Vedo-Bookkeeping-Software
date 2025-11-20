@@ -48,7 +48,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 
 interface Preferences {
   homeCurrency?: string;
@@ -268,7 +268,11 @@ export default function Quotations() {
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm font-medium text-gray-900" data-testid={`text-customer-${quotation.id}`}>
-                                  {getContactName(quotation.contactId)}
+                                  {(() => {
+                                    const contact = contacts?.find(c => c.id === quotation.contactId);
+                                    const contactName = getContactName(quotation.contactId);
+                                    return formatContactName(contactName, contact?.currency, homeCurrency);
+                                  })()}
                                 </div>
                               </TableCell>
                               <TableCell className="text-sm text-gray-500" data-testid={`text-date-${quotation.id}`}>

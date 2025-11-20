@@ -72,7 +72,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankAccount, ImportedTransaction } from "@shared/schema";
 import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
 import CategorizeTransactionDialog from "@/components/bank-feed-categorization-dialog";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 
 interface Preferences {
   homeCurrency?: string;
@@ -2469,7 +2469,13 @@ export default function Banking() {
                                           {mode === 'match' && hasHighConfidenceMatch && (
                                             <div className="text-[10px] text-gray-600 space-y-0.5">
                                               <div className="flex items-center gap-1">
-                                                <span className="font-medium">{topMatch.contactName || 'Unknown'}</span>
+                                                <span className="font-medium">
+                                                  {(() => {
+                                                    const contact = contacts.find((c: any) => c.id === topMatch.contactId);
+                                                    const contactName = topMatch.contactName || 'Unknown';
+                                                    return formatContactName(contactName, contact?.currency, homeCurrency);
+                                                  })()}
+                                                </span>
                                                 <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
                                                   {topMatch.confidence}%
                                                 </Badge>

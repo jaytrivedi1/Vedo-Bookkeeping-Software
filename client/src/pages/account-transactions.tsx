@@ -6,7 +6,7 @@ import { ChevronLeft, Calendar, Filter } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency, formatReportAmount } from "@/lib/currencyUtils";
+import { formatCurrency, formatReportAmount, formatContactName } from "@/lib/currencyUtils";
 import {
   Card,
   CardContent,
@@ -91,6 +91,11 @@ export default function AccountTransactions() {
   });
   
   const homeCurrency = preferences?.homeCurrency || 'CAD';
+
+  // Fetch contacts to get currency information for contact names
+  const { data: contacts } = useQuery<any[]>({
+    queryKey: ['/api/contacts'],
+  });
   
   // Calculate fiscal year bounds
   const today = new Date();
@@ -398,7 +403,11 @@ export default function AccountTransactions() {
                           </span>
                         </TableCell>
                         <TableCell data-testid={`text-contact-${entry.id}`}>
-                          {entry.contactName || '-'}
+                          {(() => {
+                            if (!entry.contactName) return '-';
+                            const contact = contacts?.find((c: any) => c.name === entry.contactName);
+                            return formatContactName(entry.contactName, contact?.currency, homeCurrency);
+                          })()}
                         </TableCell>
                         <TableCell data-testid={`text-memo-${entry.id}`}>
                           {entry.memo || '-'}

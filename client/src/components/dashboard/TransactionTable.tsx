@@ -40,7 +40,7 @@ import {
   exportTransactionsToPDF,
   generateFilename 
 } from "@/lib/exportUtils";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 
 interface Preferences {
   homeCurrency?: string;
@@ -209,7 +209,11 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell>
                       <div className="text-sm font-medium text-gray-900">
-                        {getContactName(transaction.contactId)}
+                        {(() => {
+                          const contact = contacts?.find(c => c.id === transaction.contactId);
+                          const contactName = getContactName(transaction.contactId);
+                          return formatContactName(contactName, contact?.currency, homeCurrency);
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm font-medium text-gray-900">
