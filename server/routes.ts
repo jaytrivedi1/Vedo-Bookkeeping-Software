@@ -1107,6 +1107,289 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send quotation via email (requires authentication)
+  apiRouter.post("/quotations/:id/send", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const quotationId = parseInt(req.params.id);
+      const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;
+      
+      if (!recipientEmail) {
+        return res.status(400).json({ message: "Recipient email is required" });
+      }
+      
+      // Get quotation data
+      const quotation = await storage.getTransaction(quotationId);
+      if (!quotation || quotation.type !== 'invoice' || quotation.status !== 'quotation') {
+        return res.status(404).json({ message: "Quotation not found" });
+      }
+      
+      // Get related data
+      const lineItems = await storage.getLineItemsByTransaction(quotationId);
+      const customer = quotation.contactId ? await storage.getContact(quotation.contactId) : null;
+      const company = await storage.getDefaultCompany();
+      
+      // Generate or get secure token
+      let token = quotation.secureToken;
+      if (!token) {
+        token = await storage.generateSecureToken(quotationId);
+      }
+      
+      // Generate public quotation link
+      const baseUrl = process.env.REPL_SLUG 
+        ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : `http://localhost:${process.env.PORT || 5000}`;
+      const quotationLink = `${baseUrl}/invoice/public/${token}`;
+      
+      // Generate PDF if attachment requested
+      let pdfAttachment = null;
+      if (includeAttachment) {
+        const { generateInvoicePDF } = await import('./invoice-pdf-generator');
+        const pdfBuffer = await generateInvoicePDF({
+          transaction: { ...quotation, reference: `QUO-${quotation.reference}` },
+          lineItems,
+          customer,
+          company,
+          isQuotation: true
+        });
+        
+        pdfAttachment = {
+          filename: `quotation-${quotation.reference || quotation.id}.pdf`,
+          content: pdfBuffer
+        };
+      }
+      
+      // Send email via Resend
+      const { getUncachableResendClient } = await import('./resend-client');
+      const { client, fromEmail } = await getUncachableResendClient();
+      
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+            .quotation-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e5e7eb; }
+            .button { display: inline-block; background: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>New Quotation</h1>
+              ${company?.name ? `<p>from ${company.name}</p>` : ''}
+            </div>
+            <div class="content">
+              <p>Dear ${recipientName || customer?.name || 'Customer'},</p>
+              ${message ? `<p>${message}</p>` : '<p>Thank you for your interest. Please find the quotation details below.</p>'}
+              
+              <div class="quotation-details">
+                <div class="detail-row">
+                  <strong>Quotation Number:</strong>
+                  <span>QUO-${quotation.reference || quotation.id}</span>
+                </div>
+                <div class="detail-row">
+                  <strong>Date:</strong>
+                  <span>${new Date(quotation.date).toLocaleDateString()}</span>
+                </div>
+                <div class="detail-row">
+                  <strong>Valid Until:</strong>
+                  <span>${quotation.dueDate ? new Date(quotation.dueDate).toLocaleDateString() : 'N/A'}</span>
+                </div>
+                <div class="detail-row">
+                  <strong>Total Amount:</strong>
+                  <span style="font-size: 18px; font-weight: bold; color: #10b981;">$${quotation.amount.toFixed(2)}</span>
+                </div>
+              </div>
+              
+              <center>
+                <a href="${quotationLink}" class="button">View Quotation Online</a>
+              </center>
+              
+              <p style="margin-top: 30px;">If you have any questions or would like to proceed with this quotation, please don't hesitate to contact us.</p>
+              
+              ${company ? `
+              <div class="footer">
+                <p><strong>${company.name}</strong></p>
+                ${company.email ? `<p>Email: ${company.email}</p>` : ''}
+                ${company.phone ? `<p>Phone: ${company.phone}</p>` : ''}
+                ${company.street1 ? `<p>${company.street1}${company.street2 ? ', ' + company.street2 : ''}</p>` : ''}
+                ${company.city ? `<p>${company.city}, ${company.state} ${company.postalCode}</p>` : ''}
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const emailData: any = {
+        from: fromEmail,
+        to: recipientEmail,
+        subject: `Quotation ${quotation.reference || quotation.id} from ${company?.name || 'Vedo'}`,
+        html: emailHtml
+      };
+      
+      if (pdfAttachment) {
+        emailData.attachments = [pdfAttachment];
+      }
+      
+      await client.emails.send(emailData);
+      
+      // Log activity
+      await storage.createInvoiceActivity({
+        invoiceId: quotationId,
+        activityType: 'sent',
+        userId: req.user?.id || null,
+        metadata: {
+          recipientEmail,
+          recipientName,
+          sentAt: new Date().toISOString(),
+          isQuotation: true
+        },
+        timestamp: new Date()
+      });
+      
+      // Track with activity logger
+      await logActivity({
+        userId: req.user?.id,
+        action: 'quotation_sent',
+        entityType: 'invoice',
+        entityId: quotationId,
+        details: `Sent quotation ${quotation.reference} to ${recipientEmail}`
+      });
+      
+      res.json({ 
+        message: "Quotation sent successfully",
+        quotationLink
+      });
+    } catch (error) {
+      console.error("Error sending quotation email:", error);
+      res.status(500).json({ 
+        message: "Failed to send quotation email",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Convert quotation to invoice
+  apiRouter.post("/quotations/:id/convert", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const quotationId = parseInt(req.params.id);
+      
+      // Get quotation data
+      const quotation = await storage.getTransaction(quotationId);
+      if (!quotation || quotation.type !== 'invoice' || quotation.status !== 'quotation') {
+        return res.status(404).json({ message: "Quotation not found" });
+      }
+      
+      // Get line items
+      const lineItems = await storage.getLineItemsByTransaction(quotationId);
+      
+      // Prepare ledger entries for the now-converted invoice
+      const arAccountId = 2; // Accounts Receivable
+      const revenueAccountId = 9; // Default revenue account
+      
+      const ledgerEntriesData = [
+        {
+          accountId: arAccountId,
+          description: `Invoice ${quotation.reference}`,
+          debit: quotation.amount,
+          credit: 0,
+          date: quotation.date
+        },
+        {
+          accountId: revenueAccountId,
+          description: `Invoice ${quotation.reference}`,
+          debit: 0,
+          credit: quotation.subTotal || quotation.amount,
+          date: quotation.date
+        }
+      ];
+      
+      // Add tax ledger entry if there's tax
+      if (quotation.taxAmount && quotation.taxAmount > 0) {
+        ledgerEntriesData.push({
+          accountId: 16, // Sales Tax Payable account
+          description: `Invoice ${quotation.reference} - Sales Tax`,
+          debit: 0,
+          credit: quotation.taxAmount,
+          date: quotation.date
+        });
+      }
+      
+      // Update status to 'open' (converted to invoice)
+      await storage.updateTransaction(quotationId, { status: 'open' });
+      
+      // Create ledger entries
+      for (const entry of ledgerEntriesData) {
+        await db.insert(ledgerEntries).values({
+          ...entry,
+          transactionId: quotationId
+        });
+      }
+      
+      // Update account balances
+      for (const entry of ledgerEntriesData) {
+        const account = await db.select().from(accounts).where(eq(accounts.id, entry.accountId));
+        if (account.length > 0) {
+          let newBalance = account[0].balance;
+          
+          // Apply debits and credits according to account type
+          if (['asset', 'expense'].includes(account[0].type)) {
+            newBalance += (entry.debit || 0) - (entry.credit || 0);
+          } else {
+            newBalance += (entry.credit || 0) - (entry.debit || 0);
+          }
+          
+          await db.update(accounts)
+            .set({ balance: newBalance })
+            .where(eq(accounts.id, entry.accountId));
+        }
+      }
+      
+      // Log activity
+      await storage.createInvoiceActivity({
+        invoiceId: quotationId,
+        activityType: 'status_changed',
+        userId: req.user?.id || null,
+        metadata: {
+          previousStatus: 'quotation',
+          newStatus: 'open',
+          convertedAt: new Date().toISOString()
+        },
+        timestamp: new Date()
+      });
+      
+      // Track with activity logger
+      await logActivity({
+        userId: req.user?.id,
+        action: 'quotation_converted',
+        entityType: 'invoice',
+        entityId: quotationId,
+        details: `Converted quotation ${quotation.reference} to invoice`
+      });
+      
+      // Get updated transaction
+      const updatedInvoice = await storage.getTransaction(quotationId);
+      
+      res.json({
+        message: "Quotation converted to invoice successfully",
+        invoice: updatedInvoice
+      });
+    } catch (error) {
+      console.error("Error converting quotation:", error);
+      res.status(500).json({ 
+        message: "Failed to convert quotation",
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // Update an existing invoice
   apiRouter.patch("/invoices/:id", async (req: Request, res: Response) => {
     try {
