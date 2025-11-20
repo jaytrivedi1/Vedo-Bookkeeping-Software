@@ -54,13 +54,21 @@ export default function InvoiceFormPage() {
     enabled: isEditMode,
   });
 
-  // Navigate back to invoices list
+  // Navigate back to appropriate list based on document type
   const handleSuccess = () => {
-    setLocation("/invoices");
+    if (initialDocumentType === 'quotation') {
+      setLocation("/quotations");
+    } else {
+      setLocation("/invoices");
+    }
   };
 
   const handleCancel = () => {
-    setLocation("/invoices");
+    if (initialDocumentType === 'quotation') {
+      setLocation("/quotations");
+    } else {
+      setLocation("/invoices");
+    }
   };
 
   // Show loading state while fetching invoice data in edit mode
