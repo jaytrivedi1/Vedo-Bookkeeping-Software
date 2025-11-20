@@ -6,7 +6,7 @@ import { Search, Building, ChevronRight, X, Edit, Eye, Trash2, FileText, DollarS
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import { 
   Card, 
@@ -276,7 +276,7 @@ export default function VendorList({ className }: VendorListProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900 truncate">{vendor.name}</h3>
+                        <h3 className="font-medium text-gray-900 truncate">{formatContactName(vendor.name, vendor.currency, homeCurrency)}</h3>
                         {vendor.isActive === false && (
                           <Badge variant="secondary" className="text-xs" data-testid={`badge-inactive-${vendor.id}`}>
                             Inactive
@@ -312,7 +312,7 @@ export default function VendorList({ className }: VendorListProps) {
               <div className="p-6">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h2 className="text-2xl font-bold mb-1">{selectedVendor.name}</h2>
+                    <h2 className="text-2xl font-bold mb-1">{formatContactName(selectedVendor.name, selectedVendor.currency, homeCurrency)}</h2>
                     {selectedVendor.contactName && (
                       <p className="text-gray-600 mb-1">Contact: {selectedVendor.contactName}</p>
                     )}
