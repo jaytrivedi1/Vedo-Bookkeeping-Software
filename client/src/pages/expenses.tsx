@@ -59,11 +59,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Transaction, Contact } from "@shared/schema";
-import { formatCurrency } from "@shared/utils";
+import { formatCurrency } from "@/lib/currencyUtils";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 export default function Expenses() {
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -80,6 +84,13 @@ export default function Expenses() {
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   const getContactName = (contactId: number | null): string => {
     if (!contactId) return 'No vendor';
@@ -247,7 +258,7 @@ export default function Expenses() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold" data-testid="text-total-expenses">
-                  ${formatCurrency(totalExpenses)}
+                  {formatCurrency(totalExpenses, homeCurrency, homeCurrency)}
                 </p>
               </CardContent>
             </Card>
@@ -258,7 +269,7 @@ export default function Expenses() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-green-600" data-testid="text-completed-expenses">
-                  ${formatCurrency(completedExpenses)}
+                  {formatCurrency(completedExpenses, homeCurrency, homeCurrency)}
                 </p>
               </CardContent>
             </Card>
@@ -269,7 +280,7 @@ export default function Expenses() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-yellow-600" data-testid="text-open-expenses">
-                  ${formatCurrency(openExpenses)}
+                  {formatCurrency(openExpenses, homeCurrency, homeCurrency)}
                 </p>
               </CardContent>
             </Card>
@@ -419,7 +430,7 @@ export default function Expenses() {
                                 {getPaymentMethodLabel(expense.paymentMethod)}
                               </TableCell>
                               <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-amount-${expense.id}`}>
-                                ${formatCurrency(expense.amount)}
+                                {formatCurrency(expense.amount, expense.currency, homeCurrency)}
                               </TableCell>
                               <TableCell data-testid={`badge-status-${expense.id}`}>
                                 <Badge className={getStatusBadgeColor(expense.status)}>
@@ -546,7 +557,7 @@ export default function Expenses() {
                                 {getPaymentMethodLabel(bill.paymentMethod)}
                               </TableCell>
                               <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-bill-amount-${bill.id}`}>
-                                ${formatCurrency(bill.amount)}
+                                {formatCurrency(bill.amount, bill.currency, homeCurrency)}
                               </TableCell>
                               <TableCell data-testid={`badge-bill-status-${bill.id}`}>
                                 <Badge className={getStatusBadgeColor(bill.status)}>

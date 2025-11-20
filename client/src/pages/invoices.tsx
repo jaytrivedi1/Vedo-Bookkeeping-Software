@@ -49,6 +49,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Transaction } from "@shared/schema";
+import { formatCurrency } from "@/lib/currencyUtils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 export default function Invoices() {
 
@@ -59,6 +64,13 @@ export default function Invoices() {
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Filter invoices
   const invoices = transactions
@@ -175,7 +187,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Total Invoiced</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalInvoiced)}</p>
+                <p className="text-2xl font-semibold">{formatCurrency(totalInvoiced, homeCurrency, homeCurrency)}</p>
               </CardContent>
             </Card>
             
@@ -184,7 +196,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Completed</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-green-600">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalPaid)}</p>
+                <p className="text-2xl font-semibold text-green-600">{formatCurrency(totalPaid, homeCurrency, homeCurrency)}</p>
               </CardContent>
             </Card>
             
@@ -193,7 +205,7 @@ export default function Invoices() {
                 <CardTitle className="text-sm text-gray-500">Open</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold text-yellow-600">${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalPending)}</p>
+                <p className="text-2xl font-semibold text-yellow-600">{formatCurrency(totalPending, homeCurrency, homeCurrency)}</p>
               </CardContent>
             </Card>
           </div>

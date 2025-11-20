@@ -11,6 +11,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Transaction, LedgerEntry } from "@shared/schema";
+import { formatCurrency } from "@/lib/currencyUtils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 export default function Journals() {
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -19,6 +24,13 @@ export default function Journals() {
   const { data: transactions, isLoading: transactionsLoading, refetch } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Fetch all ledger entries
   const { data: ledgerEntries, isLoading: ledgerLoading } = useQuery<LedgerEntry[]>({
@@ -79,7 +91,7 @@ export default function Journals() {
                 <CardTitle className="text-sm text-gray-500">Total Transaction Amount</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-semibold">${totalDebits.toFixed(2)}</p>
+                <p className="text-2xl font-semibold">{formatCurrency(totalDebits, homeCurrency, homeCurrency)}</p>
                 <p className="text-xs text-gray-500">Debits and Credits are balanced</p>
               </CardContent>
             </Card>

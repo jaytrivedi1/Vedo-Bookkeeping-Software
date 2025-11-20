@@ -40,6 +40,11 @@ import {
   exportTransactionsToPDF,
   generateFilename 
 } from "@/lib/exportUtils";
+import { formatCurrency } from "@/lib/currencyUtils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -55,6 +60,13 @@ export default function TransactionTable({ transactions, loading = false, onDele
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Function to get contact name by ID
   const getContactName = (contactId: number | null): string => {
@@ -203,17 +215,18 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     <TableCell className="text-sm font-medium text-gray-900">
                       {(() => {
                         const contact = contacts?.find(c => c.id === transaction.contactId);
+                        const formattedAmount = formatCurrency(transaction.amount, transaction.currency, homeCurrency);
                         // Vendor payments are negative (money going out)
                         if (transaction.type === 'payment' && contact?.type === 'vendor') {
-                          return '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                          return '-' + formattedAmount;
                         }
                         // Expenses and deposits are negative (money going out)
                         else if (transaction.type === 'expense' || transaction.type === 'deposit') {
-                          return '-$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                          return '-' + formattedAmount;
                         }
                         // Everything else is positive (bills, invoices, customer payments)
                         else {
-                          return '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(transaction.amount);
+                          return formattedAmount;
                         }
                       })()}
                     </TableCell>

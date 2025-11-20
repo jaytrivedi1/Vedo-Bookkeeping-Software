@@ -48,6 +48,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { formatCurrency } from "@/lib/currencyUtils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 export default function Quotations() {
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -64,6 +69,13 @@ export default function Quotations() {
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Filter quotations
   const quotations = transactions
@@ -166,7 +178,7 @@ export default function Quotations() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold" data-testid="text-total-quoted">
-                  ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalQuotations)}
+                  {formatCurrency(totalQuotations, homeCurrency, homeCurrency)}
                 </p>
               </CardContent>
             </Card>
@@ -188,9 +200,9 @@ export default function Quotations() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-semibold text-purple-600" data-testid="text-average-value">
-                  ${pendingCount > 0 
-                    ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalQuotations / pendingCount)
-                    : '0.00'
+                  {pendingCount > 0 
+                    ? formatCurrency(totalQuotations / pendingCount, homeCurrency, homeCurrency)
+                    : formatCurrency(0, homeCurrency, homeCurrency)
                   }
                 </p>
               </CardContent>
@@ -269,7 +281,7 @@ export default function Quotations() {
                                 }
                               </TableCell>
                               <TableCell className="text-sm font-medium text-gray-900" data-testid={`text-amount-${quotation.id}`}>
-                                ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(quotation.amount)}
+                                {formatCurrency(quotation.amount, quotation.currency, homeCurrency)}
                               </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex gap-2 justify-end">

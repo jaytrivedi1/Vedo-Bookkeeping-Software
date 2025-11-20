@@ -6,6 +6,7 @@ import { ChevronLeft, Calendar, Filter } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatCurrency } from "@/lib/currencyUtils";
 import {
   Card,
   CardContent,
@@ -62,6 +63,10 @@ interface CompanySettings {
   fiscalYearStartMonth: number;
 }
 
+interface Preferences {
+  homeCurrency?: string;
+}
+
 export default function AccountTransactions() {
   const params = useParams();
   const [location, setLocation] = useLocation();
@@ -79,6 +84,13 @@ export default function AccountTransactions() {
   });
 
   const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+  
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   
   // Calculate fiscal year bounds
   const today = new Date();
@@ -168,14 +180,6 @@ export default function AccountTransactions() {
       return true;
     });
   }, [ledgerData, transactionTypeFilter, memoSearch]);
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   // Get account type label
   const getAccountTypeLabel = (type: string) => {
@@ -370,7 +374,7 @@ export default function AccountTransactions() {
                     <TableCell colSpan={6}>Beginning Balance</TableCell>
                     <TableCell className="text-right" colSpan={2}></TableCell>
                     <TableCell className="text-right" data-testid="text-beginning-balance">
-                      {formatCurrency(ledgerData.beginningBalance)}
+                      {formatCurrency(ledgerData.beginningBalance, homeCurrency, homeCurrency)}
                     </TableCell>
                   </TableRow>
                   {filteredEntries.map((entry) => {
@@ -403,13 +407,13 @@ export default function AccountTransactions() {
                           {entry.splitAccountName}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-debit-${entry.id}`}>
-                          {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                          {entry.debit > 0 ? formatCurrency(entry.debit, entry.currency || homeCurrency, homeCurrency) : '-'}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-credit-${entry.id}`}>
-                          {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                          {entry.credit > 0 ? formatCurrency(entry.credit, entry.currency || homeCurrency, homeCurrency) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-medium" data-testid={`text-balance-${entry.id}`}>
-                          {formatCurrency(entry.runningBalance)}
+                          {formatCurrency(entry.runningBalance, homeCurrency, homeCurrency)}
                         </TableCell>
                       </TableRow>
                     );
@@ -418,7 +422,7 @@ export default function AccountTransactions() {
                     <TableCell colSpan={6}>Ending Balance</TableCell>
                     <TableCell className="text-right" colSpan={2}></TableCell>
                     <TableCell className="text-right" data-testid="text-ending-balance">
-                      {formatCurrency(ledgerData.endingBalance)}
+                      {formatCurrency(ledgerData.endingBalance, homeCurrency, homeCurrency)}
                     </TableCell>
                   </TableRow>
                 </TableBody>

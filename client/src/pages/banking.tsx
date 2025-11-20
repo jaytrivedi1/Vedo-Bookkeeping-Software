@@ -72,7 +72,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BankAccount, ImportedTransaction } from "@shared/schema";
 import BankFeedSetupDialog from "@/components/bank-feed-setup-dialog";
 import CategorizeTransactionDialog from "@/components/bank-feed-categorization-dialog";
-import { formatCurrency as formatCurrencyUtil } from "@shared/utils";
+import { formatCurrency } from "@/lib/currencyUtils";
+
+interface Preferences {
+  homeCurrency?: string;
+}
 
 interface GLAccount {
   id: number;
@@ -169,6 +173,13 @@ function RulesManagementTab() {
   const { toast } = useToast();
   const [editingRule, setEditingRule] = useState<any | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
 
   // Fetch rules
   const { data: rules = [], isLoading: rulesLoading } = useQuery({
@@ -273,11 +284,11 @@ function RulesManagementTab() {
     }
     if (conditions.amountMin !== null || conditions.amountMax !== null) {
       if (conditions.amountMin !== null && conditions.amountMax !== null) {
-        parts.push(`Amount between ${formatCurrencyUtil(conditions.amountMin)} and ${formatCurrencyUtil(conditions.amountMax)}`);
+        parts.push(`Amount between ${formatCurrency(conditions.amountMin, homeCurrency, homeCurrency)} and ${formatCurrency(conditions.amountMax, homeCurrency, homeCurrency)}`);
       } else if (conditions.amountMin !== null) {
-        parts.push(`Amount ≥ ${formatCurrencyUtil(conditions.amountMin)}`);
+        parts.push(`Amount ≥ ${formatCurrency(conditions.amountMin, homeCurrency, homeCurrency)}`);
       } else {
-        parts.push(`Amount ≤ ${formatCurrencyUtil(conditions.amountMax)}`);
+        parts.push(`Amount ≤ ${formatCurrency(conditions.amountMax, homeCurrency, homeCurrency)}`);
       }
     }
     return parts.join(' AND ');
@@ -557,6 +568,13 @@ export default function Banking() {
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [resizing]);
+
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<Preferences>({
+    queryKey: ['/api/settings/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
 
   // Fetch GL accounts eligible for bank feeds
   const { data: glAccounts = [], isLoading: glAccountsLoading } = useQuery<GLAccount[]>({
@@ -1119,13 +1137,6 @@ export default function Banking() {
     },
   });
 
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined) return '-';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
-  };
 
   // Calculate total table width for fixed table layout
   const totalTableWidth = Object.values(columnWidths).reduce((sum, width) => sum + width, 0);
@@ -1837,14 +1848,14 @@ export default function Banking() {
                                   <div className="flex justify-between items-center">
                                     <span className="text-xs text-gray-500">Bank:</span>
                                     <span className="text-sm font-medium">
-                                      {formatCurrency(account.bankAccount.currentBalance || 0)}
+                                      {formatCurrency(account.bankAccount.currentBalance || 0, homeCurrency, homeCurrency)}
                                     </span>
                                   </div>
                                 )}
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs text-gray-500">Books:</span>
                                   <span className="text-sm font-medium">
-                                    {formatCurrency(account.balance)}
+                                    {formatCurrency(account.balance, homeCurrency, homeCurrency)}
                                   </span>
                                 </div>
                               </div>
@@ -2313,10 +2324,10 @@ export default function Banking() {
                                 )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount))) : '-'}
+                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount)), homeCurrency, homeCurrency) : '-'}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount)) : '-'}
+                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount), homeCurrency, homeCurrency) : '-'}
                               </TableCell>
                               <TableCell 
                                 style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} 
@@ -2464,7 +2475,7 @@ export default function Banking() {
                                                 </Badge>
                                               </div>
                                               <div className="text-gray-500">
-                                                {formatCurrency(topMatch.amount)} • {format(new Date(topMatch.date), 'PP')}
+                                                {formatCurrency(topMatch.amount, homeCurrency, homeCurrency)} • {format(new Date(topMatch.date), 'PP')}
                                               </div>
                                             </div>
                                           )}
@@ -2790,16 +2801,16 @@ export default function Banking() {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                           <div>
                             <p className="text-sm text-gray-500">Statement Balance</p>
-                            <p className="text-xl font-semibold">${formatCurrencyUtil(activeReconciliation.statementEndingBalance)}</p>
+                            <p className="text-xl font-semibold">{formatCurrency(activeReconciliation.statementEndingBalance, homeCurrency, homeCurrency)}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Cleared Balance</p>
-                            <p className="text-xl font-semibold">${formatCurrencyUtil(activeReconciliation.clearedBalance || 0)}</p>
+                            <p className="text-xl font-semibold">{formatCurrency(activeReconciliation.clearedBalance || 0, homeCurrency, homeCurrency)}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Difference</p>
                             <p className={`text-xl font-semibold ${activeReconciliation.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ${formatCurrencyUtil(activeReconciliation.difference || 0)}
+                              {formatCurrency(activeReconciliation.difference || 0, homeCurrency, homeCurrency)}
                             </p>
                           </div>
                           <div>
@@ -2863,13 +2874,13 @@ export default function Banking() {
                                     <TableCell>{entry.reference || '-'}</TableCell>
                                     <TableCell>{entry.description || '-'}</TableCell>
                                     <TableCell className="text-right">
-                                      {entry.debit ? `$${formatCurrencyUtil(entry.debit)}` : '-'}
+                                      {entry.debit ? formatCurrency(entry.debit, homeCurrency, homeCurrency) : '-'}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      {entry.credit ? `$${formatCurrencyUtil(entry.credit)}` : '-'}
+                                      {entry.credit ? formatCurrency(entry.credit, homeCurrency, homeCurrency) : '-'}
                                     </TableCell>
                                     <TableCell className="text-right font-medium">
-                                      ${formatCurrencyUtil(runningBalance)}
+                                      {formatCurrency(runningBalance, homeCurrency, homeCurrency)}
                                     </TableCell>
                                   </TableRow>
                                 );
