@@ -416,34 +416,41 @@ export class DatabaseStorage implements IStorage {
         console.log(`[createTransaction] Inserted ${lineItemsData.length} line items`);
       }
       
-      // Insert ledger entries with the transaction ID (using processed entries with CAD amounts)
-      if (processedLedgerEntries.length > 0) {
-        await tx.insert(ledgerEntries).values(
-          processedLedgerEntries.map(entry => ({
-            ...entry,
-            transactionId: newTx.id
-          }))
-        );
-        console.log(`[createTransaction] Inserted ${processedLedgerEntries.length} ledger entries`);
-      }
+      // Skip ledger entries and account balance updates for quotations (they don't affect accounting)
+      const isQuotation = newTx.status === 'quotation' || newTx.status === 'draft';
       
-      // Update account balances based on ledger entries (using CAD amounts)
-      for (const entry of processedLedgerEntries) {
-        const account = await tx.select().from(accounts).where(eq(accounts.id, entry.accountId));
-        if (account.length > 0) {
-          let newBalance = account[0].balance;
-          
-          // Apply debits and credits according to account type
-          if (['asset', 'expense'].includes(account[0].type)) {
-            newBalance += (entry.debit || 0) - (entry.credit || 0);
-          } else {
-            newBalance += (entry.credit || 0) - (entry.debit || 0);
-          }
-          
-          await tx.update(accounts)
-            .set({ balance: newBalance })
-            .where(eq(accounts.id, entry.accountId));
+      if (!isQuotation) {
+        // Insert ledger entries with the transaction ID (using processed entries with CAD amounts)
+        if (processedLedgerEntries.length > 0) {
+          await tx.insert(ledgerEntries).values(
+            processedLedgerEntries.map(entry => ({
+              ...entry,
+              transactionId: newTx.id
+            }))
+          );
+          console.log(`[createTransaction] Inserted ${processedLedgerEntries.length} ledger entries`);
         }
+        
+        // Update account balances based on ledger entries (using CAD amounts)
+        for (const entry of processedLedgerEntries) {
+          const account = await tx.select().from(accounts).where(eq(accounts.id, entry.accountId));
+          if (account.length > 0) {
+            let newBalance = account[0].balance;
+            
+            // Apply debits and credits according to account type
+            if (['asset', 'expense'].includes(account[0].type)) {
+              newBalance += (entry.debit || 0) - (entry.credit || 0);
+            } else {
+              newBalance += (entry.credit || 0) - (entry.debit || 0);
+            }
+            
+            await tx.update(accounts)
+              .set({ balance: newBalance })
+              .where(eq(accounts.id, entry.accountId));
+          }
+        }
+      } else {
+        console.log(`[createTransaction] Skipping ledger entries for quotation/draft status`);
       }
       
       return [newTx];
