@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { formatCurrencyCompact } from "@/lib/currencyUtils";
 import {
   PieChart,
   Pie,
@@ -66,16 +67,6 @@ export default function Dashboard() {
   });
 
   const isLoading = companyLoading || metricsLoading;
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
 
   // Prepare Accounts Receivable data for donut chart
   const arData = metrics ? [
@@ -144,7 +135,7 @@ export default function Dashboard() {
                 <div className="space-y-4">
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-bold" data-testid="text-net-profit">
-                      {formatCurrency(metrics.profitLoss.netProfit)}
+                      {formatCurrencyCompact(metrics.profitLoss.netProfit, 'CAD', 'CAD')}
                     </span>
                     <div className="flex items-center gap-1 text-sm">
                       {metrics.profitLoss.percentageChange >= 0 ? (
@@ -174,7 +165,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground" data-testid="text-income-label">Income</span>
                         <span className="font-medium" data-testid="text-income-amount">
-                          {formatCurrency(metrics.profitLoss.income)}
+                          {formatCurrencyCompact(metrics.profitLoss.income, 'CAD', 'CAD')}
                         </span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -191,7 +182,7 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground" data-testid="text-expenses-label">Expenses</span>
                         <span className="font-medium" data-testid="text-expenses-amount">
-                          {formatCurrency(metrics.profitLoss.expenses)}
+                          {formatCurrencyCompact(metrics.profitLoss.expenses, 'CAD', 'CAD')}
                         </span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -226,7 +217,7 @@ export default function Dashboard() {
               ) : metrics && metrics.expensesByCategory.length > 0 ? (
                 <div className="space-y-4">
                   <div className="text-3xl font-bold" data-testid="text-total-expenses">
-                    {formatCurrency(metrics.expensesByCategory.reduce((sum, cat) => sum + cat.amount, 0))}
+                    {formatCurrencyCompact(metrics.expensesByCategory.reduce((sum, cat) => sum + cat.amount, 0), 'CAD', 'CAD')}
                   </div>
                   <ResponsiveContainer width="100%" height={200}>
                     <PieChart>
@@ -244,7 +235,7 @@ export default function Dashboard() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                      <Tooltip formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')} />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-2">
@@ -260,7 +251,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <span className="font-medium" data-testid={`text-expense-amount-${index}`}>
-                          {formatCurrency(category.amount)}
+                          {formatCurrencyCompact(category.amount, 'CAD', 'CAD')}
                         </span>
                       </div>
                     ))}
@@ -370,7 +361,7 @@ export default function Dashboard() {
               ) : metrics ? (
                 <div className="space-y-4">
                   <div className="text-3xl font-bold" data-testid="text-total-balance">
-                    {formatCurrency(metrics.bankAccounts.total)}
+                    {formatCurrencyCompact(metrics.bankAccounts.total, 'CAD', 'CAD')}
                   </div>
 
                   <div className="space-y-3">
@@ -396,7 +387,7 @@ export default function Dashboard() {
                         </div>
                         <div className="text-right">
                           <div className="font-semibold" data-testid={`text-bank-balance-${index}`}>
-                            {formatCurrency(account.balance)}
+                            {formatCurrencyCompact(account.balance, 'CAD', 'CAD')}
                           </div>
                         </div>
                       </div>
@@ -425,7 +416,7 @@ export default function Dashboard() {
               ) : metrics && metrics.sales.length > 0 ? (
                 <div className="space-y-4">
                   <div className="text-3xl font-bold" data-testid="text-total-sales">
-                    {formatCurrency(metrics.sales.reduce((sum, month) => sum + month.amount, 0))}
+                    {formatCurrencyCompact(metrics.sales.reduce((sum, month) => sum + month.amount, 0), 'CAD', 'CAD')}
                   </div>
                   <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={metrics.sales}>
@@ -441,7 +432,7 @@ export default function Dashboard() {
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip
-                        formatter={(value) => formatCurrency(Number(value))}
+                        formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')}
                         contentStyle={{
                           backgroundColor: 'hsl(var(--card))',
                           border: '1px solid hsl(var(--border))',
@@ -485,7 +476,7 @@ export default function Dashboard() {
               ) : metrics ? (
                 <div className="space-y-4">
                   <div className="text-3xl font-bold" data-testid="text-ar-total">
-                    {formatCurrency(metrics.accountsReceivable.total)}
+                    {formatCurrencyCompact(metrics.accountsReceivable.total, 'CAD', 'CAD')}
                   </div>
 
                   {arData.length > 0 ? (
@@ -506,7 +497,7 @@ export default function Dashboard() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                          <Tooltip formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')} />
                         </PieChart>
                       </ResponsiveContainer>
 
@@ -523,7 +514,7 @@ export default function Dashboard() {
                               </span>
                             </div>
                             <span className="font-medium" data-testid={`text-ar-amount-${index}`}>
-                              {formatCurrency(bucket.value)}
+                              {formatCurrencyCompact(bucket.value, 'CAD', 'CAD')}
                             </span>
                           </div>
                         ))}

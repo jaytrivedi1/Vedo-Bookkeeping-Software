@@ -2106,7 +2106,7 @@ export default function Reports() {
                                               {group.entries.length} transaction{group.entries.length !== 1 ? 's' : ''}
                                             </span>
                                             <span className="font-medium">
-                                              Balance: {formatCurrency(group.endingBalance)}
+                                              Balance: {formatReportAmount(group.endingBalance)}
                                             </span>
                                           </div>
                                         </div>
@@ -2134,7 +2134,7 @@ export default function Reports() {
                                                   <TableCell colSpan={6}>Beginning Balance</TableCell>
                                                   <TableCell className="text-right"></TableCell>
                                                   <TableCell className="text-right" data-testid={`beginning-balance-${group.account.id}`}>
-                                                    {formatCurrency(group.beginningBalance)}
+                                                    {formatReportAmount(group.beginningBalance)}
                                                   </TableCell>
                                                 </TableRow>
                                               )}
@@ -2159,10 +2159,10 @@ export default function Reports() {
                                                   <TableCell>{entry.splitAccountName}</TableCell>
                                                   <TableCell className="text-right">
                                                     {entry.amount > 0 ? '' : '-'}
-                                                    {formatCurrency(entry.amount)}
+                                                    {formatReportAmount(entry.amount)}
                                                   </TableCell>
                                                   <TableCell className="text-right font-medium">
-                                                    {formatCurrency(entry.runningBalance)}
+                                                    {formatReportAmount(entry.runningBalance)}
                                                   </TableCell>
                                                 </TableRow>
                                               ))}
@@ -2174,10 +2174,10 @@ export default function Reports() {
                                                 </TableCell>
                                                 <TableCell className="text-right" data-testid={`account-total-${group.account.id}`}>
                                                   {group.accountTotal > 0 ? '' : '-'}
-                                                  {formatCurrency(group.accountTotal)}
+                                                  {formatReportAmount(group.accountTotal)}
                                                 </TableCell>
                                                 <TableCell className="text-right font-medium">
-                                                  {formatCurrency(group.endingBalance)}
+                                                  {formatReportAmount(group.endingBalance)}
                                                 </TableCell>
                                               </TableRow>
                                             </TableBody>
@@ -2197,13 +2197,13 @@ export default function Reports() {
                                     <div className="text-right">
                                       <div className="text-sm text-muted-foreground">Total Debits</div>
                                       <div className="font-bold" data-testid="grand-total-debits">
-                                        {formatCurrency(groupedLedgerData.grandTotalDebit)}
+                                        {formatReportAmount(groupedLedgerData.grandTotalDebit)}
                                       </div>
                                     </div>
                                     <div className="text-right">
                                       <div className="text-sm text-muted-foreground">Total Credits</div>
                                       <div className="font-bold" data-testid="grand-total-credits">
-                                        {formatCurrency(groupedLedgerData.grandTotalCredit)}
+                                        {formatReportAmount(groupedLedgerData.grandTotalCredit)}
                                       </div>
                                     </div>
                                     <div className="text-right">
