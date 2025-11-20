@@ -32,7 +32,7 @@ export const transactionTypeEnum = pgEnum('transaction_type', [
 ]);
 
 export const statusEnum = pgEnum('status', [
-  'completed', 'cancelled', 'paid', 'overdue', 'partial', 'unapplied_credit', 'open', 'quotation', 'draft'
+  'completed', 'cancelled', 'paid', 'overdue', 'partial', 'unapplied_credit', 'open', 'quotation', 'draft', 'approved'
 ]);
 
 export const paymentMethodEnum = pgEnum('payment_method', [
@@ -183,7 +183,7 @@ export const invoiceSchema = z.object({
   contactId: z.number(),
   reference: z.string().min(1, "Reference is required"),
   description: z.string(),
-  status: z.enum(["open", "paid", "overdue", "partial", "quotation", "draft"]),
+  status: z.enum(["open", "paid", "overdue", "partial", "quotation", "draft", "approved"]),
   lineItems: z.array(
     z.object({
       description: z.string().min(1, "Description is required"),
