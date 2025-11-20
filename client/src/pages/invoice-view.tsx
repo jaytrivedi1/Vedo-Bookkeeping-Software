@@ -46,7 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
 import { useInvoiceTemplate } from "@/hooks/use-invoice-template";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
 export default function InvoiceView() {
@@ -461,7 +461,7 @@ export default function InvoiceView() {
                 <h2 className="text-sm font-medium text-gray-500 mb-2">TO</h2>
                 {customer ? (
                   <>
-                    <p className="font-medium">{customer.name}</p>
+                    <p className="font-medium">{formatContactName(customer.name, customer.currency, homeCurrency)}</p>
                     {customer.contactName && <p className="text-gray-600">{customer.contactName}</p>}
                     {customer.address && <p className="text-gray-600">{customer.address}</p>}
                     {customer.email && <p className="text-gray-600">{customer.email}</p>}

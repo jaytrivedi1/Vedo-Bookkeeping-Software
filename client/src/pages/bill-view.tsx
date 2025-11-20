@@ -25,7 +25,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Plus, Trash2, Edit, Eye, Save, X } from "lucide-react";
@@ -462,7 +462,12 @@ export default function BillView() {
                         </Select>
                       ) : (
                         <Input
-                          value={vendors.find(v => v.id === bill.contactId)?.name || 'Unknown Vendor'}
+                          value={
+                            (() => {
+                              const vendor = vendors.find(v => v.id === bill.contactId);
+                              return vendor ? formatContactName(vendor.name, vendor.currency, homeCurrency) : 'Unknown Vendor';
+                            })()
+                          }
                           readOnly
                           className="bg-muted"
                         />

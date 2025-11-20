@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
 
 export default function ChequeView() {
@@ -224,7 +224,7 @@ export default function ChequeView() {
                 <h2 className="text-sm font-medium text-gray-500 mb-2">PAYEE</h2>
                 {payee ? (
                   <>
-                    <p className="font-medium" data-testid="text-payee-name">{payee.name}</p>
+                    <p className="font-medium" data-testid="text-payee-name">{formatContactName(payee.name, payee.currency, homeCurrency)}</p>
                     {payee.contactName && <p className="text-gray-600" data-testid="text-payee-contact">{payee.contactName}</p>}
                     {payee.address && <p className="text-gray-600" data-testid="text-payee-address">{payee.address}</p>}
                     {payee.email && <p className="text-gray-600" data-testid="text-payee-email">{payee.email}</p>}

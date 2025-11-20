@@ -7,7 +7,7 @@ import {
   ArrowLeft, Edit, Save, X, PlusCircle, Trash2, Receipt, DollarSign
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Button } from "@/components/ui/button";
 import { toast, useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
@@ -261,7 +261,7 @@ export default function DepositView() {
               {contact && (
                 <div className="mt-6 border-t pt-6">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Associated Contact</h3>
-                  <p className="text-base">{contact.name}</p>
+                  <p className="text-base">{formatContactName(contact.name, contact.currency, homeCurrency)}</p>
                   {contact.email && (
                     <p className="text-sm text-gray-500">{contact.email}</p>
                   )}

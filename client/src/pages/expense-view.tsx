@@ -26,7 +26,7 @@ import {
 import { Transaction, LineItem, Contact, SalesTax, Account } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
 
 export default function ExpenseView() {
@@ -291,7 +291,7 @@ export default function ExpenseView() {
                 <h2 className="text-sm font-medium text-gray-500 mb-2">PAYEE</h2>
                 {vendor ? (
                   <>
-                    <p className="font-medium" data-testid="text-vendor-name">{vendor.name}</p>
+                    <p className="font-medium" data-testid="text-vendor-name">{formatContactName(vendor.name, vendor.currency, homeCurrency)}</p>
                     {vendor.contactName && <p className="text-gray-600" data-testid="text-vendor-contact">{vendor.contactName}</p>}
                     {vendor.address && <p className="text-gray-600" data-testid="text-vendor-address">{vendor.address}</p>}
                     {vendor.email && <p className="text-gray-600" data-testid="text-vendor-email">{vendor.email}</p>}

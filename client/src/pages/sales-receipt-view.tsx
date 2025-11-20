@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
 
 export default function SalesReceiptView() {
@@ -188,7 +188,7 @@ export default function SalesReceiptView() {
               <h3 className="text-sm font-medium text-gray-500 mb-2">Customer</h3>
               <div className="space-y-1">
                 <p className="font-medium" data-testid="text-customer-name">
-                  {customer?.name || 'Unknown Customer'}
+                  {customer ? formatContactName(customer.name, customer.currency, homeCurrency) : 'Unknown Customer'}
                 </p>
                 {customer?.email && (
                   <p className="text-sm text-gray-600" data-testid="text-customer-email">

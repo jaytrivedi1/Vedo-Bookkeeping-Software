@@ -17,7 +17,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useBackNavigation } from "@/hooks/use-back-navigation";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 
 interface PaymentResponse {
   transaction: Transaction;
@@ -484,7 +484,7 @@ export default function PaymentView() {
           <div>
             <div className="text-sm font-medium mb-1">Customer</div>
             <div className="border rounded-md h-9 px-3 py-1 flex items-center">
-              {contact?.name || 'Unknown'}
+              {contact ? formatContactName(contact.name, contact.currency, homeCurrency) : 'Unknown'}
             </div>
           </div>
           
