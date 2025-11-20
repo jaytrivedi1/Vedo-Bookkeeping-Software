@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/tabs";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Account, LedgerEntry, Transaction, Contact } from "@shared/schema";
+import { formatReportAmount } from "@/lib/currencyUtils";
 
 // Types for account books
 interface AccountWithLedger extends Account {
@@ -177,14 +178,6 @@ export default function AccountBooks() {
     } else {
       setExpandedAccounts([...expandedAccounts, accountId]);
     }
-  };
-  
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(amount);
   };
   
   // Handle period selection
@@ -569,10 +562,10 @@ export default function AccountBooks() {
                                   <TableCell>{account?.name || 'Unknown Account'}</TableCell>
                                   <TableCell>{entry.description || ''}</TableCell>
                                   <TableCell className="text-right">
-                                    {entry.debit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.debit) : ''}
+                                    {entry.debit > 0 ? formatReportAmount(entry.debit) : ''}
                                   </TableCell>
                                   <TableCell className="text-right">
-                                    {entry.credit > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(entry.credit) : ''}
+                                    {entry.credit > 0 ? formatReportAmount(entry.credit) : ''}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     {index === 0 && transaction ? (

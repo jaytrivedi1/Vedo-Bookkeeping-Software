@@ -76,11 +76,7 @@ import { Account, LedgerEntry, Company, Preferences } from "@shared/schema";
 import { getFiscalYearBounds, getFiscalYearLabel, getFiscalYear } from "@shared/fiscalYear";
 import { queryClient } from "@/lib/queryClient";
 import ExchangeRatesManager from "@/components/settings/ExchangeRatesManager";
-
-// Helper function to format currency
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(value));
-};
+import { formatReportAmount } from "@/lib/currencyUtils";
 
 // Collapsible Balance Sheet Section Component
 function BalanceSheetSection({ 
@@ -109,7 +105,7 @@ function BalanceSheetSection({
               {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               <span className="font-medium text-sm text-foreground">{title}</span>
             </div>
-            <span className="font-semibold text-sm">{formatCurrency(subtotal)}</span>
+            <span className="font-semibold text-sm">{formatReportAmount(subtotal)}</span>
           </div>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -127,7 +123,7 @@ function BalanceSheetSection({
                 data-testid={`balance-sheet-account-${account.id}`}
               >
                 <span className="text-sm text-muted-foreground hover:text-primary">{account.name}</span>
-                <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
+                <span className="text-sm text-right">{formatReportAmount(account.balance)}</span>
               </div>
             ))}
           </div>
@@ -165,7 +161,7 @@ function CashFlowSection({
               <span className="font-medium text-sm text-foreground">{title}</span>
             </div>
             <span className="font-semibold text-sm">
-              {subtotal >= 0 ? formatCurrency(subtotal) : `(${formatCurrency(subtotal)})`}
+              {subtotal >= 0 ? formatReportAmount(subtotal) : `(${formatReportAmount(subtotal)})`}
             </span>
           </div>
         </CollapsibleTrigger>
@@ -185,7 +181,7 @@ function CashFlowSection({
               >
                 <span className="text-sm text-muted-foreground hover:text-primary">{item.account.name}</span>
                 <span className="text-sm text-right">
-                  {item.amount >= 0 ? formatCurrency(item.amount) : `(${formatCurrency(item.amount)})`}
+                  {item.amount >= 0 ? formatReportAmount(item.amount) : `(${formatReportAmount(item.amount)})`}
                 </span>
               </div>
             ))}
@@ -274,7 +270,7 @@ function BalanceSheetReport({
         {/* Total Assets */}
         <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
           <span className="font-bold text-foreground">Total Assets</span>
-          <span className="font-bold text-foreground">{formatCurrency(totalAssets)}</span>
+          <span className="font-bold text-foreground">{formatReportAmount(totalAssets)}</span>
         </div>
       </div>
       
@@ -303,7 +299,7 @@ function BalanceSheetReport({
         {/* Total Liabilities */}
         <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
           <span className="font-bold text-foreground">Total Liabilities</span>
-          <span className="font-bold text-foreground">{formatCurrency(totalLiabilities)}</span>
+          <span className="font-bold text-foreground">{formatReportAmount(totalLiabilities)}</span>
         </div>
       </div>
       
@@ -322,7 +318,7 @@ function BalanceSheetReport({
                 data-testid={`balance-sheet-account-${account.id}`}
               >
                 <span className="text-sm text-muted-foreground hover:text-primary">{account.name}</span>
-                <span className="text-sm text-right">{formatCurrency(account.balance)}</span>
+                <span className="text-sm text-right">{formatReportAmount(account.balance)}</span>
               </div>
             ))}
           </div>
@@ -331,26 +327,26 @@ function BalanceSheetReport({
         {/* Retained Earnings */}
         <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
           <span className="text-sm text-muted-foreground">Retained Earnings</span>
-          <span className="text-sm text-right">{formatCurrency(retainedEarnings)}</span>
+          <span className="text-sm text-right">{formatReportAmount(retainedEarnings)}</span>
         </div>
         
         {/* Current Year Net Income */}
         <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
           <span className="text-sm text-muted-foreground">Net Income (Current Year)</span>
-          <span className="text-sm text-right">{formatCurrency(currentYearNetIncome)}</span>
+          <span className="text-sm text-right">{formatReportAmount(currentYearNetIncome)}</span>
         </div>
         
         {/* Total Equity */}
         <div className="flex justify-between py-3 px-2 border-t-2 border-border mt-2">
           <span className="font-bold text-foreground">Total Equity</span>
-          <span className="font-bold text-foreground" data-testid="balance-sheet-equity-total">{formatCurrency(totalEquity)}</span>
+          <span className="font-bold text-foreground" data-testid="balance-sheet-equity-total">{formatReportAmount(totalEquity)}</span>
         </div>
       </div>
       
       {/* TOTAL LIABILITIES & EQUITY */}
       <div className="flex justify-between py-3 px-2 border-t-4 border-double border-border mt-4">
         <span className="font-bold text-lg text-foreground">Total Liabilities & Equity</span>
-        <span className="font-bold text-lg text-foreground" data-testid="balance-sheet-liabilities-equity-total">{formatCurrency(totalLiabilitiesAndEquity)}</span>
+        <span className="font-bold text-lg text-foreground" data-testid="balance-sheet-liabilities-equity-total">{formatReportAmount(totalLiabilitiesAndEquity)}</span>
       </div>
     </div>
   );
@@ -1379,14 +1375,14 @@ export default function Reports() {
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
                                     <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      {formatReportAmount(account.balance)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
                                 <TableRow className="border-t-2">
                                   <TableCell className="font-semibold">Total Revenue</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenue.total)}
+                                    {formatReportAmount(incomeStatement.revenue.total)}
                                   </TableCell>
                                 </TableRow>
                               </>
@@ -1408,14 +1404,14 @@ export default function Reports() {
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
                                     <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      {formatReportAmount(account.balance)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
                                 <TableRow className="border-t-2">
                                   <TableCell className="font-semibold">Total Cost of Goods Sold</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.costOfGoodsSold.total)}
+                                    {formatReportAmount(incomeStatement.costOfGoodsSold.total)}
                                   </TableCell>
                                 </TableRow>
                               </>
@@ -1426,7 +1422,7 @@ export default function Reports() {
                               <TableRow className="border-t-2 bg-blue-50">
                                 <TableCell className="font-bold">Gross Profit</TableCell>
                                 <TableCell className="text-right font-bold">
-                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.grossProfit)}
+                                  {formatReportAmount(incomeStatement.grossProfit)}
                                 </TableCell>
                               </TableRow>
                             )}
@@ -1447,14 +1443,14 @@ export default function Reports() {
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
                                     <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      {formatReportAmount(account.balance)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
                                 <TableRow className="border-t-2">
                                   <TableCell className="font-semibold">Total Operating Expenses</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingExpenses.total)}
+                                    {formatReportAmount(incomeStatement.operatingExpenses.total)}
                                   </TableCell>
                                 </TableRow>
                               </>
@@ -1465,7 +1461,7 @@ export default function Reports() {
                               <TableRow className="border-t-2 bg-blue-50">
                                 <TableCell className="font-bold">Operating Income</TableCell>
                                 <TableCell className="text-right font-bold">
-                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingIncome)}
+                                  {formatReportAmount(incomeStatement.operatingIncome)}
                                 </TableCell>
                               </TableRow>
                             )}
@@ -1486,14 +1482,14 @@ export default function Reports() {
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
                                     <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      {formatReportAmount(account.balance)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
                                 <TableRow className="border-t-2">
                                   <TableCell className="font-semibold">Total Other Income</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.otherIncome.total)}
+                                    {formatReportAmount(incomeStatement.otherIncome.total)}
                                   </TableCell>
                                 </TableRow>
                               </>
@@ -1515,14 +1511,14 @@ export default function Reports() {
                                   >
                                     <TableCell className="pl-6">{account.name}</TableCell>
                                     <TableCell className="text-right">
-                                      {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(account.balance)}
+                                      {formatReportAmount(account.balance)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
                                 <TableRow className="border-t-2">
                                   <TableCell className="font-semibold">Total Other Expense</TableCell>
                                   <TableCell className="text-right font-semibold">
-                                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.otherExpense.total)}
+                                    {formatReportAmount(incomeStatement.otherExpense.total)}
                                   </TableCell>
                                 </TableRow>
                               </>
@@ -1533,7 +1529,7 @@ export default function Reports() {
                               <TableRow className="border-t-4 border-double bg-green-50">
                                 <TableCell className="font-bold text-lg">NET INCOME</TableCell>
                                 <TableCell className="text-right font-bold text-lg">
-                                  {new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)}
+                                  {formatReportAmount(incomeStatement.netIncome)}
                                 </TableCell>
                               </TableRow>
                             )}
@@ -1680,8 +1676,8 @@ export default function Reports() {
                             <span className="font-semibold text-foreground">Net Cash from Operating Activities</span>
                             <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.operating.total >= 0 
-                                ? formatCurrency(cashFlowStatement.categories.operating.total)
-                                : `(${formatCurrency(cashFlowStatement.categories.operating.total)})`
+                                ? formatReportAmount(cashFlowStatement.categories.operating.total)
+                                : `(${formatReportAmount(cashFlowStatement.categories.operating.total)})`
                               }
                             </span>
                           </div>
@@ -1704,8 +1700,8 @@ export default function Reports() {
                             <span className="font-semibold text-foreground">Net Cash from Investing Activities</span>
                             <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.investing.total >= 0 
-                                ? formatCurrency(cashFlowStatement.categories.investing.total)
-                                : `(${formatCurrency(cashFlowStatement.categories.investing.total)})`
+                                ? formatReportAmount(cashFlowStatement.categories.investing.total)
+                                : `(${formatReportAmount(cashFlowStatement.categories.investing.total)})`
                               }
                             </span>
                           </div>
@@ -1728,8 +1724,8 @@ export default function Reports() {
                             <span className="font-semibold text-foreground">Net Cash from Financing Activities</span>
                             <span className="font-semibold text-foreground">
                               {cashFlowStatement.categories.financing.total >= 0 
-                                ? formatCurrency(cashFlowStatement.categories.financing.total)
-                                : `(${formatCurrency(cashFlowStatement.categories.financing.total)})`
+                                ? formatReportAmount(cashFlowStatement.categories.financing.total)
+                                : `(${formatReportAmount(cashFlowStatement.categories.financing.total)})`
                               }
                             </span>
                           </div>
@@ -1741,8 +1737,8 @@ export default function Reports() {
                         <span className="font-bold text-foreground">Net Change in Cash</span>
                         <span className="font-bold text-foreground" data-testid="cash-flow-net-change">
                           {cashFlowStatement.netChange >= 0 
-                            ? formatCurrency(cashFlowStatement.netChange)
-                            : `(${formatCurrency(cashFlowStatement.netChange)})`
+                            ? formatReportAmount(cashFlowStatement.netChange)
+                            : `(${formatReportAmount(cashFlowStatement.netChange)})`
                           }
                         </span>
                       </div>
@@ -1751,21 +1747,21 @@ export default function Reports() {
                       <div className="space-y-2 pt-4 border-t border-border">
                         <div className="flex justify-between py-1.5 px-2">
                           <span className="text-sm text-muted-foreground">Cash at Beginning of Period</span>
-                          <span className="text-sm text-right">{formatCurrency(cashFlowStatement.openingCash || 0)}</span>
+                          <span className="text-sm text-right">{formatReportAmount(cashFlowStatement.openingCash || 0)}</span>
                         </div>
                         <div className="flex justify-between py-1.5 px-2">
                           <span className="text-sm text-muted-foreground">Net Change in Cash</span>
                           <span className="text-sm text-right">
                             {cashFlowStatement.netChange >= 0 
-                              ? formatCurrency(cashFlowStatement.netChange)
-                              : `(${formatCurrency(cashFlowStatement.netChange)})`
+                              ? formatReportAmount(cashFlowStatement.netChange)
+                              : `(${formatReportAmount(cashFlowStatement.netChange)})`
                             }
                           </span>
                         </div>
                         <div className="flex justify-between py-3 px-2 border-t-2 border-border">
                           <span className="font-bold text-foreground">Cash at End of Period</span>
                           <span className="font-bold text-foreground" data-testid="cash-flow-closing-cash">
-                            {formatCurrency(cashFlowStatement.closingCash || 0)}
+                            {formatReportAmount(cashFlowStatement.closingCash || 0)}
                           </span>
                         </div>
                       </div>

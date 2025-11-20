@@ -6,7 +6,7 @@ import { ChevronLeft, Calendar, Filter } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/currencyUtils";
+import { formatCurrency, formatReportAmount } from "@/lib/currencyUtils";
 import {
   Card,
   CardContent,
@@ -374,7 +374,7 @@ export default function AccountTransactions() {
                     <TableCell colSpan={6}>Beginning Balance</TableCell>
                     <TableCell className="text-right" colSpan={2}></TableCell>
                     <TableCell className="text-right" data-testid="text-beginning-balance">
-                      {formatCurrency(ledgerData.beginningBalance, homeCurrency, homeCurrency)}
+                      {formatReportAmount(ledgerData.beginningBalance)}
                     </TableCell>
                   </TableRow>
                   {filteredEntries.map((entry) => {
@@ -407,13 +407,13 @@ export default function AccountTransactions() {
                           {entry.splitAccountName}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-debit-${entry.id}`}>
-                          {entry.debit > 0 ? formatCurrency(entry.debit, entry.currency || homeCurrency, homeCurrency) : '-'}
+                          {entry.debit > 0 ? formatReportAmount(entry.debit) : '-'}
                         </TableCell>
                         <TableCell className="text-right" data-testid={`text-credit-${entry.id}`}>
-                          {entry.credit > 0 ? formatCurrency(entry.credit, entry.currency || homeCurrency, homeCurrency) : '-'}
+                          {entry.credit > 0 ? formatReportAmount(entry.credit) : '-'}
                         </TableCell>
                         <TableCell className="text-right font-medium" data-testid={`text-balance-${entry.id}`}>
-                          {formatCurrency(entry.runningBalance, homeCurrency, homeCurrency)}
+                          {formatReportAmount(entry.runningBalance)}
                         </TableCell>
                       </TableRow>
                     );
@@ -422,7 +422,7 @@ export default function AccountTransactions() {
                     <TableCell colSpan={6}>Ending Balance</TableCell>
                     <TableCell className="text-right" colSpan={2}></TableCell>
                     <TableCell className="text-right" data-testid="text-ending-balance">
-                      {formatCurrency(ledgerData.endingBalance, homeCurrency, homeCurrency)}
+                      {formatReportAmount(ledgerData.endingBalance)}
                     </TableCell>
                   </TableRow>
                 </TableBody>
