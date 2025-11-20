@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { PlusIcon, FileText, CreditCard, PiggyBank, Receipt } from "lucide-react";
+import { PlusIcon, FileText, CreditCard, PiggyBank, Receipt, FileSignature } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import CustomerDialog from "@/components/customers/CustomerDialog";
 import CustomerList from "@/components/customers/CustomerList";
@@ -59,6 +59,7 @@ export default function Invoices() {
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("invoices");
   
   // Fetch all transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
@@ -72,16 +73,30 @@ export default function Invoices() {
   
   const homeCurrency = preferences?.homeCurrency || 'CAD';
   
-  // Filter invoices
+  // Filter invoices (excluding quotations)
   const invoices = transactions
     ? transactions
-        .filter((transaction) => transaction.type === "invoice")
+        .filter((transaction) => transaction.type === "invoice" && transaction.status !== "quotation")
         .filter((invoice) => {
           if (!searchQuery) return true;
           const query = searchQuery.toLowerCase();
           return (
-            invoice.reference.toLowerCase().includes(query) ||
+            invoice.reference?.toLowerCase().includes(query) ||
             invoice.description?.toLowerCase().includes(query)
+          );
+        })
+    : [];
+  
+  // Filter quotations
+  const quotations = transactions
+    ? transactions
+        .filter((transaction) => transaction.type === "invoice" && transaction.status === "quotation")
+        .filter((quotation) => {
+          if (!searchQuery) return true;
+          const query = searchQuery.toLowerCase();
+          return (
+            quotation.reference?.toLowerCase().includes(query) ||
+            quotation.description?.toLowerCase().includes(query)
           );
         })
     : [];
@@ -115,6 +130,10 @@ export default function Invoices() {
     return sum;
   }, 0);
   
+  // Quotation metrics
+  const totalQuotations = quotations.reduce((sum, quotation) => sum + quotation.amount, 0);
+  const quotationCount = quotations.length;
+  
   return (
     <div className="py-6 min-h-screen">
       {/* Page header */}
@@ -147,32 +166,43 @@ export default function Invoices() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem asChild>
-                <Link href="/invoices/new">
-                  <FileText className="mr-2 h-4 w-4" />
-                  <span>Invoice</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/payment-receive">
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  <span>Receive Payment</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
-                <Receipt className="mr-2 h-4 w-4" />
-                <span>Sales Receipt</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/deposits">
-                  <PiggyBank className="mr-2 h-4 w-4" />
-                  <span>Deposit</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Customer Credit</span>
-              </DropdownMenuItem>
+              {activeTab === "quotations" ? (
+                <DropdownMenuItem asChild>
+                  <Link href="/quotations/new">
+                    <FileSignature className="mr-2 h-4 w-4" />
+                    <span>Quotation</span>
+                  </Link>
+                </DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem asChild>
+                    <Link href="/invoices/new">
+                      <FileText className="mr-2 h-4 w-4" />
+                      <span>Invoice</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/payment-receive">
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      <span>Receive Payment</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
+                    <Receipt className="mr-2 h-4 w-4" />
+                    <span>Sales Receipt</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/deposits">
+                      <PiggyBank className="mr-2 h-4 w-4" />
+                      <span>Deposit</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem disabled>
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>Customer Credit</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -229,10 +259,11 @@ export default function Invoices() {
 
           </div>
           
-          {/* Tabbed Content - Invoices and Customers */}
-          <Tabs defaultValue="invoices" className="mb-6">
+          {/* Tabbed Content - Invoices, Quotations, and Customers */}
+          <Tabs defaultValue="invoices" className="mb-6" value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="invoices">Invoices</TabsTrigger>
+              <TabsTrigger value="quotations">Quotations</TabsTrigger>
               <TabsTrigger value="customers">Customers</TabsTrigger>
             </TabsList>
             
@@ -240,6 +271,16 @@ export default function Invoices() {
               <div className="bg-white shadow-sm rounded-lg overflow-hidden">
                 <TransactionTable 
                   transactions={invoices} 
+                  loading={isLoading} 
+                  onDeleteSuccess={() => refetch()}
+                />
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="quotations" className="mt-4">
+              <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+                <TransactionTable 
+                  transactions={quotations} 
                   loading={isLoading} 
                   onDeleteSuccess={() => refetch()}
                 />
