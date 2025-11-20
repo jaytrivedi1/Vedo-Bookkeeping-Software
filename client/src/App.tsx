@@ -139,6 +139,7 @@ function Router() {
               <Route path="/invoices/:id/edit" component={InvoiceForm} />
               <Route path="/invoices/:id" component={InvoiceView} />
               <Route path="/quotations" component={Quotations} />
+              <Route path="/quotations/new" component={InvoiceForm} />
               <Route path="/payments/edit/:id" component={PaymentReceive} />
               <Route path="/payments/:id" component={PaymentView} />
               <Route path="/payment-receive" component={PaymentReceive} />

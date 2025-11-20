@@ -26,11 +26,15 @@ export default function InvoiceFormPage() {
       setInvoiceId(null); // New mode
     }
     
-    // Check for type query parameter
-    const urlParams = new URLSearchParams(window.location.search);
-    const typeParam = urlParams.get('type');
-    if (typeParam === 'quotation') {
+    // Check if we're on the quotations route or have type query parameter
+    if (path.includes('/quotations/new')) {
       setInitialDocumentType('quotation');
+    } else {
+      const urlParams = new URLSearchParams(window.location.search);
+      const typeParam = urlParams.get('type');
+      if (typeParam === 'quotation') {
+        setInitialDocumentType('quotation');
+      }
     }
   }, []);
 

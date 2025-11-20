@@ -147,7 +147,7 @@ export default function Quotations() {
             </Tooltip>
           </TooltipProvider>
           
-          <Link href="/invoices/new?type=quotation">
+          <Link href="/quotations/new">
             <Button className="text-white bg-primary hover:bg-primary/90" data-testid="button-new-quotation">
               <PlusIcon className="h-4 w-4 mr-2" />
               New Quotation
