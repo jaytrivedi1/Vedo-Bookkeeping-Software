@@ -93,3 +93,17 @@ export function formatCurrencyCompact(amount: number, currencyCode?: string | nu
 
   return `${symbol}${formattedAmount}`;
 }
+
+export function formatContactName(
+  name: string,
+  currencyCode?: string | null,
+  homeCurrency: string = 'CAD'
+): string {
+  if (!currencyCode || !name) return name;
+  
+  if (currencyCode !== homeCurrency) {
+    return `${name} - ${currencyCode.toUpperCase()}`;
+  }
+  
+  return name;
+}
