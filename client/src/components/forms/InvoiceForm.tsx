@@ -96,6 +96,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [showAddCustomerDialog, setShowAddCustomerDialog] = useState(false);
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
   const [currentLineItemIndex, setCurrentLineItemIndex] = useState<number | null>(null);
+  const [documentType, setDocumentType] = useState<'invoice' | 'quotation'>(
+    invoice?.status === 'quotation' ? 'quotation' : 'invoice'
+  );
   
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
@@ -455,28 +458,27 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const saveInvoice = useMutation({
     mutationFn: async (data: BaseInvoice) => {
       if (isEditing) {
-        console.log("Updating invoice with data:", JSON.stringify(data, null, 2));
+        console.log("Updating invoice/quotation with data:", JSON.stringify(data, null, 2));
         return await apiRequest(`/api/invoices/${invoice?.id}`, 'PATCH', data);
       } else {
-        console.log("Creating invoice with data:", JSON.stringify(data, null, 2));
+        console.log("Creating invoice/quotation with data:", JSON.stringify(data, null, 2));
         return await apiRequest('/api/invoices', 'POST', data);
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const docType = documentType === 'quotation' ? 'Quotation' : 'Invoice';
       toast({
-        title: "Invoice saved",
-        description: "Invoice has been saved successfully",
+        title: `${docType} saved`,
+        description: `${docType} has been saved successfully`,
         variant: "default",
       });
       
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
       if (onSuccess) onSuccess();
       
-      if (sendInvoiceEmail && selectedContact?.email) {
-        toast({
-          title: "Invoice sent",
-          description: `Invoice has been sent to ${selectedContact.email}`,
-        });
+      // Handle send email if requested
+      if (sendInvoiceEmail && selectedContact?.email && result?.id) {
+        handleSendEmail(result.id);
       }
     },
     onError: (error: any) => {
@@ -540,6 +542,34 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       }
     }
   });
+
+  // Handle sending email for invoice or quotation
+  const handleSendEmail = async (transactionId: number) => {
+    const endpoint = documentType === 'quotation' 
+      ? `/api/quotations/${transactionId}/send`
+      : `/api/invoices/${transactionId}/send`;
+    
+    try {
+      await apiRequest(endpoint, 'POST', {
+        recipientEmail: selectedContact?.email,
+        recipientName: selectedContact?.name,
+        includeAttachment: true
+      });
+      
+      const docType = documentType === 'quotation' ? 'Quotation' : 'Invoice';
+      toast({
+        title: `${docType} sent`,
+        description: `${docType} has been sent to ${selectedContact?.email}`,
+      });
+    } catch (error) {
+      console.error("Error sending email:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send email. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const calculateLineItemAmount = (quantity: number, unitPrice: number) => {
     return roundTo2Decimals(quantity * unitPrice);
@@ -819,7 +849,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
       dueDate: dueDate instanceof Date ? dueDate : new Date(dueDate),
       // Ensure required fields are present
       reference: data.reference || defaultInvoiceNumber,
-      status: 'open' as const, // Default status for new invoices
+      status: documentType === 'quotation' ? 'quotation' as const : 'open' as const, // Set status based on document type
       description: data.description || '',
       subTotal,
       taxAmount,
@@ -887,7 +917,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         {/* Header */}
         <div className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">Invoice #{form.watch('reference')}</h1>
+            <h1 className="text-xl font-semibold">
+              {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference')}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="icon">
@@ -989,6 +1021,31 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                   </div>
                   
                   <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-1 mb-2">
+                        <FormLabel className="text-sm font-medium">Type</FormLabel>
+                        <HelpCircle className="h-4 w-4 text-gray-400" />
+                      </div>
+                      <FormItem>
+                        <FormControl>
+                          <Select 
+                            value={documentType} 
+                            onValueChange={(value: 'invoice' | 'quotation') => setDocumentType(value)}
+                            disabled={isEditing}
+                            data-testid="select-document-type"
+                          >
+                            <SelectTrigger className="bg-white border-gray-300 h-10">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="invoice">Invoice</SelectItem>
+                              <SelectItem value="quotation">Quotation</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                      </FormItem>
+                    </div>
+                    
                     <div>
                       <div className="flex items-center gap-1 mb-2">
                         <FormLabel className="text-sm font-medium">Terms</FormLabel>
@@ -1632,7 +1689,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
         
         {/* Fixed footer - modernized */}
         <div className="border-t bg-white py-4 px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-lg sticky bottom-0 mt-auto">
-          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full h-10">
+          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full h-10" data-testid="button-cancel">
             Cancel
           </Button>
           
@@ -1643,8 +1700,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 type="submit"
                 disabled={saveInvoice.isPending}
                 className="w-full md:w-auto"
+                data-testid="button-save-mobile"
               >
-                {saveInvoice.isPending ? 'Saving...' : 'Save and send'}
+                {saveInvoice.isPending ? 'Saving...' : `Save and send ${documentType}`}
               </Button>
             </div>
             
@@ -1660,8 +1718,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                 <Button 
                   type="submit"
                   disabled={saveInvoice.isPending}
+                  data-testid="button-save"
                 >
-                  {saveInvoice.isPending ? 'Saving...' : 'Save'}
+                  {saveInvoice.isPending ? 'Saving...' : `Save ${documentType === 'quotation' ? 'Quotation' : 'Invoice'}`}
                 </Button>
                 <div className="relative ml-px">
                   <FormItem>
@@ -1675,12 +1734,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
                           }
                         }}
                       >
-                        <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0">
+                        <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0" data-testid="select-save-options">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent align="end">
-                          <SelectItem value="save">Save</SelectItem>
-                          <SelectItem value="save_send">Save and send</SelectItem>
+                          <SelectItem value="save">
+                            {documentType === 'quotation' ? 'Save Quotation' : 'Save Invoice'}
+                          </SelectItem>
+                          <SelectItem value="save_send" data-testid="option-save-send">
+                            {documentType === 'quotation' ? 'Save and Send Quotation' : 'Save and Send Invoice'}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
