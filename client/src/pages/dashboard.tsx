@@ -1,365 +1,543 @@
-import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, subMonths, startOfMonth, endOfMonth, parseISO, isSameMonth } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+import { TrendingUp, TrendingDown } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import {
-  DollarSign,
-  ShoppingCart,
-  TrendingUp,
-  FileText,
-} from "lucide-react";
-import SummaryCard from "@/components/dashboard/SummaryCard";
-import TransactionTable from "@/components/dashboard/TransactionTable";
-import RevenueChart from "@/components/dashboard/RevenueChart";
-import AccountBalances from "@/components/dashboard/AccountBalances";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Transaction } from "@shared/schema";
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
-// Type definition for income statement API response
-interface IncomeStatementData {
-  revenue: {
-    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
-    total: number;
+interface DashboardMetrics {
+  profitLoss: {
+    netProfit: number;
+    percentageChange: number;
+    income: number;
+    expenses: number;
   };
-  costOfGoodsSold: {
-    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
-    total: number;
+  expensesByCategory: Array<{ category: string; amount: number }>;
+  invoices: {
+    unpaid: { count: number; amount: number };
+    paid: { count: number; amount: number };
+    overdue: { count: number; amount: number };
+    deposited: { count: number; amount: number };
   };
-  grossProfit: number;
-  operatingExpenses: {
-    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+  bankAccounts: {
     total: number;
+    accounts: Array<{ name: string; balance: number; updated: string }>;
   };
-  operatingIncome: number;
-  otherIncome: {
-    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
+  sales: Array<{ month: string; amount: number }>;
+  accountsReceivable: {
     total: number;
+    current: number;
+    days30: number;
+    days60: number;
+    days90Plus: number;
   };
-  otherExpense: {
-    accounts: Array<{ id: number; code: string; name: string; balance: number }>;
-    total: number;
-  };
-  netIncome: number;
 }
 
+interface Company {
+  id: number;
+  name: string;
+  logoUrl?: string;
+}
+
+const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState("all");
-  
-  // Fetch default company
-  const { data: company } = useQuery({
+  // Fetch company data
+  const { data: company, isLoading: companyLoading } = useQuery<Company>({
     queryKey: ['/api/companies/default'],
   });
-  
-  // Fetch transactions
-  const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions'],
+
+  // Fetch dashboard metrics
+  const { data: metrics, isLoading: metricsLoading } = useQuery<DashboardMetrics>({
+    queryKey: ['/api/dashboard/metrics'],
   });
 
-  // Fetch current month income statement
-  const { data: incomeStatement } = useQuery<IncomeStatementData>({
-    queryKey: ['/api/reports/income-statement'],
-  });
+  const isLoading = companyLoading || metricsLoading;
 
-  // Fetch previous month income statement for trend calculation
-  const previousMonthStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
-  const previousMonthEnd = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
-  
-  const { data: previousIncomeStatement } = useQuery<IncomeStatementData>({
-    queryKey: ['/api/reports/income-statement', previousMonthStart, previousMonthEnd],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/reports/income-statement?startDate=${previousMonthStart}&endDate=${previousMonthEnd}`
-      );
-      if (!response.ok) throw new Error('Failed to fetch previous month data');
-      return response.json();
-    },
-  });
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
 
-  // Calculate monthly chart data from actual transactions
-  const chartData = useMemo(() => {
-    if (!transactions) return [];
-    
-    const currentDate = new Date();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const data = [];
-    
-    // Generate data for last 6 months
-    for (let i = 5; i >= 0; i--) {
-      const monthDate = subMonths(currentDate, i);
-      const monthStart = startOfMonth(monthDate);
-      const monthEnd = endOfMonth(monthDate);
-      
-      // Filter transactions for this month
-      const monthTransactions = transactions.filter(t => {
-        const txDate = typeof t.date === 'string' ? parseISO(t.date) : new Date(t.date);
-        return txDate >= monthStart && txDate <= monthEnd;
-      });
-      
-      // Calculate income (invoices and deposits)
-      const income = monthTransactions
-        .filter(t => ['invoice', 'deposit', 'sales_receipt'].includes(t.type))
-        .reduce((sum, t) => sum + t.amount, 0);
-      
-      // Calculate expenses (expenses, bills, cheques)
-      const expenses = monthTransactions
-        .filter(t => ['expense', 'bill', 'cheque'].includes(t.type))
-        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      
-      data.push({
-        month: months[monthDate.getMonth()],
-        income: Math.round(income * 100) / 100,
-        expenses: Math.round(expenses * 100) / 100,
-      });
-    }
-    
-    return data;
-  }, [transactions]);
-
-  // Filter transactions based on active tab
-  const filteredTransactions = transactions
-    ? transactions.filter(transaction => {
-        if (activeTab === "all") return true;
-        return transaction.type === activeTab.slice(0, -1); // Remove 's' from the end
-      })
-    : [];
-
-  // Get counts for unpaid invoices
-  const unpaidInvoices = transactions
-    ? transactions.filter(
-        transaction => transaction.type === 'invoice' && 
-        (transaction.status === 'open' || transaction.status === 'overdue' || transaction.status === 'partial')
-      )
-    : [];
-  
-  // Calculate the actual unpaid amounts using invoice balances
-  const unpaidInvoicesAmount = unpaidInvoices.reduce(
-    (sum, invoice) => {
-      // If balance is explicitly set, use it (handles partial payments correctly)
-      if (invoice.balance !== null && invoice.balance !== undefined) {
-        return sum + invoice.balance;
-      }
-      // Otherwise use the full amount (if balance isn't tracked yet)
-      return sum + invoice.amount;
-    }, 
-    0
-  );
-
-  // Calculate trends (month-over-month comparison)
-  const revenueTrend = useMemo(() => {
-    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
-    const current = incomeStatement.revenue.total;
-    const previous = previousIncomeStatement.revenue.total;
-    
-    // Handle edge cases
-    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
-    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
-    
-    // Calculate change using absolute value of previous to avoid sign issues
-    const change = ((current - previous) / Math.abs(previous)) * 100;
-    const absChange = Math.abs(Math.round(change * 10) / 10);
-    
-    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
-    return {
-      percentage: absChange,
-      direction: change > 0 ? 'up' as const : 'down' as const,
-    };
-  }, [incomeStatement, previousIncomeStatement]);
-
-  const expensesTrend = useMemo(() => {
-    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
-    const current = incomeStatement.operatingExpenses.total;
-    const previous = previousIncomeStatement.operatingExpenses.total;
-    
-    // Handle edge cases
-    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
-    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
-    
-    // Calculate change using absolute value of previous to avoid sign issues
-    const change = ((current - previous) / Math.abs(previous)) * 100;
-    const absChange = Math.abs(Math.round(change * 10) / 10);
-    
-    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
-    return {
-      percentage: absChange,
-      direction: change > 0 ? 'up' as const : 'down' as const,
-    };
-  }, [incomeStatement, previousIncomeStatement]);
-
-  const profitTrend = useMemo(() => {
-    if (!incomeStatement || !previousIncomeStatement) return { percentage: 0, direction: 'neutral' as const };
-    const current = incomeStatement.netIncome;
-    const previous = previousIncomeStatement.netIncome;
-    
-    // Special handling for profit trends (can be negative)
-    if (previous === 0 && current === 0) return { percentage: 0, direction: 'neutral' as const };
-    
-    // If transitioning from negative to positive or vice versa
-    if (previous < 0 && current > 0) {
-      return { percentage: 100, direction: 'up' as const };
-    }
-    if (previous > 0 && current < 0) {
-      return { percentage: 100, direction: 'down' as const };
-    }
-    
-    // Both same sign, calculate normal percentage
-    if (previous === 0) return { percentage: 100, direction: current > 0 ? 'up' as const : 'down' as const };
-    
-    const change = ((current - previous) / Math.abs(previous)) * 100;
-    const absChange = Math.abs(Math.round(change * 10) / 10);
-    
-    if (absChange < 0.1) return { percentage: 0, direction: 'neutral' as const };
-    return {
-      percentage: absChange,
-      direction: change > 0 ? 'up' as const : 'down' as const,
-    };
-  }, [incomeStatement, previousIncomeStatement]);
+  // Prepare Accounts Receivable data for donut chart
+  const arData = metrics ? [
+    { name: 'Current', value: metrics.accountsReceivable.current },
+    { name: '31-60 days', value: metrics.accountsReceivable.days30 },
+    { name: '61-90 days', value: metrics.accountsReceivable.days60 },
+    { name: '91+ OVER', value: metrics.accountsReceivable.days90Plus },
+  ].filter(item => item.value > 0) : [];
 
   return (
     <div className="py-6 min-h-screen">
       {/* Company Header */}
-      {company && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
+        {companyLoading ? (
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-16 w-16 rounded-lg" />
+            <Skeleton className="h-8 w-48" />
+          </div>
+        ) : company ? (
           <div className="flex items-center gap-4">
             {company.logoUrl && (
-              <img 
-                src={company.logoUrl} 
+              <img
+                src={company.logoUrl}
                 alt={`${company.name} logo`}
-                className="h-16 w-16 object-contain rounded-lg border border-gray-200 bg-white p-2"
+                className="h-16 w-16 object-contain rounded-lg border border-border bg-card p-2"
                 data-testid="company-logo"
               />
             )}
             <div>
-              <h2 className="text-2xl font-bold text-gray-900" data-testid="company-name">
+              <h2 className="text-2xl font-bold text-foreground" data-testid="company-name">
                 {company.name}
               </h2>
             </div>
           </div>
-        </div>
-      )}
-      
-      {/* Page header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 flex justify-between items-center mb-2">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">Dashboard</h1>
-        <div className="flex items-center space-x-3">
-          <span className="text-sm text-muted-foreground font-medium">{format(new Date(), 'MMMM d, yyyy')}</span>
-        </div>
+        ) : null}
       </div>
-      
+
+      {/* Dashboard Title */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+          Dashboard
+        </h1>
+      </div>
+
+      {/* Dashboard Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        {/* Dashboard content */}
-        <div className="py-4">
-          {/* Financial summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <SummaryCard
-              title="Total Revenue"
-              amount={incomeStatement?.revenue.total 
-                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.revenue.total)
-                : '0.00'}
-              icon={<DollarSign />}
-              trend={revenueTrend.percentage > 0 ? `${revenueTrend.direction === 'up' ? '+' : '-'}${revenueTrend.percentage}%` : '0%'}
-              change="from last month"
-              trendDirection={revenueTrend.direction === 'neutral' ? undefined : revenueTrend.direction}
-              iconBgColor="bg-primary-100"
-              iconTextColor="text-primary"
-            />
-            
-            <SummaryCard
-              title="Total Expenses"
-              amount={incomeStatement?.operatingExpenses.total 
-                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.operatingExpenses.total)
-                : '0.00'}
-              icon={<ShoppingCart />}
-              trend={expensesTrend.percentage > 0 ? `${expensesTrend.direction === 'up' ? '+' : '-'}${expensesTrend.percentage}%` : '0%'}
-              change="from last month"
-              trendDirection={expensesTrend.direction === 'neutral' ? undefined : expensesTrend.direction}
-              iconBgColor="bg-red-100"
-              iconTextColor="text-red-600"
-            />
-            
-            <SummaryCard
-              title="Net Profit"
-              amount={incomeStatement?.netIncome 
-                ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(incomeStatement.netIncome)
-                : '0.00'}
-              icon={<TrendingUp />}
-              trend={profitTrend.percentage > 0 ? `${profitTrend.direction === 'up' ? '+' : '-'}${profitTrend.percentage}%` : '0%'}
-              change="from last month"
-              trendDirection={profitTrend.direction === 'neutral' ? undefined : profitTrend.direction}
-              iconBgColor="bg-green-100"
-              iconTextColor="text-green-600"
-            />
-            
-            <SummaryCard
-              title="Unpaid Invoices"
-              amount={new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(unpaidInvoicesAmount)}
-              icon={<FileText />}
-              trend={`${unpaidInvoices.length} ${unpaidInvoices.length === 1 ? 'invoice' : 'invoices'}`}
-              change="awaiting payment"
-              iconBgColor="bg-yellow-100"
-              iconTextColor="text-yellow-600"
-            />
-          </div>
-          
-          {/* Recent transactions section */}
-          <div className="mt-8">
-            <h2 className="text-xl font-bold text-foreground mb-4">Recent Transactions</h2>
-            <div className="glass-card rounded-xl overflow-hidden smooth-transition hover:border-primary/30" data-testid="card-recent-transactions">
-              {/* Tab navigation */}
-              <Tabs defaultValue="all" onValueChange={setActiveTab}>
-                <div className="border-b border-border/50">
-                  <TabsList className="h-auto p-0 bg-transparent">
-                    <TabsTrigger 
-                      value="all" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
-                      data-testid="tab-all-transactions"
-                    >
-                      All Transactions
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="invoices" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
-                      data-testid="tab-invoices"
-                    >
-                      Invoices
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="expenses" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
-                      data-testid="tab-expenses"
-                    >
-                      Expenses
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="journal_entries" 
-                      className="flex-1 py-4 px-1 border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:font-semibold data-[state=inactive]:border-transparent data-[state=inactive]:text-muted-foreground rounded-none smooth-transition"
-                      data-testid="tab-journal-entries"
-                    >
-                      Journal Entries
-                    </TabsTrigger>
-                  </TabsList>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Profit & Loss Card */}
+          <Card className="glass border-border/50" data-testid="card-profit-loss">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold">PROFIT & LOSS</CardTitle>
+                <span className="text-sm text-muted-foreground">Last month</span>
+              </div>
+              <div className="text-sm text-muted-foreground">Net profit for October</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-32" />
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
                 </div>
-                
-                <TabsContent value={activeTab} className="mt-0">
-                  <TransactionTable 
-                    transactions={filteredTransactions} 
-                    loading={isLoading} 
-                    onDeleteSuccess={() => refetch()}
-                  />
-                </TabsContent>
-              </Tabs>
-            </div>
-          </div>
-          
-          {/* Chart and account balances */}
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Chart */}
-            <div className="lg:col-span-2 glass-card rounded-xl p-6 smooth-transition hover:border-primary/30 hover-lift" data-testid="card-financial-overview">
-              <h3 className="text-xl font-bold text-foreground mb-6">Financial Overview</h3>
-              <RevenueChart data={chartData} />
-            </div>
-            
-            {/* Account balances */}
-            <AccountBalances />
-          </div>
+              ) : metrics ? (
+                <div className="space-y-4">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold" data-testid="text-net-profit">
+                      {formatCurrency(metrics.profitLoss.netProfit)}
+                    </span>
+                    <div className="flex items-center gap-1 text-sm">
+                      {metrics.profitLoss.percentageChange >= 0 ? (
+                        <>
+                          <TrendingUp className="h-4 w-4 text-green-600" />
+                          <span className="text-green-600" data-testid="text-profit-change">
+                            {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}%
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <TrendingDown className="h-4 w-4 text-red-600" />
+                          <span className="text-red-600" data-testid="text-profit-change">
+                            {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}%
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    {metrics.profitLoss.percentageChange >= 0 ? 'Up' : 'Down'} {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}% from prior 30 days
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground" data-testid="text-income-label">Income</span>
+                        <span className="font-medium" data-testid="text-income-amount">
+                          {formatCurrency(metrics.profitLoss.income)}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-500"
+                          style={{
+                            width: `${(metrics.profitLoss.income / (metrics.profitLoss.income + metrics.profitLoss.expenses)) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground" data-testid="text-expenses-label">Expenses</span>
+                        <span className="font-medium" data-testid="text-expenses-amount">
+                          {formatCurrency(metrics.profitLoss.expenses)}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-cyan-500"
+                          style={{
+                            width: `${(metrics.profitLoss.expenses / (metrics.profitLoss.income + metrics.profitLoss.expenses)) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Expenses Card */}
+          <Card className="glass border-border/50" data-testid="card-expenses">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold">EXPENSES</CardTitle>
+                <span className="text-sm text-muted-foreground">Last 30 days</span>
+              </div>
+              <div className="text-sm text-muted-foreground">Spending for last 30 days</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center h-64">
+                  <Skeleton className="h-48 w-48 rounded-full" />
+                </div>
+              ) : metrics && metrics.expensesByCategory.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="text-3xl font-bold" data-testid="text-total-expenses">
+                    {formatCurrency(metrics.expensesByCategory.reduce((sum, cat) => sum + cat.amount, 0))}
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={metrics.expensesByCategory}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        paddingAngle={2}
+                        dataKey="amount"
+                      >
+                        {metrics.expensesByCategory.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2">
+                    {metrics.expensesByCategory.slice(0, 4).map((category, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <span className="text-muted-foreground" data-testid={`text-expense-category-${index}`}>
+                            {category.category}
+                          </span>
+                        </div>
+                        <span className="font-medium" data-testid={`text-expense-amount-${index}`}>
+                          {formatCurrency(category.amount)}
+                        </span>
+                      </div>
+                    ))}
+                    {metrics.expensesByCategory.length > 4 && (
+                      <div className="text-sm text-muted-foreground">
+                        +{metrics.expensesByCategory.length - 4} more
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  No expense data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Invoices Card */}
+          <Card className="glass border-border/50" data-testid="card-invoices">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">INVOICES</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : metrics ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium" data-testid="text-unpaid-label">
+                        ${metrics.invoices.unpaid.amount.toLocaleString()} Unpaid
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        Last 365 days
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 space-y-1">
+                        <div className="h-8 bg-orange-500 flex items-center justify-center text-white text-sm font-medium rounded">
+                          Overdue
+                        </div>
+                        <div className="text-xs text-center text-muted-foreground">
+                          {metrics.invoices.overdue.count}
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="h-8 bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-200 text-sm font-medium rounded">
+                          Not due yet
+                        </div>
+                        <div className="text-xs text-center text-muted-foreground">
+                          {metrics.invoices.unpaid.count - metrics.invoices.overdue.count}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium" data-testid="text-paid-label">
+                        ${metrics.invoices.paid.amount.toLocaleString()} Paid
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        Last 30 days
+                      </span>
+                    </div>
+                    <div className="h-8 bg-green-500 flex items-center justify-center text-white text-sm font-medium rounded">
+                      {metrics.invoices.paid.count} paid
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium" data-testid="text-deposited-label">
+                        Deposited
+                      </span>
+                    </div>
+                    <div className="h-8 bg-green-600 flex items-center justify-center text-white text-sm font-medium rounded">
+                      {metrics.invoices.deposited.count} deposited
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Bank Accounts Card */}
+          <Card className="glass border-border/50" data-testid="card-bank-accounts">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold">BANK ACCOUNTS</CardTitle>
+                <span className="text-sm text-muted-foreground">As of today</span>
+              </div>
+              <div className="text-sm text-muted-foreground">Today's cash balance</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-32" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : metrics ? (
+                <div className="space-y-4">
+                  <div className="text-3xl font-bold" data-testid="text-total-balance">
+                    {formatCurrency(metrics.bankAccounts.total)}
+                  </div>
+
+                  <div className="space-y-3">
+                    {metrics.bankAccounts.accounts.map((account, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-colors"
+                        data-testid={`bank-account-${index}`}
+                      >
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <div className="h-6 w-6 rounded-full bg-primary/20" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium" data-testid={`text-bank-name-${index}`}>
+                            {account.name}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Bank Balance
+                          </div>
+                          <div className="text-xs text-muted-foreground" data-testid={`text-bank-updated-${index}`}>
+                            Updated {account.updated}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold" data-testid={`text-bank-balance-${index}`}>
+                            {formatCurrency(account.balance)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {/* Sales Card */}
+          <Card className="glass border-border/50 md:col-span-2" data-testid="card-sales">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold">SALES</CardTitle>
+                <span className="text-sm text-muted-foreground">This year to date</span>
+              </div>
+              <div className="text-sm text-muted-foreground">Total Amount</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-32" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              ) : metrics && metrics.sales.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="text-3xl font-bold" data-testid="text-total-sales">
+                    {formatCurrency(metrics.sales.reduce((sum, month) => sum + month.amount, 0))}
+                  </div>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <LineChart data={metrics.sales}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis
+                        dataKey="month"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                      />
+                      <Tooltip
+                        formatter={(value) => formatCurrency(Number(value))}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '0.5rem',
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="amount"
+                        stroke="hsl(var(--primary))"
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  No sales data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Accounts Receivable Card */}
+          <Card className="glass border-border/50" data-testid="card-accounts-receivable">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold">ACCOUNTS RECEIVABLE</CardTitle>
+                <span className="text-sm text-muted-foreground">As of today</span>
+              </div>
+              <div className="text-sm text-muted-foreground">Total</div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-32" />
+                  <Skeleton className="h-48 w-48 rounded-full mx-auto" />
+                </div>
+              ) : metrics ? (
+                <div className="space-y-4">
+                  <div className="text-3xl font-bold" data-testid="text-ar-total">
+                    {formatCurrency(metrics.accountsReceivable.total)}
+                  </div>
+
+                  {arData.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={arData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            paddingAngle={2}
+                            dataKey="value"
+                          >
+                            {arData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+                        </PieChart>
+                      </ResponsiveContainer>
+
+                      <div className="space-y-2">
+                        {arData.map((bucket, index) => (
+                          <div key={index} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              />
+                              <span className="text-muted-foreground" data-testid={`text-ar-bucket-${index}`}>
+                                {bucket.name}
+                              </span>
+                            </div>
+                            <span className="font-medium" data-testid={`text-ar-amount-${index}`}>
+                              {formatCurrency(bucket.value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center h-48 text-muted-foreground">
+                      No receivables
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
