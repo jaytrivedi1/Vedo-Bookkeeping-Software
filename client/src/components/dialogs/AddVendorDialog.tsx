@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { insertContactSchema } from "@shared/schema";
@@ -106,6 +106,12 @@ export default function AddVendorDialog({
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
+  const { data: preferences } = useQuery({
+    queryKey: ['/api/preferences'],
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
+  
   const currencyItems: SearchableSelectItem[] = ALL_CURRENCIES.map(code => ({
     value: code,
     label: `${code} - ${getCurrencyName(code)}`,
@@ -126,7 +132,7 @@ export default function AddVendorDialog({
       postalCode: "",
       country: "",
       type: "vendor",
-      currency: "USD",
+      currency: homeCurrency,
       defaultTaxRate: 0,
       documentIds: [],
     }
