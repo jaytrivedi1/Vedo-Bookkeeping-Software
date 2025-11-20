@@ -167,6 +167,33 @@ export interface IStorage {
     openingCash: number;
     closingCash: number;
   }>;
+  getDashboardMetrics(): Promise<{
+    profitLoss: {
+      netProfit: number;
+      percentageChange: number;
+      income: number;
+      expenses: number;
+    };
+    expensesByCategory: Array<{ category: string; amount: number }>;
+    invoices: {
+      unpaid: { count: number; amount: number };
+      paid: { count: number; amount: number };
+      overdue: { count: number; amount: number };
+      deposited: { count: number; amount: number };
+    };
+    bankAccounts: {
+      total: number;
+      accounts: Array<{ name: string; balance: number; updated: string }>;
+    };
+    sales: Array<{ month: string; amount: number }>;
+    accountsReceivable: {
+      total: number;
+      current: number;
+      days30: number;
+      days60: number;
+      days90Plus: number;
+    };
+  }>;
   
   // Accounting helpers for Retained Earnings and Net Income
   calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;

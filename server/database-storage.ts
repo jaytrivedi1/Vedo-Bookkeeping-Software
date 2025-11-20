@@ -24,6 +24,7 @@ import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { getFiscalYearBounds } from "@shared/fiscalYear";
+import { startOfMonth, endOfMonth, subMonths, format, differenceInDays } from "date-fns";
 
 // Promisify the scrypt function
 const scryptAsync = promisify(scrypt);
@@ -1690,6 +1691,202 @@ export class DatabaseStorage implements IStorage {
       revenues,
       expenses,
       netIncome: revenues - expenses
+    };
+  }
+
+  async getDashboardMetrics() {
+    const now = new Date();
+    const currentMonthStart = startOfMonth(now);
+    const currentMonthEnd = endOfMonth(now);
+    const previousMonthStart = startOfMonth(subMonths(now, 1));
+    const previousMonthEnd = endOfMonth(subMonths(now, 1));
+
+    // Get all accounts and ledger entries
+    const allAccounts = await this.getAccounts();
+    const allLedgerEntries = await this.getAllLedgerEntries();
+    const allTransactions = await this.getTransactions();
+
+    // Helper: Calculate income/expenses for a date range
+    const calculateIncomeExpenses = (startDate: Date, endDate: Date) => {
+      const relevantEntries = allLedgerEntries.filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= startDate && entryDate <= endDate;
+      });
+
+      let income = 0;
+      let expenses = 0;
+
+      relevantEntries.forEach(entry => {
+        const account = allAccounts.find(a => a.id === entry.accountId);
+        if (!account) return;
+
+        if (account.type === 'income' || account.type === 'other_income') {
+          income += entry.credit - entry.debit;
+        } else if (account.type === 'expenses' || account.type === 'cost_of_goods_sold' || account.type === 'other_expense') {
+          expenses += entry.debit - entry.credit;
+        }
+      });
+
+      return { income, expenses, netProfit: income - expenses };
+    };
+
+    // Calculate current and previous month profit/loss
+    const currentMonth = calculateIncomeExpenses(currentMonthStart, currentMonthEnd);
+    const previousMonth = calculateIncomeExpenses(previousMonthStart, previousMonthEnd);
+
+    // Calculate percentage change
+    const percentageChange = previousMonth.netProfit === 0 
+      ? 0 
+      : ((currentMonth.netProfit - previousMonth.netProfit) / Math.abs(previousMonth.netProfit)) * 100;
+
+    // Group expenses by category (account name)
+    const expensesByCategory: Array<{ category: string; amount: number }> = [];
+    const expenseMap = new Map<number, number>();
+
+    allLedgerEntries
+      .filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= currentMonthStart && entryDate <= currentMonthEnd;
+      })
+      .forEach(entry => {
+        const account = allAccounts.find(a => a.id === entry.accountId);
+        if (!account) return;
+        if (account.type === 'expenses' || account.type === 'cost_of_goods_sold' || account.type === 'other_expense') {
+          const amount = entry.debit - entry.credit;
+          expenseMap.set(account.id, (expenseMap.get(account.id) || 0) + amount);
+        }
+      });
+
+    expenseMap.forEach((amount, accountId) => {
+      const account = allAccounts.find(a => a.id === accountId);
+      if (account && amount > 0) {
+        expensesByCategory.push({ category: account.name, amount });
+      }
+    });
+
+    // Calculate invoice statistics
+    const invoiceTransactions = allTransactions.filter(t => t.type === 'invoice');
+    const today = now;
+
+    const invoiceStats = {
+      unpaid: { count: 0, amount: 0 },
+      paid: { count: 0, amount: 0 },
+      overdue: { count: 0, amount: 0 },
+      deposited: { count: 0, amount: 0 }
+    };
+
+    invoiceTransactions.forEach(invoice => {
+      const balance = invoice.balance !== null && invoice.balance !== undefined ? invoice.balance : invoice.amount;
+      
+      if (invoice.status === 'paid') {
+        invoiceStats.paid.count++;
+        invoiceStats.paid.amount += invoice.amount;
+      } else if (invoice.status === 'unapplied_credit') {
+        invoiceStats.deposited.count++;
+        invoiceStats.deposited.amount += Math.abs(balance);
+      } else {
+        const isOverdue = invoice.dueDate && new Date(invoice.dueDate) < today;
+        
+        if (isOverdue && invoice.status === 'open' || invoice.status === 'overdue') {
+          invoiceStats.overdue.count++;
+          invoiceStats.overdue.amount += balance;
+        }
+        
+        if (invoice.status === 'open' || invoice.status === 'partial' || invoice.status === 'overdue') {
+          invoiceStats.unpaid.count++;
+          invoiceStats.unpaid.amount += balance;
+        }
+      }
+    });
+
+    // Get bank account balances
+    const bankAccounts = allAccounts.filter(a => a.type === 'bank');
+    const bankAccountBalances = await Promise.all(
+      bankAccounts.map(async (account) => {
+        const entries = allLedgerEntries.filter(e => e.accountId === account.id);
+        const balance = entries.reduce((sum, entry) => sum + entry.debit - entry.credit, 0);
+        const lastEntry = entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        
+        return {
+          name: account.name,
+          balance,
+          updated: lastEntry ? format(new Date(lastEntry.date), 'MMM d, yyyy') : 'Never'
+        };
+      })
+    );
+
+    const totalBankBalance = bankAccountBalances.reduce((sum, acc) => sum + acc.balance, 0);
+
+    // Calculate monthly sales for last 12 months
+    const sales: Array<{ month: string; amount: number }> = [];
+    for (let i = 11; i >= 0; i--) {
+      const monthDate = subMonths(now, i);
+      const monthStart = startOfMonth(monthDate);
+      const monthEnd = endOfMonth(monthDate);
+      
+      const monthInvoices = invoiceTransactions.filter(inv => {
+        const invDate = new Date(inv.date);
+        return invDate >= monthStart && invDate <= monthEnd;
+      });
+      
+      const monthAmount = monthInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+      
+      sales.push({
+        month: format(monthDate, 'MMM yyyy'),
+        amount: monthAmount
+      });
+    }
+
+    // Calculate Accounts Receivable aging
+    const arAgingBuckets = {
+      total: 0,
+      current: 0,
+      days30: 0,
+      days60: 0,
+      days90Plus: 0
+    };
+
+    invoiceTransactions.forEach(invoice => {
+      if (invoice.status === 'paid' || invoice.status === 'cancelled') return;
+      
+      const balance = invoice.balance !== null && invoice.balance !== undefined ? invoice.balance : invoice.amount;
+      arAgingBuckets.total += balance;
+      
+      if (!invoice.dueDate) {
+        arAgingBuckets.current += balance;
+        return;
+      }
+      
+      const daysOverdue = differenceInDays(today, new Date(invoice.dueDate));
+      
+      if (daysOverdue <= 0) {
+        arAgingBuckets.current += balance;
+      } else if (daysOverdue <= 30) {
+        arAgingBuckets.current += balance;
+      } else if (daysOverdue <= 60) {
+        arAgingBuckets.days30 += balance;
+      } else if (daysOverdue <= 90) {
+        arAgingBuckets.days60 += balance;
+      } else {
+        arAgingBuckets.days90Plus += balance;
+      }
+    });
+
+    return {
+      profitLoss: {
+        netProfit: currentMonth.netProfit,
+        percentageChange: Math.round(percentageChange * 10) / 10,
+        income: currentMonth.income,
+        expenses: currentMonth.expenses
+      },
+      expensesByCategory,
+      invoices: invoiceStats,
+      bankAccounts: {
+        total: totalBankBalance,
+        accounts: bankAccountBalances
+      },
+      sales,
+      accountsReceivable: arAgingBuckets
     };
   }
 

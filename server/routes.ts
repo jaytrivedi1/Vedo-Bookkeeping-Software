@@ -5568,6 +5568,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Dashboard metrics route
+  apiRouter.get("/dashboard/metrics", async (req: Request, res: Response) => {
+    try {
+      const metrics = await storage.getDashboardMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching dashboard metrics:", error);
+      res.status(500).json({ message: "Failed to fetch dashboard metrics" });
+    }
+  });
+
   // Reports routes
   apiRouter.get("/reports/income-statement", async (req: Request, res: Response) => {
     try {
