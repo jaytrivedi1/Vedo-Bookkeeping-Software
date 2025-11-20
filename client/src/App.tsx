@@ -41,6 +41,7 @@ import ManageUsers from "@/pages/manage-users";
 import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
 import InvoicePublicView from "@/pages/invoice-public-view";
+import Quotations from "@/pages/quotations";
 import MainLayout from "@/components/layout/MainLayout";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -137,6 +138,7 @@ function Router() {
               <Route path="/invoices/new" component={InvoiceForm} />
               <Route path="/invoices/:id/edit" component={InvoiceForm} />
               <Route path="/invoices/:id" component={InvoiceView} />
+              <Route path="/quotations" component={Quotations} />
               <Route path="/payments/edit/:id" component={PaymentReceive} />
               <Route path="/payments/:id" component={PaymentView} />
               <Route path="/payment-receive" component={PaymentReceive} />

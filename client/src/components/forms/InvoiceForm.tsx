@@ -70,6 +70,7 @@ interface InvoiceFormProps {
   lineItems?: any[];
   onSuccess?: () => void;
   onCancel?: () => void;
+  initialDocumentType?: 'invoice' | 'quotation';
 }
 
 type PaymentTerms = '0' | '7' | '14' | '30' | '60' | 'custom';
@@ -89,7 +90,7 @@ interface InvoiceFormType extends UseFormReturn<Invoice> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
-export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }: InvoiceFormProps) {
+export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, initialDocumentType }: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
@@ -97,7 +98,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel }:
   const [showAddProductDialog, setShowAddProductDialog] = useState(false);
   const [currentLineItemIndex, setCurrentLineItemIndex] = useState<number | null>(null);
   const [documentType, setDocumentType] = useState<'invoice' | 'quotation'>(
-    invoice?.status === 'quotation' ? 'quotation' : 'invoice'
+    invoice?.status === 'quotation' ? 'quotation' : (initialDocumentType || 'invoice')
   );
   
   // Initialize based on mode (create vs edit)

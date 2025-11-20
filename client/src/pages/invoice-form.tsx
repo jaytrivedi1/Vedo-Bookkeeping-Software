@@ -14,8 +14,9 @@ interface InvoiceResponse {
 export default function InvoiceFormPage() {
   const [, setLocation] = useLocation();
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const [initialDocumentType, setInitialDocumentType] = useState<'invoice' | 'quotation'>('invoice');
 
-  // Extract invoice ID from URL
+  // Extract invoice ID and query parameters from URL
   useEffect(() => {
     const path = window.location.pathname;
     const editMatch = path.match(/\/invoices\/(\d+)\/edit/);
@@ -23,6 +24,13 @@ export default function InvoiceFormPage() {
       setInvoiceId(parseInt(editMatch[1]));
     } else {
       setInvoiceId(null); // New mode
+    }
+    
+    // Check for type query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const typeParam = urlParams.get('type');
+    if (typeParam === 'quotation') {
+      setInitialDocumentType('quotation');
     }
   }, []);
 
@@ -103,6 +111,7 @@ export default function InvoiceFormPage() {
         lineItems={isEditMode ? data?.lineItems : undefined}
         onSuccess={handleSuccess}
         onCancel={handleCancel}
+        initialDocumentType={!isEditMode ? initialDocumentType : undefined}
       />
     </div>
   );
