@@ -72,11 +72,11 @@ import {
   Pie,
   Cell
 } from "recharts";
-import { Account, LedgerEntry, Company, Preferences } from "@shared/schema";
+import { Account, LedgerEntry, Company, Preferences, Contact } from "@shared/schema";
 import { getFiscalYearBounds, getFiscalYearLabel, getFiscalYear } from "@shared/fiscalYear";
 import { queryClient } from "@/lib/queryClient";
 import ExchangeRatesManager from "@/components/settings/ExchangeRatesManager";
-import { formatReportAmount } from "@/lib/currencyUtils";
+import { formatReportAmount, formatContactName } from "@/lib/currencyUtils";
 
 // Collapsible Balance Sheet Section Component
 function BalanceSheetSection({ 
@@ -588,6 +588,12 @@ export default function Reports() {
   // Fetch accounts (for general ledger to determine account types)
   const { data: accounts } = useQuery<Account[]>({
     queryKey: ['/api/accounts'],
+    enabled: activeTab === 'general-ledger',
+  });
+  
+  // Fetch contacts (for general ledger to show currency suffixes)
+  const { data: contacts } = useQuery<Contact[]>({
+    queryKey: ['/api/contacts'],
     enabled: activeTab === 'general-ledger',
   });
   
@@ -2020,6 +2026,10 @@ export default function Reports() {
                                     (account) => account.id === entry.accountId
                                   )?.name || 'Unknown Account';
                                   
+                                  // Look up contact for currency suffix
+                                  const contact = contacts?.find(c => c.id === entry.contactId);
+                                  const homeCurrency = preferences?.homeCurrency || 'CAD';
+                                  
                                   return (
                                     <TableRow 
                                       key={entry.id}
@@ -2034,7 +2044,9 @@ export default function Reports() {
                                         </span>
                                       </TableCell>
                                       <TableCell>{entry.referenceNumber || ''}</TableCell>
-                                      <TableCell>{entry.contactName || '-'}</TableCell>
+                                      <TableCell>
+                                        {contact ? formatContactName(entry.contactName, contact.currency, homeCurrency) : (entry.contactName || '-')}
+                                      </TableCell>
                                       <TableCell>{entry.description}</TableCell>
                                       <TableCell>{accountName}</TableCell>
                                       <TableCell className="text-right">
@@ -2140,21 +2152,28 @@ export default function Reports() {
                                               )}
                                               
                                               {/* Transaction Rows */}
-                                              {group.entries.map((entry: any) => (
-                                                <TableRow
-                                                  key={entry.id}
-                                                  className="cursor-pointer hover:bg-primary/5 transition-colors"
-                                                  onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
-                                                  data-testid={`grouped-transaction-${entry.transactionId}`}
-                                                >
-                                                  <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
-                                                  <TableCell>
-                                                    <span className="text-sm font-medium">
-                                                      {formatTransactionType(entry.transactionType)}
-                                                    </span>
-                                                  </TableCell>
-                                                  <TableCell>{entry.transactionReference || ''}</TableCell>
-                                                  <TableCell>{entry.contactName || '-'}</TableCell>
+                                              {group.entries.map((entry: any) => {
+                                                // Look up contact for currency suffix
+                                                const contact = contacts?.find(c => c.id === entry.contactId);
+                                                const homeCurrency = preferences?.homeCurrency || 'CAD';
+                                                
+                                                return (
+                                                  <TableRow
+                                                    key={entry.id}
+                                                    className="cursor-pointer hover:bg-primary/5 transition-colors"
+                                                    onClick={() => handleTransactionClick(entry.transactionId, entry.transactionType)}
+                                                    data-testid={`grouped-transaction-${entry.transactionId}`}
+                                                  >
+                                                    <TableCell>{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                                                    <TableCell>
+                                                      <span className="text-sm font-medium">
+                                                        {formatTransactionType(entry.transactionType)}
+                                                      </span>
+                                                    </TableCell>
+                                                    <TableCell>{entry.transactionReference || ''}</TableCell>
+                                                    <TableCell>
+                                                      {contact ? formatContactName(entry.contactName, contact.currency, homeCurrency) : (entry.contactName || '-')}
+                                                    </TableCell>
                                                   <TableCell>{entry.memo || '-'}</TableCell>
                                                   <TableCell>{entry.splitAccountName}</TableCell>
                                                   <TableCell className="text-right">
@@ -2165,7 +2184,8 @@ export default function Reports() {
                                                     {formatReportAmount(entry.runningBalance)}
                                                   </TableCell>
                                                 </TableRow>
-                                              ))}
+                                              );
+                                              })}
                                               
                                               {/* Total Row */}
                                               <TableRow className="border-t-2 border-border font-bold bg-muted/30">
