@@ -244,7 +244,7 @@ export default function Invoices() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/customer-credit/new">
+                <Link href="/customer-credits/new">
                   <FileText className="mr-2 h-4 w-4" />
                   <span>Customer Credit</span>
                 </Link>
