@@ -46,7 +46,6 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-5 h-5 mr-3" /> },
     { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-5 h-5 mr-3" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-5 h-5 mr-3" /> },
-    { path: "/recurring-invoices", label: "Recurring Invoices", icon: <TrendingUpIcon className="w-5 h-5 mr-3" /> },
     { path: "/expenses", label: "Expenses", icon: <BanknoteIcon className="w-5 h-5 mr-3" /> },
     { path: "/account-books", label: "Account Books", icon: <BookOpenIcon className="w-5 h-5 mr-3" /> },
     { path: "/chart-of-accounts", label: "Chart of Accounts", icon: <DatabaseIcon className="w-5 h-5 mr-3" /> },
@@ -65,7 +64,6 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
   const transactionTypes = [
     { path: "/invoices/new", label: "Invoice", icon: <FileTextIcon className="w-4 h-4 mr-2" /> },
     { path: "/quotations/new", label: "Quotation", icon: <FileTextIcon className="w-4 h-4 mr-2" /> },
-    { path: "/recurring-invoices/new", label: "Recurring Invoice", icon: <TrendingUpIcon className="w-4 h-4 mr-2" /> },
     { path: "/expenses/new", label: "Expense", icon: <BanknoteIcon className="w-4 h-4 mr-2" /> },
     { path: "/journals/new", label: "Journal Entry", icon: <ScaleIcon className="w-4 h-4 mr-2" /> },
     { path: "/deposits/new", label: "Deposit", icon: <PiggyBankIcon className="w-4 h-4 mr-2" /> },
