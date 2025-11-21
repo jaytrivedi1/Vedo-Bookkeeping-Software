@@ -243,9 +243,11 @@ export default function Invoices() {
                   <span>Deposit</span>
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Customer Credit</span>
+              <DropdownMenuItem asChild>
+                <Link href="/customer-credit/new">
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Customer Credit</span>
+                </Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
