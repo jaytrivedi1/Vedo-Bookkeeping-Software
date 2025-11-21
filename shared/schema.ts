@@ -939,6 +939,101 @@ export type InsertFxRevaluation = z.infer<typeof insertFxRevaluationSchema>;
 export type CurrencyLock = typeof currencyLocksSchema.$inferSelect;
 export type InsertCurrencyLock = z.infer<typeof insertCurrencyLockSchema>;
 
+// Recurring Invoices - automated invoice generation on schedule
+export const recurringStatusEnum = pgEnum('recurring_status', [
+  'active', 'paused', 'cancelled', 'completed'
+]);
+
+export const recurringFrequencyEnum = pgEnum('recurring_frequency', [
+  'daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom'
+]);
+
+export const recurringTemplatesSchema = pgTable('recurring_templates', {
+  id: serial('id').primaryKey(),
+  customerId: integer('customer_id').notNull().references(() => contacts.id),
+  templateName: text('template_name').notNull(),
+  currency: varchar('currency', { length: 3 }).default('USD'),
+  frequency: recurringFrequencyEnum('frequency').notNull(),
+  frequencyValue: integer('frequency_value').default(1), // For custom: every N days/weeks/months
+  frequencyUnit: text('frequency_unit'), // For custom: days, weeks, months
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date'), // null means no end date
+  maxOccurrences: integer('max_occurrences'), // Alternative to end date
+  currentOccurrences: integer('current_occurrences').default(0),
+  dayOfMonth: integer('day_of_month'), // 1-31 or -1 for last business day
+  timezone: text('timezone').default('UTC'),
+  nextRunAt: timestamp('next_run_at').notNull(),
+  lastRunAt: timestamp('last_run_at'),
+  status: recurringStatusEnum('status').notNull().default('active'),
+  autoEmail: boolean('auto_email').default(false),
+  autoCharge: boolean('auto_charge').default(false),
+  previewBeforeSend: boolean('preview_before_send').default(false),
+  paymentTerms: text('payment_terms'),
+  memo: text('memo'),
+  attachments: text('attachments').array(),
+  subTotal: doublePrecision('sub_total').notNull().default(0),
+  taxAmount: doublePrecision('tax_amount').notNull().default(0),
+  totalAmount: doublePrecision('total_amount').notNull().default(0),
+  exchangeRate: decimal('exchange_rate', { precision: 18, scale: 6 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const recurringLinesSchema = pgTable('recurring_lines', {
+  id: serial('id').primaryKey(),
+  templateId: integer('template_id').notNull().references(() => recurringTemplatesSchema.id, { onDelete: 'cascade' }),
+  description: text('description').notNull(),
+  quantity: doublePrecision('quantity').notNull().default(1),
+  unitPrice: doublePrecision('unit_price').notNull(),
+  amount: doublePrecision('amount').notNull(),
+  accountId: integer('account_id').references(() => accounts.id),
+  salesTaxId: integer('sales_tax_id').references(() => salesTaxSchema.id),
+  productId: integer('product_id').references(() => productsSchema.id),
+  orderIndex: integer('order_index').default(0),
+});
+
+export const recurringHistorySchema = pgTable('recurring_history', {
+  id: serial('id').primaryKey(),
+  templateId: integer('template_id').notNull().references(() => recurringTemplatesSchema.id),
+  invoiceId: integer('invoice_id').references(() => transactions.id),
+  scheduledAt: timestamp('scheduled_at').notNull(),
+  generatedAt: timestamp('generated_at'),
+  sentAt: timestamp('sent_at'),
+  paidAt: timestamp('paid_at'),
+  status: text('status').notNull(), // scheduled, generated, sent, paid, failed, skipped
+  errorMessage: text('error_message'),
+  retryCount: integer('retry_count').default(0),
+  metadata: json('metadata'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Insert schemas for recurring invoice tables
+export const insertRecurringTemplateSchema = createInsertSchema(recurringTemplatesSchema).omit({
+  id: true,
+  currentOccurrences: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertRecurringLineSchema = createInsertSchema(recurringLinesSchema).omit({
+  id: true
+});
+
+export const insertRecurringHistorySchema = createInsertSchema(recurringHistorySchema).omit({
+  id: true,
+  createdAt: true
+});
+
+// Types for recurring invoice tables
+export type RecurringTemplate = typeof recurringTemplatesSchema.$inferSelect;
+export type InsertRecurringTemplate = z.infer<typeof insertRecurringTemplateSchema>;
+
+export type RecurringLine = typeof recurringLinesSchema.$inferSelect;
+export type InsertRecurringLine = z.infer<typeof insertRecurringLineSchema>;
+
+export type RecurringHistory = typeof recurringHistorySchema.$inferSelect;
+export type InsertRecurringHistory = z.infer<typeof insertRecurringHistorySchema>;
+
 // Invoice Activities - track invoice lifecycle events
 export const activityTypeEnum = pgEnum('activity_type', [
   'created', 'sent', 'viewed', 'paid', 'edited', 'overdue', 'reminder_sent', 'cancelled'

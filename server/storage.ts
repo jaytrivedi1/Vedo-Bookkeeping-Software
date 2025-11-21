@@ -88,6 +88,15 @@ import {
   userInvitationsSchema,
   type UserInvitation,
   type InsertUserInvitation,
+  recurringTemplatesSchema,
+  recurringLinesSchema,
+  recurringHistorySchema,
+  type RecurringTemplate,
+  type InsertRecurringTemplate,
+  type RecurringLine,
+  type InsertRecurringLine,
+  type RecurringHistory,
+  type InsertRecurringHistory,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -375,6 +384,22 @@ export interface IStorage {
   createUserInvitation(invitation: InsertUserInvitation): Promise<UserInvitation>;
   acceptUserInvitation(token: string): Promise<UserInvitation | undefined>;
   deleteUserInvitation(id: number): Promise<boolean>;
+  
+  // Recurring Invoices
+  getRecurringTemplates(filters?: { status?: string; customerId?: number }): Promise<(RecurringTemplate & { customerName?: string })[]>;
+  getRecurringTemplate(id: number): Promise<(RecurringTemplate & { customerName?: string }) | undefined>;
+  createRecurringTemplate(template: InsertRecurringTemplate, lines: InsertRecurringLine[]): Promise<RecurringTemplate>;
+  updateRecurringTemplate(id: number, template: Partial<RecurringTemplate>): Promise<RecurringTemplate | undefined>;
+  deleteRecurringTemplate(id: number): Promise<boolean>;
+  getRecurringLines(templateId: number): Promise<RecurringLine[]>;
+  updateRecurringLines(templateId: number, lines: InsertRecurringLine[]): Promise<void>;
+  pauseRecurringTemplate(id: number): Promise<RecurringTemplate | undefined>;
+  resumeRecurringTemplate(id: number): Promise<RecurringTemplate | undefined>;
+  cancelRecurringTemplate(id: number): Promise<RecurringTemplate | undefined>;
+  duplicateRecurringTemplate(id: number, templateName: string): Promise<RecurringTemplate>;
+  getRecurringHistory(templateId: number): Promise<RecurringHistory[]>;
+  createRecurringHistory(history: InsertRecurringHistory): Promise<RecurringHistory>;
+  getActiveTemplatesDue(now: Date): Promise<RecurringTemplate[]>;
 }
 
 export class MemStorage implements IStorage {

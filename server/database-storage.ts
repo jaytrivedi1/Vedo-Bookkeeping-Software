@@ -6,18 +6,21 @@ import {
   Reconciliation, ReconciliationItem,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
   AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
+  RecurringTemplate, RecurringLine, RecurringHistory,
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
   InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
+  InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
   accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
-  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema
+  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema,
+  recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -3452,5 +3455,180 @@ export class DatabaseStorage implements IStorage {
       )
       .limit(1);
     return invoice;
+  }
+
+  // Recurring Invoices
+  async getRecurringTemplates(filters?: { status?: string; customerId?: number }): Promise<(RecurringTemplate & { customerName?: string })[]> {
+    const conditions = [];
+    if (filters?.status) {
+      conditions.push(eq(recurringTemplatesSchema.status, filters.status as any));
+    }
+    if (filters?.customerId) {
+      conditions.push(eq(recurringTemplatesSchema.customerId, filters.customerId));
+    }
+
+    let query = db.select({
+      template: recurringTemplatesSchema,
+      customerName: contacts.name,
+    })
+    .from(recurringTemplatesSchema)
+    .leftJoin(contacts, eq(recurringTemplatesSchema.customerId, contacts.id));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+
+    const results = await query.orderBy(desc(recurringTemplatesSchema.createdAt));
+    return results.map(r => ({ ...r.template, customerName: r.customerName || '' }));
+  }
+
+  async getRecurringTemplate(id: number): Promise<(RecurringTemplate & { customerName?: string }) | undefined> {
+    const results = await db.select({
+      template: recurringTemplatesSchema,
+      customerName: contacts.name,
+    })
+    .from(recurringTemplatesSchema)
+    .leftJoin(contacts, eq(recurringTemplatesSchema.customerId, contacts.id))
+    .where(eq(recurringTemplatesSchema.id, id))
+    .limit(1);
+
+    if (results.length === 0) return undefined;
+    return { ...results[0].template, customerName: results[0].customerName || '' };
+  }
+
+  async createRecurringTemplate(template: InsertRecurringTemplate, lines: InsertRecurringLine[]): Promise<RecurringTemplate> {
+    return await db.transaction(async (tx) => {
+      const [newTemplate] = await tx.insert(recurringTemplatesSchema)
+        .values(template)
+        .returning();
+
+      if (lines.length > 0) {
+        const linesWithTemplateId = lines.map(line => ({
+          ...line,
+          templateId: newTemplate.id,
+        }));
+        await tx.insert(recurringLinesSchema).values(linesWithTemplateId);
+      }
+
+      return newTemplate;
+    });
+  }
+
+  async updateRecurringTemplate(id: number, template: Partial<RecurringTemplate>): Promise<RecurringTemplate | undefined> {
+    const [updated] = await db.update(recurringTemplatesSchema)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(recurringTemplatesSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteRecurringTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(recurringTemplatesSchema)
+      .where(eq(recurringTemplatesSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getRecurringLines(templateId: number): Promise<RecurringLine[]> {
+    return await db.select()
+      .from(recurringLinesSchema)
+      .where(eq(recurringLinesSchema.templateId, templateId))
+      .orderBy(recurringLinesSchema.orderIndex);
+  }
+
+  async updateRecurringLines(templateId: number, lines: InsertRecurringLine[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.delete(recurringLinesSchema)
+        .where(eq(recurringLinesSchema.templateId, templateId));
+
+      if (lines.length > 0) {
+        const linesWithTemplateId = lines.map(line => ({
+          ...line,
+          templateId,
+        }));
+        await tx.insert(recurringLinesSchema).values(linesWithTemplateId);
+      }
+    });
+  }
+
+  async pauseRecurringTemplate(id: number): Promise<RecurringTemplate | undefined> {
+    const [updated] = await db.update(recurringTemplatesSchema)
+      .set({ status: 'paused' as any, updatedAt: new Date() })
+      .where(eq(recurringTemplatesSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async resumeRecurringTemplate(id: number): Promise<RecurringTemplate | undefined> {
+    const [updated] = await db.update(recurringTemplatesSchema)
+      .set({ status: 'active' as any, updatedAt: new Date() })
+      .where(eq(recurringTemplatesSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async cancelRecurringTemplate(id: number): Promise<RecurringTemplate | undefined> {
+    const [updated] = await db.update(recurringTemplatesSchema)
+      .set({ status: 'cancelled' as any, updatedAt: new Date() })
+      .where(eq(recurringTemplatesSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async duplicateRecurringTemplate(id: number, templateName: string): Promise<RecurringTemplate> {
+    const original = await this.getRecurringTemplate(id);
+    if (!original) {
+      throw new Error('Template not found');
+    }
+
+    const originalLines = await this.getRecurringLines(id);
+
+    return await db.transaction(async (tx) => {
+      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, currentOccurrences: _currentOccurrences, lastRunAt: _lastRunAt, ...templateData } = original;
+
+      const [newTemplate] = await tx.insert(recurringTemplatesSchema)
+        .values({
+          ...templateData,
+          templateName,
+          status: 'paused' as any,
+          currentOccurrences: 0,
+          lastRunAt: null,
+        })
+        .returning();
+
+      if (originalLines.length > 0) {
+        const newLines = originalLines.map(({ id: _lineId, templateId: _templateId, ...lineData }) => ({
+          ...lineData,
+          templateId: newTemplate.id,
+        }));
+        await tx.insert(recurringLinesSchema).values(newLines);
+      }
+
+      return newTemplate;
+    });
+  }
+
+  async getRecurringHistory(templateId: number): Promise<RecurringHistory[]> {
+    return await db.select()
+      .from(recurringHistorySchema)
+      .where(eq(recurringHistorySchema.templateId, templateId))
+      .orderBy(desc(recurringHistorySchema.scheduledAt));
+  }
+
+  async createRecurringHistory(history: InsertRecurringHistory): Promise<RecurringHistory> {
+    const [newHistory] = await db.insert(recurringHistorySchema)
+      .values(history)
+      .returning();
+    return newHistory;
+  }
+
+  async getActiveTemplatesDue(now: Date): Promise<RecurringTemplate[]> {
+    return await db.select()
+      .from(recurringTemplatesSchema)
+      .where(
+        and(
+          eq(recurringTemplatesSchema.status, 'active' as any),
+          lte(recurringTemplatesSchema.nextRunAt, now)
+        )
+      );
   }
 }
