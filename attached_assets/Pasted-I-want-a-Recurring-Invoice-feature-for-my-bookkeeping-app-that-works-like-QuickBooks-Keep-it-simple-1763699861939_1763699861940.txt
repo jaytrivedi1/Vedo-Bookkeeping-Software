@@ -1,0 +1,96 @@
+I want a Recurring Invoice feature for my bookkeeping app that works like QuickBooks. Keep it simple, reliable, and easy for users.
+
+What it should do (plain language)
+	•	Let users create an invoice template that repeats automatically on a schedule.
+	•	The template should include: customer, items/services, quantities, prices, taxes, invoice memo, payment terms, currency, and optional attachments.
+	•	The user must be able to choose:
+	•	Frequency: daily, weekly, every 2 weeks, monthly, quarterly, yearly, or custom cron-style.
+	•	Start date and optional end date (or number of occurrences).
+	•	Day of month or “last business day of month” option.
+	•	Timezone for scheduling.
+	•	The system should generate a real invoice on the scheduled date and:
+	•	Save it in the same place as normal invoices.
+	•	Assign the next invoice number in sequence.
+	•	Email the invoice automatically to the customer (optional — user chooses send or only generate).
+	•	Optionally attempt auto-charge if a saved payment method exists.
+	•	Allow overrides per occurrence:
+	•	Allow the user to edit the next generated invoice before sending (preview & edit).
+	•	Allow rules for variable lines (e.g., a billing amount that uses a formula, or use values from a linked subscription record).
+	•	Provide payment retry behavior for failed auto-charges (configurable attempts & delays).
+	•	Create a log/audit showing when each invoice was generated, sent, paid, retried, or failed.
+	•	Allow pause, skip next, cancel, or change schedule at any time.
+	•	Provide notifications to the merchant on failures (email / in-app).
+	•	Provide test mode: let user run a dry-run that shows what invoices would be created for the next N occurrences without actually creating them.
+	•	Provide webhooks / API so other systems (or integrations) can get notified when a recurring invoice is generated, sent, or fails.
+
+UI (what the user sees, plain)
+	•	Page: Create Recurring Invoice
+	•	Pick a customer (required)
+	•	Add line items (same editor as normal invoices)
+	•	Taxes, discounts, and attachments
+	•	Frequency controls (radio for common choices + advanced for custom)
+	•	Start date, End date / occurrences
+	•	Toggle: Auto-email invoice (on/off)
+	•	Toggle: Auto-charge saved card (on/off)
+	•	Preview button: shows the next invoice (editable)
+	•	Save & Activate button
+	•	Page: Recurring Invoices (list)
+	•	Show all active and paused recurring templates with columns: Customer, Next run, Frequency, Status, Amount, Actions (Edit, Pause, Run now, Duplicate, Cancel)
+	•	Clicking a template shows history of generated invoices (with status: Sent / Generated / Paid / Failed)
+	•	When a scheduled run happens:
+	•	If preview before send is enabled, create invoice in Draft and notify user to approve
+	•	Else create invoice as Sent (or Paid if auto-charge succeeded)
+
+Backend basics (what to build)
+	•	DB tables:
+	•	recurring_templates (id, owner_id, customer_id, currency, frequency_spec, start_date, end_date_or_count, timezone, send_email_bool, auto_charge_bool, next_run_at, status (active/paused/cancelled), created_at, updated_at, last_run_at)
+	•	recurring_lines (template_id, description, qty, unit_price, tax_id, order)
+	•	recurring_history (template_id, invoice_id, scheduled_at, generated_at, sent_at, paid_at, status, note)
+	•	store formula fields or metadata for variable items if needed
+	•	Scheduler:
+	•	A reliable job runner (APScheduler / cron worker) that:
+	•	Queries active templates with next_run_at <= now (respect timezone)
+	•	For each: generate invoice record, increment invoice number, attach lines, compute taxes
+	•	Save recurring_history row and update next_run_at based on frequency
+	•	Optionally email invoice and/or attempt auto-charge
+	•	Retry failures per retry policy and log results
+	•	Ensure idempotency: job must be safe to run twice without duplicating invoices (use unique token/lock)
+	•	Email & Payments:
+	•	Use existing email templates and payment gateway logic
+	•	For auto-charge: attempt charge, on success mark invoice paid; on fail log and start retry schedule
+	•	API:
+	•	POST /recurring create
+	•	GET /recurring list
+	•	GET /recurring/{id} details
+	•	PUT /recurring/{id} edit
+	•	POST /recurring/{id}/pause / resume / run-now / duplicate
+	•	GET /recurring/{id}/history
+	•	Webhooks:
+	•	Fire events: recurring.generated, recurring.sent, recurring.paid, recurring.failed
+
+Safety & rules
+	•	Do not send invoices before start_date or after end_date.
+	•	Allow user to preview and edit the next invoice only if it’s not already sent.
+	•	Respect payment gateway PCI rules: only auto-charge if customer has stored consent & card token.
+	•	When auto-creating the invoice, always keep an audit trail linking it to the template.
+	•	Handle daylight savings & timezone correctly — next_run_at should be computed using template timezone.
+
+Tests (simple)
+	•	Create a daily template and ensure 3 daily invoices are generated with correct dates.
+	•	Create monthly template on 31st and ensure last-day-of-month behavior works.
+	•	Test pause/resume: no invoices while paused, resumes when active.
+	•	Test auto-charge success and failure retry logic.
+	•	Test duplicate prevention (job runs twice but creates only one invoice per scheduled run).
+
+Acceptance criteria (plain)
+	•	I can create, preview, and activate a recurring invoice.
+	•	The system creates a real invoice on schedule and it appears in my normal invoices list.
+	•	The system can auto-email and optionally auto-charge the customer, with retries and logs.
+	•	I can pause, skip, edit, duplicate, or cancel a recurring template.
+	•	There’s a history that links every generated invoice back to its recurring template.
+	•	Scheduling respects timezone and works for edge dates (month ends).
+	•	Dry-run (preview N occurrences) works and doesn’t create invoices.
+
+⸻
+
+Start by designing the DB tables and the scheduler worker, then build the UI for creating templates and a list view.
