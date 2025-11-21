@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Trash2, Plus, Loader2, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
-import type { Contact, SalesTax } from "@shared/schema";
+import type { Contact, SalesTax, RecurringTemplate, RecurringLine } from "@shared/schema";
 
 const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -54,19 +54,19 @@ export default function RecurringInvoiceFormPage() {
   ]);
 
   const { data: customers = [] } = useQuery<Contact[]>({
-    queryKey: ["/api/contacts?type=customer"],
+    queryKey: ["/api/contacts"],
   });
 
   const { data: taxes = [] } = useQuery<SalesTax[]>({
     queryKey: ["/api/sales-taxes"],
   });
 
-  const { data: template, isLoading } = useQuery({
+  const { data: template, isLoading } = useQuery<RecurringTemplate>({
     queryKey: id ? [`/api/recurring/${id}`] : [],
     enabled: !!id,
   });
 
-  const { data: templateLines = [] } = useQuery({
+  const { data: templateLines = [] } = useQuery<RecurringLine[]>({
     queryKey: id ? [`/api/recurring/${id}/lines`] : [],
     enabled: !!id,
   });
@@ -424,14 +424,14 @@ export default function RecurringInvoiceFormPage() {
                       </TableCell>
                       <TableCell>
                         <Select
-                          value={item.salesTaxId?.toString() || ""}
-                          onValueChange={(v) => updateLineItem(index, "salesTaxId", v ? parseInt(v) : undefined)}
+                          value={item.salesTaxId?.toString() || "none"}
+                          onValueChange={(v) => updateLineItem(index, "salesTaxId", v !== "none" ? parseInt(v) : undefined)}
                         >
                           <SelectTrigger className="w-full">
-                            <SelectValue placeholder="None" />
+                            <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
                             {taxes.map((tax) => (
                               <SelectItem key={tax.id} value={tax.id.toString()}>
                                 {tax.name}
