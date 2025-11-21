@@ -123,32 +123,6 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
             </span>
           </Link>
         ))}
-        
-        {/* New Transaction Dropdown */}
-        <div className="mt-4 px-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                className="w-full justify-start bg-gradient-to-r from-primary/10 to-accent/10 hover:from-primary/20 hover:to-accent/20 border-primary/20 hover:border-primary/40 smooth-transition" 
-                variant="outline"
-                data-testid="button-new-transaction-sidebar"
-              >
-                <PlusIcon className="w-5 h-5 mr-3" />
-                New Transaction
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 glass-card border-border/50">
-              {transactionTypes.map((type) => (
-                <Link key={type.path} href={type.path}>
-                  <DropdownMenuItem className="cursor-pointer smooth-transition hover:bg-primary/10" data-testid={`menu-item-${type.label.toLowerCase().replace(/\s/g, '-')}`}>
-                    {type.icon}
-                    {type.label}
-                  </DropdownMenuItem>
-                </Link>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
       </nav>
 
       {/* Settings and Account section */}
