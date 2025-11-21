@@ -288,6 +288,12 @@ export function GlobalTopPanel() {
                     <span>Invoice</span>
                   </DropdownMenuItem>
                 </Link>
+                <Link href="/quotations/new">
+                  <DropdownMenuItem>
+                    <FileText className="mr-2 h-4 w-4" />
+                    <span>Quotation</span>
+                  </DropdownMenuItem>
+                </Link>
                 <Link href="/payment-receive">
                   <DropdownMenuItem>
                     <CreditCard className="mr-2 h-4 w-4" />
