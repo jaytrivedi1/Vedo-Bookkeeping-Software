@@ -4492,6 +4492,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           console.log(`Directly deleted invoice #1009, rows affected: ${deleteResult.rowCount}`);
           
+          // Log activity for transaction deletion
+          await logActivity(
+            storage,
+            req,
+            'deleted',
+            'transaction',
+            id,
+            {
+              reference: transaction.reference,
+              type: transaction.type,
+              amount: transaction.amount,
+              contactId: transaction.contactId
+            }
+          );
+          
           return res.status(200).json({ success: true });
         } catch (error) {
           console.error("Error directly deleting invoice #1009:", error);
@@ -5311,6 +5326,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!deleted) {
           return res.status(500).json({ message: "Failed to delete transaction" });
         }
+        
+        // Log activity for transaction deletion
+        await logActivity(
+          storage,
+          req,
+          'deleted',
+          'transaction',
+          id,
+          {
+            reference: transaction.reference,
+            type: transaction.type,
+            amount: transaction.amount,
+            contactId: transaction.contactId
+          }
+        );
       } catch (deletionError) {
         console.error("Error during transaction deletion:", deletionError);
         
