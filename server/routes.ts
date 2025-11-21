@@ -12646,23 +12646,28 @@ Respond in JSON format:
 
   apiRouter.post("/recurring", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { customerId, templateName, frequency, startDate, endDate, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      const { customerId, templateName, frequency, dayOfMonth, startDate, endDate, maxOccurrences, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      
+      const subTotal = lines.reduce((sum: number, line: any) => sum + (line.amount || 0), 0);
+      const taxAmount = 0;
       
       const template = await storage.createRecurringTemplate(
         {
           customerId,
           templateName,
           frequency: frequency as any,
+          dayOfMonth: dayOfMonth || null,
           startDate: new Date(startDate),
           endDate: endDate ? new Date(endDate) : null,
+          maxOccurrences: maxOccurrences || null,
           nextRunAt: new Date(startDate),
           autoEmail: autoEmail || false,
           autoCharge: autoCharge || false,
           paymentTerms: paymentTerms || null,
           memo: memo || null,
-          subTotal: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
-          taxAmount: 0,
-          totalAmount: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+          subTotal,
+          taxAmount,
+          totalAmount: subTotal + taxAmount,
         },
         lines
       );
@@ -12676,21 +12681,26 @@ Respond in JSON format:
   apiRouter.put("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const { customerId, templateName, frequency, startDate, endDate, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      const { customerId, templateName, frequency, dayOfMonth, startDate, endDate, maxOccurrences, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      
+      const subTotal = lines.reduce((sum: number, line: any) => sum + (line.amount || 0), 0);
+      const taxAmount = 0;
       
       const updated = await storage.updateRecurringTemplate(id, {
         customerId,
         templateName,
         frequency: frequency as any,
+        dayOfMonth: dayOfMonth || null,
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
+        maxOccurrences: maxOccurrences || null,
         autoEmail: autoEmail || false,
         autoCharge: autoCharge || false,
         paymentTerms: paymentTerms || null,
         memo: memo || null,
-        subTotal: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
-        taxAmount: 0,
-        totalAmount: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+        subTotal,
+        taxAmount,
+        totalAmount: subTotal + taxAmount,
       });
       
       if (lines.length > 0) {
@@ -12701,6 +12711,17 @@ Respond in JSON format:
     } catch (error: any) {
       console.error("Error updating template:", error);
       res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  apiRouter.get("/recurring/:id/lines", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const lines = await storage.getRecurringLines(id);
+      res.json(lines);
+    } catch (error: any) {
+      console.error("Error fetching lines:", error);
+      res.status(500).json({ error: "Failed to fetch lines" });
     }
   });
 
