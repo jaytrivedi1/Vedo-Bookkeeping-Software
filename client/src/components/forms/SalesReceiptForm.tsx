@@ -538,6 +538,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                   placeholder="Select currency"
                   searchPlaceholder="Search currencies..."
                   emptyText="No currencies found."
+                  disabled={!!watchContactId}
                   data-testid="select-currency"
                 />
               </FormControl>

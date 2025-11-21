@@ -767,7 +767,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                     <Select 
                       value={currency} 
                       onValueChange={(value) => setCurrency(value)}
-                      disabled={isEditing}
+                      disabled={isEditing || !!watchContactId}
                     >
                       <SelectTrigger className="bg-white border-gray-300 h-10">
                         <SelectValue placeholder="Select currency" />
