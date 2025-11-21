@@ -12619,6 +12619,204 @@ Respond in JSON format:
     }
   });
 
+  // Recurring Invoices API
+  apiRouter.get("/recurring", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const templates = await storage.getRecurringTemplates();
+      res.json(templates);
+    } catch (error: any) {
+      console.error("Error fetching recurring templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  apiRouter.get("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.getRecurringTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error: any) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  apiRouter.post("/recurring", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { customerId, templateName, frequency, startDate, endDate, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      
+      const template = await storage.createRecurringTemplate(
+        {
+          customerId,
+          templateName,
+          frequency: frequency as any,
+          startDate: new Date(startDate),
+          endDate: endDate ? new Date(endDate) : null,
+          nextRunAt: new Date(startDate),
+          autoEmail: autoEmail || false,
+          autoCharge: autoCharge || false,
+          paymentTerms: paymentTerms || null,
+          memo: memo || null,
+          subTotal: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+          taxAmount: 0,
+          totalAmount: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+        },
+        lines
+      );
+      res.status(201).json(template);
+    } catch (error: any) {
+      console.error("Error creating template:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  apiRouter.put("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { customerId, templateName, frequency, startDate, endDate, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
+      
+      const updated = await storage.updateRecurringTemplate(id, {
+        customerId,
+        templateName,
+        frequency: frequency as any,
+        startDate: new Date(startDate),
+        endDate: endDate ? new Date(endDate) : null,
+        autoEmail: autoEmail || false,
+        autoCharge: autoCharge || false,
+        paymentTerms: paymentTerms || null,
+        memo: memo || null,
+        subTotal: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+        taxAmount: 0,
+        totalAmount: lines.reduce((sum: number, line: any) => sum + line.amount, 0),
+      });
+      
+      if (lines.length > 0) {
+        await storage.updateRecurringLines(id, lines);
+      }
+      
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  apiRouter.delete("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteRecurringTemplate(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json({ message: "Template deleted" });
+    } catch (error: any) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  apiRouter.post("/recurring/:id/pause", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.pauseRecurringTemplate(id);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error pausing template:", error);
+      res.status(500).json({ error: "Failed to pause template" });
+    }
+  });
+
+  apiRouter.post("/recurring/:id/resume", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.resumeRecurringTemplate(id);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error resuming template:", error);
+      res.status(500).json({ error: "Failed to resume template" });
+    }
+  });
+
+  apiRouter.post("/recurring/:id/run-now", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.getRecurringTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      // Get template lines
+      const lines = await storage.getRecurringLines(id);
+      
+      // Get customer
+      const customer = await storage.getContact(template.customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      
+      // Generate invoice number
+      const lastInvoice = await storage.getLastInvoiceNumber();
+      const nextNumber = String(parseInt(lastInvoice) + 1).padStart(6, '0');
+      
+      // Create invoice from template
+      const today = new Date();
+      const lineItems = lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        amount: line.amount,
+        accountId: line.accountId || undefined,
+        salesTaxId: line.salesTaxId || undefined,
+        productId: line.productId || undefined,
+      }));
+      
+      const invoice = await storage.createTransaction(
+        {
+          reference: nextNumber,
+          type: "invoice",
+          date: today,
+          description: template.templateName,
+          amount: template.totalAmount,
+          subTotal: template.subTotal,
+          taxAmount: template.taxAmount,
+          balance: template.totalAmount,
+          contactId: template.customerId,
+          status: "open",
+          memo: template.memo || undefined,
+          paymentTerms: template.paymentTerms || undefined,
+          currency: template.currency || undefined,
+          exchangeRate: template.exchangeRate || undefined,
+        },
+        lineItems
+      );
+      
+      // Record in history
+      await storage.createRecurringHistory({
+        templateId: id,
+        invoiceId: invoice.id,
+        scheduledAt: today,
+        generatedAt: today,
+        status: "generated",
+      });
+      
+      // Update template next run date
+      const { calculateNextRunDate } = await import("./lib/recurringUtils");
+      const nextRunAt = calculateNextRunDate(template);
+      await storage.updateRecurringTemplate(id, {
+        nextRunAt,
+        currentOccurrences: (template.currentOccurrences || 0) + 1,
+      });
+      
+      res.json({ message: "Invoice generated", invoiceId: invoice.id });
+    } catch (error: any) {
+      console.error("Error running template:", error);
+      res.status(500).json({ error: "Failed to generate invoice" });
+    }
+  });
+
   app.use("/api", apiRouter);
   
   const httpServer = createServer(app);

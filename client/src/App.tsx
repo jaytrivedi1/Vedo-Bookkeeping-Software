@@ -42,6 +42,8 @@ import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
 import InvoicePublicView from "@/pages/invoice-public-view";
 import Quotations from "@/pages/quotations";
+import RecurringInvoices from "@/pages/recurring-invoices";
+import RecurringInvoiceForm from "@/pages/recurring-invoice-form";
 import MainLayout from "@/components/layout/MainLayout";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -140,6 +142,9 @@ function Router() {
               <Route path="/invoices/:id" component={InvoiceView} />
               <Route path="/quotations" component={Quotations} />
               <Route path="/quotations/new" component={InvoiceForm} />
+              <Route path="/recurring-invoices" component={RecurringInvoices} />
+              <Route path="/recurring-invoices/new" component={RecurringInvoiceForm} />
+              <Route path="/recurring-invoices/:id/edit" component={RecurringInvoiceForm} />
               <Route path="/payments/edit/:id" component={PaymentReceive} />
               <Route path="/payments/:id" component={PaymentView} />
               <Route path="/payment-receive" component={PaymentReceive} />

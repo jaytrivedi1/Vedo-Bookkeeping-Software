@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   BookOpen,
   ArrowLeftRight,
+  Clock,
 } from "lucide-react";
 import TransferForm from "@/components/forms/TransferForm";
 import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
@@ -292,6 +293,12 @@ export function GlobalTopPanel() {
                   <DropdownMenuItem>
                     <FileText className="mr-2 h-4 w-4" />
                     <span>Quotation</span>
+                  </DropdownMenuItem>
+                </Link>
+                <Link href="/recurring-invoices/new">
+                  <DropdownMenuItem>
+                    <Clock className="mr-2 h-4 w-4" />
+                    <span>Recurring Invoice</span>
                   </DropdownMenuItem>
                 </Link>
                 <Link href="/payment-receive">

@@ -1,4 +1,4 @@
-import { addDays, addMonths, addWeeks, addYears, addQuarters, getDayOfMonth, isLastDayOfMonth, format, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, addMonths, addWeeks, addYears, addQuarters, format, endOfMonth } from "date-fns";
 import { RecurringTemplate } from "@shared/schema";
 
 export type FrequencyType = "daily" | "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom";
