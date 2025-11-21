@@ -209,50 +209,44 @@ export default function Invoices() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              {activeTab === "quotations" ? (
-                <DropdownMenuItem asChild>
-                  <Link href="/quotations/new">
-                    <FileSignature className="mr-2 h-4 w-4" />
-                    <span>Quotation</span>
-                  </Link>
-                </DropdownMenuItem>
-              ) : activeTab === "recurring" ? (
-                <DropdownMenuItem asChild>
-                  <Link href="/recurring-invoices/new">
-                    <Clock className="mr-2 h-4 w-4" />
-                    <span>Recurring Template</span>
-                  </Link>
-                </DropdownMenuItem>
-              ) : (
-                <>
-                  <DropdownMenuItem asChild>
-                    <Link href="/invoices/new">
-                      <FileText className="mr-2 h-4 w-4" />
-                      <span>Invoice</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/payment-receive">
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      <span>Receive Payment</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
-                    <Receipt className="mr-2 h-4 w-4" />
-                    <span>Sales Receipt</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/deposits">
-                      <PiggyBank className="mr-2 h-4 w-4" />
-                      <span>Deposit</span>
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem disabled>
-                    <FileText className="mr-2 h-4 w-4" />
-                    <span>Customer Credit</span>
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuItem asChild>
+                <Link href="/invoices/new">
+                  <FileText className="mr-2 h-4 w-4" />
+                  <span>Invoice</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/quotations/new">
+                  <FileSignature className="mr-2 h-4 w-4" />
+                  <span>Quotation</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/recurring-invoices/new">
+                  <Clock className="mr-2 h-4 w-4" />
+                  <span>Recurring Template</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/payment-receive">
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  <span>Receive Payment</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSalesReceiptDialogOpen(true)}>
+                <Receipt className="mr-2 h-4 w-4" />
+                <span>Sales Receipt</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/deposits">
+                  <PiggyBank className="mr-2 h-4 w-4" />
+                  <span>Deposit</span>
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <FileText className="mr-2 h-4 w-4" />
+                <span>Customer Credit</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
