@@ -350,6 +350,28 @@ export default function SalesTaxes() {
     return `${rate.toFixed(hasThreeDecimals ? 3 : 2)}%`;
   };
 
+  // Organize taxes hierarchically: parent taxes with their children
+  const organizedTaxes = () => {
+    if (!salesTaxes) return [];
+    
+    const result: Array<{ tax: SalesTax; isChild: boolean }> = [];
+    const parentTaxes = salesTaxes.filter(tax => !tax.parentId);
+    const childTaxes = salesTaxes.filter(tax => tax.parentId);
+    
+    // For each parent tax, add it and its children
+    parentTaxes.forEach(parent => {
+      result.push({ tax: parent, isChild: false });
+      
+      // Add children of this parent
+      const children = childTaxes.filter(child => child.parentId === parent.id);
+      children.forEach(child => {
+        result.push({ tax: child, isChild: true });
+      });
+    });
+    
+    return result;
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
@@ -387,11 +409,18 @@ export default function SalesTaxes() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {salesTaxes.map((tax) => (
-                  <TableRow key={tax.id}>
-                    <TableCell className="font-medium">{tax.name}</TableCell>
-                    <TableCell>{tax.description || "-"}</TableCell>
-                    <TableCell>{formatRate(tax.rate)}</TableCell>
+                {organizedTaxes().map(({ tax, isChild }) => (
+                  <TableRow key={tax.id} className={isChild ? "bg-gray-50" : ""}>
+                    <TableCell className={`${isChild ? "pl-8 text-sm text-muted-foreground" : "font-medium"}`}>
+                      {isChild && "↳ "}
+                      {tax.name}
+                    </TableCell>
+                    <TableCell className={isChild ? "text-sm text-muted-foreground" : ""}>
+                      {tax.description || "-"}
+                    </TableCell>
+                    <TableCell className={isChild ? "text-sm text-muted-foreground" : ""}>
+                      {formatRate(tax.rate)}
+                    </TableCell>
                     <TableCell>
                       {tax.isActive ? (
                         <Badge variant="outline" className="bg-green-100 text-green-800">
