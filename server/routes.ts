@@ -6388,7 +6388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             contactId: null,
             // Set payment fields for expenses
             paymentAccountId: isPayment ? bankAccountId : null,
-            paymentMethod: isPayment ? (transaction.chequeNo ? 'cheque' : 'eft') : null,
+            paymentMethod: isPayment ? (transaction.chequeNo ? 'check' : 'bank_transfer') : null,
             paymentDate: isPayment ? new Date(transaction.date) : null
           },
           [], // No line items for bank transactions
@@ -8754,7 +8754,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             contactId,
             status: 'completed',
             paymentAccountId: glAccountId,
-            paymentMethod: 'eft', // Default to EFT for bank feed transactions
+            paymentMethod: 'bank_transfer', // Default to bank transfer for bank feed transactions
             paymentDate: importedTx.date,
           },
           lineItems,
