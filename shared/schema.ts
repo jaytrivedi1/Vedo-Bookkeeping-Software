@@ -465,6 +465,7 @@ export const preferencesSchema = pgTable('preferences', {
   homeCurrency: varchar('home_currency', { length: 3 }).default('USD'), // primary currency for business
   multiCurrencyEnabledAt: timestamp('multi_currency_enabled_at'), // track when multi-currency was enabled
   invoiceTemplate: text('invoice_template').default('classic'), // default invoice template (classic, modern, minimal, compact)
+  transactionLockDate: timestamp('transaction_lock_date'), // lock transactions on or before this date
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
@@ -472,7 +473,8 @@ export const insertCompanySchema = createInsertSchema(companySchema).omit({ id: 
 export const insertPreferencesSchema = createInsertSchema(preferencesSchema)
   .omit({ id: true, updatedAt: true })
   .extend({
-    multiCurrencyEnabledAt: z.coerce.date().optional().nullable()
+    multiCurrencyEnabledAt: z.coerce.date().optional().nullable(),
+    transactionLockDate: z.coerce.date().optional().nullable()
   });
 export const insertCompaniesSchema = createInsertSchema(companiesSchema).omit({ 
   id: true, 
