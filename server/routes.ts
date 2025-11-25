@@ -123,6 +123,25 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
   }
 }
 
+// Helper function to check if a transaction date is locked
+async function checkTransactionLocked(transactionDate: Date): Promise<{ isLocked: boolean; lockDate?: Date }> {
+  try {
+    const preferences = await storage.getPreferences();
+    if (!preferences || !preferences.transactionLockDate) {
+      return { isLocked: false };
+    }
+    
+    const lockDate = new Date(preferences.transactionLockDate);
+    // Transaction is locked if its date is on or before the lock date
+    const isLocked = transactionDate <= lockDate;
+    
+    return { isLocked, lockDate };
+  } catch (error) {
+    console.error('Error checking transaction lock:', error);
+    return { isLocked: false };
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Health check endpoint - responds immediately for deployment health checks
   app.get("/health", (req: Request, res: Response) => {
@@ -1720,6 +1739,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
       
+      // Check if transaction date is locked
+      const lockCheck = await checkTransactionLocked(body.date);
+      if (lockCheck.isLocked) {
+        return res.status(400).json({ 
+          message: "Transaction locked", 
+          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified` 
+        });
+      }
+      
       // Get all transactions for reference check and auto-numbering
       const transactions = await storage.getTransactions();
       
@@ -2179,6 +2207,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: req.body.status || 'completed',
         description: req.body.description || ''
       };
+      
+      // Check if transaction date is locked
+      const lockCheck = await checkTransactionLocked(body.date);
+      if (lockCheck.isLocked) {
+        return res.status(400).json({ 
+          message: "Transaction locked", 
+          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified` 
+        });
+      }
       
       // Validate expense data
       console.log("Validating expense data:", JSON.stringify(body));

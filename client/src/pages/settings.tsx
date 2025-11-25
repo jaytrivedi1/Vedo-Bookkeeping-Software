@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Check, FileText, Sparkles, LayoutTemplate, Minimize2 } from "lucide-react";
+import { Check, FileText, Sparkles, LayoutTemplate, Minimize2, X } from "lucide-react";
 
 interface Preferences {
   id?: number;
@@ -19,6 +19,7 @@ interface Preferences {
   darkMode?: boolean;
   multiCurrencyEnabled?: boolean;
   homeCurrency?: string;
+  transactionLockDate?: string | Date | null;
 }
 
 const templates = [
@@ -51,18 +52,23 @@ const templates = [
 export default function Settings() {
   const { toast } = useToast();
   const [selectedTemplate, setSelectedTemplate] = useState<string>("classic");
+  const [lockDate, setLockDate] = useState<string>("");
 
   // Fetch preferences
   const { data: preferences, isLoading } = useQuery<Preferences>({
     queryKey: ["/api/settings/preferences"],
   });
 
-  // Update selected template when preferences load
+  // Update selected template and lock date when preferences load
   useEffect(() => {
     if (preferences?.invoiceTemplate) {
       setSelectedTemplate(preferences.invoiceTemplate);
     }
-  }, [preferences?.invoiceTemplate]);
+    if (preferences?.transactionLockDate) {
+      const date = new Date(preferences.transactionLockDate);
+      setLockDate(date.toISOString().split('T')[0]);
+    }
+  }, [preferences?.invoiceTemplate, preferences?.transactionLockDate]);
 
   // Update preferences mutation
   const updatePreferences = useMutation({
@@ -87,9 +93,43 @@ export default function Settings() {
     },
   });
 
+  // Update lock date mutation
+  const updateLockDate = useMutation({
+    mutationFn: async (date: string | null) => {
+      return apiRequest("/api/settings/preferences", "POST", {
+        transactionLockDate: date ? new Date(date) : null,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Settings saved",
+        description: "Transaction lock date updated successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/preferences"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to save lock date: ${error}`,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
     updatePreferences.mutate(templateId);
+  };
+
+  const handleLockDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value;
+    setLockDate(newDate);
+    updateLockDate.mutate(newDate || null);
+  };
+
+  const handleClearLockDate = () => {
+    setLockDate("");
+    updateLockDate.mutate(null);
   };
 
   if (isLoading) {
@@ -106,6 +146,55 @@ export default function Settings() {
         <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
         <p className="text-gray-500 mt-1">Manage your application preferences</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Transaction Lock Date</CardTitle>
+          <CardDescription>
+            Lock transactions on or before a specific date to protect closed periods
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="lock-date">Lock Date</Label>
+              <div className="flex gap-2">
+                <input
+                  id="lock-date"
+                  type="date"
+                  value={lockDate}
+                  onChange={handleLockDateChange}
+                  disabled={updateLockDate.isPending}
+                  className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  data-testid="input-lock-date"
+                />
+                {lockDate && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearLockDate}
+                    disabled={updateLockDate.isPending}
+                    data-testid="button-clear-lock"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {lockDate && (
+                <p className="text-sm text-amber-600">
+                  Transactions on or before {new Date(lockDate).toLocaleDateString()} cannot be created or modified
+                </p>
+              )}
+            </div>
+            {updateLockDate.isPending && (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                Saving...
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
