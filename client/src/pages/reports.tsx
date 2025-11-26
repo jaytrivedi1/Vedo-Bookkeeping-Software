@@ -2293,102 +2293,98 @@ export default function Reports() {
               
               <div className="grid grid-cols-1 gap-6">
                 <Card>
-                  <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between">
-                      <div>
-                        <CardTitle>Trial Balance</CardTitle>
-                        <CardDescription>
-                          As of {format(fiscalYearBounds.asOfDate, "MMMM d, yyyy")}
-                        </CardDescription>
-                      </div>
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-end mb-2">
                       {trialBalanceData && !trialBalanceLoading && (
-                        <div className="mt-2 sm:mt-0">
-                          <ExportMenu
-                            onExportCSV={() => {
-                              if (!trialBalanceData || trialBalanceLoading) return;
-                              
-                              const filename = generateFilename('trial_balance');
-                              // Export trial balance to CSV
-                              const csvData = trialBalanceData.map((item: any) => ({
-                                'Account Code': item.account.code,
-                                'Account Name': item.account.name,
-                                'Debit': item.debitBalance > 0 ? item.debitBalance.toFixed(2) : '',
-                                'Credit': item.creditBalance > 0 ? item.creditBalance.toFixed(2) : '',
-                              }));
-                              
-                              // Add totals row using integer arithmetic for precision
-                              const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
-                              const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
-                              csvData.push({
-                                'Account Code': '',
-                                'Account Name': 'Total',
-                                'Debit': (totalDebitCents / 100).toFixed(2),
-                                'Credit': (totalCreditCents / 100).toFixed(2),
-                              });
-                              
-                              const csv = Papa.unparse(csvData);
-                              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                              const url = URL.createObjectURL(blob);
-                              const link = document.createElement('a');
-                              link.setAttribute('href', url);
-                              link.setAttribute('download', `${filename}.csv`);
-                              link.style.visibility = 'hidden';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }}
-                            onExportPDF={() => {
-                              if (!trialBalanceData || trialBalanceLoading) return;
-                              
-                              const filename = generateFilename('trial_balance');
-                              // Export trial balance to PDF
-                              const doc = new jsPDF();
-                              
-                              // Add title
-                              doc.setFontSize(18);
-                              doc.text('Trial Balance', 14, 22);
-                              
-                              // Add date
-                              doc.setFontSize(11);
-                              doc.text(`As of: ${new Date().toLocaleDateString()}`, 14, 30);
-                              
-                              // Prepare table data
-                              const tableData = trialBalanceData.map((item: any) => [
-                                item.account.code,
-                                item.account.name,
-                                item.debitBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.debitBalance) : '',
-                                item.creditBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.creditBalance) : '',
-                              ]);
-                              
-                              // Add totals row using integer arithmetic for precision
-                              const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
-                              const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
-                              tableData.push([
-                                '',
-                                'Total',
-                                new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebitCents / 100),
-                                new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCreditCents / 100),
-                              ]);
-                              
-                              (doc as any).autoTable({
-                                head: [['Account Code', 'Account Name', 'Debit', 'Credit']],
-                                body: tableData,
-                                startY: 40,
-                                theme: 'grid',
-                                styles: { halign: 'right' },
-                                columnStyles: {
-                                  0: { halign: 'left' },
-                                  1: { halign: 'left' },
-                                },
-                                footStyles: { fontStyle: 'bold' },
-                              });
-                              
-                              doc.save(`${filename}.pdf`);
-                            }}
-                            label="Export"
-                          />
-                        </div>
+                        <ExportMenu
+                          onExportCSV={() => {
+                            if (!trialBalanceData || trialBalanceLoading) return;
+                            
+                            const filename = generateFilename('trial_balance');
+                            const csvData = trialBalanceData.map((item: any) => ({
+                              'Account Code': item.account.code,
+                              'Account Name': item.account.name,
+                              'Debit': item.debitBalance > 0 ? item.debitBalance.toFixed(2) : '',
+                              'Credit': item.creditBalance > 0 ? item.creditBalance.toFixed(2) : '',
+                            }));
+                            
+                            const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
+                            const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
+                            csvData.push({
+                              'Account Code': '',
+                              'Account Name': 'Total',
+                              'Debit': (totalDebitCents / 100).toFixed(2),
+                              'Credit': (totalCreditCents / 100).toFixed(2),
+                            });
+                            
+                            const csv = Papa.unparse(csvData);
+                            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.setAttribute('href', url);
+                            link.setAttribute('download', `${filename}.csv`);
+                            link.style.visibility = 'hidden';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          onExportPDF={() => {
+                            if (!trialBalanceData || trialBalanceLoading) return;
+                            
+                            const filename = generateFilename('trial_balance');
+                            const doc = new jsPDF();
+                            
+                            doc.setFontSize(18);
+                            doc.text('Trial Balance', 14, 22);
+                            
+                            doc.setFontSize(11);
+                            doc.text(`As of: ${new Date().toLocaleDateString()}`, 14, 30);
+                            
+                            const tableData = trialBalanceData.map((item: any) => [
+                              item.account.code,
+                              item.account.name,
+                              item.debitBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.debitBalance) : '',
+                              item.creditBalance > 0 ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(item.creditBalance) : '',
+                            ]);
+                            
+                            const totalDebitCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.debitBalance * 100), 0);
+                            const totalCreditCents = trialBalanceData.reduce((sum: number, item: any) => sum + Math.round(item.creditBalance * 100), 0);
+                            tableData.push([
+                              '',
+                              'Total',
+                              new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalDebitCents / 100),
+                              new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalCreditCents / 100),
+                            ]);
+                            
+                            (doc as any).autoTable({
+                              head: [['Account Code', 'Account Name', 'Debit', 'Credit']],
+                              body: tableData,
+                              startY: 40,
+                              theme: 'grid',
+                              styles: { halign: 'right' },
+                              columnStyles: {
+                                0: { halign: 'left' },
+                                1: { halign: 'left' },
+                              },
+                              footStyles: { fontStyle: 'bold' },
+                            });
+                            
+                            doc.save(`${filename}.pdf`);
+                          }}
+                          label="Export"
+                        />
                       )}
+                    </div>
+                    
+                    {/* Professional Report Header */}
+                    <div className="text-center py-4 border-b border-border">
+                      <h2 className="text-xl font-semibold text-primary mb-1">
+                        {company?.name || 'Company Name'}
+                      </h2>
+                      <h3 className="text-lg font-medium text-foreground">Trial Balance</h3>
+                      <p className="text-sm text-muted-foreground">
+                        As of {format(fiscalYearBounds.asOfDate, "MMMM d, yyyy")}
+                      </p>
                     </div>
                   </CardHeader>
                   <CardContent>
