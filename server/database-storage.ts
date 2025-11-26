@@ -1674,13 +1674,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Get Trial Balance - Pure ledger entry sums by account with NO synthetic adjustments.
-   * This is the proper accounting Trial Balance that shows actual ledger balances.
+   * Get Trial Balance - Shows actual ledger balances with proper Retained Earnings calculation.
    * 
-   * For balance sheet accounts: sum all entries up to asOfDate
-   * For income statement accounts: sum entries from fiscalYearStart to asOfDate
+   * ACCOUNTING RULES:
+   * - Balance sheet accounts: sum all entries up to asOfDate
+   * - Income statement accounts: sum entries from fiscalYearStartDate to asOfDate (current period only)
+   * - Retained Earnings: actual ledger balance + all prior periods' net income
+   *   (Prior periods = all P&L entries BEFORE fiscalYearStartDate)
    * 
-   * Returns each account with its raw debit/credit totals. Debits must equal Credits.
+   * This ensures Total Debits = Total Credits because:
+   * - Prior period P&L is excluded from income/expense accounts
+   * - But that same amount is added to Retained Earnings
    */
   async getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
     account: Account;
@@ -1697,6 +1701,37 @@ export class DatabaseStorage implements IStorage {
       return ['income', 'other_income', 'expenses', 'cost_of_goods_sold', 'other_expense'].includes(accountType);
     };
     
+    // Find Retained Earnings account
+    const retainedEarningsAccount = allAccounts.find(acc => 
+      acc.code === '3100' || acc.code === '3900' || acc.name === 'Retained Earnings'
+    );
+    
+    // Calculate all prior periods' net income (P&L entries BEFORE fiscalYearStartDate)
+    // This is the amount that should be added to Retained Earnings for the Trial Balance
+    let priorPeriodsNetIncomeCents = 0;
+    
+    allLedgerEntries.forEach(entry => {
+      const account = allAccounts.find(a => a.id === entry.accountId);
+      if (!account) return;
+      
+      const entryDate = new Date(entry.date);
+      
+      // Only count P&L entries from BEFORE the fiscal year start
+      if (isIncomeStatementAccount(account.type) && entryDate < fiscalYearStartDate) {
+        const debitCents = Math.round(Number(entry.debit) * 100);
+        const creditCents = Math.round(Number(entry.credit) * 100);
+        
+        // Income accounts: net income = credits - debits
+        if (account.type === 'income' || account.type === 'other_income') {
+          priorPeriodsNetIncomeCents += creditCents - debitCents;
+        }
+        // Expense accounts: net expense = debits - credits (reduces net income)
+        else {
+          priorPeriodsNetIncomeCents -= (debitCents - creditCents);
+        }
+      }
+    });
+    
     // Sum debits and credits by account using integer arithmetic (cents) to avoid floating point errors
     const accountTotals = new Map<number, { debitsCents: number; creditsCents: number }>();
     
@@ -1706,7 +1741,7 @@ export class DatabaseStorage implements IStorage {
       
       const entryDate = new Date(entry.date);
       
-      // For income statement accounts, only include entries from fiscal year start
+      // For income statement accounts, only include entries from fiscal year start (current period)
       if (isIncomeStatementAccount(account.type)) {
         if (entryDate < fiscalYearStartDate) {
           return; // Skip entries before fiscal year start for income/expense accounts
@@ -1721,6 +1756,23 @@ export class DatabaseStorage implements IStorage {
       totals.debitsCents += Math.round(Number(entry.debit) * 100);
       totals.creditsCents += Math.round(Number(entry.credit) * 100);
     });
+    
+    // Add prior periods' net income to Retained Earnings
+    // This balances out the P&L entries we excluded from current period
+    if (retainedEarningsAccount && priorPeriodsNetIncomeCents !== 0) {
+      if (!accountTotals.has(retainedEarningsAccount.id)) {
+        accountTotals.set(retainedEarningsAccount.id, { debitsCents: 0, creditsCents: 0 });
+      }
+      const reTotals = accountTotals.get(retainedEarningsAccount.id)!;
+      
+      // Prior net income is a credit to Retained Earnings (increases equity)
+      // Prior net loss is a debit to Retained Earnings (decreases equity)
+      if (priorPeriodsNetIncomeCents > 0) {
+        reTotals.creditsCents += priorPeriodsNetIncomeCents;
+      } else {
+        reTotals.debitsCents += Math.abs(priorPeriodsNetIncomeCents);
+      }
+    }
     
     // Build result - show each account with its actual balance
     const result = allAccounts

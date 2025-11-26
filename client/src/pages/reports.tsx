@@ -236,9 +236,9 @@ function BalanceSheetReport({
   const totalLiabilities = balanceSheet.totalLiabilities || balanceSheet.liabilities?.total || 0;
   
   // Equity
+  // Note: Retained Earnings now includes ALL net income through the as-of date (prior periods + current period)
   const equityAccounts = balanceSheet.equity?.accounts || [];
   const retainedEarnings = balanceSheet.equity?.retainedEarnings || 0;
-  const currentYearNetIncome = balanceSheet.equity?.currentYearNetIncome || 0;
   const totalEquity = balanceSheet.totalEquity || balanceSheet.equity?.total || 0;
   
   const totalLiabilitiesAndEquity = totalLiabilities + totalEquity;
@@ -324,16 +324,10 @@ function BalanceSheetReport({
           </div>
         )}
         
-        {/* Retained Earnings */}
+        {/* Retained Earnings - includes ALL net income through the as-of date */}
         <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
           <span className="text-sm text-muted-foreground">Retained Earnings</span>
           <span className="text-sm text-right">{formatReportAmount(retainedEarnings)}</span>
-        </div>
-        
-        {/* Current Year Net Income */}
-        <div className="flex justify-between py-1.5 px-2 hover:bg-primary/5 rounded">
-          <span className="text-sm text-muted-foreground">Net Income (Current Year)</span>
-          <span className="text-sm text-right">{formatReportAmount(currentYearNetIncome)}</span>
         </div>
         
         {/* Total Equity */}

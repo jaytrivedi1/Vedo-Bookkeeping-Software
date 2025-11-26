@@ -5790,9 +5790,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const asOfDateStr = req.query.asOfDate as string | undefined;
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
       
-      // Calculate prior years' retained earnings and current year net income
-      const retainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
-      const currentYearNetIncome = await storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
+      // BALANCE SHEET RULE: Retained Earnings = ALL net income through as-of date
+      // This includes prior periods + current period combined
+      const priorPeriodsNetIncome = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
+      const currentPeriodNetIncome = await storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
+      
+      // Combined Retained Earnings for Balance Sheet (all net income through as-of date)
+      const retainedEarnings = priorPeriodsNetIncome + currentPeriodNetIncome;
       
       // Get accounts and ledger entries up to the as-of date
       const allAccounts = await storage.getAccounts();
@@ -5858,8 +5862,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       const otherEquity = equityAccounts.reduce((sum, item) => sum + item.balance, 0);
       
-      // Total Equity = Other Equity Accounts + Retained Earnings + Current Year Net Income
-      const totalEquity = otherEquity + retainedEarnings + currentYearNetIncome;
+      // Total Equity = Other Equity Accounts + Retained Earnings (which includes all net income through as-of date)
+      const totalEquity = otherEquity + retainedEarnings;
       
       // Return detailed balance sheet structure
       res.json({
@@ -5891,8 +5895,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             type: item.account.type,
             balance: item.balance,
           })),
-          retainedEarnings,
-          currentYearNetIncome,
+          retainedEarnings, // Combined: all net income through as-of date
           total: totalEquity,
         },
         // Summary totals
