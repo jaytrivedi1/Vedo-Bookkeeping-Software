@@ -360,6 +360,13 @@ export default function Reports() {
   const [selectedFiscalYear, setSelectedFiscalYear] = useState<number | 'current'>(new Date().getFullYear());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Trial Balance filter state
+  const [trialBalanceReportPeriod, setTrialBalanceReportPeriod] = useState<string>('this-year');
+  const [trialBalanceStartDate, setTrialBalanceStartDate] = useState<Date | undefined>(new Date(new Date().getFullYear(), 0, 1));
+  const [trialBalanceEndDate, setTrialBalanceEndDate] = useState<Date | undefined>(new Date());
+  const [trialBalanceDisplayColumns, setTrialBalanceDisplayColumns] = useState<string>('total-only');
+  const [trialBalanceActiveFilter, setTrialBalanceActiveFilter] = useState<string>('active-rows-columns');
   const [, setLocation] = useLocation();
   
   // Search state
@@ -557,13 +564,22 @@ export default function Reports() {
     enabled: activeTab !== 'general-ledger' && activeTab !== 'trial-balance',
   });
   
-  // Fetch trial balance with fiscal year dates
+  // Fetch trial balance with custom date filters
+  const trialBalanceStartISO = trialBalanceStartDate?.toISOString() || new Date(new Date().getFullYear(), 0, 1).toISOString();
+  const trialBalanceEndISO = trialBalanceEndDate?.toISOString() || new Date().toISOString();
+  
   const { data: trialBalanceData, isLoading: trialBalanceLoading } = useQuery({
-    queryKey: ['/api/reports/trial-balance', fiscalYearBounds.fiscalYearStartISO, fiscalYearBounds.fiscalYearEndISO, fiscalYearBounds.asOfDateISO],
+    queryKey: ['/api/reports/trial-balance', trialBalanceStartISO, trialBalanceEndISO, trialBalanceActiveFilter],
     queryFn: async () => {
-      const response = await fetch(`/api/reports/trial-balance?startDate=${fiscalYearBounds.fiscalYearStartISO}&endDate=${fiscalYearBounds.fiscalYearEndISO}&asOfDate=${fiscalYearBounds.asOfDateISO}`);
+      const response = await fetch(`/api/reports/trial-balance?startDate=${trialBalanceStartISO}&asOfDate=${trialBalanceEndISO}`);
       if (!response.ok) throw new Error('Failed to fetch trial balance');
-      return response.json();
+      const data = await response.json();
+      
+      // Apply active filter on the client side
+      if (trialBalanceActiveFilter === 'non-zero-only' || trialBalanceActiveFilter === 'active-rows-columns') {
+        return data.filter((item: any) => item.debitBalance !== 0 || item.creditBalance !== 0);
+      }
+      return data;
     },
     enabled: activeTab === 'trial-balance',
   });
@@ -2263,33 +2279,157 @@ export default function Reports() {
             
             {/* Trial Balance */}
             <TabsContent value="trial-balance">
-              <div className="mb-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="flex-1">
-                    <label className="text-sm font-medium text-foreground mb-1 block">Fiscal Year</label>
-                    <Select 
-                      value={selectedFiscalYear.toString()} 
-                      onValueChange={handleFiscalYearChange}
-                      data-testid="fiscal-year-select-trial-balance"
-                    >
-                      <SelectTrigger className="w-[280px]">
-                        <SelectValue placeholder="Select fiscal year" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fiscalYearOptions.map((option) => (
-                          <SelectItem 
-                            key={option.value} 
-                            value={option.value.toString()}
-                            data-testid={`fiscal-year-option-${option.value}`}
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              <Card className="mb-4">
+                <CardContent className="pt-4">
+                  {/* Row 1: Report Period with date pickers */}
+                  <div className="flex flex-wrap items-end gap-4 mb-4">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Report period</label>
+                      <Select 
+                        value={trialBalanceReportPeriod} 
+                        onValueChange={(value) => {
+                          setTrialBalanceReportPeriod(value);
+                          // Auto-set dates based on period selection
+                          const today = new Date();
+                          if (value === 'this-month') {
+                            setTrialBalanceStartDate(startOfMonth(today));
+                            setTrialBalanceEndDate(endOfMonth(today));
+                          } else if (value === 'last-month') {
+                            const lastMonth = subMonths(today, 1);
+                            setTrialBalanceStartDate(startOfMonth(lastMonth));
+                            setTrialBalanceEndDate(endOfMonth(lastMonth));
+                          } else if (value === 'this-quarter') {
+                            const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+                            const quarterEnd = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
+                            setTrialBalanceStartDate(quarterStart);
+                            setTrialBalanceEndDate(quarterEnd);
+                          } else if (value === 'this-year') {
+                            setTrialBalanceStartDate(new Date(today.getFullYear(), 0, 1));
+                            setTrialBalanceEndDate(today);
+                          } else if (value === 'last-year') {
+                            setTrialBalanceStartDate(new Date(today.getFullYear() - 1, 0, 1));
+                            setTrialBalanceEndDate(new Date(today.getFullYear() - 1, 11, 31));
+                          }
+                        }}
+                        data-testid="trial-balance-period-select"
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue placeholder="Select period" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="custom">Custom</SelectItem>
+                          <SelectItem value="this-month">This Month</SelectItem>
+                          <SelectItem value="last-month">Last Month</SelectItem>
+                          <SelectItem value="this-quarter">This Quarter</SelectItem>
+                          <SelectItem value="this-year">This Year</SelectItem>
+                          <SelectItem value="last-year">Last Year</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="flex items-end gap-2">
+                      <div>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-[130px] justify-start text-left font-normal"
+                              data-testid="trial-balance-start-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {trialBalanceStartDate ? format(trialBalanceStartDate, "dd-MM-yyyy") : "Start date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={trialBalanceStartDate}
+                              onSelect={(date) => {
+                                setTrialBalanceStartDate(date);
+                                setTrialBalanceReportPeriod('custom');
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <span className="text-muted-foreground text-sm pb-2">to</span>
+                      <div>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-[130px] justify-start text-left font-normal"
+                              data-testid="trial-balance-end-date"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {trialBalanceEndDate ? format(trialBalanceEndDate, "dd-MM-yyyy") : "End date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={trialBalanceEndDate}
+                              onSelect={(date) => {
+                                setTrialBalanceEndDate(date);
+                                setTrialBalanceReportPeriod('custom');
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                  
+                  {/* Row 2: Display options and Run Report button */}
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Display columns by</label>
+                      <Select 
+                        value={trialBalanceDisplayColumns} 
+                        onValueChange={setTrialBalanceDisplayColumns}
+                        data-testid="trial-balance-display-columns"
+                      >
+                        <SelectTrigger className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="total-only">Total Only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Show non-zero or active only</label>
+                      <Select 
+                        value={trialBalanceActiveFilter} 
+                        onValueChange={setTrialBalanceActiveFilter}
+                        data-testid="trial-balance-active-filter"
+                      >
+                        <SelectTrigger className="w-[180px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active-rows-columns">Active rows/active columns</SelectItem>
+                          <SelectItem value="all-rows">All rows</SelectItem>
+                          <SelectItem value="non-zero-only">Non-zero only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <Button 
+                      onClick={() => {
+                        // Trigger refetch with new parameters
+                        queryClient.invalidateQueries({ queryKey: ['/api/reports/trial-balance'] });
+                      }}
+                      data-testid="trial-balance-run-report"
+                    >
+                      Run report
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
               
               <div className="grid grid-cols-1 gap-6">
                 <Card>
@@ -2383,7 +2523,10 @@ export default function Reports() {
                       </h2>
                       <h3 className="text-lg font-medium text-foreground">Trial Balance</h3>
                       <p className="text-sm text-muted-foreground">
-                        As of {format(fiscalYearBounds.asOfDate, "MMMM d, yyyy")}
+                        {trialBalanceStartDate && trialBalanceEndDate 
+                          ? `${format(trialBalanceStartDate, "MMMM d, yyyy")} to ${format(trialBalanceEndDate, "MMMM d, yyyy")}`
+                          : `As of ${format(new Date(), "MMMM d, yyyy")}`
+                        }
                       </p>
                     </div>
                   </CardHeader>
