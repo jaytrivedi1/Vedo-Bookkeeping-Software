@@ -2498,6 +2498,7 @@ export default function Reports() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="total-only">Total Only</SelectItem>
+                          <SelectItem value="months">Months</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
