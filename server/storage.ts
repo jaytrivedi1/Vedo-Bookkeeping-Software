@@ -163,6 +163,13 @@ export interface IStorage {
 
   // Reports
   getAccountBalances(): Promise<{ account: Account; balance: number }[]>;
+  getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
+    account: Account;
+    totalDebits: number;
+    totalCredits: number;
+    debitBalance: number;
+    creditBalance: number;
+  }[]>;
   getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
   getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
   getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{

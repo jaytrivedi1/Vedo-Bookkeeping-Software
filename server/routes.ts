@@ -5915,7 +5915,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Trial Balance report - calculates from ledger entries
+  // Trial Balance report - pure ledger entry sums, NO synthetic adjustments
+  // This shows actual account balances from the ledger. Total debits must equal total credits.
   apiRouter.get("/reports/trial-balance", async (req: Request, res: Response) => {
     try {
       // Get company settings for fiscal year start month
@@ -5924,104 +5925,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get date parameters from query params
       const startDateStr = req.query.startDate as string | undefined;
-      const endDateStr = req.query.endDate as string | undefined;
       const asOfDateStr = req.query.asOfDate as string | undefined;
       
       // Use provided dates or fallback to today
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
-      const fiscalYearStartDate = startDateStr ? new Date(startDateStr) : new Date(asOfDate.getFullYear(), fiscalYearStartMonth - 1, 1);
-      const fiscalYearEndDate = endDateStr ? new Date(endDateStr) : asOfDate;
       
-      const accounts = await storage.getAccounts();
-      const ledgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
-      
-      // Calculate prior years' retained earnings (profit/loss from before current fiscal year)
-      const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
-      
-      // Helper function to determine if an account is an income statement account
-      const isIncomeStatementAccount = (accountType: string) => {
-        const incomeStatementTypes = [
-          'income', 'other_income',
-          'expenses', 'cost_of_goods_sold', 'other_expense'
-        ];
-        return incomeStatementTypes.includes(accountType);
-      };
-      
-      // Group ledger entries by account and calculate totals using integer arithmetic (cents)
-      const accountTotals = new Map<number, { totalDebitsCents: number; totalCreditsCents: number }>();
-      
-      ledgerEntries.forEach(entry => {
-        const account = accounts.find(acc => acc.id === entry.accountId);
-        if (!account) return;
+      // Determine fiscal year start date for income/expense accounts
+      // If startDate is provided, use it; otherwise calculate from asOfDate
+      let fiscalYearStartDate: Date;
+      if (startDateStr) {
+        fiscalYearStartDate = new Date(startDateStr);
+      } else {
+        // Calculate fiscal year start based on asOfDate
+        const year = asOfDate.getFullYear();
+        const month = asOfDate.getMonth() + 1; // 1-12
         
-        // For income statement accounts, only include entries from current fiscal year
-        // For balance sheet accounts, include all entries up to as-of date
-        const entryDate = new Date(entry.date);
-        if (isIncomeStatementAccount(account.type)) {
-          // Only include entries within the fiscal year period
-          if (entryDate < fiscalYearStartDate || entryDate > fiscalYearEndDate) {
-            return; // Skip this entry - it's outside the fiscal year
-          }
+        // If current month is before fiscal year start month, we're in the previous calendar year's fiscal year
+        if (month < fiscalYearStartMonth) {
+          fiscalYearStartDate = new Date(year - 1, fiscalYearStartMonth - 1, 1);
+        } else {
+          fiscalYearStartDate = new Date(year, fiscalYearStartMonth - 1, 1);
         }
-        
-        if (!accountTotals.has(entry.accountId)) {
-          accountTotals.set(entry.accountId, { totalDebitsCents: 0, totalCreditsCents: 0 });
-        }
-        const totals = accountTotals.get(entry.accountId)!;
-        // Convert to cents (multiply by 100 and round to avoid floating point errors)
-        totals.totalDebitsCents += Math.round(Number(entry.debit) * 100);
-        totals.totalCreditsCents += Math.round(Number(entry.credit) * 100);
-      });
+      }
       
-      // Find the Retained Earnings account (code 3100 or 3900, or by name)
-      const retainedEarningsAccount = accounts.find(acc => 
-        acc.code === '3100' || acc.code === '3900' || acc.name === 'Retained Earnings'
-      );
+      // Get trial balance using the proper method - NO synthetic adjustments
+      const trialBalanceData = await storage.getTrialBalance(asOfDate, fiscalYearStartDate);
       
-      // Build trial balance data
-      const trialBalanceData = accounts.map(account => {
-        const totals = accountTotals.get(account.id) || { totalDebitsCents: 0, totalCreditsCents: 0 };
-        let netBalanceCents = totals.totalDebitsCents - totals.totalCreditsCents;
-        
-        // Special handling for Retained Earnings account
-        // Replace its current balance with ONLY prior years' cumulative profit/loss
-        if (retainedEarningsAccount && account.id === retainedEarningsAccount.id) {
-          // Retained Earnings is a credit balance (equity account)
-          // Positive retained earnings means credits > debits
-          netBalanceCents = Math.round(-priorYearsRetainedEarnings * 100);
-        }
-        
-        // Convert back to dollars for display
-        const totalDebits = totals.totalDebitsCents / 100;
-        const totalCredits = totals.totalCreditsCents / 100;
-        
-        // For trial balance display:
-        // If net is positive (debits > credits), show in debit column
-        // If net is negative (credits > debits), show in credit column
-        let debitBalance = 0;
-        let creditBalance = 0;
-        
-        if (netBalanceCents > 0) {
-          debitBalance = netBalanceCents / 100;
-        } else if (netBalanceCents < 0) {
-          creditBalance = Math.abs(netBalanceCents) / 100;
-        }
-        
-        return {
-          account: {
-            id: account.id,
-            code: account.code,
-            name: account.name,
-            type: account.type,
-          },
-          debitBalance,
-          creditBalance,
-          totalDebits,
-          totalCredits,
-        };
-      }).filter(item => item.debitBalance !== 0 || item.creditBalance !== 0); // Only show accounts with balances
+      // Transform to API response format
+      const result = trialBalanceData.map(item => ({
+        account: {
+          id: item.account.id,
+          code: item.account.code,
+          name: item.account.name,
+          type: item.account.type,
+        },
+        debitBalance: item.debitBalance,
+        creditBalance: item.creditBalance,
+        totalDebits: item.totalDebits,
+        totalCredits: item.totalCredits,
+      }));
       
-      res.json(trialBalanceData);
+      res.json(result);
     } catch (error) {
       console.error("Error generating trial balance:", error);
       res.status(500).json({ message: "Failed to generate trial balance" });

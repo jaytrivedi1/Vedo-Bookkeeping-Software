@@ -1673,6 +1673,82 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  /**
+   * Get Trial Balance - Pure ledger entry sums by account with NO synthetic adjustments.
+   * This is the proper accounting Trial Balance that shows actual ledger balances.
+   * 
+   * For balance sheet accounts: sum all entries up to asOfDate
+   * For income statement accounts: sum entries from fiscalYearStart to asOfDate
+   * 
+   * Returns each account with its raw debit/credit totals. Debits must equal Credits.
+   */
+  async getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
+    account: Account;
+    totalDebits: number;
+    totalCredits: number;
+    debitBalance: number;
+    creditBalance: number;
+  }[]> {
+    const allAccounts = await this.getAccounts();
+    const allLedgerEntries = await this.getLedgerEntriesUpToDate(asOfDate);
+    
+    // Helper to check if account is income statement type
+    const isIncomeStatementAccount = (accountType: string): boolean => {
+      return ['income', 'other_income', 'expenses', 'cost_of_goods_sold', 'other_expense'].includes(accountType);
+    };
+    
+    // Sum debits and credits by account using integer arithmetic (cents) to avoid floating point errors
+    const accountTotals = new Map<number, { debitsCents: number; creditsCents: number }>();
+    
+    allLedgerEntries.forEach(entry => {
+      const account = allAccounts.find(a => a.id === entry.accountId);
+      if (!account) return;
+      
+      const entryDate = new Date(entry.date);
+      
+      // For income statement accounts, only include entries from fiscal year start
+      if (isIncomeStatementAccount(account.type)) {
+        if (entryDate < fiscalYearStartDate) {
+          return; // Skip entries before fiscal year start for income/expense accounts
+        }
+      }
+      
+      if (!accountTotals.has(entry.accountId)) {
+        accountTotals.set(entry.accountId, { debitsCents: 0, creditsCents: 0 });
+      }
+      
+      const totals = accountTotals.get(entry.accountId)!;
+      totals.debitsCents += Math.round(Number(entry.debit) * 100);
+      totals.creditsCents += Math.round(Number(entry.credit) * 100);
+    });
+    
+    // Build result - show each account with its actual balance
+    const result = allAccounts
+      .map(account => {
+        const totals = accountTotals.get(account.id) || { debitsCents: 0, creditsCents: 0 };
+        const totalDebits = totals.debitsCents / 100;
+        const totalCredits = totals.creditsCents / 100;
+        const netCents = totals.debitsCents - totals.creditsCents;
+        
+        // Show net balance in appropriate column
+        // Positive net (debits > credits) = debit balance
+        // Negative net (credits > debits) = credit balance
+        const debitBalance = netCents > 0 ? netCents / 100 : 0;
+        const creditBalance = netCents < 0 ? Math.abs(netCents) / 100 : 0;
+        
+        return {
+          account,
+          totalDebits,
+          totalCredits,
+          debitBalance,
+          creditBalance,
+        };
+      })
+      .filter(item => item.debitBalance !== 0 || item.creditBalance !== 0);
+    
+    return result;
+  }
+
   async getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }> {
     const accountBalances = await this.getAccountBalances();
     
