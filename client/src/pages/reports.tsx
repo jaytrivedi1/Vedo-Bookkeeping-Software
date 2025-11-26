@@ -2693,28 +2693,6 @@ export default function Reports() {
                     )}
                   </CardContent>
                 </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle>About the Trial Balance</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <p>
-                        The trial balance is a worksheet with two columns, "debit" and "credit," that lists 
-                        all the accounts with their balances before the financial statements are prepared.
-                      </p>
-                      <p>
-                        <strong>Purpose:</strong> To verify that the total debits equal the total credits. 
-                        This ensures that the accounting equation (Assets = Liabilities + Equity) is in balance.
-                      </p>
-                      <p>
-                        <strong>Important:</strong> A balanced trial balance does not guarantee that there are no errors in
-                        the individual ledger entries. It only confirms that the total debits equal the total credits.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </TabsContent>
             
