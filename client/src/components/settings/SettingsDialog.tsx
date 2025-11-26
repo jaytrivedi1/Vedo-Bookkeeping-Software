@@ -40,7 +40,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock, Users } from "lucide-react";
+import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock, Users, Calendar as CalendarIcon, X } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { MONTH_OPTIONS } from "@shared/fiscalYear";
 import InvoiceTemplatePreview from "./InvoiceTemplatePreview";
@@ -98,6 +101,7 @@ interface SettingsState {
   homeCurrency: string | null;
   multiCurrencyEnabledAt: Date | null;
   invoiceTemplate?: string;
+  transactionLockDate?: Date | null;
 }
 
 const templates = [
@@ -145,7 +149,8 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     multiCurrencyEnabled: false,
     homeCurrency: null,
     multiCurrencyEnabledAt: null,
-    invoiceTemplate: "classic"
+    invoiceTemplate: "classic",
+    transactionLockDate: null
   });
   
   // Query company settings
@@ -182,7 +187,8 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
         multiCurrencyEnabled: data.multiCurrencyEnabled || false,
         homeCurrency: data.homeCurrency || null,
         multiCurrencyEnabledAt: data.multiCurrencyEnabledAt ? new Date(data.multiCurrencyEnabledAt) : null,
-        invoiceTemplate: template
+        invoiceTemplate: template,
+        transactionLockDate: data.transactionLockDate ? new Date(data.transactionLockDate) : null
       });
       
       // Set selected template
@@ -949,37 +955,100 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
           
           {/* Preferences Tab */}
           <TabsContent value="preferences">
-            <Card>
-              <CardHeader>
-                <CardTitle>User Interface</CardTitle>
-                <CardDescription>Customize how the application looks and behaves</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Theme Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="theme-toggle">Dark Mode</Label>
-                    <p className="text-sm text-gray-500">Enable for reduced eye strain in low-light environments</p>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Interface</CardTitle>
+                  <CardDescription>Customize how the application looks and behaves</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Theme Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="theme-toggle">Dark Mode</Label>
+                      <p className="text-sm text-gray-500">Enable for reduced eye strain in low-light environments</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="theme-toggle" 
+                        checked={settings.darkMode}
+                        onCheckedChange={handleThemeToggle}
+                      />
+                      {settings.darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      id="theme-toggle" 
-                      checked={settings.darkMode}
-                      onCheckedChange={handleThemeToggle}
-                    />
-                    {settings.darkMode ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Lock className="h-5 w-5" />
+                    Transaction Lock Date
+                  </CardTitle>
+                  <CardDescription>
+                    Prevent changes to transactions on or before this date to protect closed accounting periods
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Lock transactions through</Label>
+                    <div className="flex items-center gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-left font-normal"
+                            data-testid="button-transaction-lock-date"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {settings.transactionLockDate 
+                              ? format(settings.transactionLockDate, "PPP")
+                              : "No lock date set"
+                            }
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={settings.transactionLockDate || undefined}
+                            onSelect={(date) => {
+                              setSettings(prev => ({ ...prev, transactionLockDate: date || null }));
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      {settings.transactionLockDate && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSettings(prev => ({ ...prev, transactionLockDate: null }))}
+                          title="Clear lock date"
+                          data-testid="button-clear-lock-date"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {settings.transactionLockDate 
+                        ? `Transactions dated ${format(settings.transactionLockDate, "MMMM d, yyyy")} or earlier cannot be created, edited, or deleted.`
+                        : "Set a date to prevent modifications to transactions in closed periods."
+                      }
+                    </p>
                   </div>
-                </div>
-                
-                <Button 
-                  onClick={savePreferencesHandler} 
-                  disabled={savePreferences.isPending}
-                  className="w-full"
-                >
-                  {savePreferences.isPending ? "Saving..." : "Save Preferences"}
-                </Button>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+              
+              <Button 
+                onClick={savePreferencesHandler} 
+                disabled={savePreferences.isPending}
+                className="w-full"
+              >
+                {savePreferences.isPending ? "Saving..." : "Save Preferences"}
+              </Button>
+            </div>
           </TabsContent>
           
           {/* Invoices Tab */}
