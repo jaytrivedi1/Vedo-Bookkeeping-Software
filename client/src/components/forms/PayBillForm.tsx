@@ -394,7 +394,11 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
         description: "Bill payment processed successfully",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
     onError: (error: any) => {
       toast({

@@ -331,7 +331,11 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
       });
       
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
     onError: (error: any) => {
       console.error("Error saving cheque:", error);

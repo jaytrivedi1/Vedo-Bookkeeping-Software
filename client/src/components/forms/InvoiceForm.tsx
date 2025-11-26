@@ -476,7 +476,11 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       });
       
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
       
       // Handle send email if requested
       if (sendInvoiceEmail && selectedContact?.email && result?.id) {

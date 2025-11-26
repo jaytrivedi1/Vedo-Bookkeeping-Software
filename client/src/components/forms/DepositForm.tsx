@@ -362,7 +362,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       if (onSuccess) {
         onSuccess();
       } else {
-        setLocation('/dashboard');
+        window.history.back();
       }
     },
     onError: (error) => {
@@ -428,7 +428,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       if (onSuccess) {
         onSuccess();
       } else {
-        setLocation('/dashboard');
+        window.history.back();
       }
     },
     onError: (error) => {
@@ -1016,7 +1016,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                 type="button"
                 variant="outline"
                 className="mr-2"
-                onClick={() => setLocation("/dashboard")}
+                onClick={() => window.history.back()}
               >
                 <X className="h-4 w-4 mr-2" />
                 Cancel

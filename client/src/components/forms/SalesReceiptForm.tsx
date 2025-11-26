@@ -359,7 +359,11 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
         title: "Success",
         description: "Sales receipt created successfully",
       });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
     onError: (error: Error) => {
       toast({

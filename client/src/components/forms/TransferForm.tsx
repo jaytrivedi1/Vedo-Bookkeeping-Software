@@ -210,7 +210,11 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
         title: "Success",
         description: "Transfer recorded successfully",
       });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
     onError: (error: Error) => {
       toast({

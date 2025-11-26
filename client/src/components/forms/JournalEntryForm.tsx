@@ -219,7 +219,15 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
+      toast({
+        title: "Success",
+        description: "Journal entry saved successfully",
+      });
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
   });
 

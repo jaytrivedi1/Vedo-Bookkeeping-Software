@@ -307,7 +307,11 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
       });
       
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
-      if (onSuccess) onSuccess();
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.history.back();
+      }
     },
     onError: (error: any) => {
       console.error("Error saving expense:", error);
