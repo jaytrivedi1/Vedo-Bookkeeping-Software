@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter, startOfYear, endOfYear, subWeeks, subDays, addWeeks, addMonths, addQuarters, addYears, subQuarters, subYears } from "date-fns";
 import { Calendar as CalendarIcon, ArrowLeft, FileDown, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp, ChevronRight, Menu, X, Star, Search } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 import Papa from "papaparse";
@@ -362,12 +362,103 @@ export default function Reports() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Trial Balance filter state
-  const [trialBalanceReportPeriod, setTrialBalanceReportPeriod] = useState<string>('this-year');
+  const [trialBalanceReportPeriod, setTrialBalanceReportPeriod] = useState<string>('this-fiscal-year');
   const [trialBalanceStartDate, setTrialBalanceStartDate] = useState<Date | undefined>(new Date(new Date().getFullYear(), 0, 1));
   const [trialBalanceEndDate, setTrialBalanceEndDate] = useState<Date | undefined>(new Date());
   const [trialBalanceDisplayColumns, setTrialBalanceDisplayColumns] = useState<string>('total-only');
   const [trialBalanceActiveFilter, setTrialBalanceActiveFilter] = useState<string>('active-rows-columns');
   const [, setLocation] = useLocation();
+  
+  // Helper function to calculate date ranges for report periods
+  // Assumes fiscal year starts January 1 (can be made configurable later)
+  const calculateDateRange = (period: string): { start: Date; end: Date } | null => {
+    const today = new Date();
+    const fiscalYearStart = new Date(today.getFullYear(), 0, 1); // Jan 1 of current year
+    
+    switch (period) {
+      case 'all-dates':
+        return { start: new Date(2000, 0, 1), end: today };
+      case 'custom':
+        return null; // Don't auto-set dates for custom
+      case 'today':
+        return { start: today, end: today };
+      case 'yesterday':
+        const yesterday = subDays(today, 1);
+        return { start: yesterday, end: yesterday };
+      case 'this-week':
+        return { start: startOfWeek(today, { weekStartsOn: 0 }), end: endOfWeek(today, { weekStartsOn: 0 }) };
+      case 'this-week-to-date':
+        return { start: startOfWeek(today, { weekStartsOn: 0 }), end: today };
+      case 'this-month':
+        return { start: startOfMonth(today), end: endOfMonth(today) };
+      case 'this-month-to-date':
+        return { start: startOfMonth(today), end: today };
+      case 'this-calendar-quarter':
+        return { start: startOfQuarter(today), end: endOfQuarter(today) };
+      case 'this-calendar-quarter-to-date':
+        return { start: startOfQuarter(today), end: today };
+      case 'this-fiscal-quarter':
+        // Assuming fiscal year aligns with calendar year
+        return { start: startOfQuarter(today), end: endOfQuarter(today) };
+      case 'this-fiscal-quarter-to-date':
+        return { start: startOfQuarter(today), end: today };
+      case 'this-calendar-year':
+        return { start: startOfYear(today), end: endOfYear(today) };
+      case 'this-calendar-year-to-date':
+        return { start: startOfYear(today), end: today };
+      case 'this-calendar-year-to-last-month':
+        const lastMonthEnd = endOfMonth(subMonths(today, 1));
+        return { start: startOfYear(today), end: lastMonthEnd };
+      case 'this-fiscal-year':
+        return { start: fiscalYearStart, end: endOfYear(fiscalYearStart) };
+      case 'this-fiscal-year-to-date':
+        return { start: fiscalYearStart, end: today };
+      case 'this-fiscal-year-to-last-month':
+        return { start: fiscalYearStart, end: endOfMonth(subMonths(today, 1)) };
+      case 'recent':
+        return { start: subDays(today, 30), end: today };
+      case 'last-week':
+        const lastWeekStart = startOfWeek(subWeeks(today, 1), { weekStartsOn: 0 });
+        return { start: lastWeekStart, end: endOfWeek(lastWeekStart, { weekStartsOn: 0 }) };
+      case 'last-week-to-date':
+        return { start: startOfWeek(subWeeks(today, 1), { weekStartsOn: 0 }), end: today };
+      case 'last-month':
+        const lastMonth = subMonths(today, 1);
+        return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
+      case 'last-fiscal-year-to-date':
+        const lastFiscalYearStart = subYears(fiscalYearStart, 1);
+        const lastYearSameDay = subYears(today, 1);
+        return { start: lastFiscalYearStart, end: lastYearSameDay };
+      case 'since-30-days-ago':
+        return { start: subDays(today, 30), end: today };
+      case 'since-60-days-ago':
+        return { start: subDays(today, 60), end: today };
+      case 'since-90-days-ago':
+        return { start: subDays(today, 90), end: today };
+      case 'since-365-days-ago':
+        return { start: subDays(today, 365), end: today };
+      case 'next-week':
+        const nextWeekStart = startOfWeek(addWeeks(today, 1), { weekStartsOn: 0 });
+        return { start: nextWeekStart, end: endOfWeek(nextWeekStart, { weekStartsOn: 0 }) };
+      case 'next-month':
+        const nextMonth = addMonths(today, 1);
+        return { start: startOfMonth(nextMonth), end: endOfMonth(nextMonth) };
+      case 'next-calendar-quarter':
+        const nextQuarter = addQuarters(today, 1);
+        return { start: startOfQuarter(nextQuarter), end: endOfQuarter(nextQuarter) };
+      case 'next-fiscal-quarter':
+        const nextFiscalQuarter = addQuarters(today, 1);
+        return { start: startOfQuarter(nextFiscalQuarter), end: endOfQuarter(nextFiscalQuarter) };
+      case 'next-calendar-year':
+        const nextCalYear = addYears(today, 1);
+        return { start: startOfYear(nextCalYear), end: endOfYear(nextCalYear) };
+      case 'next-fiscal-year':
+        const nextFiscalYear = addYears(fiscalYearStart, 1);
+        return { start: nextFiscalYear, end: endOfYear(nextFiscalYear) };
+      default:
+        return null;
+    }
+  };
   
   // Search state
   const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
@@ -2289,40 +2380,51 @@ export default function Reports() {
                         value={trialBalanceReportPeriod} 
                         onValueChange={(value) => {
                           setTrialBalanceReportPeriod(value);
-                          // Auto-set dates based on period selection
-                          const today = new Date();
-                          if (value === 'this-month') {
-                            setTrialBalanceStartDate(startOfMonth(today));
-                            setTrialBalanceEndDate(endOfMonth(today));
-                          } else if (value === 'last-month') {
-                            const lastMonth = subMonths(today, 1);
-                            setTrialBalanceStartDate(startOfMonth(lastMonth));
-                            setTrialBalanceEndDate(endOfMonth(lastMonth));
-                          } else if (value === 'this-quarter') {
-                            const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
-                            const quarterEnd = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0);
-                            setTrialBalanceStartDate(quarterStart);
-                            setTrialBalanceEndDate(quarterEnd);
-                          } else if (value === 'this-year') {
-                            setTrialBalanceStartDate(new Date(today.getFullYear(), 0, 1));
-                            setTrialBalanceEndDate(today);
-                          } else if (value === 'last-year') {
-                            setTrialBalanceStartDate(new Date(today.getFullYear() - 1, 0, 1));
-                            setTrialBalanceEndDate(new Date(today.getFullYear() - 1, 11, 31));
+                          const dateRange = calculateDateRange(value);
+                          if (dateRange) {
+                            setTrialBalanceStartDate(dateRange.start);
+                            setTrialBalanceEndDate(dateRange.end);
                           }
                         }}
                         data-testid="trial-balance-period-select"
                       >
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[220px]">
                           <SelectValue placeholder="Select period" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[400px]">
+                          <SelectItem value="all-dates" className="text-primary font-medium">All Dates</SelectItem>
                           <SelectItem value="custom">Custom</SelectItem>
+                          <SelectItem value="today">Today</SelectItem>
+                          <SelectItem value="this-week">This Week</SelectItem>
+                          <SelectItem value="this-week-to-date">This Week-to-date</SelectItem>
                           <SelectItem value="this-month">This Month</SelectItem>
+                          <SelectItem value="this-month-to-date">This Month-to-date</SelectItem>
+                          <SelectItem value="this-calendar-quarter">This Calendar Quarter</SelectItem>
+                          <SelectItem value="this-calendar-quarter-to-date">This Calendar Quarter-to-date</SelectItem>
+                          <SelectItem value="this-fiscal-quarter">This Fiscal Quarter</SelectItem>
+                          <SelectItem value="this-fiscal-quarter-to-date">This Fiscal Quarter-to-date</SelectItem>
+                          <SelectItem value="this-calendar-year">This Calendar Year</SelectItem>
+                          <SelectItem value="this-calendar-year-to-date">This Calendar Year-to-date</SelectItem>
+                          <SelectItem value="this-calendar-year-to-last-month">This Calendar Year-to-last-month</SelectItem>
+                          <SelectItem value="this-fiscal-year">This Fiscal Year</SelectItem>
+                          <SelectItem value="this-fiscal-year-to-date">This Fiscal Year-to-date</SelectItem>
+                          <SelectItem value="this-fiscal-year-to-last-month">This Fiscal Year-to-last-month</SelectItem>
+                          <SelectItem value="yesterday">Yesterday</SelectItem>
+                          <SelectItem value="recent">Recent</SelectItem>
+                          <SelectItem value="last-week">Last Week</SelectItem>
+                          <SelectItem value="last-week-to-date">Last Week-to-date</SelectItem>
                           <SelectItem value="last-month">Last Month</SelectItem>
-                          <SelectItem value="this-quarter">This Quarter</SelectItem>
-                          <SelectItem value="this-year">This Year</SelectItem>
-                          <SelectItem value="last-year">Last Year</SelectItem>
+                          <SelectItem value="last-fiscal-year-to-date">Last Fiscal Year-to-date</SelectItem>
+                          <SelectItem value="since-30-days-ago">Since 30 Days Ago</SelectItem>
+                          <SelectItem value="since-60-days-ago">Since 60 Days Ago</SelectItem>
+                          <SelectItem value="since-90-days-ago">Since 90 Days Ago</SelectItem>
+                          <SelectItem value="since-365-days-ago">Since 365 Days Ago</SelectItem>
+                          <SelectItem value="next-week">Next Week</SelectItem>
+                          <SelectItem value="next-month">Next Month</SelectItem>
+                          <SelectItem value="next-calendar-quarter">Next Calendar Quarter</SelectItem>
+                          <SelectItem value="next-fiscal-quarter">Next Fiscal Quarter</SelectItem>
+                          <SelectItem value="next-calendar-year">Next Calendar Year</SelectItem>
+                          <SelectItem value="next-fiscal-year">Next Fiscal Year</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
