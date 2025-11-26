@@ -2495,36 +2495,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
       
-      // Get all transactions for reference check and auto-numbering
-      const transactions = await storage.getTransactions();
-      
-      // If reference not provided, generate the next cheque number
-      if (!req.body.reference) {
-        // Filter only cheque transactions
-        const cheques = transactions.filter(t => t.type === 'cheque');
-        
-        // Default starting cheque number if no cheques exist
-        let nextChequeNumber = 1001;
-        
-        if (cheques.length > 0) {
-          // Extract numeric parts from existing cheque references
-          const chequeNumbers = cheques
-            .map(cheque => {
-              // Try to extract a numeric value from the reference
-              const match = cheque.reference?.match(/(\d+)/);
-              return match ? parseInt(match[1], 10) : 0;
-            })
-            .filter(num => !isNaN(num) && num > 0);
-          
-          // Find the highest cheque number and increment by 1
-          if (chequeNumbers.length > 0) {
-            nextChequeNumber = Math.max(...chequeNumbers) + 1;
-          }
-        }
-        
-        // Set the reference to the next cheque number
-        body.reference = `CHQ-${nextChequeNumber}`;
-      }
+      // Keep reference as user entered it (empty if not provided)
+      body.reference = req.body.reference?.trim() || null;
       
       // Validate cheque data
       console.log("Validating cheque data:", JSON.stringify(body));
@@ -2870,7 +2842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Transfer routes
   apiRouter.post("/transfers", async (req: Request, res: Response) => {
     try {
-      const { fromAccountId, toAccountId, amount, date, memo } = req.body;
+      const { fromAccountId, toAccountId, amount, date, memo, reference: userReference } = req.body;
 
       // Validate required fields
       if (!fromAccountId || !toAccountId || !amount || !date) {
@@ -2899,9 +2871,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Generate reference number
+      // Keep reference as user entered it (empty if not provided)
       const transferDate = new Date(date);
-      const reference = `TRF-${transferDate.getFullYear()}-${String(transferDate.getMonth() + 1).padStart(2, '0')}${String(transferDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
+      const reference = userReference?.trim() || null;
 
       // Create transaction
       const transaction: InsertTransaction = {
@@ -2949,15 +2921,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sales Receipt routes
   apiRouter.post("/sales-receipts", async (req: Request, res: Response) => {
     try {
-      const { date, contactId, reference, paymentMethod, depositAccountId, description, memo, lineItems, subTotal, taxAmount, totalAmount } = req.body;
+      const { date, contactId, reference: userReference, paymentMethod, depositAccountId, description, memo, lineItems, subTotal, taxAmount, totalAmount } = req.body;
 
       // Validate required fields
-      if (!reference || !depositAccountId || !lineItems || lineItems.length === 0) {
+      if (!depositAccountId || !lineItems || lineItems.length === 0) {
         return res.status(400).json({ 
           message: "Missing required fields", 
-          errors: [{ message: "Reference, deposit account, and at least one line item are required" }] 
+          errors: [{ message: "Deposit account and at least one line item are required" }] 
         });
       }
+      
+      // Keep reference as user entered it (empty if not provided)
+      const reference = userReference?.trim() || null;
 
       // Fetch deposit account
       const depositAccount = await storage.getAccount(depositAccountId);
@@ -2983,7 +2958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         type: 'sales_receipt',
         reference,
         date: salesDate,
-        description: description || `Sales Receipt ${reference}`,
+        description: description || (reference ? `Sales Receipt ${reference}` : 'Sales Receipt'),
         amount: Number(totalAmount),
         contactId: contactId || null,
         status: 'completed', // Sales receipts are always completed (payment received immediately)
@@ -3000,12 +2975,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionId: 0 // Will be set by createTransaction
       }));
 
+      // Create ledger entry description
+      const ledgerDesc = reference ? `Sales Receipt ${reference}` : 'Sales Receipt';
+
       // Create ledger entries for double-entry bookkeeping
       const ledgerEntries: InsertLedgerEntry[] = [
         // Debit: Deposit Account (Cash/Bank/Undeposited Funds)
         {
           accountId: depositAccountId,
-          description: `Sales Receipt ${reference} - ${paymentMethod}`,
+          description: `${ledgerDesc} - ${paymentMethod}`,
           debit: Number(totalAmount),
           credit: 0,
           date: salesDate,
@@ -3014,7 +2992,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Credit: Revenue Account (Subtotal)
         {
           accountId: revenueAccount.id,
-          description: `Sales Receipt ${reference} - Revenue`,
+          description: `${ledgerDesc} - Revenue`,
           debit: 0,
           credit: Number(subTotal),
           date: salesDate,
@@ -3915,10 +3893,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const depositData = depositSchema.parse(body);
       
-      // Generate default reference if empty
-      const reference = depositData.reference?.trim() 
-        ? depositData.reference 
-        : `DEP-${Date.now()}`;
+      // Keep reference as user entered it (empty if not provided)
+      const reference = depositData.reference?.trim() || null;
       
       // Create transaction
       const transaction = {
