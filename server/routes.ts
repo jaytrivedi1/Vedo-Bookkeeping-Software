@@ -5811,6 +5811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Calculate balances from filtered ledger entries
+      // Note: For Balance Sheet accounts only (P&L entries will be captured in Retained Earnings)
       filteredLedgerEntries.forEach(entry => {
         const account = allAccounts.find(a => a.id === entry.accountId);
         if (!account) return;
@@ -5819,7 +5820,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let newBalance = currentBalance;
         
         // Apply debits and credits according to account type's normal balance
-        if (['asset', 'expense', 'cost_of_goods_sold'].includes(account.type)) {
+        // Assets (bank, AR, current_assets, PPE, long_term_assets) and expenses are debit-normal
+        // Liabilities, equity, and income are credit-normal
+        const debitNormalTypes = [
+          'bank', 'accounts_receivable', 'current_assets', 
+          'property_plant_equipment', 'long_term_assets',
+          'expenses', 'cost_of_goods_sold', 'other_expense'
+        ];
+        
+        if (debitNormalTypes.includes(account.type)) {
           newBalance += Number(entry.debit) - Number(entry.credit);
         } else {
           newBalance += Number(entry.credit) - Number(entry.debit);
