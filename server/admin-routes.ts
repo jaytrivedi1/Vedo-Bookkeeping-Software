@@ -54,21 +54,30 @@ adminRouter.get("/companies", async (req: Request, res: Response) => {
     const bankConnections = await storage.getBankConnections();
     
     // Get user count for each company and enrich with additional data
+    // Note: Bank connections are currently global (not company-specific in the schema)
+    // We only show them on the first/default company to avoid confusion
+    const defaultCompanyId = companies.find(c => c.isDefault)?.id || companies[0]?.id;
+    
     const companiesWithDetails = await Promise.all(
       companies.map(async (company) => {
         const companyUsers = await storage.getCompanyUsers(company.id);
+        
+        // Only attach bank connections to the default company for now
+        // This is a temporary solution until company-specific bank connections are implemented
+        const isDefaultCompany = company.id === defaultCompanyId;
+        
         return {
           ...company,
           userCount: companyUsers.length,
           users: companyUsers,
           homeCurrency: preferences?.homeCurrency || 'USD',
-          bankFeedCount: bankConnections.filter(bc => bc.status === 'active').length,
-          bankConnections: bankConnections.map(bc => ({
+          bankFeedCount: isDefaultCompany ? bankConnections.filter(bc => bc.status === 'active').length : 0,
+          bankConnections: isDefaultCompany ? bankConnections.map(bc => ({
             id: bc.id,
             institutionName: bc.institutionName,
             status: bc.status,
             lastSync: bc.lastSync,
-          })),
+          })) : [],
         };
       })
     );
