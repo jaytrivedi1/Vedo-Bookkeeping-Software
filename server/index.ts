@@ -26,6 +26,7 @@ import { migrateBankMultiMatch } from "./migrate-bank-multi-match";
 import { addMultiCurrencySupport } from "./migrations/add-multi-currency";
 import { fetchYesterdayRates } from "./startup-exchange-rates";
 import { migrateInvoiceActivities } from "./migrations/add-invoice-activities";
+import { addUserCompaniesTable } from "./migrations/add-user-companies";
 
 const app = express();
 app.use(express.json());
@@ -73,6 +74,9 @@ app.use((req, res, next) => {
     
     // Run company table migration to create companies and set up default company
     await migrateCompanyTable();
+    
+    // Run user_companies table migration (must be after companies table)
+    await addUserCompaniesTable();
     
     // Run sales tax components migration for multi-component taxes (GST+QST)
     await migrateSalesTaxComponents();
