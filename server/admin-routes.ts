@@ -1,8 +1,21 @@
 import express, { Request, Response } from "express";
 import { storage } from "./storage";
 import { requireAuth, requireAdmin } from "./auth";
+import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 export const adminRouter = express.Router();
+
+// Initialize Plaid client for bank feed disconnection
+const plaidConfig = new Configuration({
+  basePath: PlaidEnvironments[process.env.PLAID_ENV as keyof typeof PlaidEnvironments || 'sandbox'],
+  baseOptions: {
+    headers: {
+      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+      'PLAID-SECRET': process.env.PLAID_SECRET,
+    },
+  },
+});
+const plaidClient = new PlaidApi(plaidConfig);
 
 // All admin routes require authentication and admin role
 adminRouter.use(requireAuth);
@@ -33,24 +46,34 @@ adminRouter.get("/users", async (req: Request, res: Response) => {
   }
 });
 
-// Get all companies with user counts
+// Get all companies with user counts, bank feed status, and preferences
 adminRouter.get("/companies", async (req: Request, res: Response) => {
   try {
     const companies = await storage.getCompanies();
+    const preferences = await storage.getPreferences();
+    const bankConnections = await storage.getBankConnections();
     
-    // Get user count for each company
-    const companiesWithUserCounts = await Promise.all(
+    // Get user count for each company and enrich with additional data
+    const companiesWithDetails = await Promise.all(
       companies.map(async (company) => {
         const companyUsers = await storage.getCompanyUsers(company.id);
         return {
           ...company,
           userCount: companyUsers.length,
           users: companyUsers,
+          homeCurrency: preferences?.homeCurrency || 'USD',
+          bankFeedCount: bankConnections.filter(bc => bc.status === 'active').length,
+          bankConnections: bankConnections.map(bc => ({
+            id: bc.id,
+            institutionName: bc.institutionName,
+            status: bc.status,
+            lastSync: bc.lastSync,
+          })),
         };
       })
     );
     
-    res.json(companiesWithUserCounts);
+    res.json(companiesWithDetails);
   } catch (error) {
     console.error("Error fetching companies for admin:", error);
     res.status(500).json({ message: "Failed to fetch companies" });
@@ -148,5 +171,80 @@ adminRouter.patch("/companies/:id/status", async (req: Request, res: Response) =
   } catch (error) {
     console.error("Error updating company status:", error);
     res.status(500).json({ message: "Failed to update company status" });
+  }
+});
+
+// Disconnect bank feed connection (for super admin)
+adminRouter.delete("/bank-connections/:id", async (req: Request, res: Response) => {
+  try {
+    const connectionId = parseInt(req.params.id);
+    
+    // Get the connection first to retrieve the access token
+    const connection = await storage.getBankConnection(connectionId);
+    
+    if (!connection) {
+      return res.status(404).json({ message: "Bank connection not found" });
+    }
+    
+    // Try to revoke the Plaid access token (best effort)
+    try {
+      if (connection.accessToken && process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) {
+        await plaidClient.itemRemove({
+          access_token: connection.accessToken,
+        });
+        console.log(`Successfully revoked Plaid access token for connection ${connectionId}`);
+      }
+    } catch (plaidError) {
+      // Log but don't fail - we still want to remove from our database
+      console.error("Error revoking Plaid access token:", plaidError);
+    }
+    
+    // Delete the connection from our database (this cascades to bank accounts and transactions)
+    const deleted = await storage.deleteBankConnection(connectionId);
+    
+    if (!deleted) {
+      return res.status(500).json({ message: "Failed to delete bank connection" });
+    }
+    
+    res.json({ message: "Bank connection disconnected successfully" });
+  } catch (error) {
+    console.error("Error disconnecting bank connection:", error);
+    res.status(500).json({ message: "Failed to disconnect bank connection" });
+  }
+});
+
+// Get all bank connections for admin view
+adminRouter.get("/bank-connections", async (req: Request, res: Response) => {
+  try {
+    const connections = await storage.getBankConnections();
+    
+    // Enrich with account counts
+    const connectionsWithDetails = await Promise.all(
+      connections.map(async (connection) => {
+        const accounts = await storage.getBankAccountsByConnectionId(connection.id);
+        return {
+          id: connection.id,
+          institutionName: connection.institutionName,
+          institutionId: connection.institutionId,
+          status: connection.status,
+          lastSync: connection.lastSync,
+          error: connection.error,
+          accountCount: accounts.length,
+          accounts: accounts.map(acc => ({
+            id: acc.id,
+            name: acc.name,
+            type: acc.type,
+            mask: acc.mask,
+            isActive: acc.isActive,
+          })),
+          createdAt: connection.createdAt,
+        };
+      })
+    );
+    
+    res.json(connectionsWithDetails);
+  } catch (error) {
+    console.error("Error fetching bank connections for admin:", error);
+    res.status(500).json({ message: "Failed to fetch bank connections" });
   }
 });
