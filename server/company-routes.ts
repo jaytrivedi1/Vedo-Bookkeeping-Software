@@ -40,11 +40,36 @@ const logoUpload = multer({
   }
 });
 
-// Get all companies
+// Get companies for the authenticated user
 companyRouter.get("/", async (req: Request, res: Response) => {
   try {
-    const companies = await storage.getCompanies();
-    res.json(companies);
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
+    const userId = req.user.id;
+    
+    // Get user's company assignments
+    const userCompanies = await storage.getUserCompanies(userId);
+    
+    // If user has no company assignments, return empty array
+    if (userCompanies.length === 0) {
+      return res.json([]);
+    }
+    
+    // Get the actual company objects for each assignment
+    const companies = await Promise.all(
+      userCompanies.map(async (uc) => {
+        const company = await storage.getCompany(uc.companyId);
+        return company;
+      })
+    );
+    
+    // Filter out any null values (in case a company was deleted)
+    const validCompanies = companies.filter(c => c !== null && c !== undefined);
+    
+    res.json(validCompanies);
   } catch (error) {
     console.error("Error fetching companies:", error);
     res.status(500).json({ message: "Failed to fetch companies" });
@@ -85,8 +110,21 @@ companyRouter.get("/:id", async (req: Request, res: Response) => {
 // Create new company
 companyRouter.post("/", async (req: Request, res: Response) => {
   try {
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
     const companyData = insertCompanySchema.parse(req.body);
     const company = await storage.createCompany(companyData);
+    
+    // Automatically assign the creating user to this company as admin
+    await storage.assignUserToCompany({
+      userId: req.user.id,
+      companyId: company.id,
+      role: 'admin'
+    });
+    
     res.status(201).json(company);
   } catch (error) {
     console.error("Error creating company:", error);
