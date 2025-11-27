@@ -16,7 +16,7 @@ export default function Login() {
   const { toast } = useToast();
 
   // Login form state
-  const [loginUsername, setLoginUsername] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -30,9 +30,9 @@ export default function Login() {
   }, []);
 
   // Register form state
-  const [registerUsername, setRegisterUsername] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [registerFirstName, setRegisterFirstName] = useState('');
   const [registerLastName, setRegisterLastName] = useState('');
   const [registerLoading, setRegisterLoading] = useState(false);
@@ -45,7 +45,7 @@ export default function Login() {
       // Save remember me preference
       localStorage.setItem('rememberMe', rememberMe.toString());
       
-      await login(loginUsername, loginPassword, rememberMe);
+      await login(loginEmail, loginPassword, rememberMe);
       toast({
         title: 'Success',
         description: 'Logged in successfully',
@@ -64,15 +64,36 @@ export default function Login() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate passwords match
+    if (registerPassword !== registerConfirmPassword) {
+      toast({
+        title: 'Error',
+        description: 'Passwords do not match',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Validate password strength
+    if (registerPassword.length < 6) {
+      toast({
+        title: 'Error',
+        description: 'Password must be at least 6 characters',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     setRegisterLoading(true);
 
     try {
       await register(
-        registerUsername,
+        registerEmail, // Use email as username
         registerPassword,
-        registerEmail || undefined,
-        registerFirstName || undefined,
-        registerLastName || undefined
+        registerEmail,
+        registerFirstName,
+        registerLastName
       );
       toast({
         title: 'Success',
@@ -116,14 +137,15 @@ export default function Login() {
               <TabsContent value="login">
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="login-username">Username</Label>
+                    <Label htmlFor="login-email">Email</Label>
                     <Input
-                      id="login-username"
-                      type="text"
-                      value={loginUsername}
-                      onChange={(e) => setLoginUsername(e.target.value)}
+                      id="login-email"
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="you@example.com"
                       required
-                      data-testid="input-login-username"
+                      data-testid="input-login-email"
                     />
                   </div>
                   <div className="space-y-2">
@@ -165,34 +187,14 @@ export default function Login() {
               <TabsContent value="register">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="register-username">Username *</Label>
-                    <Input
-                      id="register-username"
-                      type="text"
-                      value={registerUsername}
-                      onChange={(e) => setRegisterUsername(e.target.value)}
-                      required
-                      data-testid="input-register-username"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Password *</Label>
-                    <Input
-                      id="register-password"
-                      type="password"
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      required
-                      data-testid="input-register-password"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="register-email">Email</Label>
                     <Input
                       id="register-email"
                       type="email"
                       value={registerEmail}
                       onChange={(e) => setRegisterEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      required
                       data-testid="input-register-email"
                     />
                   </div>
@@ -204,6 +206,7 @@ export default function Login() {
                         type="text"
                         value={registerFirstName}
                         onChange={(e) => setRegisterFirstName(e.target.value)}
+                        required
                         data-testid="input-register-firstname"
                       />
                     </div>
@@ -214,9 +217,33 @@ export default function Login() {
                         type="text"
                         value={registerLastName}
                         onChange={(e) => setRegisterLastName(e.target.value)}
+                        required
                         data-testid="input-register-lastname"
                       />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-password">Password</Label>
+                    <Input
+                      id="register-password"
+                      type="password"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      required
+                      data-testid="input-register-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="register-confirm-password">Confirm Password</Label>
+                    <Input
+                      id="register-confirm-password"
+                      type="password"
+                      value={registerConfirmPassword}
+                      onChange={(e) => setRegisterConfirmPassword(e.target.value)}
+                      required
+                      data-testid="input-register-confirm-password"
+                    />
                   </div>
                   <Button
                     type="submit"

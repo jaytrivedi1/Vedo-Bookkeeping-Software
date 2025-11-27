@@ -44,16 +44,22 @@ export function setupAuth(app: Express): void {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Configure Passport Local Strategy
+  // Configure Passport Local Strategy - supports both email and username login
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
-        // Find user by username
-        const user = await storage.getUserByUsername(username);
+        // Try to find user by email first (if input looks like an email), then by username
+        let user = null;
+        if (username.includes('@')) {
+          user = await storage.getUserByEmail(username);
+        }
+        if (!user) {
+          user = await storage.getUserByUsername(username);
+        }
         
         // If user not found or password doesn't match
         if (!user || !(await storage.validatePassword(user.password, password))) {
-          return done(null, false, { message: 'Incorrect username or password' });
+          return done(null, false, { message: 'Incorrect email or password' });
         }
         
         // Update last login time
@@ -85,34 +91,49 @@ export function setupAuth(app: Express): void {
   // Register authentication routes
   app.post("/api/register", async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(req.body.username);
+      const { username, email, password, firstName, lastName } = req.body;
+      
+      // Validate required fields
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      
+      // Validate email format
+      if (!email.includes('@')) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+      
+      // Validate password strength
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+      
+      // Check if username already exists (username defaults to email if not provided)
+      const usernameToUse = username || email;
+      const existingUser = await storage.getUserByUsername(usernameToUse);
       if (existingUser) {
         return res.status(400).json({ message: "Username already exists" });
       }
 
-      // Check if email already exists
-      if (req.body.email) {
-        const existingEmail = await storage.getUserByEmail(req.body.email);
-        if (existingEmail) {
-          return res.status(400).json({ message: "Email already exists" });
-        }
-      }
+      // Create user with safe defaults (no auto-assignment to companies)
+      const user = await storage.createUser({
+        username: usernameToUse,
+        email,
+        password,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        role: 'admin', // New users get admin role for their own companies
+        isActive: true
+      });
 
-      // Create user
-      const user = await storage.createUser(req.body);
-
-      // If this is the first user, assign them to all companies
-      const companies = await storage.getCompanies();
-      if (companies.length > 0) {
-        for (const company of companies) {
-          await storage.assignUserToCompany({
-            userId: user.id,
-            companyId: company.id,
-            role: 'admin' // First user gets admin role
-          });
-        }
-      }
+      // Note: User is not auto-assigned to any companies
+      // They will create their own companies after signing up
 
       // Log in the newly created user
       req.login(user, (err) => {
