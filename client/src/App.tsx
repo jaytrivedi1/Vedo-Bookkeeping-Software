@@ -1,6 +1,6 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import NotFound from "@/pages/not-found";
@@ -40,11 +40,13 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import ManageUsers from "@/pages/manage-users";
 import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
+import Onboarding from "@/pages/onboarding";
 import InvoicePublicView from "@/pages/invoice-public-view";
 import Quotations from "@/pages/quotations";
 import RecurringInvoices from "@/pages/recurring-invoices";
 import RecurringInvoiceForm from "@/pages/recurring-invoice-form";
 import MainLayout from "@/components/layout/MainLayout";
+import { Company } from "@shared/schema";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
   const { user, isLoading } = useAuth();
@@ -104,6 +106,12 @@ function AdminRoute({ component: Component, ...rest }: { component: any; path?: 
 function Router() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
+  
+  // Fetch companies for authenticated user
+  const { data: companies, isLoading: companiesLoading } = useQuery<Company[]>({
+    queryKey: ['/api/companies'],
+    enabled: !!user, // Only fetch when user is logged in
+  });
 
   if (isLoading) {
     return (
@@ -116,7 +124,7 @@ function Router() {
     );
   }
 
-  const isPublicRoute = location === '/login' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
+  const isPublicRoute = location === '/login' || location === '/onboarding' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
   
   if (!user && !isPublicRoute) {
     return <Redirect to="/login" />;
@@ -125,10 +133,33 @@ function Router() {
   if (user && location === '/login') {
     return <Redirect to="/" />;
   }
+  
+  // If user is logged in but still loading companies, show loading
+  if (user && companiesLoading && !isPublicRoute && location !== '/onboarding') {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading your companies...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // If user has no companies, redirect to onboarding (except if already there)
+  if (user && !companiesLoading && (!companies || companies.length === 0) && location !== '/onboarding' && !isPublicRoute) {
+    return <Redirect to="/onboarding" />;
+  }
+  
+  // If user has companies but is on onboarding, redirect to dashboard
+  if (user && companies && companies.length > 0 && location === '/onboarding') {
+    return <Redirect to="/" />;
+  }
 
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/onboarding" component={Onboarding} />
       <Route path="/accept-invitation/:token" component={AcceptInvitation} />
       <Route path="/invoice/public/:token" component={InvoicePublicView} />
       <Route>
