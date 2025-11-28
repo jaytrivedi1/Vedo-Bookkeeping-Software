@@ -2390,8 +2390,23 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getCompanyByCode(code: string): Promise<Company | undefined> {
+    const result = await db.select().from(companiesSchema).where(eq(companiesSchema.companyCode, code));
+    return result[0];
+  }
+
   async createCompany(company: InsertCompany): Promise<Company> {
-    const [newCompany] = await db.insert(companiesSchema).values(company).returning();
+    const { generateUniqueCompanyCode } = await import('./utils/company-code');
+    
+    const companyCode = await generateUniqueCompanyCode(async (code) => {
+      const existing = await this.getCompanyByCode(code);
+      return !!existing;
+    });
+    
+    const [newCompany] = await db.insert(companiesSchema).values({
+      ...company,
+      companyCode,
+    }).returning();
     return newCompany;
   }
 

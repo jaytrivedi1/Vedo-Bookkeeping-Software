@@ -218,6 +218,7 @@ export interface IStorage {
   // Companies
   getCompanies(): Promise<Company[]>;
   getCompany(id: number): Promise<Company | undefined>;
+  getCompanyByCode(code: string): Promise<Company | undefined>;
   getDefaultCompany(): Promise<Company | undefined>;
   createCompany(company: InsertCompany): Promise<Company>;
   updateCompany(id: number, company: Partial<Company>): Promise<Company | undefined>;
@@ -1022,14 +1023,25 @@ export class MemStorage implements IStorage {
     return Array.from(this.companies.values()).find(company => company.isDefault);
   }
   
+  async getCompanyByCode(code: string): Promise<Company | undefined> {
+    return Array.from(this.companies.values()).find(c => c.companyCode === code);
+  }
+
   async createCompany(company: InsertCompany): Promise<Company> {
+    const { generateUniqueCompanyCode } = await import('./utils/company-code');
     const id = this.companyIdCounter++;
     const now = new Date();
+    
+    const companyCode = await generateUniqueCompanyCode(async (code) => {
+      const existing = await this.getCompanyByCode(code);
+      return !!existing;
+    });
     
     const newCompany: Company = {
       ...company,
       id,
-      isDefault: false, // Will be set separately if needed
+      companyCode,
+      isDefault: false,
       createdAt: now,
       updatedAt: now
     };
