@@ -417,6 +417,7 @@ export type Deposit = z.infer<typeof depositSchema>;
 // Companies schema to manage multiple company books
 export const companiesSchema = pgTable('companies', {
   id: serial('id').primaryKey(),
+  companyCode: text('company_code').unique(), // Unique identifier like VED-A7B2C9D4
   name: text('name').notNull(),
   street1: text('street1'),
   street2: text('street2'),

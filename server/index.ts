@@ -27,6 +27,7 @@ import { addMultiCurrencySupport } from "./migrations/add-multi-currency";
 import { fetchYesterdayRates } from "./startup-exchange-rates";
 import { migrateInvoiceActivities } from "./migrations/add-invoice-activities";
 import { addUserCompaniesTable } from "./migrations/add-user-companies";
+import { addCompanyCodeMigration } from "./migrations/add-company-code";
 
 const app = express();
 app.use(express.json());
@@ -137,6 +138,9 @@ app.use((req, res, next) => {
     
     // Add invoice activities and secure token support
     await migrateInvoiceActivities();
+    
+    // Add unique company codes (VED-XXXXXXXX format)
+    await addCompanyCodeMigration();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
