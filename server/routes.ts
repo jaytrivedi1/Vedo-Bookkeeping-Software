@@ -826,6 +826,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get next suggested invoice number
+  apiRouter.get("/invoices/next-number", async (req: Request, res: Response) => {
+    try {
+      const transactions = await storage.getTransactions();
+      
+      // Filter only invoice transactions
+      const invoices = transactions.filter(t => t.type === 'invoice');
+      
+      // Default starting invoice number if no invoices exist
+      let nextInvoiceNumber = 1001;
+      
+      if (invoices.length > 0) {
+        // Extract numeric parts from existing invoice references
+        const invoiceNumbers = invoices
+          .map(invoice => {
+            // Try to extract a numeric value from the reference
+            const match = invoice.reference?.match(/(\d+)/);
+            return match ? parseInt(match[1], 10) : 0;
+          })
+          .filter(num => !isNaN(num) && num > 0);
+        
+        // Find the highest invoice number and increment by 1
+        if (invoiceNumbers.length > 0) {
+          nextInvoiceNumber = Math.max(...invoiceNumbers) + 1;
+        }
+      }
+      
+      res.json({ nextNumber: nextInvoiceNumber.toString() });
+    } catch (error) {
+      console.error("Error getting next invoice number:", error);
+      res.status(500).json({ message: "Failed to get next invoice number" });
+    }
+  });
+
   // Get payment applications for an invoice
   apiRouter.get("/invoices/:id/payment-applications", async (req: Request, res: Response) => {
     try {
