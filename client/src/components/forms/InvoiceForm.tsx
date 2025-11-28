@@ -864,7 +864,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       // Multi-currency fields
       currency,
       exchangeRate: exchangeRate.toString(), // Store as string to match schema
-      foreignAmount: currency !== homeCurrency ? totalAmount : null, // Only set foreignAmount if using foreign currency
+      foreignAmount: totalAmount, // Always set foreignAmount (equals totalAmount for home currency)
     };
     
     // Calculate the line item amounts and ensure salesTaxId and productId are properly handled
