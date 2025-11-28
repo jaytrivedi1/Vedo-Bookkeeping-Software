@@ -130,7 +130,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   // Extract next invoice number or use existing
   const today = new Date();
-  const defaultInvoiceNumber = isEditing ? invoice?.reference : `1001`;
+  
+  // Fetch next invoice number from backend when creating a new invoice
+  const { data: nextInvoiceData } = useQuery<{ nextNumber: string }>({
+    queryKey: ['/api/invoices/next-number'],
+    enabled: !isEditing,
+  });
+  
+  const defaultInvoiceNumber = isEditing ? invoice?.reference : (nextInvoiceData?.nextNumber || '1001');
 
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
@@ -287,6 +294,13 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       setWatchContactId(watchedContactId);
     }
   }, [watchedContactId]);
+  
+  // Update the reference field when next invoice number loads (only for new invoices)
+  useEffect(() => {
+    if (!isEditing && nextInvoiceData?.nextNumber) {
+      form.setValue('reference', nextInvoiceData.nextNumber);
+    }
+  }, [nextInvoiceData, isEditing, form]);
   
   // Fetch exchange rate when currency or date changes
   const invoiceDate = form.watch("date") || new Date();
