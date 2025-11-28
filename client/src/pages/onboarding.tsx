@@ -32,12 +32,15 @@ export default function Onboarding() {
     setLoading(true);
     
     try {
-      await apiRequest('/api/companies', 'POST', {
+      const newCompany = await apiRequest('/api/companies', 'POST', {
         name: companyName.trim(),
-        isDefault: true,
       });
       
+      // Set the newly created company as the default/active company
+      await apiRequest(`/api/companies/${newCompany.id}/set-default`, 'POST');
+      
       await queryClient.invalidateQueries({ queryKey: ['/api/companies'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/companies/default'] });
       
       toast({
         title: 'Success',
