@@ -65,6 +65,7 @@ interface BankConnectionSummary {
 
 interface AdminCompany {
   id: number;
+  companyCode: string | null;
   name: string;
   taxId: string | null;
   email: string | null;
@@ -192,6 +193,7 @@ export default function AdminDashboard() {
     const searchLower = companySearch.toLowerCase();
     return (
       company.name.toLowerCase().includes(searchLower) ||
+      (company.companyCode && company.companyCode.toLowerCase().includes(searchLower)) ||
       (company.taxId && company.taxId.toLowerCase().includes(searchLower)) ||
       (company.email && company.email.toLowerCase().includes(searchLower))
     );
@@ -329,7 +331,7 @@ export default function AdminDashboard() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-16">ID</TableHead>
+                          <TableHead className="w-32">Company ID</TableHead>
                           <TableHead>Company Name</TableHead>
                           <TableHead>Country</TableHead>
                           <TableHead>Currency</TableHead>
@@ -350,8 +352,8 @@ export default function AdminDashboard() {
                         ) : (
                           filteredCompanies.map((company) => (
                             <TableRow key={company.id} data-testid={`row-company-${company.id}`}>
-                              <TableCell className="font-mono text-sm text-gray-500">
-                                #{company.id}
+                              <TableCell className="font-mono text-sm text-blue-600">
+                                {company.companyCode || `#${company.id}`}
                               </TableCell>
                               <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">

@@ -76,6 +76,9 @@ app.use((req, res, next) => {
     // Run company table migration to create companies and set up default company
     await migrateCompanyTable();
     
+    // Add unique company codes (VED-XXXXXXXX format) - must be right after companies table is created
+    await addCompanyCodeMigration();
+    
     // Run user_companies table migration (must be after companies table)
     await addUserCompaniesTable();
     
@@ -138,9 +141,6 @@ app.use((req, res, next) => {
     
     // Add invoice activities and secure token support
     await migrateInvoiceActivities();
-    
-    // Add unique company codes (VED-XXXXXXXX format)
-    await addCompanyCodeMigration();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }

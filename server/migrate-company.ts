@@ -1,17 +1,20 @@
 import { db } from './db';
-import { companiesSchema } from '@shared/schema';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 async function migrateCompanyTable() {
   console.log('Starting migration to create companies table...');
   
   try {
-    // Check if companies table exists
-    try {
-      await db.select().from(companiesSchema).limit(1);
-      console.log('Companies table already exists. Checking for default company...');
-    } catch (err) {
-      // Create companies table
+    // Check if companies table exists using raw SQL
+    const tableExists = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'companies'
+      )
+    `);
+    
+    if (!tableExists.rows[0]?.exists) {
+      // Create companies table with base columns (company_code added by separate migration)
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS companies (
           id SERIAL PRIMARY KEY,
@@ -29,22 +32,21 @@ async function migrateCompanyTable() {
         )
       `);
       console.log('Companies table created successfully.');
+    } else {
+      console.log('Companies table already exists. Checking for default company...');
     }
     
-    // Check if default company exists
-    const defaultCompanies = await db.select()
-      .from(companiesSchema)
-      .where(eq(companiesSchema.isDefault, true));
+    // Check if default company exists using raw SQL
+    const defaultCompanies = await db.execute(sql`
+      SELECT id FROM companies WHERE is_default = true LIMIT 1
+    `);
     
-    if (defaultCompanies.length === 0) {
-      // Create default company
-      await db.insert(companiesSchema).values({
-        name: 'My Company',
-        address: '123 Main St, City, Country',
-        phone: '(555) 123-4567',
-        email: 'contact@mycompany.com',
-        isDefault: true
-      });
+    if (defaultCompanies.rows.length === 0) {
+      // Create default company using raw SQL
+      await db.execute(sql`
+        INSERT INTO companies (name, phone, email, is_default)
+        VALUES ('My Company', '(555) 123-4567', 'contact@mycompany.com', true)
+      `);
       console.log('Default company created successfully.');
     } else {
       console.log('Default company already exists.');

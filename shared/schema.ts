@@ -479,6 +479,7 @@ export const insertPreferencesSchema = createInsertSchema(preferencesSchema)
   });
 export const insertCompaniesSchema = createInsertSchema(companiesSchema).omit({ 
   id: true, 
+  companyCode: true,
   createdAt: true, 
   updatedAt: true,
   isDefault: true
