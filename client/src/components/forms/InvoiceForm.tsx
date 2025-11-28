@@ -805,10 +805,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
     }
   };
 
-  // Update totals whenever line items change or tax mode changes
+  // Update totals whenever line items change, tax mode changes, or credits are applied
   useEffect(() => {
     calculateTotals();
-  }, [fields.length, isExclusiveOfTax]);
+  }, [fields.length, isExclusiveOfTax, appliedCredits]);
 
   // Update due date when invoice date changes and watch for contactId changes
   useEffect(() => {
