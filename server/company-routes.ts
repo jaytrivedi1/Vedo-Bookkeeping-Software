@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 import { storage } from "./storage";
-import { insertCompanySchema } from "@shared/schema";
+import { insertCompaniesSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -115,7 +115,7 @@ companyRouter.post("/", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Authentication required" });
     }
     
-    const companyData = insertCompanySchema.parse(req.body);
+    const companyData = insertCompaniesSchema.parse(req.body);
     const company = await storage.createCompany(companyData);
     
     // Automatically assign the creating user to this company as admin
@@ -139,7 +139,7 @@ companyRouter.post("/", async (req: Request, res: Response) => {
 companyRouter.patch("/:id", async (req: Request, res: Response) => {
   try {
     const id = parseInt(req.params.id);
-    const companyData = insertCompanySchema.partial().parse(req.body);
+    const companyData = insertCompaniesSchema.partial().parse(req.body);
     const company = await storage.updateCompany(id, companyData);
     
     if (!company) {
