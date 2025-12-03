@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AddressAutocomplete } from '@/components/ui/address-autocomplete';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -80,14 +81,6 @@ const FISCAL_MONTHS = [
   { value: '12', label: 'December' },
 ];
 
-const COUNTRIES = [
-  { value: 'CA', label: 'Canada' },
-  { value: 'US', label: 'United States' },
-  { value: 'UK', label: 'United Kingdom' },
-  { value: 'AU', label: 'Australia' },
-  { value: 'other', label: 'Other' },
-];
-
 interface CompanyData {
   name: string;
   industry: string;
@@ -131,7 +124,7 @@ export default function Onboarding() {
     city: '',
     state: '',
     postalCode: '',
-    country: 'CA',
+    country: 'Canada',
     phone: '',
     email: user?.email || '',
     website: '',
@@ -166,8 +159,8 @@ export default function Onboarding() {
           toast({ title: 'Required', description: 'Please enter your city', variant: 'destructive' });
           return false;
         }
-        if (!companyData.country) {
-          toast({ title: 'Required', description: 'Please select your country', variant: 'destructive' });
+        if (!companyData.country.trim()) {
+          toast({ title: 'Required', description: 'Please enter your country', variant: 'destructive' });
           return false;
         }
         return true;
@@ -289,14 +282,26 @@ export default function Onboarding() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="street1">Street Address</Label>
-              <Input
-                id="street1"
-                type="text"
+              <AddressAutocomplete
                 value={companyData.street1}
-                onChange={(e) => updateField('street1', e.target.value)}
-                placeholder="123 Main Street"
+                onChange={(value) => updateField('street1', value)}
+                onSelect={(address) => {
+                  setCompanyData(prev => ({
+                    ...prev,
+                    street1: address.street1,
+                    street2: address.street2 || prev.street2,
+                    city: address.city,
+                    state: address.state,
+                    postalCode: address.postalCode,
+                    country: address.country || prev.country,
+                  }));
+                }}
+                placeholder="Start typing to search address..."
                 data-testid="input-street1"
               />
+              <p className="text-xs text-muted-foreground">
+                Start typing to search and auto-fill your address
+              </p>
             </div>
             
             <div className="space-y-2">
@@ -352,16 +357,14 @@ export default function Onboarding() {
               
               <div className="space-y-2">
                 <Label htmlFor="country">Country *</Label>
-                <Select value={companyData.country} onValueChange={(v) => updateField('country', v)}>
-                  <SelectTrigger id="country" data-testid="select-country">
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="country"
+                  type="text"
+                  value={companyData.country}
+                  onChange={(e) => updateField('country', e.target.value)}
+                  placeholder="Canada"
+                  data-testid="input-country"
+                />
               </div>
             </div>
             
