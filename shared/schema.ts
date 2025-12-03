@@ -431,6 +431,10 @@ export const companiesSchema = pgTable('companies', {
   taxId: text('tax_id'),
   logoUrl: text('logo_url'),
   fiscalYearStartMonth: integer('fiscal_year_start_month').default(1), // 1=January, 12=December
+  industry: text('industry'), // e.g., "Retail", "Professional Services", "Construction"
+  companyType: text('company_type'), // e.g., "sole_proprietor", "partnership", "corporation", "llc"
+  previousSoftware: text('previous_software'), // e.g., "quickbooks", "freshbooks", "wave", "spreadsheets", "none"
+  referralSource: text('referral_source'), // e.g., "google", "friend", "accountant", "social_media", "other"
   isActive: boolean('is_active').default(true),
   isDefault: boolean('is_default').default(false),
   createdAt: timestamp('created_at').defaultNow(),
