@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,16 @@ import { Building2 } from 'lucide-react';
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { login, register } = useAuth();
   const { toast } = useToast();
+
+  // Parse URL params to determine initial tab
+  const urlParams = new URLSearchParams(searchString);
+  const initialTab = urlParams.get('tab') === 'register' ? 'register' : 'login';
+  
+  // Tab state
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -28,6 +36,17 @@ export default function Login() {
       setRememberMe(true);
     }
   }, []);
+  
+  // Update tab when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const tabParam = params.get('tab');
+    if (tabParam === 'register') {
+      setActiveTab('register');
+    } else if (tabParam === 'login' || !tabParam) {
+      setActiveTab('login');
+    }
+  }, [searchString]);
 
   // Register form state
   const [registerEmail, setRegisterEmail] = useState('');
@@ -128,10 +147,10 @@ export default function Login() {
             <CardDescription>Sign in to your account or create a new one</CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="register">Register</TabsTrigger>
+                <TabsTrigger value="login" data-testid="tab-login">Login</TabsTrigger>
+                <TabsTrigger value="register" data-testid="tab-register">Sign Up</TabsTrigger>
               </TabsList>
 
               <TabsContent value="login">
@@ -181,6 +200,17 @@ export default function Login() {
                   >
                     {loginLoading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  <p className="text-center text-sm text-muted-foreground mt-4">
+                    Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('register')}
+                      className="text-primary hover:underline font-medium"
+                      data-testid="link-signup"
+                    >
+                      Sign up
+                    </button>
+                  </p>
                 </form>
               </TabsContent>
 
@@ -253,6 +283,17 @@ export default function Login() {
                   >
                     {registerLoading ? 'Creating account...' : 'Create Account'}
                   </Button>
+                  <p className="text-center text-sm text-muted-foreground mt-4">
+                    Already have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('login')}
+                      className="text-primary hover:underline font-medium"
+                      data-testid="link-login"
+                    >
+                      Sign in
+                    </button>
+                  </p>
                 </form>
               </TabsContent>
             </Tabs>

@@ -124,13 +124,18 @@ function Router() {
     );
   }
 
-  const isPublicRoute = location === '/login' || location === '/onboarding' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
+  const isPublicRoute = location === '/login' || location === '/signup' || location === '/onboarding' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
+  
+  // Redirect /signup to /login?tab=register
+  if (location === '/signup') {
+    return <Redirect to="/login?tab=register" />;
+  }
   
   if (!user && !isPublicRoute) {
     return <Redirect to="/login" />;
   }
 
-  if (user && location === '/login') {
+  if (user && (location === '/login' || location === '/signup')) {
     return <Redirect to="/" />;
   }
   
