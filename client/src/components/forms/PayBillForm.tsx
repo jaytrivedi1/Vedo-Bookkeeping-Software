@@ -59,6 +59,8 @@ import { Separator } from "@/components/ui/separator";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Contact, Transaction, Account } from "@shared/schema";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 
 // Form validation schema
 const payBillSchema = z.object({
@@ -116,6 +118,9 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
   const [totalSelected, setTotalSelected] = useState(0);
   const [totalChequeCredits, setTotalChequeCredits] = useState(0);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
 
   // Form setup
   const form = useForm<PayBillFormValues>({
@@ -165,6 +170,104 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     label: `${account.name} (${account.code})`,
     subtitle: undefined
   })) || [];
+
+  // Fetch preferences for multi-currency settings
+  const { data: preferences } = useQuery<any>({
+    queryKey: ['/api/preferences'],
+  });
+
+  // Get home currency from preferences
+  const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
+
+  // Fetch all accounts (unfiltered) for currency lookup
+  const { data: allAccountsUnfiltered } = useQuery<Account[]>({
+    queryKey: ['/api/accounts'],
+  });
+
+  // Watch for payment account changes to detect foreign currency
+  const paymentAccountId = form.watch("paymentAccountId");
+  const paymentDate = form.watch("paymentDate") || new Date();
+  
+  // Detect foreign currency from selected payment account
+  const selectedPaymentAccount = allAccountsUnfiltered?.find(acc => acc.id === paymentAccountId);
+  const accountCurrency = selectedPaymentAccount?.currency || homeCurrency;
+  const isForeignCurrency = accountCurrency !== homeCurrency && isMultiCurrencyEnabled;
+
+  // Fetch exchange rate when foreign currency is detected
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: accountCurrency, toCurrency: homeCurrency, date: paymentDate }],
+    enabled: isForeignCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${accountCurrency}&toCurrency=${homeCurrency}&date=${format(paymentDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!isForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, isForeignCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: accountCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(paymentDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(paymentDate, 'PPP')}.`,
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error updating exchange rate",
+          description: error?.message || "Failed to update exchange rate in database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   // Fetch vendor's unapplied cheques (unapplied credits)
   const { data: vendorCheques, isLoading: isLoadingCheques } = useQuery({
@@ -549,6 +652,19 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 )}
               />
 
+              {isForeignCurrency && (
+                <div className="md:col-span-2 lg:col-span-1">
+                  <ExchangeRateInput
+                    fromCurrency={accountCurrency}
+                    toCurrency={homeCurrency}
+                    value={exchangeRate}
+                    onChange={handleExchangeRateChange}
+                    isLoading={exchangeRateLoading}
+                    date={paymentDate}
+                  />
+                </div>
+              )}
+
               <FormField
                 control={form.control}
                 name="referenceNumber"
@@ -920,6 +1036,17 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
         onAccountCreated={(accountId) => {
           form.setValue("paymentAccountId", accountId);
         }}
+      />
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        onConfirm={handleExchangeRateUpdate}
+        fromCurrency={accountCurrency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={paymentDate}
       />
     </div>
   );

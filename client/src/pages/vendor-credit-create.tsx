@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { Contact, Account, SalesTax } from "@shared/schema";
 import { formatContactName } from "@/lib/currencyUtils";
+import { format } from "date-fns";
 import {
   Form,
   FormField,
@@ -25,6 +26,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import AddVendorDialog from "@/components/dialogs/AddVendorDialog";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "@/components/dialogs/ExchangeRateUpdateDialog";
 
 // Define form schema for vendor credit
 const vendorCreditSchema = z.object({
@@ -55,6 +58,9 @@ export default function VendorCreditCreate() {
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
   const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
   const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
 
   // Fetch vendors (contacts of type "vendor")
   const { data: allContacts, isLoading: isLoadingContacts } = useQuery({
@@ -79,6 +85,7 @@ export default function VendorCreditCreate() {
   });
 
   const homeCurrency = preferences?.homeCurrency || 'USD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   useEffect(() => {
     if (allContacts) {
@@ -173,6 +180,90 @@ export default function VendorCreditCreate() {
       form.setValue("reference", nextCreditNumber);
     }
   }, [nextCreditNumber, form]);
+
+  // Watch for vendor and date changes to detect foreign currency
+  const contactId = form.watch("contactId");
+  const creditDate = form.watch("date") || new Date();
+  
+  // Detect foreign currency from selected vendor
+  const selectedVendor = allContacts?.find(c => c.id === contactId);
+  const vendorCurrency = selectedVendor?.currency || homeCurrency;
+  const isForeignCurrency = vendorCurrency !== homeCurrency && isMultiCurrencyEnabled;
+
+  // Fetch exchange rate when foreign currency is detected
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: vendorCurrency, toCurrency: homeCurrency, date: creditDate }],
+    enabled: isForeignCurrency,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${vendorCurrency}&toCurrency=${homeCurrency}&date=${format(creditDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!isForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, isForeignCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: vendorCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(creditDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(creditDate, 'PPP')}.`,
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error updating exchange rate",
+          description: error?.message || "Failed to update exchange rate in database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   useEffect(() => {
     if (salesTaxes && salesTaxes.length > 0) {
@@ -404,6 +495,20 @@ export default function VendorCreditCreate() {
                     </div>
                   </div>
 
+                  {/* Exchange Rate Section for Foreign Currency Vendors */}
+                  {isForeignCurrency && (
+                    <div className="rounded-lg border bg-muted/50 p-4">
+                      <ExchangeRateInput
+                        fromCurrency={vendorCurrency}
+                        toCurrency={homeCurrency}
+                        rate={exchangeRate}
+                        onRateChange={handleExchangeRateChange}
+                        isLoading={exchangeRateLoading}
+                        data-testid="exchange-rate-input"
+                      />
+                    </div>
+                  )}
+
                   <div>
                     <Label htmlFor="description">Description / Reason</Label>
                     <Textarea
@@ -608,6 +713,17 @@ export default function VendorCreditCreate() {
           </Tabs>
         </form>
       </Form>
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        onConfirm={handleExchangeRateUpdate}
+        fromCurrency={vendorCurrency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={creditDate}
+      />
     </div>
   );
 }

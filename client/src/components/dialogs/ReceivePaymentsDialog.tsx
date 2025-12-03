@@ -193,7 +193,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
     }
 
     // Final validation: ensure no amount exceeds invoice balance
-    for (const [invoiceId, amountToApply] of selectedInvoices.entries()) {
+    for (const [invoiceId, amountToApply] of Array.from(selectedInvoices.entries())) {
       const invoice = filteredInvoices.find(inv => inv.id === invoiceId);
       if (invoice && amountToApply > invoice.balance + 0.01) {
         return; // Shouldn't happen with input validation, but safety check

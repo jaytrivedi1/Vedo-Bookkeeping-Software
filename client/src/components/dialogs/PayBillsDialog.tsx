@@ -193,7 +193,7 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
     }
 
     // Final validation: ensure no amount exceeds bill balance
-    for (const [billId, amountToApply] of selectedBills.entries()) {
+    for (const [billId, amountToApply] of Array.from(selectedBills.entries())) {
       const bill = filteredBills.find(b => b.id === billId);
       if (bill && amountToApply > bill.balance + 0.01) {
         return; // Shouldn't happen with input validation, but safety check

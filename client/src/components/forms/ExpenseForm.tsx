@@ -214,8 +214,31 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
     name: "lineItems",
   });
 
-  // Fetch exchange rate when currency or date changes
+  // Watch for payment account changes to detect foreign currency
+  const paymentAccountId = form.watch("paymentAccountId");
+  const contactId = form.watch("contactId");
   const expenseDate = form.watch("paymentDate") || form.watch("date") || new Date();
+  
+  // Detect foreign currency from selected payment account
+  const selectedPaymentAccount = accounts?.find(acc => acc.id === paymentAccountId);
+  const accountCurrency = selectedPaymentAccount?.currency || homeCurrency;
+  
+  // Also check vendor currency if a vendor is selected
+  const selectedVendor = contacts?.find(c => c.id === contactId);
+  const vendorCurrency = selectedVendor?.currency || null;
+  
+  // Determine the effective currency: prefer account currency if it's foreign, otherwise use vendor currency
+  const effectiveCurrency = accountCurrency !== homeCurrency ? accountCurrency : (vendorCurrency || homeCurrency);
+  const isForeignCurrency = effectiveCurrency !== homeCurrency && isMultiCurrencyEnabled;
+  
+  // Sync currency state with effective currency
+  useEffect(() => {
+    if (isMultiCurrencyEnabled && !isEditing) {
+      setCurrency(effectiveCurrency);
+    }
+  }, [effectiveCurrency, isMultiCurrencyEnabled, isEditing]);
+
+  // Fetch exchange rate when currency or date changes
   const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
     queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: expenseDate }],
     enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
@@ -224,7 +247,6 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
         `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(expenseDate, 'yyyy-MM-dd')}`
       );
       if (!response.ok) {
-        // If no exchange rate found, return null to show warning
         if (response.status === 404) return null;
         throw new Error('Failed to fetch exchange rate');
       }
@@ -771,7 +793,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                     <Select 
                       value={currency} 
                       onValueChange={(value) => setCurrency(value)}
-                      disabled={isEditing || !!watchContactId}
+                      disabled={isEditing || isForeignCurrency}
                     >
                       <SelectTrigger className="bg-white border-gray-300 h-10">
                         <SelectValue placeholder="Select currency" />

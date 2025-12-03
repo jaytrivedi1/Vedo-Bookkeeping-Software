@@ -180,12 +180,12 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     defaultValues: isEditing ? {
       date: initialDate,
       contactId: cheque?.contactId || 0,
-      reference: cheque?.reference || undefined,
-      description: cheque?.description || undefined,
+      reference: cheque?.reference || '',
+      description: cheque?.description || '',
       status: 'completed' as const,
       paymentAccountId: cheque?.paymentAccountId || 0,
       paymentDate: initialPaymentDate,
-      memo: cheque?.memo || undefined,
+      memo: cheque?.memo || '',
       lineItems: lineItems?.length ? lineItems.map(item => ({
         accountId: item.accountId || undefined,
         description: item.description,
@@ -210,8 +210,31 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
     name: "lineItems",
   });
   
-  // Fetch exchange rate when currency or date changes
+  // Watch for bank account changes to detect foreign currency
+  const paymentAccountId = form.watch("paymentAccountId");
+  const contactIdWatch = form.watch("contactId");
   const chequeDate = form.watch("paymentDate") || form.watch("date") || new Date();
+  
+  // Detect foreign currency from selected bank account
+  const selectedBankAccount = accounts?.find(acc => acc.id === paymentAccountId);
+  const accountCurrency = selectedBankAccount?.currency || homeCurrency;
+  
+  // Also check vendor currency if a vendor is selected
+  const selectedVendor = contacts?.find(c => c.id === contactIdWatch);
+  const vendorCurrency = selectedVendor?.currency || null;
+  
+  // Determine the effective currency: prefer account currency if it's foreign, otherwise use vendor currency
+  const effectiveCurrency = accountCurrency !== homeCurrency ? accountCurrency : (vendorCurrency || homeCurrency);
+  const isForeignCurrency = effectiveCurrency !== homeCurrency && isMultiCurrencyEnabled;
+  
+  // Sync currency state with effective currency
+  useEffect(() => {
+    if (isMultiCurrencyEnabled && !isEditing) {
+      setCurrency(effectiveCurrency);
+    }
+  }, [effectiveCurrency, isMultiCurrencyEnabled, isEditing]);
+
+  // Fetch exchange rate when currency or date changes
   const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
     queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: chequeDate }],
     enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
@@ -233,19 +256,6 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
       setCurrency(homeCurrency);
     }
   }, [homeCurrency, isEditing, cheque?.currency]);
-  
-  // Update currency when vendor changes (if not editing)
-  useEffect(() => {
-    const contactId = form.watch('contactId');
-    if (!isEditing && contactId && contacts && isMultiCurrencyEnabled) {
-      const vendor = contacts.find(c => c.id === contactId);
-      if (vendor && vendor.currency) {
-        setCurrency(vendor.currency);
-      } else {
-        setCurrency(homeCurrency);
-      }
-    }
-  }, [form.watch('contactId'), contacts, isEditing, isMultiCurrencyEnabled, homeCurrency]);
   
   // Keep currency in sync with homeCurrency when multi-currency is disabled
   useEffect(() => {
