@@ -245,6 +245,7 @@ export interface IStorage {
   getCompanyUsers(companyId: number): Promise<UserCompany[]>;
   assignUserToCompany(userCompany: InsertUserCompany): Promise<UserCompany>;
   updateUserCompanyRole(userId: number, companyId: number, role: string): Promise<UserCompany | undefined>;
+  updateUserCompanyPrimary(userId: number, companyId: number, isPrimary: boolean): Promise<UserCompany | undefined>;
   removeUserFromCompany(userId: number, companyId: number): Promise<boolean>;
   
   // Permissions
@@ -1276,6 +1277,22 @@ export class MemStorage implements IStorage {
     const updatedUserCompany: UserCompany = {
       ...userCompany,
       role,
+      updatedAt: new Date()
+    };
+    
+    this.userCompanies.set(key, updatedUserCompany);
+    return updatedUserCompany;
+  }
+
+  async updateUserCompanyPrimary(userId: number, companyId: number, isPrimary: boolean): Promise<UserCompany | undefined> {
+    const key = `${userId}-${companyId}`;
+    const userCompany = this.userCompanies.get(key);
+    
+    if (!userCompany) return undefined;
+    
+    const updatedUserCompany: UserCompany = {
+      ...userCompany,
+      isPrimary,
       updatedAt: new Date()
     };
     

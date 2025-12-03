@@ -117,10 +117,25 @@ companyRouter.get("/default", async (req: Request, res: Response) => {
   }
 });
 
-// Get specific company by ID
+// Get specific company by ID (tenant-aware)
 companyRouter.get("/:id", async (req: Request, res: Response) => {
   try {
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
     const id = parseInt(req.params.id);
+    const userId = req.user.id;
+    
+    // Check if user has access to this company
+    const userCompanies = await storage.getUserCompanies(userId);
+    const hasAccess = userCompanies.some(uc => uc.companyId === id);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Access denied to this company" });
+    }
+    
     const company = await storage.getCompany(id);
     
     if (!company) {
@@ -162,10 +177,25 @@ companyRouter.post("/", async (req: Request, res: Response) => {
   }
 });
 
-// Update company
+// Update company (tenant-aware)
 companyRouter.patch("/:id", async (req: Request, res: Response) => {
   try {
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
     const id = parseInt(req.params.id);
+    const userId = req.user.id;
+    
+    // Check if user has access to this company
+    const userCompanies = await storage.getUserCompanies(userId);
+    const hasAccess = userCompanies.some(uc => uc.companyId === id);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Access denied to this company" });
+    }
+    
     const companyData = insertCompaniesSchema.partial().parse(req.body);
     const company = await storage.updateCompany(id, companyData);
     
@@ -183,11 +213,36 @@ companyRouter.patch("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// Set default company
+// Set user's primary company (tenant-aware)
 companyRouter.post("/:id/set-default", async (req: Request, res: Response) => {
   try {
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    
     const id = parseInt(req.params.id);
-    const company = await storage.setDefaultCompany(id);
+    const userId = req.user.id;
+    
+    // Check if user has access to this company
+    const userCompanies = await storage.getUserCompanies(userId);
+    const hasAccess = userCompanies.some(uc => uc.companyId === id);
+    
+    if (!hasAccess) {
+      return res.status(403).json({ message: "Access denied to this company" });
+    }
+    
+    // Set this as the user's primary company
+    // First, unset any existing primary
+    for (const uc of userCompanies) {
+      if (uc.isPrimary) {
+        await storage.updateUserCompanyPrimary(userId, uc.companyId, false);
+      }
+    }
+    // Then set the new primary
+    await storage.updateUserCompanyPrimary(userId, id, true);
+    
+    const company = await storage.getCompany(id);
     
     if (!company) {
       return res.status(404).json({ message: "Company not found" });

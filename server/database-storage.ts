@@ -2638,6 +2638,20 @@ export class DatabaseStorage implements IStorage {
     return updatedUserCompany;
   }
 
+  async updateUserCompanyPrimary(userId: number, companyId: number, isPrimary: boolean): Promise<UserCompany | undefined> {
+    const [updatedUserCompany] = await db.update(userCompaniesSchema)
+      .set({ isPrimary })
+      .where(
+        and(
+          eq(userCompaniesSchema.userId, userId),
+          eq(userCompaniesSchema.companyId, companyId)
+        )
+      )
+      .returning();
+      
+    return updatedUserCompany;
+  }
+
   async removeUserFromCompany(userId: number, companyId: number): Promise<boolean> {
     try {
       const result = await db.delete(userCompaniesSchema)

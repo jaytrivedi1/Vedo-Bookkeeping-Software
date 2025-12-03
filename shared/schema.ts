@@ -557,6 +557,7 @@ export const userCompaniesSchema = pgTable('user_companies', {
   userId: integer('user_id').notNull().references(() => usersSchema.id),
   companyId: integer('company_id').notNull().references(() => companiesSchema.id),
   role: roleEnum('role').notNull().default('read_only'), // Role can be specific to a company
+  isPrimary: boolean('is_primary').default(false), // Indicates user's primary/default company
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
