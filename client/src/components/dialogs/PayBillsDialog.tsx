@@ -22,6 +22,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ExchangeRateInput } from "@/components/ui/exchange-rate-input";
+import { ExchangeRateUpdateDialog } from "./ExchangeRateUpdateDialog";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface Bill {
   id: number;
@@ -33,6 +37,8 @@ interface Bill {
   contactId: number;
   contactName?: string;
   status: string;
+  currency?: string;
+  exchangeRate?: string;
 }
 
 interface PayBillsDialogProps {
@@ -55,12 +61,25 @@ const roundTo2Decimals = (num: number): number => {
 };
 
 export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onConfirm }: PayBillsDialogProps) {
+  const { toast } = useToast();
   const [selectedBills, setSelectedBills] = useState<Map<number, number>>(new Map());
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [differenceAccountId, setDifferenceAccountId] = useState<string>("");
   const [differenceAmount, setDifferenceAmount] = useState<string>("");
   const [differenceDescription, setDifferenceDescription] = useState<string>("");
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [showExchangeRateDialog, setShowExchangeRateDialog] = useState(false);
+  const [pendingExchangeRate, setPendingExchangeRate] = useState<number | null>(null);
+
+  // Fetch preferences for home currency
+  const { data: preferences } = useQuery<any>({
+    queryKey: ["/api/preferences"],
+    enabled: open,
+  });
+  
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
+  const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
 
   // Fetch all open bills
   const { data: bills = [], isLoading } = useQuery<Bill[]>({
@@ -134,6 +153,107 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
 
   // Calculate remaining amount (rounded to 2 decimals)
   const remainingAmount = roundTo2Decimals(bankTransactionAmount - totalSelected);
+
+  // Detect foreign currency from selected bills
+  const selectedBillCurrency = useMemo(() => {
+    if (selectedBills.size === 0 || !isMultiCurrencyEnabled) return null;
+    
+    const selectedIds = Array.from(selectedBills.keys());
+    const selectedBillData = filteredBills.filter(bill => selectedIds.includes(bill.id));
+    
+    // Find if any selected bill has a foreign currency
+    const foreignCurrencyBills = selectedBillData.filter(
+      bill => bill.currency && bill.currency !== homeCurrency
+    );
+    
+    // Return the currency if all foreign currency bills share the same currency
+    if (foreignCurrencyBills.length > 0) {
+      const currencies = Array.from(new Set(foreignCurrencyBills.map(bill => bill.currency)));
+      if (currencies.length === 1) {
+        return currencies[0];
+      }
+    }
+    
+    return null;
+  }, [selectedBills, filteredBills, isMultiCurrencyEnabled, homeCurrency]);
+
+  const isForeignCurrency = selectedBillCurrency !== null;
+  const paymentDate = new Date();
+
+  // Fetch exchange rate when foreign currency is detected
+  const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
+    queryKey: ['/api/exchange-rates/rate', { fromCurrency: selectedBillCurrency, toCurrency: homeCurrency, date: paymentDate }],
+    enabled: isForeignCurrency && open,
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/exchange-rates/rate?fromCurrency=${selectedBillCurrency}&toCurrency=${homeCurrency}&date=${format(paymentDate, 'yyyy-MM-dd')}`
+      );
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error('Failed to fetch exchange rate');
+      }
+      return response.json();
+    },
+  });
+
+  // Update exchange rate when exchange rate data changes
+  useEffect(() => {
+    if (exchangeRateData && exchangeRateData.rate) {
+      setExchangeRate(parseFloat(exchangeRateData.rate));
+    } else if (!isForeignCurrency) {
+      setExchangeRate(1);
+    }
+  }, [exchangeRateData, isForeignCurrency]);
+
+  // Handle exchange rate changes from the ExchangeRateInput component
+  const handleExchangeRateChange = (newRate: number, shouldUpdate: boolean) => {
+    if (shouldUpdate) {
+      setPendingExchangeRate(newRate);
+      setShowExchangeRateDialog(true);
+    } else {
+      setExchangeRate(newRate);
+    }
+  };
+
+  // Handle exchange rate update dialog confirmation
+  const handleExchangeRateUpdate = async (scope: 'transaction_only' | 'all_on_date') => {
+    if (pendingExchangeRate === null || !selectedBillCurrency) return;
+
+    if (scope === 'transaction_only') {
+      setExchangeRate(pendingExchangeRate);
+      toast({
+        title: "Exchange rate updated",
+        description: "The rate has been updated for this transaction only.",
+      });
+    } else {
+      try {
+        await apiRequest('/api/exchange-rates', 'PUT', {
+          fromCurrency: selectedBillCurrency,
+          toCurrency: homeCurrency,
+          rate: pendingExchangeRate,
+          date: format(paymentDate, 'yyyy-MM-dd'),
+          scope: 'all_on_date'
+        });
+        
+        setExchangeRate(pendingExchangeRate);
+        queryClient.invalidateQueries({ queryKey: ['/api/exchange-rates'] });
+        
+        toast({
+          title: "Exchange rate updated",
+          description: `The rate has been updated for all transactions on ${format(paymentDate, 'PPP')}.`,
+        });
+      } catch (error: any) {
+        toast({
+          title: "Error updating exchange rate",
+          description: error?.message || "Failed to update exchange rate in database.",
+          variant: "destructive",
+        });
+      }
+    }
+    
+    setPendingExchangeRate(null);
+    setShowExchangeRateDialog(false);
+  };
 
   // Auto-fill difference amount when remaining changes (only for positive remainders)
   useEffect(() => {
@@ -214,6 +334,12 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
         amount: diffAmount,
         description: differenceDescription || `Bank payment difference - ${format(new Date(), 'PP')}`,
       };
+    }
+
+    // Include exchange rate data for foreign currency payments
+    if (isForeignCurrency && selectedBillCurrency) {
+      data.exchangeRate = exchangeRate;
+      data.currency = selectedBillCurrency;
     }
 
     onConfirm(data);
@@ -333,6 +459,22 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
             </div>
           </ScrollArea>
 
+          {/* Exchange Rate Section for Foreign Currency Bills */}
+          {isForeignCurrency && selectedBillCurrency && (
+            <div className="rounded-lg border bg-muted/50 p-4">
+              <ExchangeRateInput
+                fromCurrency={selectedBillCurrency}
+                toCurrency={homeCurrency}
+                value={exchangeRate}
+                onChange={handleExchangeRateChange}
+                isLoading={exchangeRateLoading}
+              />
+              <div className="text-xs text-muted-foreground mt-2">
+                Selected bills are in {selectedBillCurrency}. Payment will use this exchange rate.
+              </div>
+            </div>
+          )}
+
           {/* Difference Section */}
           {Math.abs(remainingAmount) > 0.01 && (
             <div className="space-y-3 border rounded-md p-4 bg-blue-50">
@@ -422,6 +564,17 @@ export function PayBillsDialog({ open, onOpenChange, bankTransactionAmount, onCo
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ExchangeRateUpdateDialog
+        open={showExchangeRateDialog}
+        onOpenChange={setShowExchangeRateDialog}
+        onConfirm={handleExchangeRateUpdate}
+        fromCurrency={selectedBillCurrency || homeCurrency}
+        toCurrency={homeCurrency}
+        oldRate={exchangeRate}
+        newRate={pendingExchangeRate || exchangeRate}
+        date={paymentDate}
+      />
     </Dialog>
   );
 }

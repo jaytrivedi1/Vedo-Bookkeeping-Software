@@ -501,10 +501,9 @@ export default function CustomerCreditCreate() {
                       <ExchangeRateInput
                         fromCurrency={customerCurrency}
                         toCurrency={homeCurrency}
-                        rate={exchangeRate}
-                        onRateChange={handleExchangeRateChange}
+                        value={exchangeRate}
+                        onChange={handleExchangeRateChange}
                         isLoading={exchangeRateLoading}
-                        data-testid="exchange-rate-input"
                       />
                     </div>
                   )}
