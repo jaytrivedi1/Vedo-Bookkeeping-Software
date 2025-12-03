@@ -76,14 +76,41 @@ companyRouter.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Get default company
+// Get user's default company (tenant-aware)
 companyRouter.get("/default", async (req: Request, res: Response) => {
   try {
-    const company = await storage.getDefaultCompany();
-    if (!company) {
-      return res.status(404).json({ message: "No default company found" });
+    // Check if user is authenticated
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Authentication required" });
     }
-    res.json(company);
+    
+    const userId = req.user.id;
+    
+    // Get user's company assignments
+    const userCompanies = await storage.getUserCompanies(userId);
+    
+    // If user has no company assignments, return 404
+    if (userCompanies.length === 0) {
+      return res.status(404).json({ message: "No companies found for user" });
+    }
+    
+    // First check if the user has a primary company assignment
+    const primaryAssignment = userCompanies.find(uc => uc.isPrimary);
+    
+    if (primaryAssignment) {
+      const company = await storage.getCompany(primaryAssignment.companyId);
+      if (company) {
+        return res.json(company);
+      }
+    }
+    
+    // Otherwise return the first company they have access to
+    const firstCompany = await storage.getCompany(userCompanies[0].companyId);
+    if (firstCompany) {
+      return res.json(firstCompany);
+    }
+    
+    return res.status(404).json({ message: "No accessible companies found" });
   } catch (error) {
     console.error("Error fetching default company:", error);
     res.status(500).json({ message: "Failed to fetch default company" });

@@ -118,7 +118,8 @@ export default function Login() {
         title: 'Success',
         description: 'Account created successfully',
       });
-      setLocation('/');
+      // New users go to onboarding to create their first company
+      setLocation('/onboarding');
     } catch (error: any) {
       toast({
         title: 'Error',
