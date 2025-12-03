@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { queryClient } from '@/lib/queryClient';
 
 interface User {
   id: number;
@@ -90,6 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       credentials: 'include',
     });
+    // Clear all cached data to ensure fresh state for next user
+    queryClient.clear();
     setUser(null);
   };
 

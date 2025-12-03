@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { queryClient } from '@/lib/queryClient';
 import { Building2 } from 'lucide-react';
 
 export default function Login() {
@@ -114,6 +115,11 @@ export default function Login() {
         registerFirstName,
         registerLastName
       );
+      
+      // Clear all cached data to ensure fresh state for new user
+      // This prevents stale company data from a previous session
+      queryClient.clear();
+      
       toast({
         title: 'Success',
         description: 'Account created successfully',
