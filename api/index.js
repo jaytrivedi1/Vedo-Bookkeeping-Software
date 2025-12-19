@@ -4533,7 +4533,7 @@ var init_recurringUtils = __esm({
   }
 });
 
-// api/index.ts
+// server/vercel-handler.ts
 import express4 from "express";
 
 // server/routes.ts
@@ -15364,7 +15364,7 @@ Respond in JSON format:
   return httpServer;
 }
 
-// api/index.ts
+// server/vercel-handler.ts
 var app = express4();
 app.use(express4.json());
 app.use(express4.urlencoded({ extended: false }));
