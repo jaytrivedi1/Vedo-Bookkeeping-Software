@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Build outputs (except dist/public which is the output)
+dist/index.js
+
+# Development files
+.git
+.gitignore
+*.md
+!README.md
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Replit specific
+.replit
+replit.nix
+
+# Local data
+*.sql
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Environment files (should be in Vercel dashboard)
+.env
+.env.local
+.env.*.local
