@@ -2750,12 +2750,11 @@ ALTER TABLE ONLY public.users
 
 \unrestrict D2fYRVBZm0D87YktRg81PC9An1QpxmFgaM8fIrMIKbKvvlJFEwdwGVHaUMSr2Ue
 
-
--- DATA INSERTS --
 --
 -- PostgreSQL database dump
 --
 
+\restrict 6XpNJCxIIspqA9JCrVO2kRrnarIuaaeolLuvAPPUfwpRxoXhQ7WabI1yFd0W0lb
 
 -- Dumped from database version 16.11 (b740647)
 -- Dumped by pg_dump version 16.10
@@ -2874,8 +2873,13 @@ INSERT INTO public.bank_accounts VALUES (1, 1, 'jMKoB9oNblt96yaoxl4NsWLP3AwkX3u6
 INSERT INTO public.contacts VALUES (2, 'Tech Supplies Inc.', 'Jane Doe', 'jane@techsupplies.example', '555-987-6543', '456 Vendor St, Supplier Town, 54321', 'vendor', 'USD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (4, 'Splendid Support Inc.', 'Mr. Joe Splendid', 'joe@splendidsupport.com', '4161237890', '', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (6, 'The Customer Company', 'Mr. Customer', 'customer@company.example', '789-456-1230', '111, The Customer Street
+Customer City, ON L5J 1S6', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (7, 'Super Supplier Inc.', 'Joseph Super', 'jsuper@supers.com', '905-123-4567', '123 Super Street,
+Super City
+ON A1A 1A1', 'vendor', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (5, 'ABC Enterprise Inc.', 'Mr. ABC', 'abc@abc.com', '4161234567', '123, ABC Road
+Oakville
+ON', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (8, 'Tropical Smoothie Cafe', '', 'trp@cafe.com', '', '', 'vendor', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (11, 'USA Client Inc.', '', '', '', NULL, 'customer', 'USD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (12, 'USA Vendor Inc.', '', '', '', NULL, 'vendor', 'USD', 0, '{}', true);
@@ -4938,4 +4942,5 @@ SELECT pg_catalog.setval('public.users_id_seq', 4, true);
 -- PostgreSQL database dump complete
 --
 
+\unrestrict 6XpNJCxIIspqA9JCrVO2kRrnarIuaaeolLuvAPPUfwpRxoXhQ7WabI1yFd0W0lb
 

@@ -1,3 +1,39 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict 6XpNJCxIIspqA9JCrVO2kRrnarIuaaeolLuvAPPUfwpRxoXhQ7WabI1yFd0W0lb
+
+-- Dumped from database version 16.11 (b740647)
+-- Dumped by pg_dump version 16.10
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Data for Name: __drizzle_migrations; Type: TABLE DATA; Schema: drizzle; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: accounting_firms; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: accounts; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.accounts VALUES (32, '1110', 'Accounts Receivable - USD', 'accounts_receivable', 'USD', '', 0, true, 'none');
 INSERT INTO public.accounts VALUES (1, '1000', 'Cash', 'bank', 'CAD', '', 26, true, 'none');
 INSERT INTO public.accounts VALUES (2, '1100', 'Accounts Receivable', 'accounts_receivable', 'CAD', '', 81864.98, true, 'operating');
@@ -30,31 +66,78 @@ INSERT INTO public.accounts VALUES (19, '2300', 'Business Credit Card', 'current
 INSERT INTO public.accounts VALUES (23, '2500', 'Test Account', 'other_current_liabilities', 'USD', 'TEST', 0, true, 'none');
 INSERT INTO public.accounts VALUES (35, NULL, 'Accounts Receivable - EUR', 'accounts_receivable', 'EUR', NULL, 1621.4, true, 'none');
 INSERT INTO public.accounts VALUES (22, '1050', 'RBC Bank 0123', 'bank', 'CAD', '', -88115.655, true, 'none');
+
+
+--
+-- Data for Name: companies; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.companies VALUES (1, 'My Company Inc.', '123 Main St, City, Country', '4167209432', 'info@vedoaccounting.com', '', '', '/uploads/company-logos/company-1.png', true, true, '2025-04-15 13:50:01.9235', '2025-04-15 13:50:01.9235', 4, '71-200 Veterans Dr', '', 'Brampton', 'Ontario', 'L7A 4S6', 'Canada', 'VED-2WHY694G', NULL, NULL, NULL, NULL);
 INSERT INTO public.companies VALUES (4, 'BCD Company', NULL, NULL, NULL, NULL, NULL, NULL, false, false, '2025-11-28 03:15:47.608161', '2025-11-28 03:15:47.608161', 1, NULL, NULL, NULL, NULL, NULL, NULL, 'VED-G86KSE3A', NULL, NULL, NULL, NULL);
 INSERT INTO public.companies VALUES (5, 'Open Secrets Inc.', NULL, NULL, NULL, NULL, NULL, NULL, false, false, '2025-12-03 18:22:55.938483', '2025-12-03 18:22:55.938483', 1, NULL, NULL, NULL, NULL, NULL, NULL, 'VED-BWDRVUMZ', NULL, NULL, NULL, NULL);
 INSERT INTO public.companies VALUES (3, 'Super Company LLC', NULL, NULL, NULL, NULL, NULL, NULL, false, false, '2025-11-27 13:02:01.469637', '2025-11-27 13:02:01.469637', 1, NULL, NULL, NULL, NULL, NULL, NULL, 'VED-B84RJ4AK', NULL, NULL, NULL, NULL);
 INSERT INTO public.companies VALUES (2, 'Super Vanity LLC', NULL, NULL, NULL, NULL, NULL, NULL, false, false, '2025-11-27 04:11:21.035822', '2025-11-27 04:11:21.035822', 1, NULL, NULL, NULL, NULL, NULL, NULL, 'VED-WFVVWASP', NULL, NULL, NULL, NULL);
+
+
+--
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.users VALUES (2, 'jay@excelfrontbiz.com', 'jay@excelfrontbiz.com', 'ddf07ff39360733c2c7b7fe52cdb65ae462fc72cbd890934e812fccbf5615435da1e60981be31b09df5f16cdfb7c53b10bada1923f1fb57e9450e1921699a8f5.88f801abbf970e1aa47e4991716f8765', 'Jay', 'Trivedi', 'admin', false, NULL, '2025-11-27 03:55:02.924132', '2025-11-27 03:55:02.924132', NULL, NULL, NULL);
 INSERT INTO public.users VALUES (3, 'jaytrivedi.ca@gmail.com', 'jaytrivedi.ca@gmail.com', 'ed579889fa4dbf2cf6a71a533950d61e4f385a312da0ba7ae48c0e29b48b5fd6edddf54c35db28457592142e0f32cf0e3a965be01a9ca4ed0977d12a67d70e0d.1d3899c6b0b0b0b50c29a7f8e771105c', 'Jay', 'Trivedi', 'admin', false, NULL, '2025-12-03 18:05:12.930633', '2025-12-03 18:05:12.930633', NULL, NULL, NULL);
 INSERT INTO public.users VALUES (4, 'jay@finledger.com', 'jay@finledger.com', 'af8c6b3bb52550810d72c08864111ec45eec1ad825b400be24645fd23fb826b63eff3e06be9f71f2a22e89561a3b41d5142c1b9aa9ac43290511f9f16e01ae95.1068d9db5d40ef2523f500c500c8944d', 'Jay', 'Bhai', 'admin', false, NULL, '2025-12-03 20:13:23.975552', '2025-12-03 20:13:23.975552', NULL, NULL, NULL);
 INSERT INTO public.users VALUES (1, 'admin', 'admin@finledger.com', '79d24e95bf6250f9e5d42d9436253cbaff9727d24af31bc886ecdd7d64ddc6ec2af37e6dac613b102e3a238e5c0b124ce223966e7add3f722aad0abf36f7ba76.6a22a5e24d07824e06b6b37fa0325c99', 'System', 'Administrator', 'admin', true, '2025-12-04 16:16:38.237', '2025-10-15 16:12:15.072796', '2025-10-15 16:12:15.072796', NULL, NULL, NULL);
+
+
+--
+-- Data for Name: activity_logs; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.activity_logs VALUES (1, 1, 'deleted', 'transaction', 338, '{"reference":"1015","type":"invoice","amount":2000,"contactId":13}', '172.31.70.162', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '2025-11-21 20:55:38.856104');
 INSERT INTO public.activity_logs VALUES (2, 1, 'deleted', 'transaction', 278, '{"reference":"X2543","type":"invoice","amount":2825,"contactId":1}', '172.31.70.162', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '2025-11-21 20:56:18.713426');
 INSERT INTO public.activity_logs VALUES (3, 1, 'deleted', 'transaction', 324, '{"reference":"SR-2025-1027-4533","type":"sales_receipt","amount":1695,"contactId":1}', '172.31.70.162', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '2025-11-21 20:56:33.687516');
 INSERT INTO public.activity_logs VALUES (4, 1, 'deleted', 'transaction', 332, '{"reference":"111","type":"expense","amount":565,"contactId":1}', '172.31.70.162', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '2025-11-21 21:02:24.067177');
 INSERT INTO public.activity_logs VALUES (5, 1, 'deleted', 'transaction', 347, '{"reference":"1001","type":"invoice","amount":2260,"contactId":5}', '172.31.97.162', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0', '2025-11-28 21:43:20.879203');
+
+
+--
+-- Data for Name: bank_connections; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.bank_connections VALUES (1, 'ogkA4GAQ5BuGaEvZPXq4UN7oPeNAl6iRr1Aoj', 'access-sandbox-d8515590-2072-4816-b4f9-75c7ea17257a', 'ins_39', 'RBC Royal Bank', '{jMKoB9oNblt96yaoxl4NsWLP3AwkX3u6K9pm1}', 'active', '2025-11-13 19:21:12.642', NULL, '2025-10-28 18:30:37.646722', '2025-10-28 18:30:37.646722');
+
+
+--
+-- Data for Name: bank_accounts; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.bank_accounts VALUES (1, 1, 'jMKoB9oNblt96yaoxl4NsWLP3AwkX3u6K9pm1', 'Checking', '7768', 'Plaid checking', 'depository', 'checking', 500, NULL, 22, true, '2025-10-28 18:30:37.727793', '2025-10-28 18:30:37.727793', '2025-11-13 19:21:12.703');
+
+
+--
+-- Data for Name: contacts; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.contacts VALUES (2, 'Tech Supplies Inc.', 'Jane Doe', 'jane@techsupplies.example', '555-987-6543', '456 Vendor St, Supplier Town, 54321', 'vendor', 'USD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (4, 'Splendid Support Inc.', 'Mr. Joe Splendid', 'joe@splendidsupport.com', '4161237890', '', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (6, 'The Customer Company', 'Mr. Customer', 'customer@company.example', '789-456-1230', '111, The Customer Street
+Customer City, ON L5J 1S6', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (7, 'Super Supplier Inc.', 'Joseph Super', 'jsuper@supers.com', '905-123-4567', '123 Super Street,
+Super City
+ON A1A 1A1', 'vendor', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (5, 'ABC Enterprise Inc.', 'Mr. ABC', 'abc@abc.com', '4161234567', '123, ABC Road
+Oakville
+ON', 'customer', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (8, 'Tropical Smoothie Cafe', '', 'trp@cafe.com', '', '', 'vendor', 'CAD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (11, 'USA Client Inc.', '', '', '', NULL, 'customer', 'USD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (12, 'USA Vendor Inc.', '', '', '', NULL, 'vendor', 'USD', 0, '{}', true);
 INSERT INTO public.contacts VALUES (13, 'Europe Customer Inc.', '', '', '', NULL, 'customer', 'EUR', 0, '{}', true);
+
+
+--
+-- Data for Name: sales_taxes; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.sales_taxes VALUES (4, 'HST ON', 'Ontario Harmonized Sales Tax', 13, 5, true, false, NULL, 0);
 INSERT INTO public.sales_taxes VALUES (1, 'GST', 'Goods and Services Tax', 5, 5, true, false, NULL, 0);
 INSERT INTO public.sales_taxes VALUES (5, 'Exempt', '', 0, 5, true, false, NULL, 0);
@@ -65,6 +148,12 @@ INSERT INTO public.sales_taxes VALUES (20, 'GST', 'Component of QST+GST', 5, 5, 
 INSERT INTO public.sales_taxes VALUES (2, 'Sask PST', 'Saskatchewan Provincial Sales Tax', 12, NULL, true, true, NULL, 0);
 INSERT INTO public.sales_taxes VALUES (23, 'GST', 'Component of Sask PST', 5, 5, true, false, 2, 0);
 INSERT INTO public.sales_taxes VALUES (24, 'PST', 'Component of Sask PST', 7, 24, true, false, 2, 1);
+
+
+--
+-- Data for Name: transactions; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.transactions VALUES (346, 'DEP-1764197132281', 'deposit', '2025-11-26 22:45:01.672', 'Deposit', 500, 4, 'unapplied_credit', -500, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 INSERT INTO public.transactions VALUES (320, '', 'expense', '2025-10-14 00:00:00', 'COMMERCIAL TAXES EMPTX 6432635', 1, NULL, 'completed', NULL, NULL, NULL, NULL, 22, '2025-10-14 00:00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 INSERT INTO public.transactions VALUES (321, 'TRF-2025-1023-1673', 'journal_entry', '2025-10-23 18:59:00.034', 'Transfer from RBC Bank 0123 to Cash', 1000, NULL, 'completed', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -87,6 +176,12 @@ INSERT INTO public.transactions VALUES (327, '', 'expense', '2025-08-01 00:00:00
 INSERT INTO public.transactions VALUES (329, '', 'expense', '2025-10-01 00:00:00', 'Bill Payment PAY-FILE FEES', 2, NULL, 'completed', NULL, NULL, NULL, NULL, 22, '2025-10-01 00:00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 INSERT INTO public.transactions VALUES (325, '', 'expense', '2025-09-02 00:00:00', 'Bill Payment PAY-FILE FEES', 4, NULL, 'completed', NULL, NULL, NULL, NULL, 22, '2025-09-02 00:00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 INSERT INTO public.transactions VALUES (344, NULL, 'expense', '2025-11-13 00:00:00', 'CASH APP TRANSFER', 30, NULL, 'completed', NULL, NULL, NULL, 'bank_transfer', 22, '2025-11-13 00:00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+
+--
+-- Data for Name: imported_transactions; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.imported_transactions VALUES (1, NULL, NULL, '2025-06-02 00:00:00', NULL, 'Monthly fee ', NULL, -6, 'USD', NULL, false, NULL, NULL, 'unmatched', '2025-10-15 22:53:29.844716', '2025-10-15 22:53:29.844716', 'csv', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
 INSERT INTO public.imported_transactions VALUES (174, 1, 'MeBkvzk675h9KWvG4lAgT1vMQZVq43ULXvRRb', '2025-10-30 00:00:00', '2025-10-30 00:00:00', '20 AMAZON - LEN N', 'Amazon', -14.470418, 'USD', '{}', true, 'online', NULL, 'unmatched', '2025-10-30 22:07:57.034258', '2025-10-30 22:07:57.034258', 'plaid', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
 INSERT INTO public.imported_transactions VALUES (3, NULL, NULL, '2025-06-02 00:00:00', NULL, 'Pay Employee-Vendor OFI002@00.85', NULL, -1.7, 'USD', NULL, false, NULL, NULL, 'unmatched', '2025-10-15 22:53:29.844716', '2025-10-15 22:53:29.844716', 'csv', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
@@ -367,8 +462,38 @@ INSERT INTO public.imported_transactions VALUES (278, 1, '9pgBQaBD8AtND7MZ5Qr9IK
 INSERT INTO public.imported_transactions VALUES (279, 1, 'yxZBLXByVeu95EQrRkN1iLGrBlrw3zi4qXZyr', '2025-11-12 00:00:00', '2025-11-12 00:00:00', 'Venmo', NULL, -411, 'USD', '{}', false, 'other', NULL, 'unmatched', '2025-11-13 19:21:06.942214', '2025-11-13 19:21:06.942214', 'plaid', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
 INSERT INTO public.imported_transactions VALUES (280, 1, 'RL4bvab685tQDKRZ4l1wcrdm8JmlEjfavbLRP', '2025-11-12 00:00:00', '2025-11-12 00:00:00', 'Walmart', 'Walmart', -18.06317, 'USD', '{}', false, 'in store', NULL, 'unmatched', '2025-11-13 19:21:07.129174', '2025-11-13 19:21:07.129174', 'plaid', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
 INSERT INTO public.imported_transactions VALUES (268, 1, '3eDm4rmoKphN9dKbaMkVCMdR4DxzAnTZAkoxz', '2025-11-13 00:00:00', '2025-11-13 00:00:00', 'CASH APP TRANSFER', NULL, -30, 'USD', '{}', false, 'other', 344, 'matched', '2025-11-13 19:21:04.863311', '2025-11-13 19:21:04.863311', 'plaid', 22, NULL, NULL, false, false, NULL, NULL, NULL, NULL);
+
+
+--
+-- Data for Name: bank_transaction_matches; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: categorization_rules; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: company_settings; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.company_settings VALUES (1, 'My Company Inc.', 'info@vedoaccounting.com', '4167209432', '123 Business Street, City, State, ZIP', '', '', NULL, '2025-11-17 21:35:39.464', 4, '71-200 Veterans Dr', '', 'Brampton', 'Ontario', 'L7A 4S6', 'Canada');
+
+
+--
+-- Data for Name: csv_mapping_preferences; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.csv_mapping_preferences VALUES (1, 1, 22, 'Date', 'Description 1', 'Amount', NULL, NULL, 'MM/DD/YYYY', true, '2025-10-15 22:53:30.04416', '2025-10-15 22:53:30.04416');
+
+
+--
+-- Data for Name: currencies; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.currencies VALUES (1, 'USD', 'US Dollar', '$', 2, true, '2025-11-04 19:35:31.367429');
 INSERT INTO public.currencies VALUES (2, 'EUR', 'Euro', '€', 2, true, '2025-11-04 19:35:31.367429');
 INSERT INTO public.currencies VALUES (3, 'GBP', 'British Pound', '£', 2, true, '2025-11-04 19:35:31.367429');
@@ -449,6 +574,18 @@ INSERT INTO public.currencies VALUES (77, 'MKD', 'Macedonian Denar', 'ден', 2
 INSERT INTO public.currencies VALUES (78, 'RSD', 'Serbian Dinar', 'дин', 2, true, '2025-11-04 19:35:31.563281');
 INSERT INTO public.currencies VALUES (79, 'ALL', 'Albanian Lek', 'L', 2, true, '2025-11-04 19:35:31.563281');
 INSERT INTO public.currencies VALUES (80, 'BAM', 'Bosnia Mark', 'KM', 2, true, '2025-11-04 19:35:31.563281');
+
+
+--
+-- Data for Name: currency_locks; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: exchange_rates; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.exchange_rates VALUES (1, 'CAD', 'AED', 2.602600, '2025-11-05', false, '2025-11-06 20:27:06.849315', '2025-11-06 20:27:06.849315');
 INSERT INTO public.exchange_rates VALUES (2, 'CAD', 'AFN', 47.049400, '2025-11-05', false, '2025-11-06 20:27:06.97171', '2025-11-06 20:27:06.97171');
 INSERT INTO public.exchange_rates VALUES (3, 'CAD', 'ALL', 59.554300, '2025-11-05', false, '2025-11-06 20:27:07.088339', '2025-11-06 20:27:07.088339');
@@ -1598,6 +1735,36 @@ INSERT INTO public.exchange_rates VALUES (1146, 'EUR', 'ZAR', 19.905200, '2025-1
 INSERT INTO public.exchange_rates VALUES (1147, 'EUR', 'ZMW', 26.421300, '2025-11-19', false, '2025-11-19 20:46:49.490052', '2025-11-19 20:46:49.490052');
 INSERT INTO public.exchange_rates VALUES (1148, 'EUR', 'ZWL', 30.568000, '2025-11-19', false, '2025-11-19 20:46:49.61223', '2025-11-19 20:46:49.61223');
 INSERT INTO public.exchange_rates VALUES (1149, 'CAD', 'ZWG', 18.746400, '2025-11-20', false, '2025-11-21 04:18:17.429862', '2025-11-21 04:18:17.429862');
+
+
+--
+-- Data for Name: firm_client_access; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: fx_realizations; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: fx_revaluations; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: invoice_activities; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: ledger_entries; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.ledger_entries VALUES (677, 254, 21, 'Bill A-101 - ', 300, 0, '2025-09-15 04:00:00', NULL, NULL, NULL);
 INSERT INTO public.ledger_entries VALUES (856, 316, 22, 'Deposit DEP-2025-10-21', 378, 0, '2025-10-21 19:23:26.048', NULL, NULL, NULL);
 INSERT INTO public.ledger_entries VALUES (857, 316, 10, 'Deposit DEP-2025-10-21', 0, 378, '2025-10-21 19:23:26.048', NULL, NULL, NULL);
@@ -1652,9 +1819,21 @@ INSERT INTO public.ledger_entries VALUES (882, 327, 22, 'Bill Payment PAY-FILE F
 INSERT INTO public.ledger_entries VALUES (838, 304, 16, 'Bill BILL-0003 - ', 2000, 0, '2025-10-01 04:00:00', NULL, NULL, NULL);
 INSERT INTO public.ledger_entries VALUES (839, 304, 5, 'Bill BILL-0003 - Tax', 260, 0, '2025-10-01 04:00:00', NULL, NULL, NULL);
 INSERT INTO public.ledger_entries VALUES (840, 304, 4, 'Bill BILL-0003', 0, 2260, '2025-10-01 04:00:00', NULL, NULL, NULL);
+
+
+--
+-- Data for Name: products; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.products VALUES (8, 'Bookkeeping', '', NULL, 'product', 0.00, 0.00, 10, NULL, true, '2025-04-14 14:52:08.227863', '2025-04-14 14:52:08.227863');
 INSERT INTO public.products VALUES (9, 'Year-End Accounting', '', NULL, 'product', 0.00, 0.00, 10, NULL, true, '2025-04-14 14:52:21.390283', '2025-04-14 14:52:21.390283');
 INSERT INTO public.products VALUES (10, 'Corporate Tax Return (T2)', '', NULL, 'product', 0.00, 0.00, 10, NULL, true, '2025-04-14 14:52:48.166739', '2025-04-14 14:52:48.166739');
+
+
+--
+-- Data for Name: line_items; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.line_items VALUES (134, 319, 'Misc Payment Wise', 1, 265.4601769911505, 265.4601769911505, 4, 16, NULL);
 INSERT INTO public.line_items VALUES (135, 320, 'COMMERCIAL TAXES EMPTX 6432635', 1, 1, 1, 5, 27, NULL);
 INSERT INTO public.line_items VALUES (137, 323, 'Bookkeeping', 1, 2000, 2000, 1, NULL, 8);
@@ -1673,53 +1852,343 @@ INSERT INTO public.line_items VALUES (117, 304, '', 1, 2000, 2000, 4, 16, NULL);
 INSERT INTO public.line_items VALUES (118, 305, '', 1, 1500, 1500, 4, 14, NULL);
 INSERT INTO public.line_items VALUES (119, 306, '', 1, 3000, 3000, 6, 4, NULL);
 INSERT INTO public.line_items VALUES (79, 254, '', 1, 300, 300, 1, 21, NULL);
+
+
+--
+-- Data for Name: payment_applications; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: preferences; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.preferences VALUES (1, false, true, NULL, '2025-11-26 19:03:03.382', true, 'CAD', '2025-11-06 21:35:47.921', 'classic', NULL);
+
+
+--
+-- Data for Name: reconciliations; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.reconciliations VALUES (1, 22, '2025-09-30 00:00:00', 10000, 0, 0, 'in_progress', '2025-10-28 00:49:37.414594', NULL, NULL);
 INSERT INTO public.reconciliations VALUES (2, 22, '2025-10-31 00:00:00', 10000, 0, 0, 'in_progress', '2025-10-30 13:45:12.549881', NULL, NULL);
 INSERT INTO public.reconciliations VALUES (3, 22, '2025-10-31 00:00:00', 25030, -6, 25036, 'in_progress', '2025-11-18 21:41:49.570901', NULL, NULL);
+
+
+--
+-- Data for Name: reconciliation_items; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.reconciliation_items VALUES (1, 3, 886, true);
 INSERT INTO public.reconciliation_items VALUES (2, 3, 884, true);
 INSERT INTO public.reconciliation_items VALUES (3, 3, 882, true);
+
+
+--
+-- Data for Name: recurring_templates; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: recurring_history; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: recurring_lines; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: session; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.session VALUES ('PmlqjZ0Iev4TyuZei6MsYplpCTD141Ps', '{"cookie":{"originalMaxAge":2592000000,"expires":"2025-11-28T23:01:46.098Z","secure":false,"httpOnly":true,"path":"/"},"passport":{"user":1}}', '2025-12-26 20:47:39');
 INSERT INTO public.session VALUES ('Oa-LmK709Ys9et2e3Fwu3ff7NnjRZWlk', '{"cookie":{"originalMaxAge":2592000000,"expires":"2026-01-03T16:16:38.416Z","secure":false,"httpOnly":true,"path":"/"},"passport":{"user":1}}', '2026-01-14 20:47:47');
 INSERT INTO public.session VALUES ('oRFu3a334QrbKhN7_wY9l4Nw_7r4GBdb', '{"cookie":{"originalMaxAge":2592000000,"expires":"2025-11-27T19:38:59.892Z","secure":false,"httpOnly":true,"path":"/"},"passport":{"user":1}}', '2025-12-27 18:59:03');
+
+
+--
+-- Data for Name: transaction_attachments; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Data for Name: user_companies; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
 INSERT INTO public.user_companies VALUES (1, 1, 1, 'admin', false, '2025-11-27 13:26:58.102879');
 INSERT INTO public.user_companies VALUES (2, 2, 4, 'admin', false, '2025-11-28 03:15:47.671929');
 INSERT INTO public.user_companies VALUES (3, 2, 1, 'admin', false, '2025-11-28 14:39:48.319956');
 INSERT INTO public.user_companies VALUES (4, 3, 5, 'admin', true, '2025-12-03 18:22:56.009553');
+
+
+--
+-- Data for Name: user_invitations; Type: TABLE DATA; Schema: public; Owner: neondb_owner
+--
+
+
+
+--
+-- Name: __drizzle_migrations_id_seq; Type: SEQUENCE SET; Schema: drizzle; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('drizzle.__drizzle_migrations_id_seq', 1, false);
+
+
+--
+-- Name: accounting_firms_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.accounting_firms_id_seq', 1, false);
+
+
+--
+-- Name: accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.accounts_id_seq', 35, true);
+
+
+--
+-- Name: activity_logs_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.activity_logs_id_seq', 5, true);
+
+
+--
+-- Name: bank_accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.bank_accounts_id_seq', 1, true);
+
+
+--
+-- Name: bank_connections_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.bank_connections_id_seq', 1, true);
+
+
+--
+-- Name: bank_transaction_matches_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.bank_transaction_matches_id_seq', 1, false);
+
+
+--
+-- Name: categorization_rules_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.categorization_rules_id_seq', 1, false);
+
+
+--
+-- Name: companies_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.companies_id_seq', 5, true);
+
+
+--
+-- Name: company_settings_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.company_settings_id_seq', 1, true);
+
+
+--
+-- Name: contacts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.contacts_id_seq', 13, true);
+
+
+--
+-- Name: csv_mapping_preferences_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.csv_mapping_preferences_id_seq', 1, true);
+
+
+--
+-- Name: currencies_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.currencies_id_seq', 80, true);
+
+
+--
+-- Name: currency_locks_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.currency_locks_id_seq', 1, false);
+
+
+--
+-- Name: exchange_rates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.exchange_rates_id_seq', 1149, true);
+
+
+--
+-- Name: firm_client_access_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.firm_client_access_id_seq', 1, false);
+
+
+--
+-- Name: fx_realizations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.fx_realizations_id_seq', 1, false);
+
+
+--
+-- Name: fx_revaluations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.fx_revaluations_id_seq', 1, false);
+
+
+--
+-- Name: imported_transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.imported_transactions_id_seq', 280, true);
+
+
+--
+-- Name: invoice_activities_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.invoice_activities_id_seq', 1, false);
+
+
+--
+-- Name: ledger_entries_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.ledger_entries_id_seq', 927, true);
+
+
+--
+-- Name: line_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.line_items_id_seq', 156, true);
+
+
+--
+-- Name: payment_applications_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.payment_applications_id_seq', 26, true);
+
+
+--
+-- Name: preferences_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.preferences_id_seq', 1, true);
+
+
+--
+-- Name: products_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.products_id_seq', 10, true);
+
+
+--
+-- Name: reconciliation_items_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.reconciliation_items_id_seq', 3, true);
+
+
+--
+-- Name: reconciliations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.reconciliations_id_seq', 3, true);
+
+
+--
+-- Name: recurring_history_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.recurring_history_id_seq', 1, false);
+
+
+--
+-- Name: recurring_lines_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.recurring_lines_id_seq', 1, false);
+
+
+--
+-- Name: recurring_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.recurring_templates_id_seq', 1, false);
+
+
+--
+-- Name: sales_taxes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.sales_taxes_id_seq', 24, true);
+
+
+--
+-- Name: transaction_attachments_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.transaction_attachments_id_seq', 1, false);
+
+
+--
+-- Name: transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.transactions_id_seq', 348, true);
+
+
+--
+-- Name: user_companies_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.user_companies_id_seq', 4, true);
+
+
+--
+-- Name: user_invitations_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.user_invitations_id_seq', 1, false);
+
+
+--
+-- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: neondb_owner
+--
+
 SELECT pg_catalog.setval('public.users_id_seq', 4, true);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict 6XpNJCxIIspqA9JCrVO2kRrnarIuaaeolLuvAPPUfwpRxoXhQ7WabI1yFd0W0lb
+
