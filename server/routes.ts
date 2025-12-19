@@ -8380,6 +8380,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create link token for Plaid Link
   apiRouter.post("/plaid/link-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const request = {
         user: {
           client_user_id: `user_${req.user?.id || 'default'}`,
@@ -8401,8 +8404,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Exchange public token for access token and save bank connection
   apiRouter.post("/plaid/exchange-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const { public_token, accountId } = req.body;
-      
+
       if (!public_token) {
         return res.status(400).json({ error: 'public_token is required' });
       }
@@ -8513,6 +8519,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sync transactions for a bank account
   apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const accountId = parseInt(req.params.accountId);
       const bankAccount = await storage.getBankAccount(accountId);
       

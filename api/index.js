@@ -5754,7 +5754,7 @@ adminRouter.delete("/bank-connections/:id", async (req, res) => {
       return res.status(404).json({ message: "Bank connection not found" });
     }
     try {
-      if (connection.accessToken && process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) {
+      if (connection.accessToken && plaidClient) {
         await plaidClient.itemRemove({
           access_token: connection.accessToken
         });
@@ -5810,19 +5810,21 @@ import { Configuration as Configuration2, PlaidApi as PlaidApi2, PlaidEnvironmen
 var PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID;
 var PLAID_SECRET = process.env.PLAID_SECRET;
 var PLAID_ENV = process.env.PLAID_ENV || "sandbox";
-if (!PLAID_CLIENT_ID || !PLAID_SECRET) {
-  throw new Error("PLAID_CLIENT_ID and PLAID_SECRET environment variables are required");
-}
-var configuration = new Configuration2({
-  basePath: PlaidEnvironments2[PLAID_ENV],
-  baseOptions: {
-    headers: {
-      "PLAID-CLIENT-ID": PLAID_CLIENT_ID,
-      "PLAID-SECRET": PLAID_SECRET
+var plaidClient2 = null;
+if (PLAID_CLIENT_ID && PLAID_SECRET) {
+  const configuration = new Configuration2({
+    basePath: PlaidEnvironments2[PLAID_ENV],
+    baseOptions: {
+      headers: {
+        "PLAID-CLIENT-ID": PLAID_CLIENT_ID,
+        "PLAID-SECRET": PLAID_SECRET
+      }
     }
-  }
-});
-var plaidClient2 = new PlaidApi2(configuration);
+  });
+  plaidClient2 = new PlaidApi2(configuration);
+} else {
+  console.warn("Plaid credentials not configured - bank connection features will be disabled");
+}
 var PLAID_PRODUCTS = [Products.Transactions];
 var PLAID_COUNTRY_CODES = [CountryCode.Us, CountryCode.Ca];
 
@@ -11971,6 +11973,9 @@ async function registerRoutes(app2) {
   });
   apiRouter.post("/plaid/link-token", requireAuth, async (req, res) => {
     try {
+      if (!plaidClient2) {
+        return res.status(503).json({ error: "Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables." });
+      }
       const request = {
         user: {
           client_user_id: `user_${req.user?.id || "default"}`
@@ -11989,6 +11994,9 @@ async function registerRoutes(app2) {
   });
   apiRouter.post("/plaid/exchange-token", requireAuth, async (req, res) => {
     try {
+      if (!plaidClient2) {
+        return res.status(503).json({ error: "Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables." });
+      }
       const { public_token, accountId } = req.body;
       if (!public_token) {
         return res.status(400).json({ error: "public_token is required" });
@@ -12074,6 +12082,9 @@ async function registerRoutes(app2) {
   });
   apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, async (req, res) => {
     try {
+      if (!plaidClient2) {
+        return res.status(503).json({ error: "Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables." });
+      }
       const accountId = parseInt(req.params.accountId);
       const bankAccount = await storage.getBankAccount(accountId);
       if (!bankAccount) {

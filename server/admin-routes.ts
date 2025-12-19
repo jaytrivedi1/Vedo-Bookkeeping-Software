@@ -197,7 +197,7 @@ adminRouter.delete("/bank-connections/:id", async (req: Request, res: Response) 
     
     // Try to revoke the Plaid access token (best effort)
     try {
-      if (connection.accessToken && process.env.PLAID_CLIENT_ID && process.env.PLAID_SECRET) {
+      if (connection.accessToken && plaidClient) {
         await plaidClient.itemRemove({
           access_token: connection.accessToken,
         });
