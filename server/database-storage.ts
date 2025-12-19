@@ -2713,7 +2713,7 @@ export class DatabaseStorage implements IStorage {
   async getRolePermissions(role: string): Promise<RolePermission[]> {
     return await db.select()
       .from(rolePermissionsSchema)
-      .where(eq(rolePermissionsSchema.role, role));
+      .where(eq(rolePermissionsSchema.role, role as "admin" | "staff" | "read_only" | "accountant"));
   }
 
   async addPermissionToRole(rolePermission: InsertRolePermission): Promise<RolePermission> {
@@ -2729,11 +2729,11 @@ export class DatabaseStorage implements IStorage {
       const result = await db.delete(rolePermissionsSchema)
         .where(
           and(
-            eq(rolePermissionsSchema.role, role),
+            eq(rolePermissionsSchema.role, role as "admin" | "staff" | "read_only" | "accountant"),
             eq(rolePermissionsSchema.permissionId, permissionId)
           )
         );
-        
+
       return result.rowCount !== null && result.rowCount > 0;
     } catch (error) {
       console.error(`Error removing permission ${permissionId} from role ${role}:`, error);
@@ -3223,13 +3223,13 @@ export class DatabaseStorage implements IStorage {
   async getFxRealizations(): Promise<FxRealization[]> {
     return await db.select()
       .from(fxRealizationsSchema)
-      .orderBy(desc(fxRealizationsSchema.realizationDate));
+      .orderBy(desc(fxRealizationsSchema.realizedDate));
   }
 
   async getFxRealizationsByTransaction(transactionId: number): Promise<FxRealization[]> {
     return await db.select()
       .from(fxRealizationsSchema)
-      .where(eq(fxRealizationsSchema.paymentTransactionId, transactionId));
+      .where(eq(fxRealizationsSchema.paymentId, transactionId));
   }
 
   async createFxRealization(fxRealization: InsertFxRealization): Promise<FxRealization> {
@@ -3616,7 +3616,7 @@ export class DatabaseStorage implements IStorage {
 
   // Recurring Invoices
   async getRecurringTemplates(filters?: { status?: string; customerId?: number }): Promise<(RecurringTemplate & { customerName?: string })[]> {
-    const conditions = [];
+    const conditions: any[] = [];
     if (filters?.status) {
       conditions.push(eq(recurringTemplatesSchema.status, filters.status as any));
     }
@@ -3624,18 +3624,17 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(recurringTemplatesSchema.customerId, filters.customerId));
     }
 
-    let query = db.select({
+    const baseQuery = db.select({
       template: recurringTemplatesSchema,
       customerName: contacts.name,
     })
     .from(recurringTemplatesSchema)
     .leftJoin(contacts, eq(recurringTemplatesSchema.customerId, contacts.id));
 
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
+    const results = conditions.length > 0
+      ? await baseQuery.where(and(...conditions)).orderBy(desc(recurringTemplatesSchema.createdAt))
+      : await baseQuery.orderBy(desc(recurringTemplatesSchema.createdAt));
 
-    const results = await query.orderBy(desc(recurringTemplatesSchema.createdAt));
     return results.map(r => ({ ...r.template, customerName: r.customerName || '' }));
   }
 
