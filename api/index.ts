@@ -39,10 +39,15 @@ async function initializeApp() {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
+    console.log('Starting route registration...');
+    console.log('DATABASE_URL set:', !!process.env.DATABASE_URL);
+    console.log('POSTGRES_URL set:', !!process.env.POSTGRES_URL);
+    console.log('SESSION_SECRET set:', !!process.env.SESSION_SECRET);
+
     // registerRoutes sets up auth and all API routes
-    // It also creates an HTTP server but we don't need it for Vercel
     await registerRoutes(app);
     isInitialized = true;
+    console.log('Route registration complete');
   })();
 
   return initPromise;
@@ -50,7 +55,18 @@ async function initializeApp() {
 
 // Export handler for Vercel
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await initializeApp();
+  try {
+    console.log('Handler called:', req.method, req.url);
+    await initializeApp();
+    console.log('App initialized successfully');
+  } catch (error) {
+    console.error('Initialization error:', error);
+    res.status(500).json({
+      error: 'Failed to initialize app',
+      message: error instanceof Error ? error.message : String(error)
+    });
+    return;
+  }
 
   // Create a promise that resolves when Express finishes handling the request
   return new Promise<void>((resolve, reject) => {
