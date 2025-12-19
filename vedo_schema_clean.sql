@@ -2,6 +2,7 @@
 -- PostgreSQL database dump
 --
 
+\restrict D2fYRVBZm0D87YktRg81PC9An1QpxmFgaM8fIrMIKbKvvlJFEwdwGVHaUMSr2Ue
 
 -- Dumped from database version 16.11 (b740647)
 -- Dumped by pg_dump version 16.10
@@ -24,7 +25,6 @@ SET row_security = off;
 CREATE SCHEMA drizzle;
 
 
-ALTER SCHEMA drizzle OWNER TO neondb_owner;
 
 --
 -- Name: account_type; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -49,7 +49,6 @@ CREATE TYPE public.account_type AS ENUM (
 );
 
 
-ALTER TYPE public.account_type OWNER TO neondb_owner;
 
 --
 -- Name: cash_flow_category; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -63,7 +62,6 @@ CREATE TYPE public.cash_flow_category AS ENUM (
 );
 
 
-ALTER TYPE public.cash_flow_category OWNER TO neondb_owner;
 
 --
 -- Name: payment_method; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -78,7 +76,6 @@ CREATE TYPE public.payment_method AS ENUM (
 );
 
 
-ALTER TYPE public.payment_method OWNER TO neondb_owner;
 
 --
 -- Name: reconciliation_status; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -91,7 +88,6 @@ CREATE TYPE public.reconciliation_status AS ENUM (
 );
 
 
-ALTER TYPE public.reconciliation_status OWNER TO neondb_owner;
 
 --
 -- Name: recurring_frequency; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -108,7 +104,6 @@ CREATE TYPE public.recurring_frequency AS ENUM (
 );
 
 
-ALTER TYPE public.recurring_frequency OWNER TO neondb_owner;
 
 --
 -- Name: recurring_status; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -122,7 +117,6 @@ CREATE TYPE public.recurring_status AS ENUM (
 );
 
 
-ALTER TYPE public.recurring_status OWNER TO neondb_owner;
 
 --
 -- Name: status; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -143,7 +137,6 @@ CREATE TYPE public.status AS ENUM (
 );
 
 
-ALTER TYPE public.status OWNER TO neondb_owner;
 
 --
 -- Name: transaction_type; Type: TYPE; Schema: public; Owner: neondb_owner
@@ -164,7 +157,6 @@ CREATE TYPE public.transaction_type AS ENUM (
 );
 
 
-ALTER TYPE public.transaction_type OWNER TO neondb_owner;
 
 SET default_tablespace = '';
 
@@ -181,7 +173,6 @@ CREATE TABLE drizzle.__drizzle_migrations (
 );
 
 
-ALTER TABLE drizzle.__drizzle_migrations OWNER TO neondb_owner;
 
 --
 -- Name: __drizzle_migrations_id_seq; Type: SEQUENCE; Schema: drizzle; Owner: neondb_owner
@@ -196,7 +187,6 @@ CREATE SEQUENCE drizzle.__drizzle_migrations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE drizzle.__drizzle_migrations_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: __drizzle_migrations_id_seq; Type: SEQUENCE OWNED BY; Schema: drizzle; Owner: neondb_owner
@@ -221,7 +211,6 @@ CREATE TABLE public.accounting_firms (
 );
 
 
-ALTER TABLE public.accounting_firms OWNER TO neondb_owner;
 
 --
 -- Name: accounting_firms_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -236,7 +225,6 @@ CREATE SEQUENCE public.accounting_firms_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.accounting_firms_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: accounting_firms_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -262,7 +250,6 @@ CREATE TABLE public.accounts (
 );
 
 
-ALTER TABLE public.accounts OWNER TO neondb_owner;
 
 --
 -- Name: accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -277,7 +264,6 @@ CREATE SEQUENCE public.accounts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.accounts_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: accounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -303,7 +289,6 @@ CREATE TABLE public.activity_logs (
 );
 
 
-ALTER TABLE public.activity_logs OWNER TO neondb_owner;
 
 --
 -- Name: activity_logs_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -318,7 +303,6 @@ CREATE SEQUENCE public.activity_logs_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.activity_logs_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: activity_logs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -350,7 +334,6 @@ CREATE TABLE public.bank_accounts (
 );
 
 
-ALTER TABLE public.bank_accounts OWNER TO neondb_owner;
 
 --
 -- Name: bank_accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -365,7 +348,6 @@ CREATE SEQUENCE public.bank_accounts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.bank_accounts_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: bank_accounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -393,7 +375,6 @@ CREATE TABLE public.bank_connections (
 );
 
 
-ALTER TABLE public.bank_connections OWNER TO neondb_owner;
 
 --
 -- Name: bank_connections_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -408,7 +389,6 @@ CREATE SEQUENCE public.bank_connections_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.bank_connections_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: bank_connections_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -430,7 +410,6 @@ CREATE TABLE public.bank_transaction_matches (
 );
 
 
-ALTER TABLE public.bank_transaction_matches OWNER TO neondb_owner;
 
 --
 -- Name: bank_transaction_matches_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -445,7 +424,6 @@ CREATE SEQUENCE public.bank_transaction_matches_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.bank_transaction_matches_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: bank_transaction_matches_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -472,7 +450,6 @@ CREATE TABLE public.categorization_rules (
 );
 
 
-ALTER TABLE public.categorization_rules OWNER TO neondb_owner;
 
 --
 -- Name: categorization_rules_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -487,7 +464,6 @@ CREATE SEQUENCE public.categorization_rules_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.categorization_rules_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: categorization_rules_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -528,7 +504,6 @@ CREATE TABLE public.companies (
 );
 
 
-ALTER TABLE public.companies OWNER TO neondb_owner;
 
 --
 -- Name: companies_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -543,7 +518,6 @@ CREATE SEQUENCE public.companies_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.companies_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: companies_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -576,7 +550,6 @@ CREATE TABLE public.company_settings (
 );
 
 
-ALTER TABLE public.company_settings OWNER TO neondb_owner;
 
 --
 -- Name: company_settings_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -591,7 +564,6 @@ CREATE SEQUENCE public.company_settings_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.company_settings_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: company_settings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -619,7 +591,6 @@ CREATE TABLE public.contacts (
 );
 
 
-ALTER TABLE public.contacts OWNER TO neondb_owner;
 
 --
 -- Name: contacts_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -634,7 +605,6 @@ CREATE SEQUENCE public.contacts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.contacts_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: contacts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -663,7 +633,6 @@ CREATE TABLE public.csv_mapping_preferences (
 );
 
 
-ALTER TABLE public.csv_mapping_preferences OWNER TO neondb_owner;
 
 --
 -- Name: csv_mapping_preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -678,7 +647,6 @@ CREATE SEQUENCE public.csv_mapping_preferences_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.csv_mapping_preferences_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: csv_mapping_preferences_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -702,7 +670,6 @@ CREATE TABLE public.currencies (
 );
 
 
-ALTER TABLE public.currencies OWNER TO neondb_owner;
 
 --
 -- Name: currencies_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -717,7 +684,6 @@ CREATE SEQUENCE public.currencies_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.currencies_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: currencies_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -739,7 +705,6 @@ CREATE TABLE public.currency_locks (
 );
 
 
-ALTER TABLE public.currency_locks OWNER TO neondb_owner;
 
 --
 -- Name: currency_locks_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -754,7 +719,6 @@ CREATE SEQUENCE public.currency_locks_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.currency_locks_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: currency_locks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -779,7 +743,6 @@ CREATE TABLE public.exchange_rates (
 );
 
 
-ALTER TABLE public.exchange_rates OWNER TO neondb_owner;
 
 --
 -- Name: exchange_rates_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -794,7 +757,6 @@ CREATE SEQUENCE public.exchange_rates_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.exchange_rates_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: exchange_rates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -817,7 +779,6 @@ CREATE TABLE public.firm_client_access (
 );
 
 
-ALTER TABLE public.firm_client_access OWNER TO neondb_owner;
 
 --
 -- Name: firm_client_access_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -832,7 +793,6 @@ CREATE SEQUENCE public.firm_client_access_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.firm_client_access_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: firm_client_access_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -858,7 +818,6 @@ CREATE TABLE public.fx_realizations (
 );
 
 
-ALTER TABLE public.fx_realizations OWNER TO neondb_owner;
 
 --
 -- Name: fx_realizations_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -873,7 +832,6 @@ CREATE SEQUENCE public.fx_realizations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.fx_realizations_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: fx_realizations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -900,7 +858,6 @@ CREATE TABLE public.fx_revaluations (
 );
 
 
-ALTER TABLE public.fx_revaluations OWNER TO neondb_owner;
 
 --
 -- Name: fx_revaluations_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -915,7 +872,6 @@ CREATE SEQUENCE public.fx_revaluations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.fx_revaluations_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: fx_revaluations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -958,7 +914,6 @@ CREATE TABLE public.imported_transactions (
 );
 
 
-ALTER TABLE public.imported_transactions OWNER TO neondb_owner;
 
 --
 -- Name: imported_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -973,7 +928,6 @@ CREATE SEQUENCE public.imported_transactions_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.imported_transactions_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: imported_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -998,7 +952,6 @@ CREATE TABLE public.invoice_activities (
 );
 
 
-ALTER TABLE public.invoice_activities OWNER TO neondb_owner;
 
 --
 -- Name: invoice_activities_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1013,7 +966,6 @@ CREATE SEQUENCE public.invoice_activities_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.invoice_activities_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: invoice_activities_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1040,7 +992,6 @@ CREATE TABLE public.ledger_entries (
 );
 
 
-ALTER TABLE public.ledger_entries OWNER TO neondb_owner;
 
 --
 -- Name: ledger_entries_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1055,7 +1006,6 @@ CREATE SEQUENCE public.ledger_entries_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.ledger_entries_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: ledger_entries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1081,7 +1031,6 @@ CREATE TABLE public.line_items (
 );
 
 
-ALTER TABLE public.line_items OWNER TO neondb_owner;
 
 --
 -- Name: line_items_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1096,7 +1045,6 @@ CREATE SEQUENCE public.line_items_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.line_items_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: line_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1118,7 +1066,6 @@ CREATE TABLE public.payment_applications (
 );
 
 
-ALTER TABLE public.payment_applications OWNER TO neondb_owner;
 
 --
 -- Name: payment_applications_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1133,7 +1080,6 @@ CREATE SEQUENCE public.payment_applications_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.payment_applications_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: payment_applications_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1160,7 +1106,6 @@ CREATE TABLE public.preferences (
 );
 
 
-ALTER TABLE public.preferences OWNER TO neondb_owner;
 
 --
 -- Name: preferences_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1175,7 +1120,6 @@ CREATE SEQUENCE public.preferences_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.preferences_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: preferences_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1204,7 +1148,6 @@ CREATE TABLE public.products (
 );
 
 
-ALTER TABLE public.products OWNER TO neondb_owner;
 
 --
 -- Name: products_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1219,7 +1162,6 @@ CREATE SEQUENCE public.products_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.products_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: products_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1240,7 +1182,6 @@ CREATE TABLE public.reconciliation_items (
 );
 
 
-ALTER TABLE public.reconciliation_items OWNER TO neondb_owner;
 
 --
 -- Name: reconciliation_items_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1255,7 +1196,6 @@ CREATE SEQUENCE public.reconciliation_items_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.reconciliation_items_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: reconciliation_items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1282,7 +1222,6 @@ CREATE TABLE public.reconciliations (
 );
 
 
-ALTER TABLE public.reconciliations OWNER TO neondb_owner;
 
 --
 -- Name: reconciliations_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1297,7 +1236,6 @@ CREATE SEQUENCE public.reconciliations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.reconciliations_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: reconciliations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1326,7 +1264,6 @@ CREATE TABLE public.recurring_history (
 );
 
 
-ALTER TABLE public.recurring_history OWNER TO neondb_owner;
 
 --
 -- Name: recurring_history_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1341,7 +1278,6 @@ CREATE SEQUENCE public.recurring_history_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.recurring_history_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: recurring_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1368,7 +1304,6 @@ CREATE TABLE public.recurring_lines (
 );
 
 
-ALTER TABLE public.recurring_lines OWNER TO neondb_owner;
 
 --
 -- Name: recurring_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1383,7 +1318,6 @@ CREATE SEQUENCE public.recurring_lines_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.recurring_lines_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: recurring_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1428,7 +1362,6 @@ CREATE TABLE public.recurring_templates (
 );
 
 
-ALTER TABLE public.recurring_templates OWNER TO neondb_owner;
 
 --
 -- Name: recurring_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1443,7 +1376,6 @@ CREATE SEQUENCE public.recurring_templates_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.recurring_templates_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: recurring_templates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1469,7 +1401,6 @@ CREATE TABLE public.sales_taxes (
 );
 
 
-ALTER TABLE public.sales_taxes OWNER TO neondb_owner;
 
 --
 -- Name: sales_taxes_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1484,7 +1415,6 @@ CREATE SEQUENCE public.sales_taxes_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.sales_taxes_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: sales_taxes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1504,7 +1434,6 @@ CREATE TABLE public.session (
 );
 
 
-ALTER TABLE public.session OWNER TO neondb_owner;
 
 --
 -- Name: transaction_attachments; Type: TABLE; Schema: public; Owner: neondb_owner
@@ -1521,7 +1450,6 @@ CREATE TABLE public.transaction_attachments (
 );
 
 
-ALTER TABLE public.transaction_attachments OWNER TO neondb_owner;
 
 --
 -- Name: transaction_attachments_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1536,7 +1464,6 @@ CREATE SEQUENCE public.transaction_attachments_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.transaction_attachments_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: transaction_attachments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1575,7 +1502,6 @@ CREATE TABLE public.transactions (
 );
 
 
-ALTER TABLE public.transactions OWNER TO neondb_owner;
 
 --
 -- Name: transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1590,7 +1516,6 @@ CREATE SEQUENCE public.transactions_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.transactions_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1613,7 +1538,6 @@ CREATE TABLE public.user_companies (
 );
 
 
-ALTER TABLE public.user_companies OWNER TO neondb_owner;
 
 --
 -- Name: user_companies_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1628,7 +1552,6 @@ CREATE SEQUENCE public.user_companies_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_companies_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: user_companies_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1655,7 +1578,6 @@ CREATE TABLE public.user_invitations (
 );
 
 
-ALTER TABLE public.user_invitations OWNER TO neondb_owner;
 
 --
 -- Name: user_invitations_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1670,7 +1592,6 @@ CREATE SEQUENCE public.user_invitations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_invitations_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: user_invitations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -1701,7 +1622,6 @@ CREATE TABLE public.users (
 );
 
 
-ALTER TABLE public.users OWNER TO neondb_owner;
 
 --
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: neondb_owner
@@ -1716,7 +1636,6 @@ CREATE SEQUENCE public.users_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.users_id_seq OWNER TO neondb_owner;
 
 --
 -- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: neondb_owner
@@ -2816,21 +2735,18 @@ ALTER TABLE ONLY public.users
 
 
 --
--- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO neon_superuser WITH GRANT OPTION;
 
 
 --
--- Name: DEFAULT PRIVILEGES FOR TABLES; Type: DEFAULT ACL; Schema: public; Owner: cloud_admin
 --
 
-ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON TABLES TO neon_superuser WITH GRANT OPTION;
 
 
 --
 -- PostgreSQL database dump complete
 --
 
+\unrestrict D2fYRVBZm0D87YktRg81PC9An1QpxmFgaM8fIrMIKbKvvlJFEwdwGVHaUMSr2Ue
 
