@@ -957,20 +957,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="hidden md:flex border-slate-200 text-slate-600 hover:bg-slate-50">
-              <Settings className="h-4 w-4 mr-1.5" />
-              Settings
-            </Button>
-            <Button
-              type="submit"
-              disabled={saveInvoice.isPending}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-            >
-              {saveInvoice.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </div>
         </div>
 
         <div className="flex-grow overflow-y-auto">
