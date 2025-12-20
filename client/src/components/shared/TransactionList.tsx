@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
 import {
@@ -13,7 +13,11 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CreditCard,
-  Plus
+  Plus,
+  MoreHorizontal,
+  Mail,
+  Download,
+  Copy
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -51,6 +55,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface TransactionListProps {
   contactId: number;
@@ -69,6 +80,7 @@ export default function TransactionList({
 }: TransactionListProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -151,73 +163,68 @@ export default function TransactionList({
     deleteTransactionMutation.mutate(selectedTransactionToDelete.id);
   };
 
-  // Get status badge styles
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'paid':
-      case 'completed':
-        return <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Paid</Badge>;
-      case 'open':
-        return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Open</Badge>;
-      case 'overdue':
-        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Overdue</Badge>;
-      case 'draft':
-        return <Badge className="bg-slate-100 text-slate-800 hover:bg-slate-100">Draft</Badge>;
-      case 'cancelled':
-        return <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100">Cancelled</Badge>;
-      case 'unapplied_credit':
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Credit</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  // Get compact status badge
+  const getStatusBadge = (transaction: Transaction) => {
+    const { type, status, balance } = transaction;
+
+    // For invoices/bills, check balance to determine status
+    if (type === 'invoice' || type === 'bill') {
+      if (balance === 0 || status === 'paid' || status === 'completed') {
+        return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Paid</Badge>;
+      }
+      if (status === 'overdue') {
+        return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-red-100 text-red-700 font-medium">Overdue</Badge>;
+      }
+      return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-amber-100 text-amber-700 font-medium">Open</Badge>;
     }
+
+    // For deposits
+    if (type === 'deposit') {
+      if (status === 'unapplied_credit') {
+        return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
+      }
+      return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Done</Badge>;
+    }
+
+    // For payments
+    if (type === 'payment') {
+      return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Rcvd</Badge>;
+    }
+
+    // Default
+    return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-slate-100 text-slate-600 font-medium">Done</Badge>;
   };
 
-  // Get icon for transaction type
-  const getTransactionIcon = (type: string, status?: string) => {
+  // Get compact icon for transaction type
+  const getTransactionIcon = (type: string) => {
+    const iconClass = "h-4 w-4";
     switch (type) {
       case 'invoice':
       case 'bill':
-        return <FileText className="h-5 w-5" />;
+        return <FileText className={`${iconClass} text-blue-500`} />;
       case 'payment':
-        return <DollarSign className="h-5 w-5" />;
+        return <DollarSign className={`${iconClass} text-emerald-500`} />;
       case 'deposit':
-        return <ArrowDownCircle className="h-5 w-5" />;
+        return <ArrowDownCircle className={`${iconClass} text-emerald-500`} />;
       case 'sales_receipt':
-        return <Receipt className="h-5 w-5" />;
+        return <Receipt className={`${iconClass} text-emerald-500`} />;
       case 'transfer':
-        return <ArrowUpCircle className="h-5 w-5" />;
+        return <ArrowUpCircle className={`${iconClass} text-slate-500`} />;
       case 'expense':
-        return <CreditCard className="h-5 w-5" />;
+        return <CreditCard className={`${iconClass} text-red-500`} />;
       default:
-        return <CreditCard className="h-5 w-5" />;
+        return <CreditCard className={`${iconClass} text-slate-500`} />;
     }
   };
 
-  // Get icon color
-  const getIconColor = (type: string) => {
-    switch (type) {
-      case 'invoice':
-      case 'bill':
-        return 'text-blue-600 bg-blue-50';
-      case 'payment':
-      case 'deposit':
-      case 'sales_receipt':
-        return 'text-emerald-600 bg-emerald-50';
-      case 'expense':
-        return 'text-red-600 bg-red-50';
-      default:
-        return 'text-slate-600 bg-slate-50';
-    }
-  };
-
-  // Format transaction type for display
-  const formatTransactionType = (type: string, status?: string) => {
+  // Format transaction type for display (short)
+  const formatTransactionType = (type: string) => {
     switch (type) {
       case 'invoice': return 'Invoice';
       case 'bill': return 'Bill';
       case 'payment': return 'Payment';
-      case 'deposit': return status === 'unapplied_credit' ? 'Credit' : 'Deposit';
-      case 'sales_receipt': return 'Sales Receipt';
+      case 'deposit': return 'Deposit';
+      case 'sales_receipt': return 'Receipt';
       case 'transfer': return 'Transfer';
       case 'expense': return 'Expense';
       case 'cheque': return 'Cheque';
@@ -240,50 +247,63 @@ export default function TransactionList({
     }
   };
 
-  // Group transactions by month
+  // Handle row click
+  const handleRowClick = (transaction: Transaction) => {
+    const link = getTransactionLink(transaction);
+    if (link) {
+      navigate(link);
+    } else {
+      setSelectedTransaction(transaction);
+      refetchLedgerEntries();
+    }
+  };
+
+  // Group transactions by month with totals
   const groupedTransactions = filteredTransactions
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .reduce((acc, transaction) => {
       const monthKey = format(new Date(transaction.date), "MMMM yyyy");
       if (!acc[monthKey]) {
-        acc[monthKey] = [];
+        acc[monthKey] = { transactions: [], total: 0, count: 0 };
       }
-      acc[monthKey].push(transaction);
+      acc[monthKey].transactions.push(transaction);
+      acc[monthKey].total += Math.abs(transaction.amount);
+      acc[monthKey].count += 1;
       return acc;
-    }, {} as Record<string, Transaction[]>);
+    }, {} as Record<string, { transactions: Transaction[]; total: number; count: number }>);
 
   const createButtonLabel = contactType === 'customer' ? 'New Invoice' : 'New Bill';
 
   return (
     <>
-      <Card className="border-0 shadow-sm rounded-2xl">
-        <CardHeader className="pb-4">
+      <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
+        <CardHeader className="pb-3 px-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-slate-800">
+            <CardTitle className="text-base font-semibold text-slate-800">
               Transaction History
             </CardTitle>
             {onCreateNew && (
               <Button
                 onClick={onCreateNew}
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700"
+                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-3.5 w-3.5 mr-1" />
                 {createButtonLabel}
               </Button>
             )}
           </div>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="pt-0 px-0">
           {transactionsLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
             </div>
           ) : filteredTransactions.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              <FileText className="mx-auto h-12 w-12 text-slate-300 mb-3" />
+            <div className="text-center py-10 text-slate-500 px-4">
+              <FileText className="mx-auto h-10 w-10 text-slate-300 mb-2" />
               <h3 className="text-sm font-medium text-slate-600">No transactions yet</h3>
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-xs text-slate-400">
                 {contactType === 'customer'
                   ? 'Create an invoice to get started.'
                   : 'Create a bill to get started.'}
@@ -291,136 +311,145 @@ export default function TransactionList({
               {onCreateNew && (
                 <Button
                   onClick={onCreateNew}
-                  className="mt-4 bg-emerald-600 hover:bg-emerald-700"
+                  className="mt-3 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
                   size="sm"
                 >
-                  <Plus className="h-4 w-4 mr-1" />
+                  <Plus className="h-3.5 w-3.5 mr-1" />
                   {createButtonLabel}
                 </Button>
               )}
             </div>
           ) : (
-            <ScrollArea style={{ maxHeight }} className="pr-4">
-              <div className="space-y-6">
-                {Object.entries(groupedTransactions).map(([monthKey, monthTransactions]) => (
+            <ScrollArea style={{ maxHeight }}>
+              <div>
+                {Object.entries(groupedTransactions).map(([monthKey, { transactions: monthTransactions, total, count }]) => (
                   <div key={monthKey}>
-                    <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                      {monthKey}
-                    </h4>
-                    <div className="space-y-2">
-                      {monthTransactions.map((transaction) => {
-                        const link = getTransactionLink(transaction);
-                        const iconColor = getIconColor(transaction.type);
-                        const showBalance = transaction.type === 'invoice' || transaction.type === 'bill';
+                    {/* Month Header with Totals */}
+                    <div className="flex items-center justify-between px-4 py-2 bg-slate-50/80 border-y border-slate-100">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        {monthKey}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {count} transaction{count !== 1 ? 's' : ''}
+                        <span className="mx-1.5 text-slate-300">•</span>
+                        <span className="font-semibold text-slate-600">
+                          {formatCurrency(total, homeCurrency, homeCurrency)}
+                        </span>
+                      </span>
+                    </div>
 
-                        // Determine status badge
-                        const statusBadge = transaction.type === 'deposit'
-                          ? transaction.status === 'unapplied_credit'
-                            ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Credit</Badge>
-                            : <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Completed</Badge>
-                          : (transaction.type === 'invoice' || transaction.type === 'bill') &&
-                            (transaction.balance === 0 || transaction.status === 'paid' || transaction.status === 'completed')
-                            ? <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Paid</Badge>
-                          : (transaction.type === 'invoice' || transaction.type === 'bill') &&
-                            transaction.balance !== null &&
-                            transaction.balance !== undefined &&
-                            transaction.balance > 0
-                              ? <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Open</Badge>
-                              : getStatusBadge(transaction.status);
+                    {/* Transaction Rows */}
+                    <div>
+                      {monthTransactions.map((transaction) => {
+                        const showBalance = (transaction.type === 'invoice' || transaction.type === 'bill') &&
+                          transaction.balance !== null && transaction.balance !== undefined;
 
                         return (
                           <div
                             key={transaction.id}
-                            className="group relative bg-white border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-sm transition-all"
+                            onClick={() => handleRowClick(transaction)}
+                            className="group grid grid-cols-[minmax(100px,120px)_90px_80px_1fr_minmax(90px,110px)_36px] items-center h-11 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                           >
-                            <div className="flex items-start gap-4">
-                              {/* Icon */}
-                              <div className={`flex-shrink-0 w-10 h-10 rounded-xl ${iconColor} flex items-center justify-center`}>
-                                {getTransactionIcon(transaction.type, transaction.status)}
-                              </div>
-
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-4">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <h4 className="font-semibold text-slate-800">
-                                        {formatTransactionType(transaction.type, transaction.status)}
-                                      </h4>
-                                      {statusBadge}
-                                    </div>
-                                    <div className="flex items-center gap-3 text-sm text-slate-500">
-                                      <span>{format(new Date(transaction.date), "MMM dd, yyyy")}</span>
-                                      {transaction.reference && (
-                                        <>
-                                          <span className="text-slate-300">•</span>
-                                          <span className="font-medium">#{transaction.reference}</span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Amount */}
-                                  <div className="text-right">
-                                    <div className={`text-lg font-semibold ${
-                                      transaction.type === 'payment' ||
-                                      transaction.type === 'deposit' ||
-                                      transaction.type === 'sales_receipt'
-                                        ? 'text-emerald-600'
-                                        : transaction.type === 'expense'
-                                          ? 'text-red-600'
-                                          : 'text-slate-800'
-                                    }`}>
-                                      {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
-                                    </div>
-                                    {showBalance && transaction.balance !== null && transaction.balance !== undefined && (
-                                      <div className="text-sm text-slate-500 mt-0.5">
-                                        Balance: {formatCurrency(Math.abs(transaction.balance), transaction.currency, homeCurrency)}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
+                            {/* Type + Badge */}
+                            <div className="flex items-center gap-2 min-w-0">
+                              {getTransactionIcon(transaction.type)}
+                              {getStatusBadge(transaction)}
                             </div>
 
-                            {/* Actions - visible on hover */}
-                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {link ? (
-                                <Link href={link} onClick={(e) => e.stopPropagation()}>
-                                  <Button variant="outline" size="sm" className="h-8 px-3">
-                                    <Eye className="h-4 w-4 mr-1" />
-                                    View
-                                  </Button>
-                                </Link>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-8 px-3"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedTransaction(transaction);
-                                    if (transaction.id) {
-                                      refetchLedgerEntries();
-                                    }
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4 mr-1" />
-                                  View
-                                </Button>
-                              )}
+                            {/* Date */}
+                            <span className="text-[13px] text-slate-500 tabular-nums">
+                              {format(new Date(transaction.date), "MMM d, yyyy")}
+                            </span>
 
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-8 px-3 text-red-600 hover:text-red-800 hover:bg-red-50 hover:border-red-200"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteTransaction(transaction);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                            {/* Reference */}
+                            <span className="text-[13px] font-mono text-slate-600 truncate">
+                              {transaction.reference ? `#${transaction.reference}` : '—'}
+                            </span>
+
+                            {/* Type Label (for clarity) */}
+                            <span className="text-[13px] text-slate-400 truncate pl-2">
+                              {formatTransactionType(transaction.type)}
+                            </span>
+
+                            {/* Amount + Balance */}
+                            <div className="text-right">
+                              <div className={`text-[13px] font-semibold tabular-nums ${
+                                transaction.type === 'payment' ||
+                                transaction.type === 'deposit' ||
+                                transaction.type === 'sales_receipt'
+                                  ? 'text-emerald-600'
+                                  : transaction.type === 'expense'
+                                    ? 'text-red-600'
+                                    : 'text-slate-800'
+                              }`}>
+                                {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
+                              </div>
+                              {showBalance && (
+                                <div className="text-[11px] text-slate-400 tabular-nums">
+                                  bal {formatCurrency(Math.abs(transaction.balance!), transaction.currency, homeCurrency)}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Actions Menu */}
+                            <div className="flex justify-end">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-40">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRowClick(transaction);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  {(transaction.type === 'invoice' || transaction.type === 'bill') && (
+                                    <>
+                                      <DropdownMenuItem
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          window.open(`/api/invoices/${transaction.id}/pdf`, '_blank');
+                                        }}
+                                      >
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Download PDF
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          // Navigate to invoice with send dialog open
+                                          navigate(`/invoices/${transaction.id}?openSendDialog=true`);
+                                        }}
+                                      >
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        Send Email
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteTransaction(transaction);
+                                    }}
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         );
@@ -439,7 +468,7 @@ export default function TransactionList({
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-xl">
-              {formatTransactionType(selectedTransaction?.type || '', selectedTransaction?.status)}
+              {formatTransactionType(selectedTransaction?.type || '')}
               {selectedTransaction?.reference ? ` #${selectedTransaction.reference}` : ''}
             </DialogTitle>
           </DialogHeader>
@@ -462,7 +491,7 @@ export default function TransactionList({
 
                       <div>
                         <h3 className="text-sm font-medium text-slate-500">Status</h3>
-                        <div className="mt-1">{getStatusBadge(selectedTransaction.status)}</div>
+                        <div className="mt-1">{getStatusBadge(selectedTransaction)}</div>
                       </div>
 
                       {selectedTransaction.description && (
