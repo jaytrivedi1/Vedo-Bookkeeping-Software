@@ -30,7 +30,7 @@ interface Invoice extends Omit<BaseInvoice, 'lineItems'> {
   appliedCreditAmount?: number;
   appliedCredits?: {id: number, amount: number}[];
 }
-import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, X, HelpCircle, Settings } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, X, HelpCircle, Settings, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1594,7 +1594,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                 <Button
                   type="submit"
                   disabled={saveInvoice.isPending}
-                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 rounded-r-none transition-colors shadow-sm px-6"
+                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 rounded-r-none border-r-0 transition-colors shadow-sm px-6"
                   data-testid="button-save"
                 >
                   {saveInvoice.isPending ? 'Saving...' : `Save ${documentType === 'quotation' ? 'Quotation' : 'Invoice'}`}
@@ -1608,8 +1608,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                     }
                   }}
                 >
-                  <SelectTrigger className="w-10 rounded-l-none h-11 border-l border-blue-500 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 transition-colors shadow-sm" data-testid="select-save-options">
-                    <SelectValue />
+                  <SelectTrigger className="w-11 rounded-l-none h-11 bg-blue-600 hover:bg-blue-700 text-white border-0 transition-colors shadow-sm [&>svg]:hidden" data-testid="select-save-options">
+                    <ChevronDown className="h-4 w-4" />
                   </SelectTrigger>
                   <SelectContent align="end">
                     <SelectItem value="save">
