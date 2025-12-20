@@ -312,7 +312,7 @@ export default function InvoiceForm({
       reference: invoice?.reference,
       description: invoice?.description || '',
       status: invoice?.status as "open" | "paid" | "overdue" | "partial",
-      lineItems: lineItems?.length ? lineItems.map(item => {
+      lineItems: propLineItems?.length ? propLineItems.map(item => {
         // Map line item for editing, converting productId to string for Select component
         return {
           description: item.description,
@@ -439,18 +439,18 @@ export default function InvoiceForm({
 
   // Initialize totals from existing invoice data when in edit mode
   useEffect(() => {
-    if (isEditing && lineItems?.length && invoice) {
+    if (isEditing && propLineItems?.length && invoice) {
       // Don't recalculate - use existing data
-      const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const subtotal = propLineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
       const taxTotal = (invoice.amount || 0) - subtotal;
-      
+
       setSubTotal(subtotal);
       setTaxAmount(taxTotal);
       setTotalAmount(invoice.amount || 0);
       // Keep the existing balance - don't recalculate it
       setBalanceDue(invoice.balance || invoice.amount || 0);
     }
-  }, [isEditing, lineItems, invoice]);
+  }, [isEditing, propLineItems, invoice]);
 
   // Set selected contact when editing an invoice
   useEffect(() => {
@@ -464,14 +464,14 @@ export default function InvoiceForm({
 
   // Reset form when invoice data loads (fixes empty form on navigation)
   useEffect(() => {
-    if (isEditing && invoice && lineItems) {
+    if (isEditing && invoice && propLineItems) {
       form.reset({
         date: new Date(invoice.date),
         contactId: invoice.contactId,
         reference: invoice.reference,
         description: invoice.description || '',
         status: invoice.status as "open" | "paid" | "overdue" | "partial",
-        lineItems: lineItems.length ? lineItems.map(item => ({
+        lineItems: propLineItems.length ? propLineItems.map(item => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -481,7 +481,7 @@ export default function InvoiceForm({
         })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
       });
     }
-  }, [invoice, lineItems, isEditing, form]);
+  }, [invoice, propLineItems, isEditing, form]);
 
   // Credit management functions
   const addCredit = (credit: Transaction) => {
