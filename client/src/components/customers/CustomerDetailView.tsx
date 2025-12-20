@@ -10,9 +10,10 @@ import {
   Phone,
   MapPin,
   User,
-  FileText,
-  DollarSign,
-  CreditCard
+  Wallet,
+  Clock,
+  Plus,
+  DollarSign
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
@@ -69,29 +70,57 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
   const customerTransactions = transactions?.filter(t => t.contactId === customerId) || [];
   const customerInvoices = customerTransactions.filter(t => t.type === 'invoice');
 
-  const outstandingBalance = customerInvoices.reduce((sum, invoice) => {
+  // Open invoices (balance > 0)
+  const openInvoices = customerInvoices.filter(inv =>
+    (inv.balance !== null && inv.balance !== undefined && inv.balance > 0) ||
+    (inv.status === 'open' || inv.status === 'draft')
+  );
+
+  const outstandingBalance = openInvoices.reduce((sum, invoice) => {
     const balance = (invoice.balance !== null && invoice.balance !== undefined)
       ? invoice.balance
       : invoice.amount;
     return sum + balance;
   }, 0);
 
+  // Overdue invoices calculation
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const overdueInvoices = openInvoices.filter(inv => {
+    if (inv.status === 'overdue') return true;
+    if (inv.dueDate) {
+      const dueDate = new Date(inv.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate < today && (inv.balance === undefined || inv.balance === null || inv.balance > 0);
+    }
+    return false;
+  });
+
+  const overdueAmount = overdueInvoices.reduce((sum, inv) => {
+    const balance = (inv.balance !== null && inv.balance !== undefined)
+      ? inv.balance
+      : inv.amount;
+    return sum + balance;
+  }, 0);
+
+  const overdueCount = overdueInvoices.length;
+
+  // Calculate oldest overdue days
+  const oldestOverdueDays = overdueInvoices.length > 0
+    ? Math.max(...overdueInvoices.map(inv => {
+        if (!inv.dueDate) return 0;
+        const dueDate = new Date(inv.dueDate);
+        return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+      }))
+    : 0;
+
   const totalPaid = customerInvoices.reduce((sum, invoice) => {
     const paid = invoice.amount - ((invoice.balance !== null && invoice.balance !== undefined) ? invoice.balance : invoice.amount);
     return sum + paid;
   }, 0);
 
-  const totalInvoices = customerInvoices.length;
-
-  // Unapplied credits
-  const unappliedCredits = customerTransactions
-    .filter(t => t.type === 'deposit' && t.status === 'unapplied_credit')
-    .reduce((sum, credit) => {
-      const creditAmount = (credit.balance !== null && credit.balance !== undefined)
-        ? Math.abs(credit.balance)
-        : Math.abs(credit.amount);
-      return sum + creditAmount;
-    }, 0);
+  const openInvoiceCount = openInvoices.length;
 
   // Delete customer mutation
   const deleteCustomerMutation = useMutation({
@@ -139,6 +168,10 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
 
   const handleCreateInvoice = () => {
     navigate(`/invoices/new?customerId=${customerId}`);
+  };
+
+  const handleReceivePayment = () => {
+    navigate(`/payment-receive?customerId=${customerId}`);
   };
 
   if (!customer) {
@@ -271,68 +304,96 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           </Card>
         </div>
 
-        {/* Account Summary */}
-        <Card className="border-0 shadow-sm rounded-2xl">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-              Account Summary
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Outstanding Balance */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-                    <DollarSign className="h-4 w-4 text-amber-600" />
-                  </div>
-                  <span className="text-xs text-slate-500">Balance Due</span>
+        {/* Account Summary Banner */}
+        <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
+
+              {/* Balance Due Section */}
+              <div className="relative p-6 overflow-hidden">
+                {/* Background Icon */}
+                <Wallet className="absolute -right-4 -bottom-4 h-32 w-32 text-slate-200 opacity-50" />
+
+                <div className="relative">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Balance Due
+                  </p>
+                  <p className="text-3xl font-black text-slate-800 mb-2">
+                    {formatCurrency(outstandingBalance, homeCurrency, homeCurrency)}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    {openInvoiceCount > 0
+                      ? `Across ${openInvoiceCount} open invoice${openInvoiceCount !== 1 ? 's' : ''}`
+                      : 'No outstanding invoices'
+                    }
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Lifetime paid: {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
+                  </p>
                 </div>
-                <p className={`text-xl font-bold ${outstandingBalance > 0 ? 'text-amber-600' : 'text-slate-800'}`}>
-                  {formatCurrency(outstandingBalance, homeCurrency, homeCurrency)}
-                </p>
               </div>
 
-              {/* Total Paid */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                    <DollarSign className="h-4 w-4 text-emerald-600" />
-                  </div>
-                  <span className="text-xs text-slate-500">Total Paid</span>
+              {/* Overdue Section */}
+              <div className={`relative p-6 overflow-hidden ${overdueAmount > 0 ? 'bg-red-50/50' : ''}`}>
+                {/* Background Icon */}
+                <Clock className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                  overdueAmount > 0 ? 'text-red-200' : 'text-slate-200'
+                }`} />
+
+                <div className="relative">
+                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                    overdueAmount > 0 ? 'text-red-500' : 'text-slate-400'
+                  }`}>
+                    Overdue
+                  </p>
+                  <p className={`text-3xl font-black mb-2 ${
+                    overdueAmount > 0 ? 'text-red-600' : 'text-slate-400'
+                  }`}>
+                    {formatCurrency(overdueAmount, homeCurrency, homeCurrency)}
+                  </p>
+                  {overdueAmount > 0 ? (
+                    <>
+                      <p className="text-sm text-red-600">
+                        {overdueCount} invoice{overdueCount !== 1 ? 's' : ''} past due
+                      </p>
+                      <p className="text-xs text-red-500 mt-1">
+                        Oldest: {oldestOverdueDays} day{oldestOverdueDays !== 1 ? 's' : ''} overdue
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-500">
+                        No overdue invoices
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        All payments on track
+                      </p>
+                    </>
+                  )}
                 </div>
-                <p className="text-xl font-bold text-emerald-600">
-                  {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
-                </p>
               </div>
 
-              {/* Unapplied Credits */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <CreditCard className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <span className="text-xs text-slate-500">Credits</span>
-                </div>
-                <p className="text-xl font-bold text-blue-600">
-                  {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)}
-                </p>
-              </div>
-
-              {/* Total Invoices */}
-              <div className="bg-slate-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center">
-                    <FileText className="h-4 w-4 text-slate-600" />
-                  </div>
-                  <span className="text-xs text-slate-500">Invoices</span>
-                </div>
-                <p className="text-xl font-bold text-slate-800">
-                  {totalInvoices}
-                </p>
+              {/* Actions Section */}
+              <div className="p-6 flex flex-col justify-center gap-3 min-w-[180px]">
+                <Button
+                  onClick={handleReceivePayment}
+                  className="bg-emerald-600 hover:bg-emerald-700 w-full"
+                  disabled={outstandingBalance <= 0}
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Receive Payment
+                </Button>
+                <Button
+                  onClick={handleCreateInvoice}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Invoice
+                </Button>
               </div>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
         {/* Transaction History */}
