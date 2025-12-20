@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, useFieldArray, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -101,7 +101,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   const [documentType, setDocumentType] = useState<'invoice' | 'quotation'>(
     invoice?.status === 'quotation' ? 'quotation' : (initialDocumentType || 'invoice')
   );
-  
+
+  // CC and BCC for email
+  const [emailCC, setEmailCC] = useState<string>('');
+  const [emailBCC, setEmailBCC] = useState<string>('');
+
+  // Ref to track if this is a "Save & Send" action (avoids async state issues)
+  const isSaveAndSendRef = useRef(false);
+
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
   const initialDate = isEditing ? new Date(invoice!.date) : new Date();
@@ -492,9 +499,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
 
       // If Save & Send was clicked, navigate to invoice view with send dialog open
-      if (sendInvoiceEmail && result?.id) {
+      if (isSaveAndSendRef.current && result?.id) {
+        isSaveAndSendRef.current = false; // Reset the ref
         const basePath = documentType === 'quotation' ? '/quotations' : '/invoices';
-        window.location.href = `${basePath}/${result.id}?openSendDialog=true`;
+        // Pass CC/BCC as query params so they can be pre-filled in the send dialog
+        const params = new URLSearchParams({ openSendDialog: 'true' });
+        if (emailCC) params.set('cc', emailCC);
+        if (emailBCC) params.set('bcc', emailBCC);
+        window.location.href = `${basePath}/${result.id}?${params.toString()}`;
         return;
       }
 
@@ -992,18 +1004,27 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                     </div>
                   )}
 
-                  <div className="flex items-center space-x-2 mt-4">
-                    <Checkbox
-                      id="send-invoice"
-                      checked={sendInvoiceEmail}
-                      onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
+                  {/* CC Field */}
+                  <div className="mt-4">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">CC (Optional)</FormLabel>
+                    <Input
+                      value={emailCC}
+                      onChange={(e) => setEmailCC(e.target.value)}
+                      placeholder="email1@example.com, email2@example.com"
+                      className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                     />
-                    <label
-                      htmlFor="send-invoice"
-                      className="text-sm text-slate-600 cursor-pointer"
-                    >
-                      Send invoice via email
-                    </label>
+                    <p className="text-xs text-slate-400 mt-1">Separate multiple emails with commas</p>
+                  </div>
+
+                  {/* BCC Field */}
+                  <div className="mt-3">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">BCC (Optional)</FormLabel>
+                    <Input
+                      value={emailBCC}
+                      onChange={(e) => setEmailBCC(e.target.value)}
+                      placeholder="archive@example.com"
+                      className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                    />
                   </div>
                 </div>
 
@@ -1582,7 +1603,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                 disabled={saveInvoice.isPending}
                 className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
                 onClick={() => {
-                  setSendInvoiceEmail(true);
+                  isSaveAndSendRef.current = true;
                   form.handleSubmit(onSubmit)();
                 }}
                 data-testid="button-save-send"

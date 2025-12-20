@@ -60,9 +60,12 @@ export default function InvoiceView() {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientName, setRecipientName] = useState("");
+  const [emailCC, setEmailCC] = useState("");
+  const [emailBCC, setEmailBCC] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [personalMessage, setPersonalMessage] = useState("");
   const [includePdfAttachment, setIncludePdfAttachment] = useState(true);
-  
+
   // Extract the invoice ID from the URL
   useEffect(() => {
     const path = window.location.pathname;
@@ -77,6 +80,9 @@ export default function InvoiceView() {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('openSendDialog') === 'true') {
       setSendDialogOpen(true);
+      // Pre-fill CC/BCC from URL params if provided
+      if (urlParams.get('cc')) setEmailCC(urlParams.get('cc') || '');
+      if (urlParams.get('bcc')) setEmailBCC(urlParams.get('bcc') || '');
       // Clean up the URL by removing the query param
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -152,12 +158,19 @@ export default function InvoiceView() {
       if (!invoiceId) {
         throw new Error('No invoice ID available');
       }
+      // Parse CC and BCC into arrays
+      const ccArray = emailCC ? emailCC.split(',').map(e => e.trim()).filter(e => e) : [];
+      const bccArray = emailBCC ? emailBCC.split(',').map(e => e.trim()).filter(e => e) : [];
+
       const response = await apiRequest(
         `/api/invoices/${invoiceId}/send-email`,
         'POST',
         {
           recipientEmail,
           recipientName,
+          cc: ccArray,
+          bcc: bccArray,
+          subject: emailSubject,
           message: personalMessage,
           includeAttachment: includePdfAttachment
         }
@@ -271,21 +284,33 @@ export default function InvoiceView() {
   // Find customer
   const customer = contacts?.find(c => c.id === invoice?.contactId);
   
+  // Get default company for email subject
+  const { data: defaultCompany } = useQuery({
+    queryKey: ['/api/companies/default'],
+    queryFn: () => apiRequest('/api/companies/default'),
+  });
+
   // Helper function to reset send form
   const resetSendForm = () => {
     setRecipientEmail(customer?.email || "");
     setRecipientName(customer?.name || "");
+    setEmailCC("");
+    setEmailBCC("");
+    setEmailSubject(invoice ? `Invoice ${invoice.reference || invoice.id} from ${defaultCompany?.name || 'Your Company'}` : "");
     setPersonalMessage("");
     setIncludePdfAttachment(true);
   };
-  
+
   // Pre-fill customer data when customer changes or send dialog opens
   useEffect(() => {
     if (sendDialogOpen && customer) {
       setRecipientEmail(customer.email || "");
       setRecipientName(customer.name || "");
     }
-  }, [sendDialogOpen, customer]);
+    if (sendDialogOpen && invoice) {
+      setEmailSubject(`Invoice ${invoice.reference || invoice.id} from ${defaultCompany?.name || 'Your Company'}`);
+    }
+  }, [sendDialogOpen, customer, invoice, defaultCompany]);
   
   // Helper function to get activity icon
   const getActivityIcon = (activityType: string) => {
@@ -723,41 +748,87 @@ export default function InvoiceView() {
       
       {/* Send Invoice Dialog */}
       <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]" data-testid="dialog-send-invoice" aria-describedby="send-invoice-description">
+        <DialogContent className="sm:max-w-[600px]" data-testid="dialog-send-invoice" aria-describedby="send-invoice-description">
           <DialogHeader>
-            <DialogTitle>Send Invoice</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-blue-600" />
+              Send Invoice Email
+            </DialogTitle>
             <DialogDescription id="send-invoice-description">
-              Send this invoice via email to the customer
+              Review and customize the email before sending to your customer
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="recipientEmail">Recipient Email *</Label>
-              <Input
-                id="recipientEmail"
-                type="email"
-                placeholder="customer@example.com"
-                value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
-                data-testid="input-recipient-email"
-              />
+            {/* To Field */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <Label htmlFor="recipientEmail" className="text-right text-sm font-medium text-slate-600">To *</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="recipientEmail"
+                  type="email"
+                  placeholder="customer@example.com"
+                  value={recipientEmail}
+                  onChange={(e) => setRecipientEmail(e.target.value)}
+                  className="flex-1"
+                  data-testid="input-recipient-email"
+                />
+                <Input
+                  id="recipientName"
+                  type="text"
+                  placeholder="Name"
+                  value={recipientName}
+                  onChange={(e) => setRecipientName(e.target.value)}
+                  className="w-32"
+                  data-testid="input-recipient-name"
+                />
+              </div>
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="recipientName">Recipient Name</Label>
+
+            {/* CC Field */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <Label htmlFor="emailCC" className="text-right text-sm font-medium text-slate-600">CC</Label>
               <Input
-                id="recipientName"
+                id="emailCC"
                 type="text"
-                placeholder="Customer Name"
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                data-testid="input-recipient-name"
+                placeholder="email1@example.com, email2@example.com"
+                value={emailCC}
+                onChange={(e) => setEmailCC(e.target.value)}
+                data-testid="input-email-cc"
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="personalMessage">Personal Message (Optional)</Label>
+
+            {/* BCC Field */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <Label htmlFor="emailBCC" className="text-right text-sm font-medium text-slate-600">BCC</Label>
+              <Input
+                id="emailBCC"
+                type="text"
+                placeholder="email1@example.com, email2@example.com"
+                value={emailBCC}
+                onChange={(e) => setEmailBCC(e.target.value)}
+                data-testid="input-email-bcc"
+              />
+            </div>
+
+            <Separator />
+
+            {/* Subject Field */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <Label htmlFor="emailSubject" className="text-right text-sm font-medium text-slate-600">Subject</Label>
+              <Input
+                id="emailSubject"
+                type="text"
+                placeholder="Invoice subject..."
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                data-testid="input-email-subject"
+              />
+            </div>
+
+            {/* Message Field */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-start">
+              <Label htmlFor="personalMessage" className="text-right text-sm font-medium text-slate-600 pt-2">Message</Label>
               <Textarea
                 id="personalMessage"
                 placeholder="Add a personal message to include in the email..."
@@ -767,21 +838,44 @@ export default function InvoiceView() {
                 data-testid="textarea-personal-message"
               />
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="includePdf"
-                checked={includePdfAttachment}
-                onCheckedChange={(checked) => setIncludePdfAttachment(checked === true)}
-                data-testid="checkbox-include-pdf"
-              />
-              <Label htmlFor="includePdf" className="cursor-pointer">
-                Include PDF attachment
-              </Label>
+
+            <Separator />
+
+            {/* PDF Attachment */}
+            <div className="grid grid-cols-[80px_1fr] gap-3 items-center">
+              <Label className="text-right text-sm font-medium text-slate-600">Attach</Label>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="includePdf"
+                    checked={includePdfAttachment}
+                    onCheckedChange={(checked) => setIncludePdfAttachment(checked === true)}
+                    data-testid="checkbox-include-pdf"
+                  />
+                  <Label htmlFor="includePdf" className="cursor-pointer text-sm">
+                    Include Invoice PDF
+                  </Label>
+                </div>
+                {includePdfAttachment && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Open PDF preview in new tab
+                      window.open(`/api/invoices/${invoiceId}/pdf`, '_blank');
+                    }}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <Eye className="mr-1 h-3 w-3" />
+                    Preview PDF
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-          
-          <DialogFooter>
+
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => setSendDialogOpen(false)}
@@ -792,6 +886,7 @@ export default function InvoiceView() {
             <Button
               onClick={() => sendInvoiceMutation.mutate()}
               disabled={!recipientEmail || sendInvoiceMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
               data-testid="button-submit-send"
             >
               {sendInvoiceMutation.isPending ? (
@@ -802,7 +897,7 @@ export default function InvoiceView() {
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Send Invoice
+                  Send Email
                 </>
               )}
             </Button>

@@ -1007,7 +1007,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/invoices/:id/send-email", requireAuth, async (req: Request, res: Response) => {
     try {
       const invoiceId = parseInt(req.params.id);
-      const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;
+      const { recipientEmail, recipientName, cc, bcc, subject, message, includeAttachment = true } = req.body;
       
       if (!recipientEmail) {
         return res.status(400).json({ message: "Recipient email is required" });
@@ -1115,10 +1115,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const emailData: any = {
         from: fromEmail,
         to: recipientEmail,
-        subject: `Invoice ${invoice.reference || invoice.id} from ${company.name}`,
+        subject: subject || `Invoice ${invoice.reference || invoice.id} from ${company.name}`,
         html: emailHtml
       };
-      
+
+      // Add CC recipients if provided
+      if (cc && Array.isArray(cc) && cc.length > 0) {
+        emailData.cc = cc;
+      }
+
+      // Add BCC recipients if provided
+      if (bcc && Array.isArray(bcc) && bcc.length > 0) {
+        emailData.bcc = bcc;
+      }
+
       if (pdfAttachment) {
         emailData.attachments = [pdfAttachment];
       }
@@ -1133,6 +1143,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: {
           recipientEmail,
           recipientName,
+          cc: cc || [],
+          bcc: bcc || [],
           sentAt: new Date().toISOString()
         },
         timestamp: new Date()
