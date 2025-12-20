@@ -1,15 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useSearch } from 'wouter';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
-import { Building2 } from 'lucide-react';
+import {
+  BarChart4,
+  FileText,
+  TrendingUp,
+  Globe,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  Check
+} from 'lucide-react';
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -20,13 +27,14 @@ export default function Login() {
   // Parse URL params to determine initial tab
   const urlParams = new URLSearchParams(searchString);
   const initialTab = urlParams.get('tab') === 'register' ? 'register' : 'login';
-  
+
   // Tab state
   const [activeTab, setActiveTab] = useState(initialTab);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -37,7 +45,7 @@ export default function Login() {
       setRememberMe(true);
     }
   }, []);
-  
+
   // Update tab when URL changes
   useEffect(() => {
     const params = new URLSearchParams(searchString);
@@ -52,6 +60,7 @@ export default function Login() {
   // Register form state
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   const [registerFirstName, setRegisterFirstName] = useState('');
   const [registerLastName, setRegisterLastName] = useState('');
@@ -64,7 +73,7 @@ export default function Login() {
     try {
       // Save remember me preference
       localStorage.setItem('rememberMe', rememberMe.toString());
-      
+
       await login(loginEmail, loginPassword, rememberMe);
       toast({
         title: 'Success',
@@ -84,7 +93,7 @@ export default function Login() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate passwords match
     if (registerPassword !== registerConfirmPassword) {
       toast({
@@ -94,7 +103,7 @@ export default function Login() {
       });
       return;
     }
-    
+
     // Validate password strength
     if (registerPassword.length < 6) {
       toast({
@@ -104,7 +113,7 @@ export default function Login() {
       });
       return;
     }
-    
+
     setRegisterLoading(true);
 
     try {
@@ -115,11 +124,10 @@ export default function Login() {
         registerFirstName,
         registerLastName
       );
-      
+
       // Clear all cached data to ensure fresh state for new user
-      // This prevents stale company data from a previous session
       queryClient.clear();
-      
+
       toast({
         title: 'Success',
         description: 'Account created successfully',
@@ -137,33 +145,136 @@ export default function Login() {
     }
   };
 
+  const features = [
+    {
+      icon: FileText,
+      title: 'Invoicing & Expenses',
+      description: 'Create professional invoices and track expenses effortlessly'
+    },
+    {
+      icon: TrendingUp,
+      title: 'Financial Reports',
+      description: 'Real-time profit & loss, balance sheets, and more'
+    },
+    {
+      icon: Globe,
+      title: 'Multi-currency',
+      description: 'Handle transactions in multiple currencies with ease'
+    }
+  ];
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Vedo</h1>
-          </div>
-          <p className="text-gray-500">Professional Bookkeeping Application</p>
+    <div className="min-h-screen flex">
+      {/* Left Panel - Branding (hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] bg-slate-900 text-white p-12 flex-col justify-between relative overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500 rounded-full filter blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-teal-500 rounded-full filter blur-3xl transform translate-x-1/2 translate-y-1/2" />
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome</CardTitle>
-            <CardDescription>Sign in to your account or create a new one</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login" data-testid="tab-login">Login</TabsTrigger>
-                <TabsTrigger value="register" data-testid="tab-register">Sign Up</TabsTrigger>
-              </TabsList>
+        {/* Logo */}
+        <div className="relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-lg">
+              <BarChart4 className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-bold tracking-tight">Vedo</span>
+          </div>
+          <p className="text-slate-400 text-sm ml-14">Professional Bookkeeping Software</p>
+        </div>
 
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
+        {/* Features */}
+        <div className="relative z-10 space-y-8">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">
+              Manage your finances
+              <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400">
+                with confidence
+              </span>
+            </h2>
+            <p className="text-slate-400 max-w-md">
+              Everything you need to run your business finances in one powerful, easy-to-use platform.
+            </p>
+          </div>
+
+          <div className="space-y-5">
+            {features.map((feature, index) => (
+              <div key={index} className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
+                  <feature.icon className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-0.5">{feature.title}</h3>
+                  <p className="text-sm text-slate-400">{feature.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="relative z-10 text-sm text-slate-500">
+          © {new Date().getFullYear()} Vedo. All rights reserved.
+        </div>
+      </div>
+
+      {/* Right Panel - Form */}
+      <div className="flex-1 flex flex-col bg-white">
+        {/* Mobile Header */}
+        <div className="lg:hidden bg-slate-900 text-white p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
+              <BarChart4 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <span className="text-xl font-bold">Vedo</span>
+              <p className="text-slate-400 text-xs">Professional Bookkeeping</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Form Container */}
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-12">
+          <div className="w-full max-w-md">
+            {/* Tab Buttons */}
+            <div className="flex gap-1 p-1 bg-slate-100 rounded-lg mb-8">
+              <button
+                onClick={() => setActiveTab('login')}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
+                  activeTab === 'login'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                data-testid="tab-login"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => setActiveTab('register')}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-md transition-all ${
+                  activeTab === 'register'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                data-testid="tab-register"
+              >
+                Create Account
+              </button>
+            </div>
+
+            {/* Login Form */}
+            {activeTab === 'login' && (
+              <div className="animate-fade-in">
+                <div className="mb-8">
+                  <h1 className="text-2xl font-bold text-slate-900 mb-2">Welcome back</h1>
+                  <p className="text-slate-500">Enter your credentials to access your account</p>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
+                    <Label htmlFor="login-email" className="text-slate-700">Email</Label>
                     <Input
                       id="login-email"
                       type="email"
@@ -171,60 +282,99 @@ export default function Login() {
                       onChange={(e) => setLoginEmail(e.target.value)}
                       placeholder="you@example.com"
                       required
+                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20"
                       data-testid="input-login-email"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                      data-testid="input-login-password"
-                    />
+                    <Label htmlFor="login-password" className="text-slate-700">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="login-password"
+                        type={showLoginPassword ? 'text' : 'password'}
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20 pr-10"
+                        data-testid="input-login-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="remember-me"
-                      checked={rememberMe}
-                      onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                      data-testid="checkbox-remember-me"
-                    />
-                    <Label
-                      htmlFor="remember-me"
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      Remember me
-                    </Label>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="remember-me"
+                        checked={rememberMe}
+                        onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                        className="border-slate-300 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                        data-testid="checkbox-remember-me"
+                      />
+                      <Label
+                        htmlFor="remember-me"
+                        className="text-sm text-slate-600 font-normal cursor-pointer"
+                      >
+                        Remember me
+                      </Label>
+                    </div>
                   </div>
+
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                     disabled={loginLoading}
                     data-testid="button-login"
                   >
-                    {loginLoading ? 'Signing in...' : 'Sign In'}
+                    {loginLoading ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Signing in...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        Sign In
+                        <ArrowRight className="w-4 h-4" />
+                      </span>
+                    )}
                   </Button>
-                  <p className="text-center text-sm text-muted-foreground mt-4">
-                    Don't have an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('register')}
-                      className="text-primary hover:underline font-medium"
-                      data-testid="link-signup"
-                    >
-                      Sign up
-                    </button>
-                  </p>
                 </form>
-              </TabsContent>
 
-              <TabsContent value="register">
-                <form onSubmit={handleRegister} className="space-y-4">
+                <p className="text-center text-sm text-slate-500 mt-6">
+                  Don't have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('register')}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                    data-testid="link-signup"
+                  >
+                    Create one
+                  </button>
+                </p>
+              </div>
+            )}
+
+            {/* Register Form */}
+            {activeTab === 'register' && (
+              <div className="animate-fade-in">
+                <div className="mb-8">
+                  <h1 className="text-2xl font-bold text-slate-900 mb-2">Create your account</h1>
+                  <p className="text-slate-500">Start managing your finances in minutes</p>
+                </div>
+
+                <form onSubmit={handleRegister} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="register-email">Email</Label>
+                    <Label htmlFor="register-email" className="text-slate-700">Email</Label>
                     <Input
                       id="register-email"
                       type="email"
@@ -232,80 +382,119 @@ export default function Login() {
                       onChange={(e) => setRegisterEmail(e.target.value)}
                       placeholder="you@example.com"
                       required
+                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20"
                       data-testid="input-register-email"
                     />
                   </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="register-firstname">First Name</Label>
+                      <Label htmlFor="register-firstname" className="text-slate-700">First Name</Label>
                       <Input
                         id="register-firstname"
                         type="text"
                         value={registerFirstName}
                         onChange={(e) => setRegisterFirstName(e.target.value)}
                         required
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20"
                         data-testid="input-register-firstname"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="register-lastname">Last Name</Label>
+                      <Label htmlFor="register-lastname" className="text-slate-700">Last Name</Label>
                       <Input
                         id="register-lastname"
                         type="text"
                         value={registerLastName}
                         onChange={(e) => setRegisterLastName(e.target.value)}
                         required
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20"
                         data-testid="input-register-lastname"
                       />
                     </div>
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="register-password">Password</Label>
-                    <Input
-                      id="register-password"
-                      type="password"
-                      value={registerPassword}
-                      onChange={(e) => setRegisterPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      required
-                      data-testid="input-register-password"
-                    />
+                    <Label htmlFor="register-password" className="text-slate-700">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="register-password"
+                        type={showRegisterPassword ? 'text' : 'password'}
+                        value={registerPassword}
+                        onChange={(e) => setRegisterPassword(e.target.value)}
+                        placeholder="At least 6 characters"
+                        required
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20 pr-10"
+                        data-testid="input-register-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="register-confirm-password">Confirm Password</Label>
+                    <Label htmlFor="register-confirm-password" className="text-slate-700">Confirm Password</Label>
                     <Input
                       id="register-confirm-password"
                       type="password"
                       value={registerConfirmPassword}
                       onChange={(e) => setRegisterConfirmPassword(e.target.value)}
                       required
+                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-blue-500/20"
                       data-testid="input-register-confirm-password"
                     />
                   </div>
+
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                     disabled={registerLoading}
                     data-testid="button-register"
                   >
-                    {registerLoading ? 'Creating account...' : 'Create Account'}
+                    {registerLoading ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Creating account...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        Create Account
+                        <ArrowRight className="w-4 h-4" />
+                      </span>
+                    )}
                   </Button>
-                  <p className="text-center text-sm text-muted-foreground mt-4">
-                    Already have an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('login')}
-                      className="text-primary hover:underline font-medium"
-                      data-testid="link-login"
-                    >
-                      Sign in
-                    </button>
-                  </p>
+
+                  <div className="flex items-start gap-2 p-3 bg-slate-50 rounded-lg text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    <span className="text-slate-600">
+                      By creating an account, you agree to our Terms of Service and Privacy Policy
+                    </span>
+                  </div>
                 </form>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+
+                <p className="text-center text-sm text-slate-500 mt-6">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('login')}
+                    className="text-blue-600 hover:text-blue-700 font-medium"
+                    data-testid="link-login"
+                  >
+                    Sign in
+                  </button>
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
