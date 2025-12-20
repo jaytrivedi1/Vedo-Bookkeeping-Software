@@ -933,217 +933,164 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="h-screen flex flex-col">
-        {/* Header */}
-        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-lg">
-          <div className="flex items-center gap-3">
-            <div className="px-3 py-1 bg-blue-600 rounded-md">
-              <span className="text-sm font-medium text-white">
-                {documentType === 'quotation' ? 'Quotation' : 'Invoice'}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+        {/* Modern Compact Header */}
+        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+          <div className="flex items-center gap-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 -ml-2"
+            >
+              <XIcon className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Close</span>
+            </Button>
+            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold text-slate-900">
+                {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference')}
+              </h1>
+              <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                Draft
               </span>
             </div>
-            <h1 className="text-xl font-semibold text-white">
-              #{form.watch('reference')}
-            </h1>
           </div>
-          <div className="flex items-center gap-1">
-            <Button type="button" variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-slate-800">
-              <Settings className="h-5 w-5" />
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="hidden md:flex border-slate-200 text-slate-600 hover:bg-slate-50">
+              <Settings className="h-4 w-4 mr-1.5" />
+              Settings
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="text-slate-400 hover:text-white hover:bg-slate-800">
-              <HelpCircle className="h-5 w-5" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={onCancel} className="text-slate-400 hover:text-white hover:bg-slate-800">
-              <XIcon className="h-5 w-5" />
+            <Button
+              type="submit"
+              disabled={saveInvoice.isPending}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+            >
+              {saveInvoice.isPending ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-grow bg-slate-50">
-          {/* Main content area with improved 2-column layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
-            {/* Left column - Main content */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Customer section - with better alignment */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <FormField
-                      control={form.control}
-                      name="contactId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center gap-1 mb-2">
-                            <FormLabel className="text-sm font-medium">Customer</FormLabel>
-                            <HelpCircle className="h-4 w-4 text-gray-400" />
-                          </div>
-                          <FormControl>
-                            <SearchableSelect
-                              items={customerItems}
-                              value={field.value?.toString() || ""}
-                              onValueChange={(value) => {
-                                const contactId = parseInt(value);
-                                field.onChange(contactId);
-                                handleContactChange(contactId);
-                              }}
-                              placeholder="Select a customer"
-                              emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
-                              searchPlaceholder="Search customers..."
-                              className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20"
-                              disabled={contactsLoading}
-                              onAddNew={() => setShowAddCustomerDialog(true)}
-                              addNewText="Add New Customer"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Customer email</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <Input
-                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20"
-                        placeholder="Separate emails with a comma"
-                        value={selectedContact?.email || ''}
-                        readOnly
-                      />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="send-invoice" 
-                        checked={sendInvoiceEmail}
-                        onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
-                      />
-                      <label
-                        htmlFor="send-invoice"
-                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        Send later
-                      </label>
-                      <HelpCircle className="h-4 w-4 text-gray-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Billing section - improved alignment */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <FormLabel className="text-sm font-medium block mb-2">Billing address</FormLabel>
-                    <Textarea
-                      className="min-h-[120px] bg-slate-50 border-slate-200 resize-none focus:border-blue-500 focus:ring-blue-500/20"
-                      value={selectedContact?.address || ''}
-                      readOnly
-                    />
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Type</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
+        <div className="flex-grow overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+
+            {/* Customer & Invoice Details - Horizontal Layout */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+                {/* Left: Customer Selection */}
+                <div className="p-6">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Bill To</h2>
+                  <FormField
+                    control={form.control}
+                    name="contactId"
+                    render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Select 
-                            value={documentType} 
-                            onValueChange={(value: 'invoice' | 'quotation') => setDocumentType(value)}
-                            disabled={isEditing}
-                            data-testid="select-document-type"
-                          >
-                            <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="invoice">Invoice</SelectItem>
-                              <SelectItem value="quotation">Quotation</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    </div>
-                    
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Terms</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <FormItem>
-                        <FormControl>
-                          <Select 
-                            value={paymentTerms} 
-                            onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                          >
-                            <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20">
-                              <SelectValue placeholder="Select payment terms" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Due upon receipt</SelectItem>
-                              <SelectItem value="7">Net 7</SelectItem>
-                              <SelectItem value="14">Net 14</SelectItem>
-                              <SelectItem value="30">Net 30</SelectItem>
-                              <SelectItem value="60">Net 60</SelectItem>
-                              <SelectItem value="custom">Custom</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    </div>
-                    
-                    {isMultiCurrencyEnabled && (
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex items-center gap-1 mb-2">
-                            <FormLabel className="text-sm font-medium">Currency</FormLabel>
-                            <HelpCircle className="h-4 w-4 text-gray-400" />
-                          </div>
-                          <FormItem>
-                            <FormControl>
-                              <Select 
-                                value={currency} 
-                                onValueChange={(value) => setCurrency(value)}
-                                disabled={isEditing || !!watchContactId}
-                              >
-                                <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20">
-                                  <SelectValue placeholder="Select currency" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {CURRENCIES.map(curr => (
-                                    <SelectItem key={curr.code} value={curr.code}>
-                                      {curr.code} - {curr.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                          </FormItem>
-                        </div>
-                        
-                        {currency !== homeCurrency && (
-                          <ExchangeRateInput
-                            fromCurrency={currency}
-                            toCurrency={homeCurrency}
-                            value={exchangeRate}
-                            onChange={handleExchangeRateChange}
-                            isLoading={exchangeRateLoading}
-                            date={invoiceDate}
+                          <SearchableSelect
+                            items={customerItems}
+                            value={field.value?.toString() || ""}
+                            onValueChange={(value) => {
+                              const contactId = parseInt(value);
+                              field.onChange(contactId);
+                              handleContactChange(contactId);
+                            }}
+                            placeholder="Select a customer"
+                            emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
+                            searchPlaceholder="Search customers..."
+                            className="bg-slate-50 border-slate-200 h-12 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                            disabled={contactsLoading}
+                            onAddNew={() => setShowAddCustomerDialog(true)}
+                            addNewText="Add New Customer"
                           />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Customer Details Preview */}
+                  {selectedContact && (
+                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      <div className="text-sm text-slate-600 space-y-1">
+                        {selectedContact.email && (
+                          <p className="flex items-center gap-2">
+                            <span className="text-slate-400">Email:</span>
+                            <span className="font-medium text-slate-700">{selectedContact.email}</span>
+                          </p>
+                        )}
+                        {selectedContact.address && (
+                          <p className="flex items-start gap-2">
+                            <span className="text-slate-400">Address:</span>
+                            <span className="font-medium text-slate-700 whitespace-pre-line">{selectedContact.address}</span>
+                          </p>
                         )}
                       </div>
-                    )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-2 mt-4">
+                    <Checkbox
+                      id="send-invoice"
+                      checked={sendInvoiceEmail}
+                      onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="send-invoice"
+                      className="text-sm text-slate-600 cursor-pointer"
+                    >
+                      Send invoice via email
+                    </label>
                   </div>
-                  
-                  <div className="space-y-4">
+                </div>
+
+                {/* Right: Invoice Details */}
+                <div className="p-6">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Invoice Details</h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Invoice Number */}
                     <div>
-                      <FormLabel className="text-sm font-medium block mb-2">Invoice date</FormLabel>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice No.</FormLabel>
+                      <FormField
+                        control={form.control}
+                        name="reference"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                className="bg-slate-50 border-slate-200 h-11 font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {/* Document Type */}
+                    <div>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Type</FormLabel>
+                      <Select
+                        value={documentType}
+                        onValueChange={(value: 'invoice' | 'quotation') => setDocumentType(value)}
+                        disabled={isEditing}
+                        data-testid="select-document-type"
+                      >
+                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="invoice">Invoice</SelectItem>
+                          <SelectItem value="quotation">Quotation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Invoice Date */}
+                    <div>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice Date</FormLabel>
                       <FormField
                         control={form.control}
                         name="date"
@@ -1152,11 +1099,16 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                             <Popover>
                               <PopoverTrigger asChild>
                                 <FormControl>
-                                  <Input
-                                    className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20 cursor-pointer"
-                                    value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
-                                    readOnly
-                                  />
+                                  <Button
+                                    variant="outline"
+                                    className={cn(
+                                      "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
+                                      !field.value && "text-muted-foreground"
+                                    )}
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                                    {field.value ? format(field.value, "MMM dd, yyyy") : "Select date"}
+                                  </Button>
                                 </FormControl>
                               </PopoverTrigger>
                               <PopoverContent className="w-auto p-0" align="start">
@@ -1173,16 +1125,19 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         )}
                       />
                     </div>
-                    
+
+                    {/* Due Date */}
                     <div>
-                      <FormLabel className="text-sm font-medium block mb-2">Due date</FormLabel>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Due Date</FormLabel>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Input
-                            className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20 cursor-pointer"
-                            value={format(dueDate, "dd/MM/yyyy")}
-                            readOnly
-                          />
+                          <Button
+                            variant="outline"
+                            className="w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                            {format(dueDate, "MMM dd, yyyy")}
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
@@ -1194,272 +1149,307 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         </PopoverContent>
                       </Popover>
                     </div>
+
+                    {/* Payment Terms - Full Width */}
+                    <div className="col-span-2">
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Payment Terms</FormLabel>
+                      <Select
+                        value={paymentTerms}
+                        onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                      >
+                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                          <SelectValue placeholder="Select payment terms" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Due upon receipt</SelectItem>
+                          <SelectItem value="7">Net 7</SelectItem>
+                          <SelectItem value="14">Net 14</SelectItem>
+                          <SelectItem value="30">Net 30</SelectItem>
+                          <SelectItem value="60">Net 60</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Currency - if multi-currency enabled */}
+                    {isMultiCurrencyEnabled && (
+                      <>
+                        <div className="col-span-2">
+                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Currency</FormLabel>
+                          <Select
+                            value={currency}
+                            onValueChange={(value) => setCurrency(value)}
+                            disabled={isEditing || !!watchContactId}
+                          >
+                            <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                              <SelectValue placeholder="Select currency" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CURRENCIES.map(curr => (
+                                <SelectItem key={curr.code} value={curr.code}>
+                                  {curr.code} - {curr.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {currency !== homeCurrency && (
+                          <div className="col-span-2">
+                            <ExchangeRateInput
+                              fromCurrency={currency}
+                              toCurrency={homeCurrency}
+                              value={exchangeRate}
+                              onChange={handleExchangeRateChange}
+                              isLoading={exchangeRateLoading}
+                              date={invoiceDate}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
-              
-              {/* Tags section removed as requested */}
-              
-              {/* Line Items - improved table */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="text-sm font-medium">Line Items</div>
-                  <FormItem>
-                    <FormControl>
-                      <Select defaultValue="exclusive">
-                        <SelectTrigger className="w-44 bg-slate-50 border-slate-200 h-10 focus:border-blue-500 focus:ring-blue-500/20">
-                          <SelectValue placeholder="Tax setting" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                          <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                          <SelectItem value="no-tax">No Tax</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                </div>
-                
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  {/* Header */}
-                  <div className="bg-slate-100 grid grid-cols-12 gap-2 text-xs font-semibold p-3 border-b border-slate-200 uppercase text-slate-600 tracking-wide">
-                    <div className="col-span-1 text-center">#</div>
-                    <div className="col-span-3">Product/Service</div>
-                    <div className="col-span-2">Description</div>
-                    <div className="col-span-1 text-center">Qty</div>
-                    <div className="col-span-1 text-center">Rate</div>
-                    <div className="col-span-1 text-center">Amount</div>
-                    <div className="col-span-2 text-center">Sales Tax</div>
-                    <div className="col-span-1"></div>
-                  </div>
-                  
-                  {/* Line Items */}
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="grid grid-cols-12 gap-2 p-3 border-b border-slate-100 items-center hover:bg-slate-50 transition-colors">
-                      <div className="col-span-1 text-center text-sm text-slate-500 font-medium">{index + 1}</div>
-                      <div className="col-span-3">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.productId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <SearchableSelect
-                                  items={productItems}
-                                  value={field.value ? field.value.toString() : ''}
-                                  onValueChange={(value) => {
-                                    if (!value) {
-                                      field.onChange(undefined);
-                                      form.setValue(`lineItems.${index}.description`, '');
-                                      form.setValue(`lineItems.${index}.unitPrice`, 0);
-                                      form.setValue(`lineItems.${index}.salesTaxId`, undefined);
-                                      updateLineItemAmount(index);
-                                    } else {
-                                      const productId = parseInt(value);
-                                      const product = typedProducts.find(p => p.id === productId);
-                                      if (product) {
-                                        field.onChange(value);
-                                        form.setValue(`lineItems.${index}.description`, product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
-                                        
-                                        if (product.salesTaxId) {
-                                          form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
-                                        }
-                                        
+            </div>
+
+            {/* Line Items Section - Modern Full Width */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
+                <Select defaultValue="exclusive">
+                  <SelectTrigger className="w-48 bg-slate-50 border-slate-200 h-10 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                    <SelectValue placeholder="Tax setting" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                    <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                    <SelectItem value="no-tax">No Tax</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Modern Line Items */}
+              <div className="divide-y divide-slate-100">
+                {fields.map((field, index) => (
+                  <div key={field.id} className="p-4 hover:bg-slate-50/50 transition-colors group">
+                    <div className="flex items-start gap-4">
+                      {/* Line Number */}
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 mt-1">
+                        {index + 1}
+                      </div>
+
+                      {/* Main Content */}
+                      <div className="flex-grow grid grid-cols-1 md:grid-cols-12 gap-4">
+                        {/* Product/Service - Larger */}
+                        <div className="md:col-span-5">
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.productId`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <SearchableSelect
+                                    items={productItems}
+                                    value={field.value ? field.value.toString() : ''}
+                                    onValueChange={(value) => {
+                                      if (!value) {
+                                        field.onChange(undefined);
+                                        form.setValue(`lineItems.${index}.description`, '');
+                                        form.setValue(`lineItems.${index}.unitPrice`, 0);
+                                        form.setValue(`lineItems.${index}.salesTaxId`, undefined);
                                         updateLineItemAmount(index);
+                                      } else {
+                                        const productId = parseInt(value);
+                                        const product = typedProducts.find(p => p.id === productId);
+                                        if (product) {
+                                          field.onChange(value);
+                                          form.setValue(`lineItems.${index}.description`, product.name);
+                                          form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
+
+                                          if (product.salesTaxId) {
+                                            form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
+                                          }
+
+                                          updateLineItemAmount(index);
+                                        }
                                       }
-                                    }
-                                  }}
-                                  onAddNew={() => {
-                                    setCurrentLineItemIndex(index);
-                                    setShowAddProductDialog(true);
-                                  }}
-                                  addNewText="Add New Product/Service"
-                                  placeholder="Select product/service"
-                                  searchPlaceholder="Search products..."
-                                  emptyText={productsLoading ? "Loading..." : "No products found"}
-                                  disabled={productsLoading}
-                                  className="bg-transparent border-0 border-b border-slate-200 rounded-none hover:bg-slate-50 focus:bg-slate-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                                    }}
+                                    onAddNew={() => {
+                                      setCurrentLineItemIndex(index);
+                                      setShowAddProductDialog(true);
+                                    }}
+                                    addNewText="Add New Product/Service"
+                                    placeholder="Select or search..."
+                                    searchPlaceholder="Search products..."
+                                    emptyText={productsLoading ? "Loading..." : "No products found"}
+                                    disabled={productsLoading}
+                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Quantity */}
+                        <div className="md:col-span-2">
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.quantity`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input
+                                    className="bg-white border-slate-200 h-11 text-center rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    {...field}
+                                    onChange={(e) => {
+                                      field.onChange(parseFloat(e.target.value));
+                                      updateLineItemAmount(index);
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Rate */}
+                        <div className="md:col-span-2">
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Rate</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.unitPrice`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input
+                                    className="bg-white border-slate-200 h-11 text-right rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    {...field}
+                                    onChange={(e) => {
+                                      field.onChange(parseFloat(e.target.value));
+                                      updateLineItemAmount(index);
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Tax */}
+                        <div className="md:col-span-2">
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.salesTaxId`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <SearchableSelect
+                                    items={taxItems}
+                                    value={field.value?.toString() || "0"}
+                                    onValueChange={(value) => {
+                                      const numValue = parseInt(value);
+                                      if (numValue === 0) {
+                                        field.onChange(undefined);
+                                      } else {
+                                        field.onChange(numValue);
+                                      }
+                                      updateLineItemAmount(index);
+                                      calculateTotals();
+                                    }}
+                                    placeholder="Select Tax"
+                                    searchPlaceholder="Search taxes..."
+                                    emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Amount - Display Only */}
+                        <div className="md:col-span-1">
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.amount`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <div className="h-11 flex items-center justify-end px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900">
+                                    ${formatCurrency(field.value)}
+                                  </div>
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                       </div>
-                      <div className="col-span-2">
-                        <Input
-                          className="bg-transparent border-0 border-b border-slate-200 p-2 focus:ring-0 hover:bg-slate-50 focus:bg-slate-50"
-                          placeholder="Enter description"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.quantity`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  className="bg-transparent border-0 border-b border-slate-200 p-2 text-center focus:ring-0 hover:bg-slate-50 focus:bg-slate-50"
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  {...field}
-                                  onChange={(e) => {
-                                    field.onChange(parseFloat(e.target.value));
-                                    updateLineItemAmount(index);
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.unitPrice`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  className="bg-transparent border-0 border-b border-slate-200 p-2 text-center focus:ring-0 hover:bg-slate-50 focus:bg-slate-50"
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  {...field}
-                                  onChange={(e) => {
-                                    field.onChange(parseFloat(e.target.value));
-                                    updateLineItemAmount(index);
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.amount`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input
-                                  className="bg-transparent border-0 border-b border-slate-200 p-2 text-center focus:ring-0 font-semibold text-slate-700"
-                                  readOnly
-                                  value={formatCurrency(field.value)}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      {/* Sales Tax dropdown for each line item */}
-                      <div className="col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.salesTaxId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <SearchableSelect
-                                  items={taxItems}
-                                  value={field.value?.toString() || "0"}
-                                  onValueChange={(value) => {
-                                    const numValue = parseInt(value);
-                                    if (numValue === 0) {
-                                      field.onChange(undefined);
-                                    } else {
-                                      field.onChange(numValue);
-                                    }
-                                    updateLineItemAmount(index);
-                                    calculateTotals();
-                                  }}
-                                  placeholder="Select Tax"
-                                  searchPlaceholder="Search taxes..."
-                                  emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                                  className="bg-transparent border-0 border-b border-slate-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-slate-50 focus:bg-slate-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      <div className="col-span-1 flex justify-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          onClick={() => {
-                            if (fields.length > 1) {
-                              remove(index);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+
+                      {/* Delete Button */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
+                        onClick={() => {
+                          if (fields.length > 1) {
+                            remove(index);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                  ))}
-                </div>
-                
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add lines
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (fields.length > 1) {
-                        remove();
-                      }
-                    }}
-                  >
-                    Clear all lines
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                  >
-                    Add subtotal
-                  </Button>
-                </div>
-                
-                {/* Totals */}
-                <div className="flex justify-end mt-6">
-                  <div className="w-80 space-y-3 bg-slate-50 p-5 rounded-xl border border-slate-200">
-                    <div className="flex justify-between items-center text-slate-700">
-                      <span className="text-sm font-medium">Subtotal</span>
-                      <span className="font-semibold">${formatCurrency(subTotal)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Line Button */}
+              <div className="px-6 py-4 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
+                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-2"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add line item
+                </Button>
+              </div>
+
+              {/* Totals Section - Clean Modern Design */}
+              <div className="px-6 py-6 bg-slate-50 border-t border-slate-200">
+                <div className="flex justify-end">
+                  <div className="w-full max-w-sm space-y-3">
+                    {/* Subtotal */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-600">Subtotal</span>
+                      <span className="text-sm font-medium text-slate-900">${formatCurrency(subTotal)}</span>
                     </div>
-                    
-                    {/* Tax Summary - Editable */}
-                    <div className="flex justify-between items-center text-slate-600">
-                      <span className="text-sm">
-                        {taxNames.length > 0
-                          ? taxNames.join(', ')
-                          : 'Tax'}
+
+                    {/* Tax - Editable */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-600">
+                        {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
                       </span>
                       <div className="flex items-center gap-1">
-                        <span className="font-medium">$</span>
+                        <span className="text-sm text-slate-500">$</span>
                         <Input
                           type="number"
                           min="0"
@@ -1470,20 +1460,15 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                             if (!isNaN(value) && e.target.value.trim() !== '') {
                               const roundedValue = roundTo2Decimals(value);
                               setManualTaxAmount(roundedValue);
-                              // Pass the value directly to avoid state timing issues
                               calculateTotals(roundedValue);
                             } else {
-                              // If empty or invalid, clear the manual override
                               setManualTaxAmount(null);
-                              // Pass null to explicitly use calculated tax
                               calculateTotals(null);
                             }
                           }}
                           onBlur={(e) => {
-                            // Ensure value is rounded on blur, or cleared if empty
                             if (e.target.value.trim() === '') {
                               setManualTaxAmount(null);
-                              // Pass null to explicitly use calculated tax
                               calculateTotals(null);
                             } else if (manualTaxAmount !== null) {
                               const roundedValue = roundTo2Decimals(manualTaxAmount);
@@ -1491,31 +1476,30 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                               calculateTotals(roundedValue);
                             }
                           }}
-                          className="w-24 h-8 text-right px-2 font-medium border-slate-200 bg-white focus:border-blue-500 focus:ring-blue-500/20"
+                          className="w-24 h-9 text-right px-2 text-sm font-medium border-slate-200 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                         />
                       </div>
                     </div>
-                    
-                    {/* Show tax components breakdown if available (read-only, for info) */}
+
+                    {/* Tax Breakdown */}
                     {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
-                      <div className="pl-4 space-y-1">
+                      <div className="pl-4 space-y-1 pb-2">
                         {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                          <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
-                            <span>
-                              {taxComponent.name} ({taxComponent.rate}%)
-                            </span>
+                          <div key={taxComponent.id} className="flex justify-between items-center text-xs text-slate-500">
+                            <span>{taxComponent.name} ({taxComponent.rate}%)</span>
                             <span>${formatCurrency(taxComponent.amount)}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                    
-                    <div className="flex justify-between border-t border-slate-300 pt-3">
-                      <span className="text-sm font-semibold text-slate-900">Total</span>
-                      <span className="font-bold text-slate-900">${formatCurrency(totalAmount)}</span>
+
+                    {/* Total */}
+                    <div className="flex justify-between items-center pt-3 border-t border-slate-300">
+                      <span className="text-base font-semibold text-slate-900">Total</span>
+                      <span className="text-lg font-bold text-slate-900">${formatCurrency(totalAmount)}</span>
                     </div>
-                    
-                    {/* Applied credits with editable amounts */}
+
+                    {/* Applied Credits */}
                     {appliedCredits.length > 0 && (
                       <div className="space-y-2 mt-3 pt-3 border-t border-slate-300">
                         {appliedCredits.map(ac => (
@@ -1539,126 +1523,91 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                       </div>
                     )}
                     
-                    <div className="flex justify-between font-bold border-t-2 border-blue-500 pt-4 mt-4 text-lg bg-blue-50 -mx-5 -mb-5 px-5 pb-5 rounded-b-xl">
-                      <span className="text-blue-900">Balance due</span>
+                    {/* Balance Due - Highlighted */}
+                    <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 -mx-4 px-4 py-4 rounded-b-xl">
+                      <span className="text-base font-bold text-blue-900">Balance Due</span>
                       {currency !== homeCurrency ? (
                         <div className="text-right">
-                          <div className="text-blue-700">{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}</div>
-                          <div className="text-xs font-normal text-blue-500">
+                          <div className="text-xl font-bold text-blue-700">
+                            {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
+                          </div>
+                          <div className="text-xs text-blue-500">
                             ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-blue-700">${formatCurrency(balanceDue)}</span>
+                        <span className="text-xl font-bold text-blue-700">${formatCurrency(balanceDue)}</span>
                       )}
                     </div>
                   </div>
                 </div>
               </div>
-              
-              {/* Invoice message */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition-shadow">
-                <FormLabel className="text-sm font-medium block mb-2">Message on invoice</FormLabel>
-                <Textarea
-                  className="min-h-[100px] bg-slate-50 border-slate-200 resize-none focus:border-blue-500 focus:ring-blue-500/20"
-                  placeholder="Add a personal note or message for this invoice"
-                />
+            </div>
+
+            {/* Notes & Attachments Section */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Notes & Attachments</h2>
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Message */}
+                <div>
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
+                  <Textarea
+                    className="min-h-[120px] bg-slate-50 border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    placeholder="Add a personal note or payment instructions..."
+                  />
+                </div>
+
+                {/* Attachments */}
+                <div>
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer min-h-[120px] flex flex-col items-center justify-center">
+                    <div className="relative inline-block">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mb-2 rounded-lg"
+                        onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Select files
+                      </Button>
+                      <input
+                        type="file"
+                        id="file-upload-invoice"
+                        className="hidden"
+                        multiple
+                        onChange={(e) => {
+                          console.log("Files selected:", e.target.files);
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400">or drag and drop files here</p>
+                  </div>
+                </div>
               </div>
             </div>
-            
-            {/* Right column - Invoice details */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Balance Due Card */}
-              <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg p-6 text-white">
-                <div className="text-center">
-                  <div className="text-xs uppercase tracking-wide text-blue-200 mb-2 font-medium">Balance Due</div>
-                  {currency !== homeCurrency ? (
-                    <div>
-                      <div className="text-3xl font-bold">
-                        {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
-                      </div>
-                      <div className="text-sm text-blue-200 mt-1">
-                        ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-3xl font-bold">${formatCurrency(balanceDue)}</div>
-                  )}
+
+            {/* Credits Section - Collapsible Style */}
+            {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Available Credits</h2>
+                  <span className="text-sm font-medium text-emerald-600">
+                    ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))} available
+                  </span>
                 </div>
-              </div>
-              
-              {/* Invoice Number Card */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <FormLabel className="text-sm font-medium block mb-2">Invoice no.</FormLabel>
-                <FormField
-                  control={form.control}
-                  name="reference"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input
-                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-blue-500/20 font-medium"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              {/* Attach Documents Card */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <FormLabel className="text-sm font-medium block mb-3">Attach documents</FormLabel>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-colors cursor-pointer">
-                  <div className="relative inline-block">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      className="mb-2"
-                      onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                    >
-                      Select files
-                    </Button>
-                    <input
-                      type="file"
-                      id="file-upload-invoice"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => {
-                        // Handle file selection here
-                        console.log("Files selected:", e.target.files);
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Drag and drop files here</p>
-                  <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
-                </div>
-              </div>
-              
-              {/* Available Credits Panel */}
-              {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                  <div className="mb-4">
-                    <div className="text-sm font-medium mb-2">Available Credits</div>
-                    {unappliedCredits.length === 0 && appliedCredits.length > 0 ? (
-                      <div className="text-xs text-gray-500">No additional credits available</div>
-                    ) : (
-                      <div className="text-sm text-green-600 font-medium">
-                        ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* List of unapplied credits with add button - with scrolling */}
-                  <div className="max-h-48 overflow-y-auto">
+                <div className="p-6">
+                  {/* Unapplied Credits */}
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
                     {unappliedCredits.filter(c => !appliedCredits.some(ac => ac.creditId === c.id)).map(credit => (
-                      <div key={credit.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <div className="flex-grow">
-                          <div className="text-sm font-medium">Credit #{credit.id}</div>
-                          <div className="text-xs text-gray-500">
-                            {format(new Date(credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(credit.balance || 0))}
+                      <div key={credit.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                        <div>
+                          <div className="text-sm font-medium text-slate-900">Credit #{credit.id}</div>
+                          <div className="text-xs text-slate-500">
+                            {format(new Date(credit.date), 'MMM dd, yyyy')} · ${formatCurrency(Math.abs(credit.balance || 0))}
                           </div>
                         </div>
                         <Button
@@ -1666,115 +1615,128 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                           size="sm"
                           variant="outline"
                           onClick={() => addCredit(credit)}
-                          className="ml-2"
+                          className="rounded-lg border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300"
                           data-testid={`button-add-credit-${credit.id}`}
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-4 w-4 mr-1" />
+                          Apply
                         </Button>
                       </div>
                     ))}
                   </div>
-                  
-                  {/* Applied credits with remove button - with scrolling */}
+
+                  {/* Applied Credits */}
                   {appliedCredits.length > 0 && (
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="text-sm font-medium mb-2">Applied to this invoice</div>
-                      <div className="max-h-48 overflow-y-auto space-y-2">
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Applied to this invoice</div>
+                      <div className="space-y-2">
                         {appliedCredits.map(ac => (
-                          <div key={ac.creditId} className="flex items-center gap-2 py-2">
-                            <div className="flex-grow">
-                              <div className="text-sm">Credit #{ac.creditId}</div>
-                              <div className="text-xs text-gray-500">
-                                {format(new Date(ac.credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(ac.credit.balance || 0))} available
+                          <div key={ac.creditId} className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
+                            <div>
+                              <div className="text-sm font-medium text-slate-900">Credit #{ac.creditId}</div>
+                              <div className="text-xs text-slate-500">
+                                {format(new Date(ac.credit.date), 'MMM dd, yyyy')}
                               </div>
                             </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removeCredit(ac.creditId)}
-                              data-testid={`button-remove-credit-${ac.creditId}`}
-                            >
-                              <X className="h-4 w-4 text-gray-500" />
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-emerald-600">-${formatCurrency(ac.amount)}</span>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => removeCredit(ac.creditId)}
+                                className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                data-testid={`button-remove-credit-${ac.creditId}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
-                      </div>
-                      <div className="flex justify-between items-center mt-3 pt-3 border-t font-medium text-green-600">
-                        <span>Total Applied:</span>
-                        <span>${formatCurrency(appliedCredits.reduce((sum, ac) => sum + ac.amount, 0))}</span>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
           </div>
         </div>
         
-        {/* Fixed footer - modernized */}
-        <div className="border-t border-slate-200 bg-white py-4 px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] sticky bottom-0 mt-auto">
-          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full h-11 border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-colors" data-testid="button-cancel">
-            Cancel
-          </Button>
-          
-          <div className="flex flex-wrap md:flex-nowrap gap-2 md:space-x-2">
-            <div className="flex md:hidden w-full justify-end">
-              {/* Mobile save button */}
-              <Button
-                type="submit"
-                disabled={saveInvoice.isPending}
-                className="w-full md:w-auto h-11 bg-blue-600 hover:bg-blue-700 transition-colors"
-                data-testid="button-save-mobile"
-              >
-                {saveInvoice.isPending ? 'Saving...' : `Save and send ${documentType}`}
-              </Button>
+        {/* Modern Sticky Footer */}
+        <div className="border-t border-slate-200 bg-white/95 backdrop-blur-sm py-3 px-4 md:px-6 sticky bottom-0 z-20 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)]">
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Left: Cancel */}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onCancel}
+              className="hidden sm:flex text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              data-testid="button-cancel"
+            >
+              Cancel
+            </Button>
+
+            {/* Center: Balance Display */}
+            <div className="flex items-center gap-4 order-first sm:order-none">
+              <div className="text-center sm:text-right">
+                <div className="text-xs text-slate-500 uppercase tracking-wide">Balance Due</div>
+                <div className="text-xl font-bold text-slate-900">
+                  {currency !== homeCurrency ? (
+                    <>
+                      {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
+                    </>
+                  ) : (
+                    <>${formatCurrency(balanceDue)}</>
+                  )}
+                </div>
+              </div>
             </div>
-            
-            <div className="hidden md:flex md:space-x-2 flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex h-11 border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-colors">
-                Print or Preview
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex h-11 border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-colors">
-                Customize
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {/* Mobile Cancel */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                className="sm:hidden flex-1 h-11 border-slate-200"
+                data-testid="button-cancel-mobile"
+              >
+                Cancel
               </Button>
 
-              <div className="flex">
+              {/* Save Button with Dropdown */}
+              <div className="flex flex-1 sm:flex-none">
                 <Button
                   type="submit"
                   disabled={saveInvoice.isPending}
-                  className="h-11 bg-blue-600 hover:bg-blue-700 rounded-r-none transition-colors"
+                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 rounded-r-none transition-colors shadow-sm px-6"
                   data-testid="button-save"
                 >
                   {saveInvoice.isPending ? 'Saving...' : `Save ${documentType === 'quotation' ? 'Quotation' : 'Invoice'}`}
                 </Button>
-                <div className="relative ml-px">
-                  <FormItem>
-                    <FormControl>
-                      <Select
-                        defaultValue="save"
-                        onValueChange={(value) => {
-                          if (value === "save_send") {
-                            setSendInvoiceEmail(true);
-                            form.handleSubmit(onSubmit)();
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="px-2 rounded-l-none h-11 border-l-0 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 transition-colors" data-testid="select-save-options">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent align="end">
-                          <SelectItem value="save">
-                            {documentType === 'quotation' ? 'Save Quotation' : 'Save Invoice'}
-                          </SelectItem>
-                          <SelectItem value="save_send" data-testid="option-save-send">
-                            {documentType === 'quotation' ? 'Save and Send Quotation' : 'Save and Send Invoice'}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                </div>
+                <Select
+                  defaultValue="save"
+                  onValueChange={(value) => {
+                    if (value === "save_send") {
+                      setSendInvoiceEmail(true);
+                      form.handleSubmit(onSubmit)();
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-10 rounded-l-none h-11 border-l border-blue-500 bg-blue-600 hover:bg-blue-700 text-white border-blue-600 transition-colors shadow-sm" data-testid="select-save-options">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    <SelectItem value="save">
+                      {documentType === 'quotation' ? 'Save Quotation' : 'Save Invoice'}
+                    </SelectItem>
+                    <SelectItem value="save_send" data-testid="option-save-send">
+                      {documentType === 'quotation' ? 'Save and Send Quotation' : 'Save and Send Invoice'}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </div>
