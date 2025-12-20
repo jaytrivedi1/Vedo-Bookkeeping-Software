@@ -60,8 +60,8 @@ export function CompanySelector() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center">
-        <Skeleton className="h-9 w-[200px] rounded-md" />
+      <div className="flex items-center w-full">
+        <Skeleton className="h-10 w-full rounded-md bg-slate-800/50" />
       </div>
     );
   }
@@ -77,16 +77,16 @@ export function CompanySelector() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant="ghost"
           role="combobox"
           aria-expanded={open}
-          className="min-w-[200px] justify-between"
+          className="w-full justify-between bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 text-white h-10"
         >
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            <span>{currentCompany.name}</span>
+          <div className="flex items-center gap-2 truncate">
+            <Building2 className="h-4 w-4 text-slate-400 flex-shrink-0" />
+            <span className="truncate text-sm">{currentCompany.name}</span>
           </div>
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronDown className="ml-2 h-4 w-4 shrink-0 text-slate-400" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[250px] p-0">
