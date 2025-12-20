@@ -30,7 +30,7 @@ interface Invoice extends Omit<BaseInvoice, 'lineItems'> {
   appliedCreditAmount?: number;
   appliedCredits?: {id: number, amount: number}[];
 }
-import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, X, HelpCircle, Settings, ChevronDown } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, XIcon, X, HelpCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -488,17 +488,21 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
         description: `${docType} has been saved successfully`,
         variant: "default",
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+
+      // If Save & Send was clicked, navigate to invoice view with send dialog open
+      if (sendInvoiceEmail && result?.id) {
+        const basePath = documentType === 'quotation' ? '/quotations' : '/invoices';
+        window.location.href = `${basePath}/${result.id}?openSendDialog=true`;
+        return;
+      }
+
+      // Normal save - go back
       if (onSuccess) {
         onSuccess();
       } else {
         window.history.back();
-      }
-      
-      // Handle send email if requested
-      if (sendInvoiceEmail && selectedContact?.email && result?.id) {
-        handleSendEmail(result.id);
       }
     },
     onError: (error: any) => {
@@ -562,34 +566,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       }
     }
   });
-
-  // Handle sending email for invoice or quotation
-  const handleSendEmail = async (transactionId: number) => {
-    const endpoint = documentType === 'quotation' 
-      ? `/api/quotations/${transactionId}/send`
-      : `/api/invoices/${transactionId}/send`;
-    
-    try {
-      await apiRequest(endpoint, 'POST', {
-        recipientEmail: selectedContact?.email,
-        recipientName: selectedContact?.name,
-        includeAttachment: true
-      });
-      
-      const docType = documentType === 'quotation' ? 'Quotation' : 'Invoice';
-      toast({
-        title: `${docType} sent`,
-        description: `${docType} has been sent to ${selectedContact?.email}`,
-      });
-    } catch (error) {
-      console.error("Error sending email:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send email. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
 
   const calculateLineItemAmount = (quantity: number, unitPrice: number) => {
     return roundTo2Decimals(quantity * unitPrice);
@@ -1589,38 +1565,30 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                 Cancel
               </Button>
 
-              {/* Save Button with Dropdown */}
-              <div className="flex flex-1 sm:flex-none">
-                <Button
-                  type="submit"
-                  disabled={saveInvoice.isPending}
-                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 rounded-r-none border-r-0 transition-colors shadow-sm px-6"
-                  data-testid="button-save"
-                >
-                  {saveInvoice.isPending ? 'Saving...' : `Save ${documentType === 'quotation' ? 'Quotation' : 'Invoice'}`}
-                </Button>
-                <Select
-                  defaultValue="save"
-                  onValueChange={(value) => {
-                    if (value === "save_send") {
-                      setSendInvoiceEmail(true);
-                      form.handleSubmit(onSubmit)();
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-11 rounded-l-none h-11 bg-blue-600 hover:bg-blue-700 text-white border-0 transition-colors shadow-sm [&>svg]:hidden" data-testid="select-save-options">
-                    <ChevronDown className="h-4 w-4" />
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    <SelectItem value="save">
-                      {documentType === 'quotation' ? 'Save Quotation' : 'Save Invoice'}
-                    </SelectItem>
-                    <SelectItem value="save_send" data-testid="option-save-send">
-                      {documentType === 'quotation' ? 'Save and Send Quotation' : 'Save and Send Invoice'}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Save Button */}
+              <Button
+                type="submit"
+                disabled={saveInvoice.isPending}
+                variant="outline"
+                className="flex-1 sm:flex-none h-11 border-slate-300 hover:bg-slate-50 transition-colors px-6"
+                data-testid="button-save"
+              >
+                {saveInvoice.isPending ? 'Saving...' : 'Save'}
+              </Button>
+
+              {/* Save & Send Button */}
+              <Button
+                type="button"
+                disabled={saveInvoice.isPending}
+                className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
+                onClick={() => {
+                  setSendInvoiceEmail(true);
+                  form.handleSubmit(onSubmit)();
+                }}
+                data-testid="button-save-send"
+              >
+                {saveInvoice.isPending ? 'Saving...' : 'Save & Send'}
+              </Button>
             </div>
           </div>
         </div>

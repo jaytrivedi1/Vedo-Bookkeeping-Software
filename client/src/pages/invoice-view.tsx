@@ -72,6 +72,14 @@ export default function InvoiceView() {
     } else {
       handleBack();
     }
+
+    // Check if we should auto-open the send dialog (from Save & Send button)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('openSendDialog') === 'true') {
+      setSendDialogOpen(true);
+      // Clean up the URL by removing the query param
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, [handleBack]);
   
   // Define extended transaction interface with dueDate
