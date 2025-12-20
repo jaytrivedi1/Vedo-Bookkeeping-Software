@@ -499,14 +499,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
 
       // If Save & Send was clicked, navigate to invoice view with send dialog open
-      if (isSaveAndSendRef.current && result?.id) {
+      if (isSaveAndSendRef.current && result?.transaction?.id) {
         isSaveAndSendRef.current = false; // Reset the ref
         const basePath = documentType === 'quotation' ? '/quotations' : '/invoices';
         // Pass CC/BCC as query params so they can be pre-filled in the send dialog
         const params = new URLSearchParams({ openSendDialog: 'true' });
         if (emailCC) params.set('cc', emailCC);
         if (emailBCC) params.set('bcc', emailBCC);
-        window.location.href = `${basePath}/${result.id}?${params.toString()}`;
+        window.location.href = `${basePath}/${result.transaction.id}?${params.toString()}`;
         return;
       }
 
