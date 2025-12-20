@@ -30,7 +30,7 @@ interface Invoice extends Omit<BaseInvoice, 'lineItems'> {
   appliedCreditAmount?: number;
   appliedCredits?: {id: number, amount: number}[];
 }
-import { CalendarIcon, Plus, Trash2, XIcon, X, HelpCircle } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, XIcon, X, HelpCircle, Send, Link as LinkIcon, Edit2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,11 @@ interface InvoiceFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
   initialDocumentType?: 'invoice' | 'quotation';
+  readOnly?: boolean; // When true, displays as view-only mode
+  customer?: Contact; // Customer data for read-only mode
+  onSendInvoice?: () => void; // Callback when Send Invoice is clicked in read-only mode
+  onCopyLink?: () => void; // Callback when Copy Link is clicked in read-only mode
+  onEdit?: () => void; // Callback when Edit is clicked in read-only mode
 }
 
 type PaymentTerms = '0' | '7' | '14' | '30' | '60' | 'custom';
@@ -91,7 +96,42 @@ interface InvoiceFormType extends UseFormReturn<Invoice> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
-export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, initialDocumentType }: InvoiceFormProps) {
+// Helper component for displaying read-only values with consistent styling
+function ReadOnlyValue({
+  label,
+  value,
+  className = ""
+}: {
+  label?: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {label && (
+        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">
+          {label}
+        </span>
+      )}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl h-11 px-3 flex items-center text-sm text-slate-700">
+        {value || <span className="text-slate-400">—</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function InvoiceForm({
+  invoice,
+  lineItems: propLineItems,
+  onSuccess,
+  onCancel,
+  initialDocumentType,
+  readOnly = false,
+  customer: propCustomer,
+  onSendInvoice,
+  onCopyLink,
+  onEdit
+}: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
@@ -933,18 +973,66 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
               className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 -ml-2"
             >
               <XIcon className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Close</span>
+              <span className="hidden sm:inline">{readOnly ? 'Back' : 'Close'}</span>
             </Button>
             <div className="h-6 w-px bg-slate-200 hidden sm:block" />
             <div className="flex items-center gap-3">
               <h1 className="text-lg font-semibold text-slate-900">
-                {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference')}
+                {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference') || invoice?.reference}
               </h1>
-              <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-                Draft
-              </span>
+              {readOnly ? (
+                <span className={cn(
+                  "px-2.5 py-1 text-xs font-medium rounded-full capitalize",
+                  invoice?.status === 'paid' && "bg-green-100 text-green-700",
+                  invoice?.status === 'open' && "bg-blue-100 text-blue-700",
+                  invoice?.status === 'overdue' && "bg-red-100 text-red-700",
+                  invoice?.status === 'quotation' && "bg-purple-100 text-purple-700",
+                  !['paid', 'open', 'overdue', 'quotation'].includes(invoice?.status) && "bg-slate-100 text-slate-700"
+                )}>
+                  {invoice?.status || 'Draft'}
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                  Draft
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Action buttons for read-only mode */}
+          {readOnly && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onSendInvoice}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <Send className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Send Invoice</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onCopyLink}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <LinkIcon className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Copy Link</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={onEdit}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Edit2 className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Edit</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         <div className="flex-grow overflow-y-auto">
@@ -953,79 +1041,109 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
             {/* Customer & Invoice Details - Horizontal Layout */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
-                {/* Left: Customer Selection */}
+                {/* Left: Customer Selection / Display */}
                 <div className="p-6">
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Bill To</h2>
-                  <FormField
-                    control={form.control}
-                    name="contactId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <SearchableSelect
-                            items={customerItems}
-                            value={field.value?.toString() || ""}
-                            onValueChange={(value) => {
-                              const contactId = parseInt(value);
-                              field.onChange(contactId);
-                              handleContactChange(contactId);
-                            }}
-                            placeholder="Select a customer"
-                            emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
-                            searchPlaceholder="Search customers..."
-                            className="bg-slate-50 border-slate-200 h-12 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
-                            disabled={contactsLoading}
-                            onAddNew={() => setShowAddCustomerDialog(true)}
-                            addNewText="Add New Customer"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
 
-                  {/* Customer Details Preview */}
-                  {selectedContact && (
-                    <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                      <div className="text-sm text-slate-600 space-y-1">
-                        {selectedContact.email && (
-                          <p className="flex items-center gap-2">
-                            <span className="text-slate-400">Email:</span>
-                            <span className="font-medium text-slate-700">{selectedContact.email}</span>
-                          </p>
-                        )}
-                        {selectedContact.address && (
-                          <p className="flex items-start gap-2">
-                            <span className="text-slate-400">Address:</span>
-                            <span className="font-medium text-slate-700 whitespace-pre-line">{selectedContact.address}</span>
-                          </p>
+                  {readOnly ? (
+                    /* Read-only customer display */
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        {(propCustomer || selectedContact) ? (
+                          <div className="space-y-2">
+                            <p className="font-semibold text-slate-900 text-base">
+                              {(propCustomer || selectedContact)?.name || 'Unknown Customer'}
+                            </p>
+                            {(propCustomer || selectedContact)?.contactName && (
+                              <p className="text-sm text-slate-600">{(propCustomer || selectedContact)?.contactName}</p>
+                            )}
+                            {(propCustomer || selectedContact)?.email && (
+                              <p className="text-sm text-slate-600">{(propCustomer || selectedContact)?.email}</p>
+                            )}
+                            {(propCustomer || selectedContact)?.address && (
+                              <p className="text-sm text-slate-600 whitespace-pre-line">{(propCustomer || selectedContact)?.address}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-slate-400 text-sm">No customer assigned</p>
                         )}
                       </div>
                     </div>
+                  ) : (
+                    /* Editable customer selection */
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="contactId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <SearchableSelect
+                                items={customerItems}
+                                value={field.value?.toString() || ""}
+                                onValueChange={(value) => {
+                                  const contactId = parseInt(value);
+                                  field.onChange(contactId);
+                                  handleContactChange(contactId);
+                                }}
+                                placeholder="Select a customer"
+                                emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
+                                searchPlaceholder="Search customers..."
+                                className="bg-slate-50 border-slate-200 h-12 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                                disabled={contactsLoading}
+                                onAddNew={() => setShowAddCustomerDialog(true)}
+                                addNewText="Add New Customer"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Customer Details Preview */}
+                      {selectedContact && (
+                        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="text-sm text-slate-600 space-y-1">
+                            {selectedContact.email && (
+                              <p className="flex items-center gap-2">
+                                <span className="text-slate-400">Email:</span>
+                                <span className="font-medium text-slate-700">{selectedContact.email}</span>
+                              </p>
+                            )}
+                            {selectedContact.address && (
+                              <p className="flex items-start gap-2">
+                                <span className="text-slate-400">Address:</span>
+                                <span className="font-medium text-slate-700 whitespace-pre-line">{selectedContact.address}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CC Field */}
+                      <div className="mt-4">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">CC (Optional)</FormLabel>
+                        <Input
+                          value={emailCC}
+                          onChange={(e) => setEmailCC(e.target.value)}
+                          placeholder="email1@example.com, email2@example.com"
+                          className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Separate multiple emails with commas</p>
+                      </div>
+
+                      {/* BCC Field */}
+                      <div className="mt-3">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">BCC (Optional)</FormLabel>
+                        <Input
+                          value={emailBCC}
+                          onChange={(e) => setEmailBCC(e.target.value)}
+                          placeholder="archive@example.com"
+                          className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        />
+                      </div>
+                    </>
                   )}
-
-                  {/* CC Field */}
-                  <div className="mt-4">
-                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">CC (Optional)</FormLabel>
-                    <Input
-                      value={emailCC}
-                      onChange={(e) => setEmailCC(e.target.value)}
-                      placeholder="email1@example.com, email2@example.com"
-                      className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
-                    />
-                    <p className="text-xs text-slate-400 mt-1">Separate multiple emails with commas</p>
-                  </div>
-
-                  {/* BCC Field */}
-                  <div className="mt-3">
-                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">BCC (Optional)</FormLabel>
-                    <Input
-                      value={emailBCC}
-                      onChange={(e) => setEmailBCC(e.target.value)}
-                      placeholder="archive@example.com"
-                      className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
-                    />
-                  </div>
                 </div>
 
                 {/* Right: Invoice Details */}
@@ -1033,132 +1151,167 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Invoice Details</h2>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Invoice Number */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice No.</FormLabel>
-                      <FormField
-                        control={form.control}
-                        name="reference"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormControl>
-                              <Input
-                                className="bg-slate-50 border-slate-200 h-11 font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                    <ReadOnlyValue
+                      label="Invoice No."
+                      value={<span className="font-semibold">{invoice?.reference || form.watch('reference') || '—'}</span>}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice No.</FormLabel>
+                        <FormField
+                          control={form.control}
+                          name="reference"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  className="bg-slate-50 border-slate-200 h-11 font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     {/* Invoice Date */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice Date</FormLabel>
-                      <FormField
-                        control={form.control}
-                        name="date"
-                        render={({ field }) => (
-                          <FormItem>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Button
-                                    variant="outline"
-                                    className={cn(
-                                      "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
-                                      !field.value && "text-muted-foreground"
-                                    )}
-                                  >
-                                    <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                                    {field.value ? format(field.value, "MMM dd, yyyy") : "Select date"}
-                                  </Button>
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value}
-                                  onSelect={field.onChange}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
+                    <ReadOnlyValue
+                      label="Invoice Date"
+                      value={invoice?.date ? format(new Date(invoice.date), "MMM dd, yyyy") : '—'}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice Date</FormLabel>
+                        <FormField
+                          control={form.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                                      {field.value ? format(field.value, "MMM dd, yyyy") : "Select date"}
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     {/* Due Date */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Due Date</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                            {format(dueDate, "MMM dd, yyyy")}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dueDate}
-                            onSelect={(date) => date && setDueDate(date)}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                    <ReadOnlyValue
+                      label="Due Date"
+                      value={invoice?.dueDate ? format(new Date(invoice.dueDate), "MMM dd, yyyy") : 'Not specified'}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Due Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                              {format(dueDate, "MMM dd, yyyy")}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={dueDate}
+                              onSelect={(date) => date && setDueDate(date)}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
 
                     {/* Payment Terms - Full Width */}
-                    <div className="col-span-2">
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Payment Terms</FormLabel>
-                      <Select
-                        value={paymentTerms}
-                        onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                      >
-                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
-                          <SelectValue placeholder="Select payment terms" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">Due upon receipt</SelectItem>
-                          <SelectItem value="7">Net 7</SelectItem>
-                          <SelectItem value="14">Net 14</SelectItem>
-                          <SelectItem value="30">Net 30</SelectItem>
-                          <SelectItem value="60">Net 60</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <ReadOnlyValue
+                      label="Payment Terms"
+                      value={invoice?.paymentTerms || 'Due upon receipt'}
+                      className={cn(readOnly ? 'col-span-2' : 'hidden')}
+                    />
+                    {!readOnly && (
+                      <div className="col-span-2">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Payment Terms</FormLabel>
+                        <Select
+                          value={paymentTerms}
+                          onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                            <SelectValue placeholder="Select payment terms" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Due upon receipt</SelectItem>
+                            <SelectItem value="7">Net 7</SelectItem>
+                            <SelectItem value="14">Net 14</SelectItem>
+                            <SelectItem value="30">Net 30</SelectItem>
+                            <SelectItem value="60">Net 60</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     {/* Currency - if multi-currency enabled */}
                     {isMultiCurrencyEnabled && (
                       <>
-                        <div className="col-span-2">
-                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Currency</FormLabel>
-                          <Select
-                            value={currency}
-                            onValueChange={(value) => setCurrency(value)}
-                            disabled={isEditing || !!watchContactId}
-                          >
-                            <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
-                              <SelectValue placeholder="Select currency" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {CURRENCIES.map(curr => (
-                                <SelectItem key={curr.code} value={curr.code}>
-                                  {curr.code} - {curr.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <ReadOnlyValue
+                          label="Currency"
+                          value={invoice?.currency || currency}
+                          className={cn(readOnly ? 'col-span-2' : 'hidden')}
+                        />
+                        {!readOnly && (
+                          <div className="col-span-2">
+                            <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Currency</FormLabel>
+                            <Select
+                              value={currency}
+                              onValueChange={(value) => setCurrency(value)}
+                              disabled={isEditing || !!watchContactId}
+                            >
+                              <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                                <SelectValue placeholder="Select currency" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CURRENCIES.map(curr => (
+                                  <SelectItem key={curr.code} value={curr.code}>
+                                    {curr.code} - {curr.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
 
-                        {currency !== homeCurrency && (
+                        {!readOnly && currency !== homeCurrency && (
                           <div className="col-span-2">
                             <ExchangeRateInput
                               fromCurrency={currency}
@@ -1181,16 +1334,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
-                <Select defaultValue="exclusive">
-                  <SelectTrigger className="w-48 bg-slate-50 border-slate-200 h-10 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
-                    <SelectValue placeholder="Tax setting" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                    <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                    <SelectItem value="no-tax">No Tax</SelectItem>
-                  </SelectContent>
-                </Select>
+                {!readOnly && (
+                  <Select defaultValue="exclusive">
+                    <SelectTrigger className="w-48 bg-slate-50 border-slate-200 h-10 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                      <SelectValue placeholder="Tax setting" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                      <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                      <SelectItem value="no-tax">No Tax</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Modern Line Items */}
@@ -1365,78 +1520,94 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         </div>
                       </div>
 
-                      {/* Delete Button */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
-                        onClick={() => {
-                          if (fields.length > 1) {
-                            remove(index);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {/* Delete Button - only in edit mode */}
+                      {!readOnly && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
+                          onClick={() => {
+                            if (fields.length > 1) {
+                              remove(index);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Add Line Button */}
-              <div className="px-6 py-4 border-t border-slate-100">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
-                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-2"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add line item
-                </Button>
-              </div>
+              {/* Add Line Button - only in edit mode */}
+              {!readOnly && (
+                <div className="px-6 py-4 border-t border-slate-100">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-2"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add line item
+                  </Button>
+                </div>
+              )}
 
               {/* Notes/Attachments + Totals Section - Side by Side */}
               <div className="px-6 py-6 bg-slate-50 border-t border-slate-200">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Left: Notes & Attachments */}
                   <div className="space-y-4">
-                    {/* Notes */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
-                      <Textarea
-                        className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                        placeholder="Add a personal note or payment instructions..."
-                      />
-                    </div>
-
-                    {/* Attachments */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
-                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer bg-white">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
-                          onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Select files
-                        </Button>
-                        <input
-                          type="file"
-                          id="file-upload-invoice"
-                          className="hidden"
-                          multiple
-                          onChange={(e) => {
-                            console.log("Files selected:", e.target.files);
-                          }}
-                        />
-                        <p className="text-xs text-slate-400 mt-2">or drag and drop</p>
+                    {readOnly ? (
+                      /* Read-only notes display */
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Notes</FormLabel>
+                        <div className="min-h-[100px] bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-600">
+                          {invoice?.description || <span className="text-slate-400 italic">No notes</span>}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <>
+                        {/* Notes */}
+                        <div>
+                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
+                          <Textarea
+                            className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                            placeholder="Add a personal note or payment instructions..."
+                          />
+                        </div>
+
+                        {/* Attachments */}
+                        <div>
+                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
+                          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer bg-white">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-lg"
+                              onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Select files
+                            </Button>
+                            <input
+                              type="file"
+                              id="file-upload-invoice"
+                              className="hidden"
+                              multiple
+                              onChange={(e) => {
+                                console.log("Files selected:", e.target.files);
+                              }}
+                            />
+                            <p className="text-xs text-slate-400 mt-2">or drag and drop</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Right: Totals */}
@@ -1503,8 +1674,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
               </div>
             </div>
 
-            {/* Credits Section - Only show if there are unapplied credits */}
-            {unappliedCredits.length > 0 && (
+            {/* Credits Section - Only show if there are unapplied credits and in edit mode */}
+            {!readOnly && unappliedCredits.length > 0 && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Available Credits</h2>
@@ -1546,71 +1717,75 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
         {/* Modern Sticky Footer */}
         <div className="border-t border-slate-200 bg-white/95 backdrop-blur-sm py-3 px-4 md:px-6 sticky bottom-0 z-20 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)]">
           <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            {/* Left: Cancel */}
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onCancel}
-              className="hidden sm:flex text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-              data-testid="button-cancel"
-            >
-              Cancel
-            </Button>
+            {/* Left: Cancel - only in edit mode */}
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onCancel}
+                className="hidden sm:flex text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                data-testid="button-cancel"
+              >
+                Cancel
+              </Button>
+            )}
 
             {/* Center: Balance Display */}
-            <div className="flex items-center gap-4 order-first sm:order-none">
+            <div className={cn("flex items-center gap-4", readOnly ? "order-none flex-1 justify-center" : "order-first sm:order-none")}>
               <div className="text-center sm:text-right">
                 <div className="text-xs text-slate-500 uppercase tracking-wide">Balance Due</div>
                 <div className="text-xl font-bold text-slate-900">
                   {currency !== homeCurrency ? (
                     <>
-                      {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
+                      {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}
                     </>
                   ) : (
-                    <>${formatCurrency(balanceDue)}</>
+                    <>${formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}</>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              {/* Mobile Cancel */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                className="sm:hidden flex-1 h-11 border-slate-200"
-                data-testid="button-cancel-mobile"
-              >
-                Cancel
-              </Button>
+            {/* Right: Actions - only in edit mode */}
+            {!readOnly && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Mobile Cancel */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onCancel}
+                  className="sm:hidden flex-1 h-11 border-slate-200"
+                  data-testid="button-cancel-mobile"
+                >
+                  Cancel
+                </Button>
 
-              {/* Save Button */}
-              <Button
-                type="submit"
-                disabled={saveInvoice.isPending}
-                variant="outline"
-                className="flex-1 sm:flex-none h-11 border-slate-300 hover:bg-slate-50 transition-colors px-6"
-                data-testid="button-save"
-              >
-                {saveInvoice.isPending ? 'Saving...' : 'Save'}
-              </Button>
+                {/* Save Button */}
+                <Button
+                  type="submit"
+                  disabled={saveInvoice.isPending}
+                  variant="outline"
+                  className="flex-1 sm:flex-none h-11 border-slate-300 hover:bg-slate-50 transition-colors px-6"
+                  data-testid="button-save"
+                >
+                  {saveInvoice.isPending ? 'Saving...' : 'Save'}
+                </Button>
 
-              {/* Save & Send Button */}
-              <Button
-                type="button"
-                disabled={saveInvoice.isPending}
-                className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
-                onClick={() => {
-                  isSaveAndSendRef.current = true;
-                  form.handleSubmit(onSubmit)();
-                }}
-                data-testid="button-save-send"
-              >
-                {saveInvoice.isPending ? 'Saving...' : 'Save & Send'}
-              </Button>
-            </div>
+                {/* Save & Send Button */}
+                <Button
+                  type="button"
+                  disabled={saveInvoice.isPending}
+                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
+                  onClick={() => {
+                    isSaveAndSendRef.current = true;
+                    form.handleSubmit(onSubmit)();
+                  }}
+                  data-testid="button-save-send"
+                >
+                  {saveInvoice.isPending ? 'Saving...' : 'Save & Send'}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </form>
