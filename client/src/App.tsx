@@ -45,6 +45,8 @@ import InvoicePublicView from "@/pages/invoice-public-view";
 import Quotations from "@/pages/quotations";
 import RecurringInvoices from "@/pages/recurring-invoices";
 import RecurringInvoiceForm from "@/pages/recurring-invoice-form";
+import CustomerDetail from "@/pages/customer-detail";
+import VendorDetail from "@/pages/vendor-detail";
 import MainLayout from "@/components/layout/MainLayout";
 import { Company } from "@shared/schema";
 
@@ -213,6 +215,8 @@ function Router() {
               <Route path="/fx-revaluation" component={FxRevaluation} />
               <Route path="/activity-log" component={ActivityLogPage} />
               <Route path="/reports" component={Reports} />
+              <Route path="/customers/:id" component={CustomerDetail} />
+              <Route path="/vendors/:id" component={VendorDetail} />
               <Route path="/manage-users" component={ManageUsers} />
               <Route path="/admin">
                 {() => <AdminRoute component={AdminDashboard} />}
