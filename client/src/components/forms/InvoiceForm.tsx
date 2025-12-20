@@ -1069,25 +1069,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                       />
                     </div>
 
-                    {/* Document Type */}
-                    <div>
-                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Type</FormLabel>
-                      <Select
-                        value={documentType}
-                        onValueChange={(value: 'invoice' | 'quotation') => setDocumentType(value)}
-                        disabled={isEditing}
-                        data-testid="select-document-type"
-                      >
-                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="invoice">Invoice</SelectItem>
-                          <SelectItem value="quotation">Quotation</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     {/* Invoice Date */}
                     <div>
                       <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice Date</FormLabel>
@@ -1240,9 +1221,9 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                       </div>
 
                       {/* Main Content */}
-                      <div className="flex-grow grid grid-cols-1 md:grid-cols-12 gap-4">
-                        {/* Product/Service - Larger */}
-                        <div className="md:col-span-5">
+                      <div className="flex-grow grid grid-cols-1 md:grid-cols-12 gap-3">
+                        {/* Product/Service */}
+                        <div className="md:col-span-4">
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
                           <FormField
                             control={form.control}
@@ -1295,7 +1276,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         </div>
 
                         {/* Quantity */}
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1">
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
                           <FormField
                             control={form.control}
@@ -1349,7 +1330,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         </div>
 
                         {/* Tax */}
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-3">
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
                           <FormField
                             control={form.control}
@@ -1383,7 +1364,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                         </div>
 
                         {/* Amount - Display Only */}
-                        <div className="md:col-span-1">
+                        <div className="md:col-span-2">
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
                           <FormField
                             control={form.control}
@@ -1391,7 +1372,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                             render={({ field }) => (
                               <FormItem>
                                 <FormControl>
-                                  <div className="h-11 flex items-center justify-end px-3 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900">
+                                  <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
                                     ${formatCurrency(field.value)}
                                   </div>
                                 </FormControl>
@@ -1433,63 +1414,70 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                 </Button>
               </div>
 
-              {/* Totals Section - Clean Modern Design */}
+              {/* Notes/Attachments + Totals Section - Side by Side */}
               <div className="px-6 py-6 bg-slate-50 border-t border-slate-200">
-                <div className="flex justify-end">
-                  <div className="w-full max-w-sm space-y-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left: Notes & Attachments */}
+                  <div className="space-y-4">
+                    {/* Notes */}
+                    <div>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
+                      <Textarea
+                        className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="Add a personal note or payment instructions..."
+                      />
+                    </div>
+
+                    {/* Attachments */}
+                    <div>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
+                      <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer bg-white">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg"
+                          onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Select files
+                        </Button>
+                        <input
+                          type="file"
+                          id="file-upload-invoice"
+                          className="hidden"
+                          multiple
+                          onChange={(e) => {
+                            console.log("Files selected:", e.target.files);
+                          }}
+                        />
+                        <p className="text-xs text-slate-400 mt-2">or drag and drop</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Totals */}
+                  <div className="space-y-3">
                     {/* Subtotal */}
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-slate-600">Subtotal</span>
                       <span className="text-sm font-medium text-slate-900">${formatCurrency(subTotal)}</span>
                     </div>
 
-                    {/* Tax - Editable */}
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">
-                        {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm text-slate-500">$</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value) && e.target.value.trim() !== '') {
-                              const roundedValue = roundTo2Decimals(value);
-                              setManualTaxAmount(roundedValue);
-                              calculateTotals(roundedValue);
-                            } else {
-                              setManualTaxAmount(null);
-                              calculateTotals(null);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            if (e.target.value.trim() === '') {
-                              setManualTaxAmount(null);
-                              calculateTotals(null);
-                            } else if (manualTaxAmount !== null) {
-                              const roundedValue = roundTo2Decimals(manualTaxAmount);
-                              setManualTaxAmount(roundedValue);
-                              calculateTotals(roundedValue);
-                            }
-                          }}
-                          className="w-24 h-9 text-right px-2 text-sm font-medium border-slate-200 bg-white rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tax Breakdown */}
-                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
-                      <div className="pl-4 space-y-1 pb-2">
+                    {/* Tax - Single consolidated display */}
+                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+                      <div className="space-y-1">
                         {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                          <div key={taxComponent.id} className="flex justify-between items-center text-xs text-slate-500">
-                            <span>{taxComponent.name} ({taxComponent.rate}%)</span>
-                            <span>${formatCurrency(taxComponent.amount)}</span>
+                          <div key={taxComponent.id} className="flex justify-between items-center">
+                            <span className="text-sm text-slate-600">{taxComponent.name} ({taxComponent.rate}%)</span>
+                            <span className="text-sm font-medium text-slate-900">${formatCurrency(taxComponent.amount)}</span>
                           </div>
                         ))}
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-600">Tax</span>
+                        <span className="text-sm font-medium text-slate-900">${formatCurrency(taxAmount)}</span>
                       </div>
                     )}
 
@@ -1501,30 +1489,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
                     {/* Applied Credits */}
                     {appliedCredits.length > 0 && (
-                      <div className="space-y-2 mt-3 pt-3 border-t border-slate-300">
+                      <div className="space-y-2 pt-2">
                         {appliedCredits.map(ac => (
                           <div key={ac.creditId} className="flex justify-between items-center text-slate-600">
                             <span className="text-sm">Credit #{ac.creditId}</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm text-emerald-600">-$</span>
-                              <Input
-                                type="number"
-                                min="0"
-                                max={Math.abs(ac.credit.balance || 0) + ac.amount}
-                                step="0.01"
-                                value={ac.amount}
-                                onChange={(e) => updateCreditAmount(ac.creditId, parseFloat(e.target.value) || 0)}
-                                className="w-20 h-7 text-right px-2 text-sm text-emerald-600 font-medium border-slate-200 bg-white focus:border-blue-500"
-                                data-testid={`input-credit-amount-totals-${ac.creditId}`}
-                              />
-                            </div>
+                            <span className="text-sm font-medium text-emerald-600">-${formatCurrency(ac.amount)}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                    
+
                     {/* Balance Due - Highlighted */}
-                    <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 -mx-4 px-4 py-4 rounded-b-xl">
+                    <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 -mx-4 px-4 py-4 rounded-xl">
                       <span className="text-base font-bold text-blue-900">Balance Due</span>
                       {currency !== homeCurrency ? (
                         <div className="text-right">
@@ -1544,54 +1520,8 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
               </div>
             </div>
 
-            {/* Notes & Attachments Section */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Notes & Attachments</h2>
-              </div>
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Message */}
-                <div>
-                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
-                  <Textarea
-                    className="min-h-[120px] bg-slate-50 border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                    placeholder="Add a personal note or payment instructions..."
-                  />
-                </div>
-
-                {/* Attachments */}
-                <div>
-                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
-                  <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer min-h-[120px] flex flex-col items-center justify-center">
-                    <div className="relative inline-block">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mb-2 rounded-lg"
-                        onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Select files
-                      </Button>
-                      <input
-                        type="file"
-                        id="file-upload-invoice"
-                        className="hidden"
-                        multiple
-                        onChange={(e) => {
-                          console.log("Files selected:", e.target.files);
-                        }}
-                      />
-                    </div>
-                    <p className="text-xs text-slate-400">or drag and drop files here</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Credits Section - Collapsible Style */}
-            {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
+            {/* Credits Section - Only show if there are unapplied credits */}
+            {unappliedCredits.length > 0 && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Available Credits</h2>
@@ -1600,7 +1530,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                   </span>
                 </div>
                 <div className="p-6">
-                  {/* Unapplied Credits */}
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {unappliedCredits.filter(c => !appliedCredits.some(ac => ac.creditId === c.id)).map(credit => (
                       <div key={credit.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
@@ -1624,38 +1553,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                       </div>
                     ))}
                   </div>
-
-                  {/* Applied Credits */}
-                  {appliedCredits.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                      <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3">Applied to this invoice</div>
-                      <div className="space-y-2">
-                        {appliedCredits.map(ac => (
-                          <div key={ac.creditId} className="flex items-center justify-between p-3 bg-emerald-50 rounded-xl">
-                            <div>
-                              <div className="text-sm font-medium text-slate-900">Credit #{ac.creditId}</div>
-                              <div className="text-xs text-slate-500">
-                                {format(new Date(ac.credit.date), 'MMM dd, yyyy')}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-emerald-600">-${formatCurrency(ac.amount)}</span>
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => removeCredit(ac.creditId)}
-                                className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50"
-                                data-testid={`button-remove-credit-${ac.creditId}`}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
