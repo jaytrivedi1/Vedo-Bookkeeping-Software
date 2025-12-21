@@ -1358,10 +1358,10 @@ export default function InvoiceForm({
                         {index + 1}
                       </div>
 
-                      {/* Main Content */}
-                      <div className="flex-grow grid grid-cols-1 md:grid-cols-12 gap-3">
+                      {/* Main Content - Reordered: Product/Service → Description → Qty → Rate → Amount → Tax */}
+                      <div className="flex-grow grid grid-cols-1 md:grid-cols-[minmax(140px,1.5fr)_minmax(180px,2fr)_70px_90px_100px_minmax(120px,1fr)] gap-3">
                         {/* Product/Service */}
-                        <div className="md:col-span-4">
+                        <div>
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
                           <FormField
                             control={form.control}
@@ -1413,8 +1413,29 @@ export default function InvoiceForm({
                           />
                         </div>
 
+                        {/* Description - Editable text field */}
+                        <div>
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Description</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.description`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <Input
+                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    placeholder="Item description..."
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
                         {/* Quantity */}
-                        <div className="md:col-span-1">
+                        <div>
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
                           <FormField
                             control={form.control}
@@ -1441,7 +1462,7 @@ export default function InvoiceForm({
                         </div>
 
                         {/* Rate */}
-                        <div className="md:col-span-2">
+                        <div>
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Rate</FormLabel>
                           <FormField
                             control={form.control}
@@ -1467,8 +1488,26 @@ export default function InvoiceForm({
                           />
                         </div>
 
-                        {/* Tax */}
-                        <div className="md:col-span-3">
+                        {/* Amount - Display Only (moved before Tax) */}
+                        <div>
+                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
+                          <FormField
+                            control={form.control}
+                            name={`lineItems.${index}.amount`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormControl>
+                                  <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
+                                    ${formatCurrency(field.value)}
+                                  </div>
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+
+                        {/* Tax (moved to end) */}
+                        <div>
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
                           <FormField
                             control={form.control}
@@ -1496,24 +1535,6 @@ export default function InvoiceForm({
                                   />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        {/* Amount - Display Only */}
-                        <div className="md:col-span-2">
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.amount`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
-                                    ${formatCurrency(field.value)}
-                                  </div>
-                                </FormControl>
                               </FormItem>
                             )}
                           />
