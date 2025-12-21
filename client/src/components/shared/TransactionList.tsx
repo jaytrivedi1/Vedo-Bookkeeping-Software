@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Transaction, LedgerEntry } from "@shared/schema";
@@ -10,11 +10,14 @@ import {
   FileText,
   MoreHorizontal,
   Mail,
-  Download
+  Download,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/currencyUtils";
+import { useSortableData, SortConfig } from "@/hooks/useSortableData";
 import {
   Card,
   CardContent,
@@ -229,12 +232,45 @@ export default function TransactionList({
     }
   };
 
-  // Sort transactions by date (newest first) - no grouping
-  const sortedTransactions = filteredTransactions
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Sortable data hook - resets when contactId changes
+  const { sortedItems: sortedTransactions, sortConfig, requestSort } = useSortableData(
+    filteredTransactions,
+    {
+      defaultSort: { key: 'date', direction: 'desc' },
+      resetDependency: contactId
+    }
+  );
 
   // Grid column definition for consistent alignment (no icon column)
   const gridCols = "grid-cols-[55px_105px_85px_1fr_100px_90px_36px]";
+
+  // Sortable header component
+  const SortableHeader = ({
+    label,
+    sortKey,
+    align = 'left'
+  }: {
+    label: string;
+    sortKey: string;
+    align?: 'left' | 'right';
+  }) => {
+    const isActive = sortConfig.key === sortKey;
+    return (
+      <button
+        onClick={() => requestSort(sortKey)}
+        className={`flex items-center gap-0.5 text-[11px] font-semibold uppercase tracking-wide transition-colors cursor-pointer select-none ${
+          isActive ? 'text-slate-700' : 'text-slate-500 hover:text-slate-600'
+        } ${align === 'right' ? 'ml-auto' : ''}`}
+      >
+        <span>{label}</span>
+        {isActive && (
+          sortConfig.direction === 'asc'
+            ? <ChevronUp className="h-3 w-3" />
+            : <ChevronDown className="h-3 w-3" />
+        )}
+      </button>
+    );
+  };
 
   return (
     <>
@@ -263,12 +299,12 @@ export default function TransactionList({
             <div>
               {/* Sticky Column Headers */}
               <div className={`grid ${gridCols} items-center h-9 px-4 pl-5 bg-slate-50 border-b border-slate-200 sticky top-0 z-10`}>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</span>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Date</span>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Number</span>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Memo</span>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide text-right">Amount</span>
-                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide text-right">Balance</span>
+                <SortableHeader label="Status" sortKey="status" />
+                <SortableHeader label="Date" sortKey="date" />
+                <SortableHeader label="Number" sortKey="reference" />
+                <SortableHeader label="Memo" sortKey="description" />
+                <SortableHeader label="Amount" sortKey="amount" align="right" />
+                <SortableHeader label="Balance" sortKey="balance" align="right" />
                 <span></span>
               </div>
 
