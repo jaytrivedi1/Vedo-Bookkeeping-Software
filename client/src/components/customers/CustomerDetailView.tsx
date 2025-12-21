@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
+import NotesCard from "@/components/shared/NotesCard";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
@@ -230,8 +231,8 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           </div>
         </Card>
 
-        {/* Contact Info and Address Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Contact Info, Address, and Notes Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Contact Info */}
           <Card className="border-0 shadow-sm rounded-2xl">
             <CardHeader className="pb-3">
@@ -302,6 +303,13 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
               )}
             </CardContent>
           </Card>
+
+          {/* Internal Notes */}
+          <NotesCard
+            contactId={customerId}
+            initialNotes={customer.notes}
+            contactType="customer"
+          />
         </div>
 
         {/* Account Summary Banner */}

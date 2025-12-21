@@ -75,6 +75,7 @@ export const contacts = pgTable('contacts', {
   defaultTaxRate: doublePrecision('default_tax_rate').default(0), // Default sales tax rate
   documentIds: text('document_ids').array(), // Array of document IDs for attachments
   isActive: boolean('is_active').notNull().default(true), // Active status for filtering
+  notes: text('notes'), // Internal notes about this contact (not visible to customer/vendor)
 });
 
 // Transaction Headers
