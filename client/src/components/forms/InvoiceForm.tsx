@@ -1572,13 +1572,23 @@ export default function InvoiceForm({
                     ) : (
                       <>
                         {/* Notes */}
-                        <div>
-                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
-                          <Textarea
-                            className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                            placeholder="Add a personal note or payment instructions..."
-                          />
-                        </div>
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  {...field}
+                                  className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                  placeholder="Add a personal note or payment instructions..."
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
 
                         {/* Attachments */}
                         <div>

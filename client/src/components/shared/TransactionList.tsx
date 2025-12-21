@@ -241,8 +241,8 @@ export default function TransactionList({
     }
   );
 
-  // Grid column definition for consistent alignment (no icon column)
-  const gridCols = "grid-cols-[55px_105px_85px_1fr_100px_90px_36px]";
+  // Grid column definition for consistent alignment (with TYPE column)
+  const gridCols = "grid-cols-[55px_65px_100px_75px_1fr_100px_90px_36px]";
 
   // Sortable header component
   const SortableHeader = ({
@@ -300,6 +300,7 @@ export default function TransactionList({
               {/* Sticky Column Headers */}
               <div className={`grid ${gridCols} items-center h-9 px-4 pl-5 bg-slate-50 border-b border-slate-200 sticky top-0 z-10`}>
                 <SortableHeader label="Status" sortKey="status" />
+                <SortableHeader label="Type" sortKey="type" />
                 <SortableHeader label="Date" sortKey="date" />
                 <SortableHeader label="Number" sortKey="reference" />
                 <SortableHeader label="Memo" sortKey="description" />
@@ -326,6 +327,11 @@ export default function TransactionList({
                           {getStatusBadge(transaction)}
                         </div>
 
+                        {/* Type */}
+                        <span className="text-[12px] text-slate-500">
+                          {formatTransactionType(transaction.type)}
+                        </span>
+
                         {/* Date */}
                         <span className="text-[13px] text-slate-600 tabular-nums">
                           {format(new Date(transaction.date), "MMM d, yyyy")}
@@ -338,7 +344,7 @@ export default function TransactionList({
 
                         {/* Memo/Description */}
                         <span className="text-[13px] text-slate-500 truncate pr-2">
-                          {transaction.description || transaction.memo || formatTransactionType(transaction.type)}
+                          {transaction.description || transaction.memo || '—'}
                         </span>
 
                         {/* Amount */}
