@@ -88,6 +88,7 @@ export const transactions = pgTable('transactions', {
   amount: doublePrecision('amount').notNull(), // Home currency amount (converted if foreign)
   subTotal: doublePrecision('sub_total'),
   taxAmount: doublePrecision('tax_amount'),
+  taxType: varchar('tax_type', { length: 20 }), // 'exclusive' | 'inclusive' | 'no-tax'
   balance: doublePrecision('balance'),
   contactId: integer('contact_id').references(() => contacts.id),
   status: statusEnum('status').notNull().default('open'),

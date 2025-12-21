@@ -164,7 +164,12 @@ export default function InvoiceForm({
   const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice?.contactId);
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
   const [appliedCredits, setAppliedCredits] = useState<Array<{creditId: number, amount: number, credit: Transaction}>>([]);
-  const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+
+  // Tax setting: 'exclusive' (add tax on top), 'inclusive' (tax within price), 'no-tax' (no tax)
+  type TaxSetting = 'exclusive' | 'inclusive' | 'no-tax';
+  const [taxSetting, setTaxSetting] = useState<TaxSetting>(
+    isEditing && invoice?.taxType ? (invoice.taxType as TaxSetting) : 'exclusive'
+  );
   
   // Multi-currency state
   const [currency, setCurrency] = useState<string>(invoice?.currency || 'USD');
@@ -636,75 +641,174 @@ export default function InvoiceForm({
 
   const calculateTotals = (manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
-    
+
     let calculatedSubtotal = 0;
     let totalTaxAmount = 0;
     const taxComponents = new Map<number, TaxComponentInfo>();
     const usedTaxes = new Map<number, SalesTax>();
-    
-    lineItems.forEach((item) => {
-      const itemAmount = item.amount || 0;
-      
-      if (item.salesTaxId) {
-        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
-        if (salesTax) {
-          if (salesTax.isComposite) {
-            const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
-            
-            if (components.length > 0) {
-              let itemTotalTax = 0;
-              components.forEach(component => {
-                let componentTaxAmount: number;
-                if (isExclusiveOfTax) {
-                  componentTaxAmount = roundTo2Decimals(itemAmount * (component.rate / 100));
+
+    // NO TAX MODE: Simply sum all line amounts, no tax calculation
+    if (taxSetting === 'no-tax') {
+      lineItems.forEach((item) => {
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (item.amount || 0));
+      });
+      totalTaxAmount = 0;
+      // No tax components to track
+    }
+    // EXCLUSIVE MODE: Tax added on top of subtotal
+    else if (taxSetting === 'exclusive') {
+      lineItems.forEach((item) => {
+        const itemAmount = item.amount || 0;
+        // In exclusive mode, subtotal = sum of line amounts
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+
+        if (item.salesTaxId) {
+          const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+          if (salesTax) {
+            if (salesTax.isComposite) {
+              const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+
+              if (components.length > 0) {
+                components.forEach(component => {
+                  const componentTaxAmount = roundTo2Decimals(itemAmount * (component.rate / 100));
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
+
+                  const existingComponent = taxComponents.get(component.id);
+                  if (existingComponent) {
+                    existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
+                    taxComponents.set(component.id, existingComponent);
+                  } else {
+                    taxComponents.set(component.id, {
+                      id: component.id,
+                      name: component.name,
+                      rate: component.rate,
+                      amount: componentTaxAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                });
+                usedTaxes.set(salesTax.id, salesTax);
+              } else {
+                // No components found, use main tax
+                const itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
+                totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+                usedTaxes.set(salesTax.id, salesTax);
+
+                const existingTax = taxComponents.get(salesTax.id);
+                if (existingTax) {
+                  existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                  taxComponents.set(salesTax.id, existingTax);
                 } else {
-                  componentTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + component.rate));
-                }
-                itemTotalTax = roundTo2Decimals(itemTotalTax + componentTaxAmount);
-                totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
-                
-                const existingComponent = taxComponents.get(component.id);
-                if (existingComponent) {
-                  existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
-                  taxComponents.set(component.id, existingComponent);
-                } else {
-                  taxComponents.set(component.id, {
-                    id: component.id,
-                    name: component.name,
-                    rate: component.rate,
-                    amount: componentTaxAmount,
-                    isComponent: true,
-                    parentId: salesTax.id
+                  taxComponents.set(salesTax.id, {
+                    id: salesTax.id,
+                    name: salesTax.name,
+                    rate: salesTax.rate,
+                    amount: itemTaxAmount,
+                    isComponent: false
                   });
                 }
-              });
-              
-              // Calculate subtotal for this line item
-              if (isExclusiveOfTax) {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-              } else {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTotalTax));
               }
-              
-              usedTaxes.set(salesTax.id, salesTax);
             } else {
-              let itemTaxAmount: number;
-              if (isExclusiveOfTax) {
-                itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
-              } else {
-                itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
-              }
+              // Regular non-composite tax
+              const itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
               totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
-              
-              // Calculate subtotal for this line item
-              if (isExclusiveOfTax) {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-              } else {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
-              }
-              
               usedTaxes.set(salesTax.id, salesTax);
-              
+
+              const existingTax = taxComponents.get(salesTax.id);
+              if (existingTax) {
+                existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                taxComponents.set(salesTax.id, existingTax);
+              } else {
+                taxComponents.set(salesTax.id, {
+                  id: salesTax.id,
+                  name: salesTax.name,
+                  rate: salesTax.rate,
+                  amount: itemTaxAmount,
+                  isComponent: false
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+    // INCLUSIVE MODE: Tax is within the line amount, back-calculate
+    else if (taxSetting === 'inclusive') {
+      lineItems.forEach((item) => {
+        const itemAmount = item.amount || 0;
+
+        if (item.salesTaxId) {
+          const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+          if (salesTax) {
+            if (salesTax.isComposite) {
+              const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+
+              if (components.length > 0) {
+                // Calculate combined rate for back-calculation
+                const combinedRate = components.reduce((sum, c) => sum + c.rate, 0);
+                const divisor = 1 + (combinedRate / 100);
+                const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+                const itemTotalTax = roundTo2Decimals(itemAmount - itemSubtotal);
+
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+
+                // Distribute tax proportionally across components
+                components.forEach(component => {
+                  const componentProportion = component.rate / combinedRate;
+                  const componentTaxAmount = roundTo2Decimals(itemTotalTax * componentProportion);
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
+
+                  const existingComponent = taxComponents.get(component.id);
+                  if (existingComponent) {
+                    existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
+                    taxComponents.set(component.id, existingComponent);
+                  } else {
+                    taxComponents.set(component.id, {
+                      id: component.id,
+                      name: component.name,
+                      rate: component.rate,
+                      amount: componentTaxAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                });
+                usedTaxes.set(salesTax.id, salesTax);
+              } else {
+                // No components, use main tax rate
+                const divisor = 1 + (salesTax.rate / 100);
+                const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+                const itemTaxAmount = roundTo2Decimals(itemAmount - itemSubtotal);
+
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+                totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+                usedTaxes.set(salesTax.id, salesTax);
+
+                const existingTax = taxComponents.get(salesTax.id);
+                if (existingTax) {
+                  existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                  taxComponents.set(salesTax.id, existingTax);
+                } else {
+                  taxComponents.set(salesTax.id, {
+                    id: salesTax.id,
+                    name: salesTax.name,
+                    rate: salesTax.rate,
+                    amount: itemTaxAmount,
+                    isComponent: false
+                  });
+                }
+              }
+            } else {
+              // Regular non-composite tax - back-calculate
+              const divisor = 1 + (salesTax.rate / 100);
+              const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+              const itemTaxAmount = roundTo2Decimals(itemAmount - itemSubtotal);
+
+              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+              totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+              usedTaxes.set(salesTax.id, salesTax);
+
               const existingTax = taxComponents.get(salesTax.id);
               if (existingTax) {
                 existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
@@ -720,64 +824,41 @@ export default function InvoiceForm({
               }
             }
           } else {
-            let itemTaxAmount: number;
-            if (isExclusiveOfTax) {
-              itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
-            } else {
-              itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
-            }
-            totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
-            
-            // Calculate subtotal for this line item
-            if (isExclusiveOfTax) {
-              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-            } else {
-              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
-            }
-            
-            usedTaxes.set(salesTax.id, salesTax);
-            
-            const existingTax = taxComponents.get(salesTax.id);
-            if (existingTax) {
-              existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
-              taxComponents.set(salesTax.id, existingTax);
-            } else {
-              taxComponents.set(salesTax.id, {
-                id: salesTax.id,
-                name: salesTax.name,
-                rate: salesTax.rate,
-                amount: itemTaxAmount,
-                isComponent: false
-              });
-            }
+            // No tax found, treat as no-tax line
+            calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
           }
+        } else {
+          // No tax on this line item - add full amount to subtotal
+          calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
         }
-      } else {
-        // No tax on this line item - add full amount to subtotal
-        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-      }
-    });
-    
+      });
+    }
+
     // Use manual tax amount if set, otherwise use calculated tax
     // Priority: 1) manualTaxOverride parameter (null = use calculated), 2) manualTaxAmount state, 3) calculated tax
-    const finalTaxAmount = manualTaxOverride !== undefined 
-      ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
-      : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
+    // Note: In no-tax mode, always use 0 regardless of manual override
+    const finalTaxAmount = taxSetting === 'no-tax'
+      ? 0
+      : (manualTaxOverride !== undefined
+          ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
+          : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount));
+
     // Total is always subtotal + tax
     const total = roundTo2Decimals(calculatedSubtotal + finalTaxAmount);
-    
+
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
-    
+
     // Convert tax components map to array and sort by displayOrder if available
     const taxComponentsArray = Array.from(taxComponents.values());
-    
+
     // Store in a property accessible during form rendering
     form.taxComponentsInfo = taxComponentsArray;
-    
-    console.log("Calculating totals:", { 
-      calculatedSubtotal, 
-      totalTaxAmount, 
+
+    console.log("Calculating totals:", {
+      taxSetting,
+      calculatedSubtotal,
+      totalTaxAmount,
       manualTaxAmount,
       finalTaxAmount,
       total,
@@ -785,22 +866,22 @@ export default function InvoiceForm({
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
     });
-    
+
     // Make sure to persist these values
     setSubTotal(calculatedSubtotal);
     setTaxAmount(finalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);
-    
+
     // Calculate balance due (total - applied credits)
     // Sum all applied credits from the appliedCredits array
     const totalAppliedCredits = appliedCredits.reduce((sum, ac) => sum + ac.amount, 0);
-    
+
     console.log("Total applied credits:", totalAppliedCredits, "from", appliedCredits.length, "credits");
-    
+
     // Calculate balance due: total - applied credits
     const newBalanceDue = roundTo2Decimals(total - totalAppliedCredits);
-    
+
     console.log("Balance calculation:", {
       total,
       totalAppliedCredits,
@@ -808,7 +889,7 @@ export default function InvoiceForm({
       isEditMode: isEditing,
       existingBalance: invoice?.balance
     });
-    
+
     setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
   };
 
@@ -850,7 +931,7 @@ export default function InvoiceForm({
   // Update totals whenever line items change, tax mode changes, or credits are applied
   useEffect(() => {
     calculateTotals();
-  }, [fields.length, isExclusiveOfTax, appliedCredits]);
+  }, [fields.length, taxSetting, appliedCredits]);
 
   // Update due date when invoice date changes and watch for contactId changes
   useEffect(() => {
@@ -902,6 +983,7 @@ export default function InvoiceForm({
       subTotal,
       taxAmount,
       totalAmount,
+      taxType: taxSetting, // 'exclusive' | 'inclusive' | 'no-tax'
       paymentTerms,
       // Multi-currency fields
       currency,
@@ -1335,7 +1417,21 @@ export default function InvoiceForm({
               <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
                 {!readOnly && (
-                  <Select defaultValue="exclusive">
+                  <Select
+                    value={taxSetting}
+                    onValueChange={(value: 'exclusive' | 'inclusive' | 'no-tax') => {
+                      setTaxSetting(value);
+                      // If switching to "No Tax", clear all line item tax selections
+                      if (value === 'no-tax') {
+                        const lineItems = form.getValues('lineItems');
+                        lineItems.forEach((_, index) => {
+                          form.setValue(`lineItems.${index}.salesTaxId`, undefined);
+                        });
+                      }
+                      // Recalculate totals immediately
+                      calculateTotals();
+                    }}
+                  >
                     <SelectTrigger className="w-48 bg-slate-50 border-slate-200 h-10 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
                       <SelectValue placeholder="Tax setting" />
                     </SelectTrigger>
@@ -1506,38 +1602,44 @@ export default function InvoiceForm({
                           />
                         </div>
 
-                        {/* Tax (moved to end) */}
-                        <div>
+                        {/* Tax (moved to end) - disabled when "No Tax" mode */}
+                        <div className={taxSetting === 'no-tax' ? 'opacity-50' : ''}>
                           <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.salesTaxId`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <SearchableSelect
-                                    items={taxItems}
-                                    value={field.value?.toString() || "0"}
-                                    onValueChange={(value) => {
-                                      const numValue = parseInt(value);
-                                      if (numValue === 0) {
-                                        field.onChange(undefined);
-                                      } else {
-                                        field.onChange(numValue);
-                                      }
-                                      updateLineItemAmount(index);
-                                      calculateTotals();
-                                    }}
-                                    placeholder="Select Tax"
-                                    searchPlaceholder="Search taxes..."
-                                    emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                          {taxSetting === 'no-tax' ? (
+                            <div className="h-11 flex items-center justify-center px-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm">
+                              N/A
+                            </div>
+                          ) : (
+                            <FormField
+                              control={form.control}
+                              name={`lineItems.${index}.salesTaxId`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <SearchableSelect
+                                      items={taxItems}
+                                      value={field.value?.toString() || "0"}
+                                      onValueChange={(value) => {
+                                        const numValue = parseInt(value);
+                                        if (numValue === 0) {
+                                          field.onChange(undefined);
+                                        } else {
+                                          field.onChange(numValue);
+                                        }
+                                        updateLineItemAmount(index);
+                                        calculateTotals();
+                                      }}
+                                      placeholder="Select Tax"
+                                      searchPlaceholder="Search taxes..."
+                                      emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                                      className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          )}
                         </div>
                       </div>
 
@@ -1649,21 +1751,23 @@ export default function InvoiceForm({
                       <span className="text-sm font-medium text-slate-900">${formatCurrency(subTotal)}</span>
                     </div>
 
-                    {/* Tax - Single consolidated display */}
-                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
-                      <div className="space-y-1">
-                        {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                          <div key={taxComponent.id} className="flex justify-between items-center">
-                            <span className="text-sm text-slate-600">{taxComponent.name} ({taxComponent.rate}%)</span>
-                            <span className="text-sm font-medium text-slate-900">${formatCurrency(taxComponent.amount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-600">Tax</span>
-                        <span className="text-sm font-medium text-slate-900">${formatCurrency(taxAmount)}</span>
-                      </div>
+                    {/* Tax - Single consolidated display (hidden when "No Tax" mode) */}
+                    {taxSetting !== 'no-tax' && (
+                      form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+                        <div className="space-y-1">
+                          {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                            <div key={taxComponent.id} className="flex justify-between items-center">
+                              <span className="text-sm text-slate-600">{taxComponent.name} ({taxComponent.rate}%)</span>
+                              <span className="text-sm font-medium text-slate-900">${formatCurrency(taxComponent.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-600">Tax</span>
+                          <span className="text-sm font-medium text-slate-900">${formatCurrency(taxAmount)}</span>
+                        </div>
+                      )
                     )}
 
                     {/* Total */}

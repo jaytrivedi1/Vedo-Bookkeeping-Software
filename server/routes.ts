@@ -1510,6 +1510,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactId: body.contactId,
         dueDate: body.dueDate,
         paymentTerms: body.paymentTerms,
+        taxType: body.taxType, // 'exclusive' | 'inclusive' | 'no-tax'
         // Amount will be recalculated if line items are updated
       };
       
@@ -1518,12 +1519,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Delete existing line items - we'll recreate them
         // This is a simple approach, a more sophisticated one would update existing items
         
-        // Calculate the new subtotal from line items with rounding
-        const subTotal = roundTo2Decimals(body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0));
+        // Use provided subTotal and taxAmount from frontend (already properly calculated based on tax mode)
+        const subTotal = roundTo2Decimals(body.subTotal || body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0));
         const taxAmount = roundTo2Decimals(body.taxAmount || 0);
-        
+
         // Update transaction amount with rounding
         transactionUpdate.amount = roundTo2Decimals(subTotal + taxAmount);
+        transactionUpdate.subTotal = subTotal;
+        transactionUpdate.taxAmount = taxAmount;
         
         // Update the transaction
         const updatedTransaction = await storage.updateTransaction(invoiceId, transactionUpdate);
@@ -1890,6 +1893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: totalAmount,  // Will be converted to CAD by createTransaction if foreign currency
         subTotal: subTotal,
         taxAmount: taxAmount,
+        taxType: invoiceData.taxType || 'exclusive', // 'exclusive' | 'inclusive' | 'no-tax'
         balance: totalAmount,
         contactId: invoiceData.contactId,
         status: invoiceData.status,
