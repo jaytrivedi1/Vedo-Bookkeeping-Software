@@ -8,11 +8,6 @@ import {
   Trash2,
   AlertTriangle,
   FileText,
-  DollarSign,
-  Receipt,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  CreditCard,
   MoreHorizontal,
   Mail,
   Download
@@ -193,28 +188,6 @@ export default function TransactionList({
     return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-slate-100 text-slate-600 font-medium">Done</Badge>;
   };
 
-  // Get compact icon for transaction type
-  const getTransactionIcon = (type: string) => {
-    const iconClass = "h-4 w-4";
-    switch (type) {
-      case 'invoice':
-      case 'bill':
-        return <FileText className={`${iconClass} text-blue-500`} />;
-      case 'payment':
-        return <DollarSign className={`${iconClass} text-emerald-500`} />;
-      case 'deposit':
-        return <ArrowDownCircle className={`${iconClass} text-emerald-500`} />;
-      case 'sales_receipt':
-        return <Receipt className={`${iconClass} text-emerald-500`} />;
-      case 'transfer':
-        return <ArrowUpCircle className={`${iconClass} text-slate-500`} />;
-      case 'expense':
-        return <CreditCard className={`${iconClass} text-red-500`} />;
-      default:
-        return <CreditCard className={`${iconClass} text-slate-500`} />;
-    }
-  };
-
   // Format transaction type for display (short)
   const formatTransactionType = (type: string) => {
     switch (type) {
@@ -260,8 +233,8 @@ export default function TransactionList({
   const sortedTransactions = filteredTransactions
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Grid column definition for consistent alignment
-  const gridCols = "grid-cols-[60px_100px_80px_1fr_100px_90px_36px]";
+  // Grid column definition for consistent alignment (no icon column)
+  const gridCols = "grid-cols-[55px_105px_85px_1fr_100px_90px_36px]";
 
   return (
     <>
@@ -289,7 +262,7 @@ export default function TransactionList({
           ) : (
             <div>
               {/* Sticky Column Headers */}
-              <div className={`grid ${gridCols} items-center h-9 px-4 bg-slate-50 border-b border-slate-200 sticky top-0 z-10`}>
+              <div className={`grid ${gridCols} items-center h-9 px-4 pl-5 bg-slate-50 border-b border-slate-200 sticky top-0 z-10`}>
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</span>
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Date</span>
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Number</span>
@@ -310,11 +283,10 @@ export default function TransactionList({
                       <div
                         key={transaction.id}
                         onClick={() => handleRowClick(transaction)}
-                        className={`group grid ${gridCols} items-center h-11 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors`}
+                        className={`group grid ${gridCols} items-center h-11 px-4 pl-5 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors`}
                       >
                         {/* Status Badge */}
-                        <div className="flex items-center gap-1.5">
-                          {getTransactionIcon(transaction.type)}
+                        <div>
                           {getStatusBadge(transaction)}
                         </div>
 
