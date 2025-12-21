@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Transaction, LedgerEntry } from "@shared/schema";
 import { format } from "date-fns";
 import {
@@ -13,11 +13,9 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CreditCard,
-  Plus,
   MoreHorizontal,
   Mail,
-  Download,
-  Copy
+  Download
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -258,43 +256,22 @@ export default function TransactionList({
     }
   };
 
-  // Group transactions by month with totals
-  const groupedTransactions = filteredTransactions
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .reduce((acc, transaction) => {
-      const monthKey = format(new Date(transaction.date), "MMMM yyyy");
-      if (!acc[monthKey]) {
-        acc[monthKey] = { transactions: [], total: 0, count: 0 };
-      }
-      acc[monthKey].transactions.push(transaction);
-      acc[monthKey].total += Math.abs(transaction.amount);
-      acc[monthKey].count += 1;
-      return acc;
-    }, {} as Record<string, { transactions: Transaction[]; total: number; count: number }>);
+  // Sort transactions by date (newest first) - no grouping
+  const sortedTransactions = filteredTransactions
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const createButtonLabel = contactType === 'customer' ? 'New Invoice' : 'New Bill';
+  // Grid column definition for consistent alignment
+  const gridCols = "grid-cols-[60px_100px_80px_1fr_100px_90px_36px]";
 
   return (
     <>
       <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3 px-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold text-slate-800">
-              Transaction History
-            </CardTitle>
-            {onCreateNew && (
-              <Button
-                onClick={onCreateNew}
-                size="sm"
-                className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                {createButtonLabel}
-              </Button>
-            )}
-          </div>
+        <CardHeader className="pb-0 px-4">
+          <CardTitle className="text-base font-semibold text-slate-800">
+            Transaction History
+          </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0 px-0">
+        <CardContent className="pt-3 px-0">
           {transactionsLoading ? (
             <div className="flex justify-center items-center h-32">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
@@ -308,157 +285,141 @@ export default function TransactionList({
                   ? 'Create an invoice to get started.'
                   : 'Create a bill to get started.'}
               </p>
-              {onCreateNew && (
-                <Button
-                  onClick={onCreateNew}
-                  className="mt-3 h-8 text-xs bg-emerald-600 hover:bg-emerald-700"
-                  size="sm"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  {createButtonLabel}
-                </Button>
-              )}
             </div>
           ) : (
-            <ScrollArea style={{ maxHeight }}>
-              <div>
-                {Object.entries(groupedTransactions).map(([monthKey, { transactions: monthTransactions, total, count }]) => (
-                  <div key={monthKey}>
-                    {/* Month Header with Totals */}
-                    <div className="flex items-center justify-between px-4 py-2 bg-slate-50/80 border-y border-slate-100">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                        {monthKey}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {count} transaction{count !== 1 ? 's' : ''}
-                        <span className="mx-1.5 text-slate-300">•</span>
-                        <span className="font-semibold text-slate-600">
-                          {formatCurrency(total, homeCurrency, homeCurrency)}
-                        </span>
-                      </span>
-                    </div>
-
-                    {/* Transaction Rows */}
-                    <div>
-                      {monthTransactions.map((transaction) => {
-                        const showBalance = (transaction.type === 'invoice' || transaction.type === 'bill') &&
-                          transaction.balance !== null && transaction.balance !== undefined;
-
-                        return (
-                          <div
-                            key={transaction.id}
-                            onClick={() => handleRowClick(transaction)}
-                            className="group grid grid-cols-[minmax(100px,120px)_90px_80px_1fr_minmax(90px,110px)_36px] items-center h-11 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                          >
-                            {/* Type + Badge */}
-                            <div className="flex items-center gap-2 min-w-0">
-                              {getTransactionIcon(transaction.type)}
-                              {getStatusBadge(transaction)}
-                            </div>
-
-                            {/* Date */}
-                            <span className="text-[13px] text-slate-500 tabular-nums">
-                              {format(new Date(transaction.date), "MMM d, yyyy")}
-                            </span>
-
-                            {/* Reference */}
-                            <span className="text-[13px] font-mono text-slate-600 truncate">
-                              {transaction.reference ? `#${transaction.reference}` : '—'}
-                            </span>
-
-                            {/* Type Label (for clarity) */}
-                            <span className="text-[13px] text-slate-400 truncate pl-2">
-                              {formatTransactionType(transaction.type)}
-                            </span>
-
-                            {/* Amount + Balance */}
-                            <div className="text-right">
-                              <div className={`text-[13px] font-semibold tabular-nums ${
-                                transaction.type === 'payment' ||
-                                transaction.type === 'deposit' ||
-                                transaction.type === 'sales_receipt'
-                                  ? 'text-emerald-600'
-                                  : transaction.type === 'expense'
-                                    ? 'text-red-600'
-                                    : 'text-slate-800'
-                              }`}>
-                                {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
-                              </div>
-                              {showBalance && (
-                                <div className="text-[11px] text-slate-400 tabular-nums">
-                                  bal {formatCurrency(Math.abs(transaction.balance!), transaction.currency, homeCurrency)}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Actions Menu */}
-                            <div className="flex justify-end">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <MoreHorizontal className="h-4 w-4 text-slate-400" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-40">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRowClick(transaction);
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </DropdownMenuItem>
-                                  {(transaction.type === 'invoice' || transaction.type === 'bill') && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          window.open(`/api/invoices/${transaction.id}/pdf`, '_blank');
-                                        }}
-                                      >
-                                        <Download className="h-4 w-4 mr-2" />
-                                        Download PDF
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          // Navigate to invoice with send dialog open
-                                          navigate(`/invoices/${transaction.id}?openSendDialog=true`);
-                                        }}
-                                      >
-                                        <Mail className="h-4 w-4 mr-2" />
-                                        Send Email
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteTransaction(transaction);
-                                    }}
-                                    className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+            <div>
+              {/* Sticky Column Headers */}
+              <div className={`grid ${gridCols} items-center h-9 px-4 bg-slate-50 border-b border-slate-200 sticky top-0 z-10`}>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Status</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Date</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Number</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Memo</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide text-right">Amount</span>
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide text-right">Balance</span>
+                <span></span>
               </div>
-            </ScrollArea>
+
+              {/* Transaction Rows */}
+              <ScrollArea style={{ maxHeight }}>
+                <div>
+                  {sortedTransactions.map((transaction) => {
+                    const hasBalance = (transaction.type === 'invoice' || transaction.type === 'bill') &&
+                      transaction.balance !== null && transaction.balance !== undefined;
+
+                    return (
+                      <div
+                        key={transaction.id}
+                        onClick={() => handleRowClick(transaction)}
+                        className={`group grid ${gridCols} items-center h-11 px-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors`}
+                      >
+                        {/* Status Badge */}
+                        <div className="flex items-center gap-1.5">
+                          {getTransactionIcon(transaction.type)}
+                          {getStatusBadge(transaction)}
+                        </div>
+
+                        {/* Date */}
+                        <span className="text-[13px] text-slate-600 tabular-nums">
+                          {format(new Date(transaction.date), "MMM d, yyyy")}
+                        </span>
+
+                        {/* Number/Reference */}
+                        <span className="text-[13px] font-mono text-slate-700 truncate">
+                          {transaction.reference ? `#${transaction.reference}` : '—'}
+                        </span>
+
+                        {/* Memo/Description */}
+                        <span className="text-[13px] text-slate-500 truncate pr-2">
+                          {transaction.description || transaction.memo || formatTransactionType(transaction.type)}
+                        </span>
+
+                        {/* Amount */}
+                        <div className={`text-[13px] font-semibold tabular-nums text-right ${
+                          transaction.type === 'payment' ||
+                          transaction.type === 'deposit' ||
+                          transaction.type === 'sales_receipt'
+                            ? 'text-emerald-600'
+                            : transaction.type === 'expense'
+                              ? 'text-red-600'
+                              : 'text-slate-800'
+                        }`}>
+                          {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
+                        </div>
+
+                        {/* Balance */}
+                        <div className="text-[13px] tabular-nums text-right text-slate-500">
+                          {hasBalance
+                            ? formatCurrency(Math.abs(transaction.balance!), transaction.currency, homeCurrency)
+                            : '—'
+                          }
+                        </div>
+
+                        {/* Actions Menu */}
+                        <div className="flex justify-end">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreHorizontal className="h-4 w-4 text-slate-400" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRowClick(transaction);
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              {(transaction.type === 'invoice' || transaction.type === 'bill') && (
+                                <>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(`/api/invoices/${transaction.id}/pdf`, '_blank');
+                                    }}
+                                  >
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download PDF
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Navigate to invoice with send dialog open
+                                      navigate(`/invoices/${transaction.id}?openSendDialog=true`);
+                                    }}
+                                  >
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Send Email
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteTransaction(transaction);
+                                }}
+                                className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>
