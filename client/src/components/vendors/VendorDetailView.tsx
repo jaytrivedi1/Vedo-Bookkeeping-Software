@@ -12,13 +12,14 @@ import {
   Building2,
   Wallet,
   Clock,
-  Plus,
-  DollarSign,
-  CreditCard
+  CreditCard,
+  FileText
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
 import NotesCard from "@/components/shared/NotesCard";
+import NewTransactionDropdown from "@/components/shared/NewTransactionDropdown";
+import StatementConfigModal from "@/components/shared/StatementConfigModal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
@@ -55,6 +56,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   // Fetch vendor
   const { data: contacts } = useQuery<Contact[]>({
@@ -185,14 +187,6 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
 
     setIsDeleting(true);
     deleteVendorMutation.mutate(vendor.id);
-  };
-
-  const handleCreateBill = () => {
-    navigate(`/bill-create?vendorId=${vendorId}`);
-  };
-
-  const handleMakePayment = () => {
-    navigate(`/pay-bill?vendorId=${vendorId}`);
   };
 
   if (!vendor) {
@@ -447,22 +441,18 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
               </div>
 
               {/* Actions Section */}
-              <div className="p-6 flex flex-col justify-center gap-3 min-w-[180px]">
+              <div className="p-6 flex flex-col justify-center gap-3 min-w-[200px]">
+                <NewTransactionDropdown
+                  contactId={vendorId}
+                  contactType="vendor"
+                />
                 <Button
-                  onClick={handleMakePayment}
-                  className="bg-violet-600 hover:bg-violet-700 w-full"
-                  disabled={netBalanceDue <= 0}
-                >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Make Payment
-                </Button>
-                <Button
-                  onClick={handleCreateBill}
+                  onClick={() => setIsStatementModalOpen(true)}
                   variant="outline"
-                  className="w-full"
+                  className="w-full border-slate-300 hover:bg-slate-50"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Bill
+                  <FileText className="h-4 w-4 mr-2" />
+                  New Statement
                 </Button>
               </div>
             </div>
@@ -474,7 +464,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
           contactId={vendorId}
           contactType="vendor"
           homeCurrency={homeCurrency}
-          onCreateNew={handleCreateBill}
+          onCreateNew={() => navigate(`/bill-create?vendorId=${vendorId}`)}
           maxHeight="500px"
         />
       </div>
@@ -539,6 +529,15 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Statement Configuration Modal */}
+      <StatementConfigModal
+        open={isStatementModalOpen}
+        onOpenChange={setIsStatementModalOpen}
+        contactId={vendorId}
+        contactType="vendor"
+        contactName={vendor.name}
+      />
     </ScrollArea>
   );
 }

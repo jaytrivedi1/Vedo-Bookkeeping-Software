@@ -12,13 +12,14 @@ import {
   User,
   Wallet,
   Clock,
-  Plus,
-  DollarSign,
-  CreditCard
+  CreditCard,
+  FileText
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
 import NotesCard from "@/components/shared/NotesCard";
+import NewTransactionDropdown from "@/components/shared/NewTransactionDropdown";
+import StatementConfigModal from "@/components/shared/StatementConfigModal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
@@ -55,6 +56,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
   // Fetch customer
   const { data: contacts } = useQuery<Contact[]>({
@@ -185,14 +187,6 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
 
     setIsDeleting(true);
     deleteCustomerMutation.mutate(customer.id);
-  };
-
-  const handleCreateInvoice = () => {
-    navigate(`/invoices/new?customerId=${customerId}`);
-  };
-
-  const handleReceivePayment = () => {
-    navigate(`/payment-receive?customerId=${customerId}`);
   };
 
   if (!customer) {
@@ -447,22 +441,18 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
               </div>
 
               {/* Actions Section */}
-              <div className="p-6 flex flex-col justify-center gap-3 min-w-[180px]">
+              <div className="p-6 flex flex-col justify-center gap-3 min-w-[200px]">
+                <NewTransactionDropdown
+                  contactId={customerId}
+                  contactType="customer"
+                />
                 <Button
-                  onClick={handleReceivePayment}
-                  className="bg-emerald-600 hover:bg-emerald-700 w-full"
-                  disabled={netBalanceDue <= 0}
-                >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Receive Payment
-                </Button>
-                <Button
-                  onClick={handleCreateInvoice}
+                  onClick={() => setIsStatementModalOpen(true)}
                   variant="outline"
-                  className="w-full"
+                  className="w-full border-slate-300 hover:bg-slate-50"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Invoice
+                  <FileText className="h-4 w-4 mr-2" />
+                  New Statement
                 </Button>
               </div>
             </div>
@@ -474,7 +464,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           contactId={customerId}
           contactType="customer"
           homeCurrency={homeCurrency}
-          onCreateNew={handleCreateInvoice}
+          onCreateNew={() => navigate(`/invoices/new?customerId=${customerId}`)}
           maxHeight="500px"
         />
       </div>
@@ -539,6 +529,15 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Statement Configuration Modal */}
+      <StatementConfigModal
+        open={isStatementModalOpen}
+        onOpenChange={setIsStatementModalOpen}
+        contactId={customerId}
+        contactType="customer"
+        contactName={customer.name}
+      />
     </ScrollArea>
   );
 }
