@@ -13,7 +13,8 @@ import {
   Wallet,
   Clock,
   Plus,
-  DollarSign
+  DollarSign,
+  CreditCard
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
@@ -122,6 +123,25 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
   }, 0);
 
   const openBillCount = openBills.length;
+
+  // Calculate total unapplied credits for this vendor (cheques, payments with unapplied_credit status)
+  const unappliedCredits = vendorTransactions
+    .filter(t =>
+      t.status === 'unapplied_credit' &&
+      (t.type === 'cheque' || t.type === 'payment') &&
+      t.balance !== null && t.balance !== undefined && t.balance > 0
+    )
+    .reduce((sum, t) => sum + Math.abs(t.balance || 0), 0);
+
+  const unappliedCreditCount = vendorTransactions
+    .filter(t =>
+      t.status === 'unapplied_credit' &&
+      (t.type === 'cheque' || t.type === 'payment') &&
+      t.balance !== null && t.balance !== undefined && t.balance > 0
+    ).length;
+
+  // Net balance due = outstanding bills minus available credits
+  const netBalanceDue = Math.max(0, outstandingBalance - unappliedCredits);
 
   // Delete vendor mutation
   const deleteVendorMutation = useMutation({
@@ -315,7 +335,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
         {/* Account Summary Banner */}
         <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
 
               {/* Amount Owed Section */}
               <div className="relative p-6 overflow-hidden">
@@ -326,8 +346,8 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                     Amount Owed
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${outstandingBalance > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
-                    {formatCurrency(outstandingBalance, homeCurrency, homeCurrency)}
+                  <p className={`text-3xl font-black mb-2 ${(unappliedCredits > 0 ? netBalanceDue : outstandingBalance) > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                    {formatCurrency(unappliedCredits > 0 ? netBalanceDue : outstandingBalance, homeCurrency, homeCurrency)}
                   </p>
                   <p className="text-sm text-slate-500">
                     {openBillCount > 0
@@ -335,9 +355,54 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                       : 'No outstanding bills'
                     }
                   </p>
+                  {unappliedCredits > 0 && (
+                    <p className="text-xs text-blue-500 mt-1">
+                      Net of {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)} in credits
+                    </p>
+                  )}
                   <p className="text-xs text-slate-400 mt-1">
                     Lifetime paid: {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
                   </p>
+                </div>
+              </div>
+
+              {/* Credits Section */}
+              <div className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? 'bg-blue-50/50' : ''}`}>
+                {/* Background Icon */}
+                <CreditCard className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                  unappliedCredits > 0 ? 'text-blue-200' : 'text-slate-200'
+                }`} />
+
+                <div className="relative">
+                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                    unappliedCredits > 0 ? 'text-blue-500' : 'text-slate-400'
+                  }`}>
+                    Credits
+                  </p>
+                  <p className={`text-3xl font-black mb-2 ${
+                    unappliedCredits > 0 ? 'text-blue-600' : 'text-slate-400'
+                  }`}>
+                    {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)}
+                  </p>
+                  {unappliedCredits > 0 ? (
+                    <>
+                      <p className="text-sm text-blue-600">
+                        {unappliedCreditCount} unapplied credit{unappliedCreditCount !== 1 ? 's' : ''}
+                      </p>
+                      <p className="text-xs text-blue-500 mt-1">
+                        Available to apply to bills
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-500">
+                        No available credits
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Overpayments appear here
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -386,7 +451,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                 <Button
                   onClick={handleMakePayment}
                   className="bg-violet-600 hover:bg-violet-700 w-full"
-                  disabled={outstandingBalance <= 0}
+                  disabled={netBalanceDue <= 0}
                 >
                   <DollarSign className="h-4 w-4 mr-2" />
                   Make Payment

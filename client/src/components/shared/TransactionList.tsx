@@ -184,7 +184,19 @@ export default function TransactionList({
 
     // For payments
     if (type === 'payment') {
+      // Show "Credit" badge if payment has unapplied amount
+      if (status === 'unapplied_credit' && balance !== null && balance !== undefined && balance > 0) {
+        return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
+      }
       return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Rcvd</Badge>;
+    }
+
+    // For cheques with unapplied credit
+    if (type === 'cheque') {
+      if (status === 'unapplied_credit' && balance !== null && balance !== undefined && balance > 0) {
+        return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
+      }
+      return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Done</Badge>;
     }
 
     // Default
@@ -313,8 +325,18 @@ export default function TransactionList({
               <ScrollArea style={{ maxHeight }}>
                 <div>
                   {sortedTransactions.map((transaction) => {
-                    const hasBalance = (transaction.type === 'invoice' || transaction.type === 'bill') &&
+                    // For invoices/bills: show remaining balance due
+                    const isInvoiceOrBill = (transaction.type === 'invoice' || transaction.type === 'bill') &&
                       transaction.balance !== null && transaction.balance !== undefined;
+
+                    // For payments/deposits/cheques: show unapplied credit amount
+                    const hasUnappliedCredit =
+                      (transaction.type === 'payment' || transaction.type === 'deposit' || transaction.type === 'cheque') &&
+                      transaction.status === 'unapplied_credit' &&
+                      transaction.balance !== null && transaction.balance !== undefined &&
+                      transaction.balance > 0;
+
+                    const hasBalance = isInvoiceOrBill || hasUnappliedCredit;
 
                     return (
                       <div
@@ -360,8 +382,10 @@ export default function TransactionList({
                           {formatCurrency(Math.abs(transaction.amount), transaction.currency, homeCurrency)}
                         </div>
 
-                        {/* Balance */}
-                        <div className="text-[13px] tabular-nums text-right text-slate-500">
+                        {/* Balance - shows remaining due for invoices/bills OR unapplied credit for payments */}
+                        <div className={`text-[13px] tabular-nums text-right ${
+                          hasUnappliedCredit ? 'text-blue-600 font-medium' : 'text-slate-500'
+                        }`}>
                           {hasBalance
                             ? formatCurrency(Math.abs(transaction.balance!), transaction.currency, homeCurrency)
                             : '—'

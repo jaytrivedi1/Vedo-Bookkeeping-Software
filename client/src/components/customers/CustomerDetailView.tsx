@@ -13,7 +13,8 @@ import {
   Wallet,
   Clock,
   Plus,
-  DollarSign
+  DollarSign,
+  CreditCard
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
@@ -122,6 +123,25 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
   }, 0);
 
   const openInvoiceCount = openInvoices.length;
+
+  // Calculate total unapplied credits for this customer (payments, deposits, cheques with unapplied_credit status)
+  const unappliedCredits = customerTransactions
+    .filter(t =>
+      t.status === 'unapplied_credit' &&
+      (t.type === 'payment' || t.type === 'deposit' || t.type === 'cheque') &&
+      t.balance !== null && t.balance !== undefined && t.balance > 0
+    )
+    .reduce((sum, t) => sum + Math.abs(t.balance || 0), 0);
+
+  const unappliedCreditCount = customerTransactions
+    .filter(t =>
+      t.status === 'unapplied_credit' &&
+      (t.type === 'payment' || t.type === 'deposit' || t.type === 'cheque') &&
+      t.balance !== null && t.balance !== undefined && t.balance > 0
+    ).length;
+
+  // Net balance due = outstanding invoices minus available credits
+  const netBalanceDue = Math.max(0, outstandingBalance - unappliedCredits);
 
   // Delete customer mutation
   const deleteCustomerMutation = useMutation({
@@ -315,7 +335,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
         {/* Account Summary Banner */}
         <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
 
               {/* Balance Due Section */}
               <div className="relative p-6 overflow-hidden">
@@ -327,7 +347,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                     Balance Due
                   </p>
                   <p className="text-3xl font-black text-slate-800 mb-2">
-                    {formatCurrency(outstandingBalance, homeCurrency, homeCurrency)}
+                    {formatCurrency(unappliedCredits > 0 ? netBalanceDue : outstandingBalance, homeCurrency, homeCurrency)}
                   </p>
                   <p className="text-sm text-slate-500">
                     {openInvoiceCount > 0
@@ -335,9 +355,54 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                       : 'No outstanding invoices'
                     }
                   </p>
+                  {unappliedCredits > 0 && (
+                    <p className="text-xs text-blue-500 mt-1">
+                      Net of {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)} in credits
+                    </p>
+                  )}
                   <p className="text-xs text-slate-400 mt-1">
                     Lifetime paid: {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
                   </p>
+                </div>
+              </div>
+
+              {/* Credits Section */}
+              <div className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? 'bg-blue-50/50' : ''}`}>
+                {/* Background Icon */}
+                <CreditCard className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                  unappliedCredits > 0 ? 'text-blue-200' : 'text-slate-200'
+                }`} />
+
+                <div className="relative">
+                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                    unappliedCredits > 0 ? 'text-blue-500' : 'text-slate-400'
+                  }`}>
+                    Credits
+                  </p>
+                  <p className={`text-3xl font-black mb-2 ${
+                    unappliedCredits > 0 ? 'text-blue-600' : 'text-slate-400'
+                  }`}>
+                    {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)}
+                  </p>
+                  {unappliedCredits > 0 ? (
+                    <>
+                      <p className="text-sm text-blue-600">
+                        {unappliedCreditCount} unapplied credit{unappliedCreditCount !== 1 ? 's' : ''}
+                      </p>
+                      <p className="text-xs text-blue-500 mt-1">
+                        Available to apply to invoices
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-slate-500">
+                        No available credits
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Overpayments appear here
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -386,7 +451,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                 <Button
                   onClick={handleReceivePayment}
                   className="bg-emerald-600 hover:bg-emerald-700 w-full"
-                  disabled={outstandingBalance <= 0}
+                  disabled={netBalanceDue <= 0}
                 >
                   <DollarSign className="h-4 w-4 mr-2" />
                   Receive Payment
