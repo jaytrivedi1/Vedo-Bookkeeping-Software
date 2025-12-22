@@ -75,7 +75,18 @@ export const contacts = pgTable('contacts', {
   defaultTaxRate: doublePrecision('default_tax_rate').default(0), // Default sales tax rate
   documentIds: text('document_ids').array(), // Array of document IDs for attachments
   isActive: boolean('is_active').notNull().default(true), // Active status for filtering
-  notes: text('notes'), // Internal notes about this contact (not visible to customer/vendor)
+  notes: text('notes'), // Internal notes about this contact (not visible to customer/vendor) - DEPRECATED: use contact_notes table
+  pinnedNote: text('pinned_note'), // Important note to display as alert banner across tabs
+});
+
+// Contact Notes - timestamped log entries for customer/vendor internal notes
+export const contactNotesSchema = pgTable('contact_notes', {
+  id: serial('id').primaryKey(),
+  contactId: integer('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  isPinned: boolean('is_pinned').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  createdBy: integer('created_by'), // User ID who created the note (FK added separately)
 });
 
 // Transaction Headers
@@ -172,6 +183,7 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({ id: true,
   code: z.string().optional()
 });
 export const insertContactSchema = createInsertSchema(contacts).omit({ id: true });
+export const insertContactNoteSchema = createInsertSchema(contactNotesSchema).omit({ id: true, createdAt: true });
 export const insertTransactionSchema = createInsertSchema(transactions).omit({ id: true });
 export const insertLineItemSchema = createInsertSchema(lineItems).omit({ id: true });
 export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({ id: true });
@@ -294,6 +306,9 @@ export type InsertAccount = z.infer<typeof insertAccountSchema>;
 
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = z.infer<typeof insertContactSchema>;
+
+export type ContactNote = typeof contactNotesSchema.$inferSelect;
+export type InsertContactNote = z.infer<typeof insertContactNoteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect & {
   appliedCredits?: { id: number; amount: number }[];

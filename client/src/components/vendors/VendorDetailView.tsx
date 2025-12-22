@@ -13,13 +13,16 @@ import {
   Wallet,
   Clock,
   CreditCard,
-  FileText
+  FileText,
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
-import NotesCard from "@/components/shared/NotesCard";
 import NewTransactionDropdown from "@/components/shared/NewTransactionDropdown";
 import StatementConfigModal from "@/components/shared/StatementConfigModal";
+import WorkspaceTabs, { TabItem } from "@/components/shared/WorkspaceTabs";
+import PinnedNoteBanner from "@/components/shared/PinnedNoteBanner";
+import NotesTab from "@/components/shared/NotesTab";
+import { useTabFromUrl } from "@/hooks/useTabFromUrl";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
@@ -49,7 +52,16 @@ interface VendorDetailViewProps {
   homeCurrency: string;
 }
 
-export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetailViewProps) {
+// Define tabs for vendor workspace (fewer than customer)
+const VENDOR_TABS: TabItem[] = [
+  { id: "transactions", label: "Transaction History" },
+  { id: "notes", label: "Notes" },
+];
+
+export default function VendorDetailView({
+  vendorId,
+  homeCurrency,
+}: VendorDetailViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -58,32 +70,39 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
+  // Tab state synced with URL
+  const [activeTab, setActiveTab] = useTabFromUrl("transactions");
+
   // Fetch vendor
   const { data: contacts } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+    queryKey: ["/api/contacts"],
   });
 
   // Fetch transactions
   const { data: transactions } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions'],
+    queryKey: ["/api/transactions"],
   });
 
-  const vendor = contacts?.find(c => c.id === vendorId);
+  const vendor = contacts?.find((c) => c.id === vendorId);
 
   // Calculate vendor stats
-  const vendorTransactions = transactions?.filter(t => t.contactId === vendorId) || [];
-  const vendorBills = vendorTransactions.filter(t => t.type === 'bill');
+  const vendorTransactions =
+    transactions?.filter((t) => t.contactId === vendorId) || [];
+  const vendorBills = vendorTransactions.filter((t) => t.type === "bill");
 
   // Open bills (balance > 0)
-  const openBills = vendorBills.filter(bill =>
-    (bill.balance !== null && bill.balance !== undefined && bill.balance > 0) ||
-    (bill.status === 'open' || bill.status === 'draft')
+  const openBills = vendorBills.filter(
+    (bill) =>
+      (bill.balance !== null && bill.balance !== undefined && bill.balance > 0) ||
+      bill.status === "open" ||
+      bill.status === "draft"
   );
 
   const outstandingBalance = openBills.reduce((sum, bill) => {
-    const balance = (bill.balance !== null && bill.balance !== undefined)
-      ? bill.balance
-      : bill.amount;
+    const balance =
+      bill.balance !== null && bill.balance !== undefined
+        ? bill.balance
+        : bill.amount;
     return sum + balance;
   }, 0);
 
@@ -91,56 +110,74 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const overdueBills = openBills.filter(bill => {
-    if (bill.status === 'overdue') return true;
+  const overdueBills = openBills.filter((bill) => {
+    if (bill.status === "overdue") return true;
     if (bill.dueDate) {
       const dueDate = new Date(bill.dueDate);
       dueDate.setHours(0, 0, 0, 0);
-      return dueDate < today && (bill.balance === undefined || bill.balance === null || bill.balance > 0);
+      return (
+        dueDate < today &&
+        (bill.balance === undefined || bill.balance === null || bill.balance > 0)
+      );
     }
     return false;
   });
 
   const overdueAmount = overdueBills.reduce((sum, bill) => {
-    const balance = (bill.balance !== null && bill.balance !== undefined)
-      ? bill.balance
-      : bill.amount;
+    const balance =
+      bill.balance !== null && bill.balance !== undefined
+        ? bill.balance
+        : bill.amount;
     return sum + balance;
   }, 0);
 
   const overdueCount = overdueBills.length;
 
   // Calculate oldest overdue days
-  const oldestOverdueDays = overdueBills.length > 0
-    ? Math.max(...overdueBills.map(bill => {
-        if (!bill.dueDate) return 0;
-        const dueDate = new Date(bill.dueDate);
-        return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      }))
-    : 0;
+  const oldestOverdueDays =
+    overdueBills.length > 0
+      ? Math.max(
+          ...overdueBills.map((bill) => {
+            if (!bill.dueDate) return 0;
+            const dueDate = new Date(bill.dueDate);
+            return Math.floor(
+              (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+            );
+          })
+        )
+      : 0;
 
   const totalPaid = vendorBills.reduce((sum, bill) => {
-    const paid = bill.amount - ((bill.balance !== null && bill.balance !== undefined) ? bill.balance : bill.amount);
+    const paid =
+      bill.amount -
+      (bill.balance !== null && bill.balance !== undefined
+        ? bill.balance
+        : bill.amount);
     return sum + paid;
   }, 0);
 
   const openBillCount = openBills.length;
 
-  // Calculate total unapplied credits for this vendor (cheques, payments with unapplied_credit status)
+  // Calculate total unapplied credits for this vendor
   const unappliedCredits = vendorTransactions
-    .filter(t =>
-      t.status === 'unapplied_credit' &&
-      (t.type === 'cheque' || t.type === 'payment') &&
-      t.balance !== null && t.balance !== undefined && t.balance > 0
+    .filter(
+      (t) =>
+        t.status === "unapplied_credit" &&
+        (t.type === "cheque" || t.type === "payment") &&
+        t.balance !== null &&
+        t.balance !== undefined &&
+        t.balance > 0
     )
     .reduce((sum, t) => sum + Math.abs(t.balance || 0), 0);
 
-  const unappliedCreditCount = vendorTransactions
-    .filter(t =>
-      t.status === 'unapplied_credit' &&
-      (t.type === 'cheque' || t.type === 'payment') &&
-      t.balance !== null && t.balance !== undefined && t.balance > 0
-    ).length;
+  const unappliedCreditCount = vendorTransactions.filter(
+    (t) =>
+      t.status === "unapplied_credit" &&
+      (t.type === "cheque" || t.type === "payment") &&
+      t.balance !== null &&
+      t.balance !== undefined &&
+      t.balance > 0
+  ).length;
 
   // Net balance due = outstanding bills minus available credits
   const netBalanceDue = Math.max(0, outstandingBalance - unappliedCredits);
@@ -148,15 +185,15 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
   // Delete vendor mutation
   const deleteVendorMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/contacts/${id}`, 'DELETE');
+      return apiRequest(`/api/contacts/${id}`, "DELETE");
     },
     onSuccess: () => {
       toast({
         title: "Vendor deleted",
         description: "Vendor has been successfully deleted",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      navigate('/vendors');
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      navigate("/vendors");
     },
     onError: (error: any) => {
       toast({
@@ -168,7 +205,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
     onSettled: () => {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
-    }
+    },
   });
 
   const handleDeleteVendor = () => {
@@ -178,7 +215,8 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
     if (vendorTransactions.length > 0) {
       toast({
         title: "Cannot delete vendor",
-        description: "This vendor has associated transactions. Delete all transactions first.",
+        description:
+          "This vendor has associated transactions. Delete all transactions first.",
         variant: "destructive",
       });
       setIsDeleteDialogOpen(false);
@@ -215,10 +253,16 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">
-                    {formatContactName(vendor.name, vendor.currency, homeCurrency)}
+                    {formatContactName(
+                      vendor.name,
+                      vendor.currency,
+                      homeCurrency
+                    )}
                   </h1>
                   {vendor.contactName && (
-                    <p className="text-violet-100 text-sm mt-0.5">{vendor.contactName}</p>
+                    <p className="text-violet-100 text-sm mt-0.5">
+                      {vendor.contactName}
+                    </p>
                   )}
                 </div>
               </div>
@@ -245,8 +289,8 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
           </div>
         </Card>
 
-        {/* Contact Info, Address, and Notes Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Contact Info and Address Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Contact Info */}
           <Card className="border-0 shadow-sm rounded-2xl">
             <CardHeader className="pb-3">
@@ -290,7 +334,9 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
               )}
 
               {!vendor.email && !vendor.phone && (
-                <p className="text-sm text-slate-400 italic">No contact information</p>
+                <p className="text-sm text-slate-400 italic">
+                  No contact information
+                </p>
               )}
             </CardContent>
           </Card>
@@ -313,75 +359,94 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 italic">No address on file</p>
+                <p className="text-sm text-slate-400 italic">
+                  No address on file
+                </p>
               )}
             </CardContent>
           </Card>
-
-          {/* Internal Notes */}
-          <NotesCard
-            contactId={vendorId}
-            initialNotes={vendor.notes}
-            contactType="vendor"
-          />
         </div>
 
         {/* Account Summary Banner */}
         <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-
               {/* Amount Owed Section */}
               <div className="relative p-6 overflow-hidden">
-                {/* Background Icon */}
                 <Wallet className="absolute -right-4 -bottom-4 h-32 w-32 text-slate-200 opacity-50" />
-
                 <div className="relative">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                     Amount Owed
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${(unappliedCredits > 0 ? netBalanceDue : outstandingBalance) > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
-                    {formatCurrency(unappliedCredits > 0 ? netBalanceDue : outstandingBalance, homeCurrency, homeCurrency)}
+                  <p
+                    className={`text-3xl font-black mb-2 ${
+                      (unappliedCredits > 0 ? netBalanceDue : outstandingBalance) > 0
+                        ? "text-slate-800"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {formatCurrency(
+                      unappliedCredits > 0 ? netBalanceDue : outstandingBalance,
+                      homeCurrency,
+                      homeCurrency
+                    )}
                   </p>
                   <p className="text-sm text-slate-500">
                     {openBillCount > 0
-                      ? `Across ${openBillCount} open bill${openBillCount !== 1 ? 's' : ''}`
-                      : 'No outstanding bills'
-                    }
+                      ? `Across ${openBillCount} open bill${openBillCount !== 1 ? "s" : ""}`
+                      : "No outstanding bills"}
                   </p>
                   {unappliedCredits > 0 && (
                     <p className="text-xs text-blue-500 mt-1">
-                      Net of {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)} in credits
+                      Net of{" "}
+                      {formatCurrency(
+                        unappliedCredits,
+                        homeCurrency,
+                        homeCurrency
+                      )}{" "}
+                      in credits
                     </p>
                   )}
                   <p className="text-xs text-slate-400 mt-1">
-                    Lifetime paid: {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
+                    Lifetime paid:{" "}
+                    {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
                   </p>
                 </div>
               </div>
 
               {/* Credits Section */}
-              <div className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? 'bg-blue-50/50' : ''}`}>
-                {/* Background Icon */}
-                <CreditCard className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
-                  unappliedCredits > 0 ? 'text-blue-200' : 'text-slate-200'
-                }`} />
-
+              <div
+                className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? "bg-blue-50/50" : ""}`}
+              >
+                <CreditCard
+                  className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                    unappliedCredits > 0 ? "text-blue-200" : "text-slate-200"
+                  }`}
+                />
                 <div className="relative">
-                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    unappliedCredits > 0 ? 'text-blue-500' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                      unappliedCredits > 0 ? "text-blue-500" : "text-slate-400"
+                    }`}
+                  >
                     Credits
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${
-                    unappliedCredits > 0 ? 'text-blue-600' : 'text-slate-400'
-                  }`}>
-                    {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)}
+                  <p
+                    className={`text-3xl font-black mb-2 ${
+                      unappliedCredits > 0 ? "text-blue-600" : "text-slate-400"
+                    }`}
+                  >
+                    {formatCurrency(
+                      unappliedCredits,
+                      homeCurrency,
+                      homeCurrency
+                    )}
                   </p>
                   {unappliedCredits > 0 ? (
                     <>
                       <p className="text-sm text-blue-600">
-                        {unappliedCreditCount} unapplied credit{unappliedCreditCount !== 1 ? 's' : ''}
+                        {unappliedCreditCount} unapplied credit
+                        {unappliedCreditCount !== 1 ? "s" : ""}
                       </p>
                       <p className="text-xs text-blue-500 mt-1">
                         Available to apply to bills
@@ -401,37 +466,43 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
               </div>
 
               {/* Overdue Section */}
-              <div className={`relative p-6 overflow-hidden ${overdueAmount > 0 ? 'bg-red-50/50' : ''}`}>
-                {/* Background Icon */}
-                <Clock className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
-                  overdueAmount > 0 ? 'text-red-200' : 'text-slate-200'
-                }`} />
-
+              <div
+                className={`relative p-6 overflow-hidden ${overdueAmount > 0 ? "bg-red-50/50" : ""}`}
+              >
+                <Clock
+                  className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                    overdueAmount > 0 ? "text-red-200" : "text-slate-200"
+                  }`}
+                />
                 <div className="relative">
-                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    overdueAmount > 0 ? 'text-red-500' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                      overdueAmount > 0 ? "text-red-500" : "text-slate-400"
+                    }`}
+                  >
                     Overdue
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${
-                    overdueAmount > 0 ? 'text-red-600' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-3xl font-black mb-2 ${
+                      overdueAmount > 0 ? "text-red-600" : "text-slate-400"
+                    }`}
+                  >
                     {formatCurrency(overdueAmount, homeCurrency, homeCurrency)}
                   </p>
                   {overdueAmount > 0 ? (
                     <>
                       <p className="text-sm text-red-600">
-                        {overdueCount} bill{overdueCount !== 1 ? 's' : ''} past due
+                        {overdueCount} bill{overdueCount !== 1 ? "s" : ""} past
+                        due
                       </p>
                       <p className="text-xs text-red-500 mt-1">
-                        Oldest: {oldestOverdueDays} day{oldestOverdueDays !== 1 ? 's' : ''} overdue
+                        Oldest: {oldestOverdueDays} day
+                        {oldestOverdueDays !== 1 ? "s" : ""} overdue
                       </p>
                     </>
                   ) : (
                     <>
-                      <p className="text-sm text-slate-500">
-                        No overdue bills
-                      </p>
+                      <p className="text-sm text-slate-500">No overdue bills</p>
                       <p className="text-xs text-slate-400 mt-1">
                         All payments on track
                       </p>
@@ -459,14 +530,32 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
           </div>
         </Card>
 
-        {/* Transaction History */}
-        <TransactionList
-          contactId={vendorId}
-          contactType="vendor"
-          homeCurrency={homeCurrency}
-          onCreateNew={() => navigate(`/bill-create?vendorId=${vendorId}`)}
-          maxHeight="500px"
+        {/* Pinned Note Banner (visible on all tabs except Notes) */}
+        {vendor.pinnedNote && activeTab !== "notes" && (
+          <PinnedNoteBanner note={vendor.pinnedNote} />
+        )}
+
+        {/* Tab Navigation */}
+        <WorkspaceTabs
+          tabs={VENDOR_TABS}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
+
+        {/* Tab Content */}
+        {activeTab === "transactions" && (
+          <TransactionList
+            contactId={vendorId}
+            contactType="vendor"
+            homeCurrency={homeCurrency}
+            onCreateNew={() => navigate(`/bill-create?vendorId=${vendorId}`)}
+            maxHeight="500px"
+          />
+        )}
+
+        {activeTab === "notes" && (
+          <NotesTab contactId={vendorId} contactType="vendor" />
+        )}
       </div>
 
       {/* Edit Vendor Dialog */}
@@ -483,7 +572,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
             contact={vendor}
             onSuccess={() => {
               setIsEditDialogOpen(false);
-              queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+              queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
             }}
             onCancel={() => setIsEditDialogOpen(false)}
           />
@@ -491,18 +580,22 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
       </Dialog>
 
       {/* Delete Vendor Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center text-red-600">
               <AlertTriangle className="h-5 w-5 mr-2" /> Delete Vendor
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {vendor.name}? This action cannot be undone.
+              Are you sure you want to delete {vendor.name}? This action cannot
+              be undone.
               {vendorTransactions.length > 0 && (
                 <p className="mt-2 text-red-500 font-medium">
-                  This vendor has {vendorTransactions.length} associated transaction(s).
-                  Please delete all transactions first.
+                  This vendor has {vendorTransactions.length} associated
+                  transaction(s). Please delete all transactions first.
                 </p>
               )}
             </AlertDialogDescription>
@@ -523,7 +616,7 @@ export default function VendorDetailView({ vendorId, homeCurrency }: VendorDetai
                   Deleting...
                 </>
               ) : (
-                'Delete'
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

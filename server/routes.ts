@@ -769,16 +769,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const contactId = parseInt(req.params.id);
       const contact = await storage.getContact(contactId);
-      
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
-      
+
       const transactions = await storage.getTransactionsByContact(contactId);
       res.json(transactions);
     } catch (error) {
       console.error("Error fetching contact transactions:", error);
       res.status(500).json({ message: "Failed to fetch contact transactions" });
+    }
+  });
+
+  // ========================
+  // Contact Notes Routes
+  // ========================
+
+  // Get all notes for a contact
+  apiRouter.get("/contacts/:id/notes", async (req: Request, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const notes = await storage.getContactNotes(contactId);
+      res.json(notes);
+    } catch (error) {
+      console.error("Error fetching contact notes:", error);
+      res.status(500).json({ message: "Failed to fetch contact notes" });
+    }
+  });
+
+  // Create a new note for a contact
+  apiRouter.post("/contacts/:id/notes", async (req: Request, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const { content, isPinned } = req.body;
+
+      // Get the current user ID from the session if available
+      const userId = req.user?.id || null;
+
+      const note = await storage.createContactNote({
+        contactId,
+        content,
+        isPinned: isPinned || false,
+        createdBy: userId,
+      });
+
+      // If this note is pinned, update the contact's pinnedNote field
+      if (isPinned) {
+        await storage.updateContact(contactId, { pinnedNote: content });
+      }
+
+      res.status(201).json(note);
+    } catch (error) {
+      console.error("Error creating contact note:", error);
+      res.status(500).json({ message: "Failed to create contact note" });
+    }
+  });
+
+  // Update a contact note
+  apiRouter.patch("/contact-notes/:noteId", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+      const { content, isPinned } = req.body;
+
+      const existingNote = await storage.getContactNote(noteId);
+      if (!existingNote) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      const updatedNote = await storage.updateContactNote(noteId, { content, isPinned });
+
+      // Handle pinned note updates on the contact
+      if (isPinned !== undefined) {
+        if (isPinned) {
+          // Unpin all other notes for this contact
+          await storage.unpinAllContactNotes(existingNote.contactId);
+          await storage.updateContactNote(noteId, { isPinned: true });
+          await storage.updateContact(existingNote.contactId, { pinnedNote: content || existingNote.content });
+        } else {
+          // Clear the contact's pinnedNote if this was the pinned note
+          const contact = await storage.getContact(existingNote.contactId);
+          if (contact?.pinnedNote === existingNote.content) {
+            await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+          }
+        }
+      }
+
+      res.json(updatedNote);
+    } catch (error) {
+      console.error("Error updating contact note:", error);
+      res.status(500).json({ message: "Failed to update contact note" });
+    }
+  });
+
+  // Delete a contact note
+  apiRouter.delete("/contact-notes/:noteId", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const existingNote = await storage.getContactNote(noteId);
+      if (!existingNote) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      // If this was the pinned note, clear it from the contact
+      if (existingNote.isPinned) {
+        await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+      }
+
+      await storage.deleteContactNote(noteId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting contact note:", error);
+      res.status(500).json({ message: "Failed to delete contact note" });
+    }
+  });
+
+  // Pin/Unpin a note (convenience endpoint)
+  apiRouter.post("/contact-notes/:noteId/pin", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const note = await storage.getContactNote(noteId);
+      if (!note) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      // Unpin all other notes for this contact first
+      await storage.unpinAllContactNotes(note.contactId);
+
+      // Pin this note
+      await storage.updateContactNote(noteId, { isPinned: true });
+      await storage.updateContact(note.contactId, { pinnedNote: note.content });
+
+      res.json({ success: true, pinnedNoteId: noteId });
+    } catch (error) {
+      console.error("Error pinning contact note:", error);
+      res.status(500).json({ message: "Failed to pin contact note" });
+    }
+  });
+
+  // Unpin a note
+  apiRouter.post("/contact-notes/:noteId/unpin", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const note = await storage.getContactNote(noteId);
+      if (!note) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      await storage.updateContactNote(noteId, { isPinned: false });
+      await storage.updateContact(note.contactId, { pinnedNote: null });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unpinning contact note:", error);
+      res.status(500).json({ message: "Failed to unpin contact note" });
     }
   });
 

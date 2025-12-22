@@ -1,21 +1,21 @@
 import { db } from "./db";
-import { 
-  Account, Contact, Transaction, LineItem, LedgerEntry, SalesTax, Product,
+import {
+  Account, Contact, ContactNote, Transaction, LineItem, LedgerEntry, SalesTax, Product,
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
   AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
   RecurringTemplate, RecurringLine, RecurringHistory,
-  InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
+  InsertAccount, InsertContact, InsertContactNote, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
   InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
   InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
-  accounts, contacts, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
-  companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema, 
+  accounts, contacts, contactNotesSchema, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
+  companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema,
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
@@ -248,6 +248,83 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transactions.contactId, contactId))
       .limit(1);
     return result.length > 0;
+  }
+
+  // Contact Notes
+  async getContactNotes(contactId: number): Promise<ContactNote[]> {
+    try {
+      const results = await db
+        .select()
+        .from(contactNotesSchema)
+        .where(eq(contactNotesSchema.contactId, contactId))
+        .orderBy(desc(contactNotesSchema.createdAt));
+      return results;
+    } catch (error) {
+      console.error("Error fetching contact notes:", error);
+      throw error;
+    }
+  }
+
+  async getContactNote(id: number): Promise<ContactNote | undefined> {
+    try {
+      const result = await db
+        .select()
+        .from(contactNotesSchema)
+        .where(eq(contactNotesSchema.id, id));
+      return result[0];
+    } catch (error) {
+      console.error("Error fetching contact note:", error);
+      throw error;
+    }
+  }
+
+  async createContactNote(note: InsertContactNote): Promise<ContactNote> {
+    try {
+      const result = await db.insert(contactNotesSchema).values(note).returning();
+      return result[0];
+    } catch (error) {
+      console.error("Error creating contact note:", error);
+      throw error;
+    }
+  }
+
+  async updateContactNote(id: number, note: Partial<ContactNote>): Promise<ContactNote | undefined> {
+    try {
+      const result = await db
+        .update(contactNotesSchema)
+        .set(note)
+        .where(eq(contactNotesSchema.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      console.error("Error updating contact note:", error);
+      throw error;
+    }
+  }
+
+  async deleteContactNote(id: number): Promise<boolean> {
+    try {
+      const result = await db
+        .delete(contactNotesSchema)
+        .where(eq(contactNotesSchema.id, id))
+        .returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error("Error deleting contact note:", error);
+      throw error;
+    }
+  }
+
+  async unpinAllContactNotes(contactId: number): Promise<void> {
+    try {
+      await db
+        .update(contactNotesSchema)
+        .set({ isPinned: false })
+        .where(eq(contactNotesSchema.contactId, contactId));
+    } catch (error) {
+      console.error("Error unpinning contact notes:", error);
+      throw error;
+    }
   }
 
   // Transactions

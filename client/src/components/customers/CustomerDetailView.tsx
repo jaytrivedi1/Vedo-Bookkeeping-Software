@@ -13,13 +13,19 @@ import {
   Wallet,
   Clock,
   CreditCard,
-  FileText
+  FileText,
+  StickyNote,
 } from "lucide-react";
 import ContactEditForm from "@/components/forms/ContactEditForm";
 import TransactionList from "@/components/shared/TransactionList";
-import NotesCard from "@/components/shared/NotesCard";
 import NewTransactionDropdown from "@/components/shared/NewTransactionDropdown";
 import StatementConfigModal from "@/components/shared/StatementConfigModal";
+import WorkspaceTabs, { TabItem } from "@/components/shared/WorkspaceTabs";
+import PinnedNoteBanner from "@/components/shared/PinnedNoteBanner";
+import NotesTab from "@/components/shared/NotesTab";
+import QuotationsTab from "@/components/shared/QuotationsTab";
+import RecurringInvoicesTab from "@/components/shared/RecurringInvoicesTab";
+import { useTabFromUrl } from "@/hooks/useTabFromUrl";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
@@ -49,7 +55,18 @@ interface CustomerDetailViewProps {
   homeCurrency: string;
 }
 
-export default function CustomerDetailView({ customerId, homeCurrency }: CustomerDetailViewProps) {
+// Define tabs for customer workspace
+const CUSTOMER_TABS: TabItem[] = [
+  { id: "transactions", label: "Transaction History" },
+  { id: "quotations", label: "Quotations" },
+  { id: "recurring", label: "Recurring Invoices" },
+  { id: "notes", label: "Notes" },
+];
+
+export default function CustomerDetailView({
+  customerId,
+  homeCurrency,
+}: CustomerDetailViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -58,32 +75,41 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
   const [isDeleting, setIsDeleting] = useState(false);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
 
+  // Tab state synced with URL
+  const [activeTab, setActiveTab] = useTabFromUrl("transactions");
+
   // Fetch customer
   const { data: contacts } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+    queryKey: ["/api/contacts"],
   });
 
   // Fetch transactions
   const { data: transactions } = useQuery<Transaction[]>({
-    queryKey: ['/api/transactions'],
+    queryKey: ["/api/transactions"],
   });
 
-  const customer = contacts?.find(c => c.id === customerId);
+  const customer = contacts?.find((c) => c.id === customerId);
 
   // Calculate customer stats
-  const customerTransactions = transactions?.filter(t => t.contactId === customerId) || [];
-  const customerInvoices = customerTransactions.filter(t => t.type === 'invoice');
+  const customerTransactions =
+    transactions?.filter((t) => t.contactId === customerId) || [];
+  const customerInvoices = customerTransactions.filter(
+    (t) => t.type === "invoice"
+  );
 
   // Open invoices (balance > 0)
-  const openInvoices = customerInvoices.filter(inv =>
-    (inv.balance !== null && inv.balance !== undefined && inv.balance > 0) ||
-    (inv.status === 'open' || inv.status === 'draft')
+  const openInvoices = customerInvoices.filter(
+    (inv) =>
+      (inv.balance !== null && inv.balance !== undefined && inv.balance > 0) ||
+      inv.status === "open" ||
+      inv.status === "draft"
   );
 
   const outstandingBalance = openInvoices.reduce((sum, invoice) => {
-    const balance = (invoice.balance !== null && invoice.balance !== undefined)
-      ? invoice.balance
-      : invoice.amount;
+    const balance =
+      invoice.balance !== null && invoice.balance !== undefined
+        ? invoice.balance
+        : invoice.amount;
     return sum + balance;
   }, 0);
 
@@ -91,72 +117,104 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const overdueInvoices = openInvoices.filter(inv => {
-    if (inv.status === 'overdue') return true;
+  const overdueInvoices = openInvoices.filter((inv) => {
+    if (inv.status === "overdue") return true;
     if (inv.dueDate) {
       const dueDate = new Date(inv.dueDate);
       dueDate.setHours(0, 0, 0, 0);
-      return dueDate < today && (inv.balance === undefined || inv.balance === null || inv.balance > 0);
+      return (
+        dueDate < today &&
+        (inv.balance === undefined || inv.balance === null || inv.balance > 0)
+      );
     }
     return false;
   });
 
   const overdueAmount = overdueInvoices.reduce((sum, inv) => {
-    const balance = (inv.balance !== null && inv.balance !== undefined)
-      ? inv.balance
-      : inv.amount;
+    const balance =
+      inv.balance !== null && inv.balance !== undefined
+        ? inv.balance
+        : inv.amount;
     return sum + balance;
   }, 0);
 
   const overdueCount = overdueInvoices.length;
 
   // Calculate oldest overdue days
-  const oldestOverdueDays = overdueInvoices.length > 0
-    ? Math.max(...overdueInvoices.map(inv => {
-        if (!inv.dueDate) return 0;
-        const dueDate = new Date(inv.dueDate);
-        return Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-      }))
-    : 0;
+  const oldestOverdueDays =
+    overdueInvoices.length > 0
+      ? Math.max(
+          ...overdueInvoices.map((inv) => {
+            if (!inv.dueDate) return 0;
+            const dueDate = new Date(inv.dueDate);
+            return Math.floor(
+              (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+            );
+          })
+        )
+      : 0;
 
   const totalPaid = customerInvoices.reduce((sum, invoice) => {
-    const paid = invoice.amount - ((invoice.balance !== null && invoice.balance !== undefined) ? invoice.balance : invoice.amount);
+    const paid =
+      invoice.amount -
+      (invoice.balance !== null && invoice.balance !== undefined
+        ? invoice.balance
+        : invoice.amount);
     return sum + paid;
   }, 0);
 
   const openInvoiceCount = openInvoices.length;
 
-  // Calculate total unapplied credits for this customer (payments, deposits, cheques with unapplied_credit status)
+  // Calculate total unapplied credits for this customer
   const unappliedCredits = customerTransactions
-    .filter(t =>
-      t.status === 'unapplied_credit' &&
-      (t.type === 'payment' || t.type === 'deposit' || t.type === 'cheque') &&
-      t.balance !== null && t.balance !== undefined && t.balance > 0
+    .filter(
+      (t) =>
+        t.status === "unapplied_credit" &&
+        (t.type === "payment" || t.type === "deposit" || t.type === "cheque") &&
+        t.balance !== null &&
+        t.balance !== undefined &&
+        t.balance > 0
     )
     .reduce((sum, t) => sum + Math.abs(t.balance || 0), 0);
 
-  const unappliedCreditCount = customerTransactions
-    .filter(t =>
-      t.status === 'unapplied_credit' &&
-      (t.type === 'payment' || t.type === 'deposit' || t.type === 'cheque') &&
-      t.balance !== null && t.balance !== undefined && t.balance > 0
-    ).length;
+  const unappliedCreditCount = customerTransactions.filter(
+    (t) =>
+      t.status === "unapplied_credit" &&
+      (t.type === "payment" || t.type === "deposit" || t.type === "cheque") &&
+      t.balance !== null &&
+      t.balance !== undefined &&
+      t.balance > 0
+  ).length;
 
   // Net balance due = outstanding invoices minus available credits
   const netBalanceDue = Math.max(0, outstandingBalance - unappliedCredits);
 
+  // Count quotations and recurring invoices for tab badges
+  const quotationCount =
+    transactions?.filter(
+      (t) => t.contactId === customerId && t.status === "quotation"
+    ).length || 0;
+
+  // Update tabs with counts
+  const tabsWithCounts: TabItem[] = CUSTOMER_TABS.map((tab) => {
+    if (tab.id === "quotations") {
+      return { ...tab, count: quotationCount };
+    }
+    return tab;
+  });
+
   // Delete customer mutation
   const deleteCustomerMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/contacts/${id}`, 'DELETE');
+      return apiRequest(`/api/contacts/${id}`, "DELETE");
     },
     onSuccess: () => {
       toast({
         title: "Customer deleted",
         description: "Customer has been successfully deleted",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
-      navigate('/customers');
+      queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
+      navigate("/customers");
     },
     onError: (error: any) => {
       toast({
@@ -168,7 +226,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
     onSettled: () => {
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
-    }
+    },
   });
 
   const handleDeleteCustomer = () => {
@@ -178,7 +236,8 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
     if (customerTransactions.length > 0) {
       toast({
         title: "Cannot delete customer",
-        description: "This customer has associated transactions. Delete all transactions first.",
+        description:
+          "This customer has associated transactions. Delete all transactions first.",
         variant: "destructive",
       });
       setIsDeleteDialogOpen(false);
@@ -215,10 +274,16 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-white">
-                    {formatContactName(customer.name, customer.currency, homeCurrency)}
+                    {formatContactName(
+                      customer.name,
+                      customer.currency,
+                      homeCurrency
+                    )}
                   </h1>
                   {customer.contactName && (
-                    <p className="text-emerald-100 text-sm mt-0.5">{customer.contactName}</p>
+                    <p className="text-emerald-100 text-sm mt-0.5">
+                      {customer.contactName}
+                    </p>
                   )}
                 </div>
               </div>
@@ -245,8 +310,8 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           </div>
         </Card>
 
-        {/* Contact Info, Address, and Notes Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Contact Info and Address Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Contact Info */}
           <Card className="border-0 shadow-sm rounded-2xl">
             <CardHeader className="pb-3">
@@ -290,7 +355,9 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
               )}
 
               {!customer.email && !customer.phone && (
-                <p className="text-sm text-slate-400 italic">No contact information</p>
+                <p className="text-sm text-slate-400 italic">
+                  No contact information
+                </p>
               )}
             </CardContent>
           </Card>
@@ -313,75 +380,88 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 italic">No address on file</p>
+                <p className="text-sm text-slate-400 italic">
+                  No address on file
+                </p>
               )}
             </CardContent>
           </Card>
-
-          {/* Internal Notes */}
-          <NotesCard
-            contactId={customerId}
-            initialNotes={customer.notes}
-            contactType="customer"
-          />
         </div>
 
         {/* Account Summary Banner */}
         <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_auto] divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
-
               {/* Balance Due Section */}
               <div className="relative p-6 overflow-hidden">
-                {/* Background Icon */}
                 <Wallet className="absolute -right-4 -bottom-4 h-32 w-32 text-slate-200 opacity-50" />
-
                 <div className="relative">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
                     Balance Due
                   </p>
                   <p className="text-3xl font-black text-slate-800 mb-2">
-                    {formatCurrency(unappliedCredits > 0 ? netBalanceDue : outstandingBalance, homeCurrency, homeCurrency)}
+                    {formatCurrency(
+                      unappliedCredits > 0 ? netBalanceDue : outstandingBalance,
+                      homeCurrency,
+                      homeCurrency
+                    )}
                   </p>
                   <p className="text-sm text-slate-500">
                     {openInvoiceCount > 0
-                      ? `Across ${openInvoiceCount} open invoice${openInvoiceCount !== 1 ? 's' : ''}`
-                      : 'No outstanding invoices'
-                    }
+                      ? `Across ${openInvoiceCount} open invoice${openInvoiceCount !== 1 ? "s" : ""}`
+                      : "No outstanding invoices"}
                   </p>
                   {unappliedCredits > 0 && (
                     <p className="text-xs text-blue-500 mt-1">
-                      Net of {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)} in credits
+                      Net of{" "}
+                      {formatCurrency(
+                        unappliedCredits,
+                        homeCurrency,
+                        homeCurrency
+                      )}{" "}
+                      in credits
                     </p>
                   )}
                   <p className="text-xs text-slate-400 mt-1">
-                    Lifetime paid: {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
+                    Lifetime paid:{" "}
+                    {formatCurrency(totalPaid, homeCurrency, homeCurrency)}
                   </p>
                 </div>
               </div>
 
               {/* Credits Section */}
-              <div className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? 'bg-blue-50/50' : ''}`}>
-                {/* Background Icon */}
-                <CreditCard className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
-                  unappliedCredits > 0 ? 'text-blue-200' : 'text-slate-200'
-                }`} />
-
+              <div
+                className={`relative p-6 overflow-hidden ${unappliedCredits > 0 ? "bg-blue-50/50" : ""}`}
+              >
+                <CreditCard
+                  className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                    unappliedCredits > 0 ? "text-blue-200" : "text-slate-200"
+                  }`}
+                />
                 <div className="relative">
-                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    unappliedCredits > 0 ? 'text-blue-500' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                      unappliedCredits > 0 ? "text-blue-500" : "text-slate-400"
+                    }`}
+                  >
                     Credits
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${
-                    unappliedCredits > 0 ? 'text-blue-600' : 'text-slate-400'
-                  }`}>
-                    {formatCurrency(unappliedCredits, homeCurrency, homeCurrency)}
+                  <p
+                    className={`text-3xl font-black mb-2 ${
+                      unappliedCredits > 0 ? "text-blue-600" : "text-slate-400"
+                    }`}
+                  >
+                    {formatCurrency(
+                      unappliedCredits,
+                      homeCurrency,
+                      homeCurrency
+                    )}
                   </p>
                   {unappliedCredits > 0 ? (
                     <>
                       <p className="text-sm text-blue-600">
-                        {unappliedCreditCount} unapplied credit{unappliedCreditCount !== 1 ? 's' : ''}
+                        {unappliedCreditCount} unapplied credit
+                        {unappliedCreditCount !== 1 ? "s" : ""}
                       </p>
                       <p className="text-xs text-blue-500 mt-1">
                         Available to apply to invoices
@@ -401,30 +481,38 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
               </div>
 
               {/* Overdue Section */}
-              <div className={`relative p-6 overflow-hidden ${overdueAmount > 0 ? 'bg-red-50/50' : ''}`}>
-                {/* Background Icon */}
-                <Clock className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
-                  overdueAmount > 0 ? 'text-red-200' : 'text-slate-200'
-                }`} />
-
+              <div
+                className={`relative p-6 overflow-hidden ${overdueAmount > 0 ? "bg-red-50/50" : ""}`}
+              >
+                <Clock
+                  className={`absolute -right-4 -bottom-4 h-32 w-32 opacity-50 ${
+                    overdueAmount > 0 ? "text-red-200" : "text-slate-200"
+                  }`}
+                />
                 <div className="relative">
-                  <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
-                    overdueAmount > 0 ? 'text-red-500' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                      overdueAmount > 0 ? "text-red-500" : "text-slate-400"
+                    }`}
+                  >
                     Overdue
                   </p>
-                  <p className={`text-3xl font-black mb-2 ${
-                    overdueAmount > 0 ? 'text-red-600' : 'text-slate-400'
-                  }`}>
+                  <p
+                    className={`text-3xl font-black mb-2 ${
+                      overdueAmount > 0 ? "text-red-600" : "text-slate-400"
+                    }`}
+                  >
                     {formatCurrency(overdueAmount, homeCurrency, homeCurrency)}
                   </p>
                   {overdueAmount > 0 ? (
                     <>
                       <p className="text-sm text-red-600">
-                        {overdueCount} invoice{overdueCount !== 1 ? 's' : ''} past due
+                        {overdueCount} invoice{overdueCount !== 1 ? "s" : ""}{" "}
+                        past due
                       </p>
                       <p className="text-xs text-red-500 mt-1">
-                        Oldest: {oldestOverdueDays} day{oldestOverdueDays !== 1 ? 's' : ''} overdue
+                        Oldest: {oldestOverdueDays} day
+                        {oldestOverdueDays !== 1 ? "s" : ""} overdue
                       </p>
                     </>
                   ) : (
@@ -459,14 +547,43 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
           </div>
         </Card>
 
-        {/* Transaction History */}
-        <TransactionList
-          contactId={customerId}
-          contactType="customer"
-          homeCurrency={homeCurrency}
-          onCreateNew={() => navigate(`/invoices/new?customerId=${customerId}`)}
-          maxHeight="500px"
+        {/* Pinned Note Banner (visible on all tabs except Notes) */}
+        {customer.pinnedNote && activeTab !== "notes" && (
+          <PinnedNoteBanner note={customer.pinnedNote} />
+        )}
+
+        {/* Tab Navigation */}
+        <WorkspaceTabs
+          tabs={tabsWithCounts}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
         />
+
+        {/* Tab Content */}
+        {activeTab === "transactions" && (
+          <TransactionList
+            contactId={customerId}
+            contactType="customer"
+            homeCurrency={homeCurrency}
+            onCreateNew={() => navigate(`/invoices/new?customerId=${customerId}`)}
+            maxHeight="500px"
+          />
+        )}
+
+        {activeTab === "quotations" && (
+          <QuotationsTab customerId={customerId} homeCurrency={homeCurrency} />
+        )}
+
+        {activeTab === "recurring" && (
+          <RecurringInvoicesTab
+            customerId={customerId}
+            homeCurrency={homeCurrency}
+          />
+        )}
+
+        {activeTab === "notes" && (
+          <NotesTab contactId={customerId} contactType="customer" />
+        )}
       </div>
 
       {/* Edit Customer Dialog */}
@@ -483,7 +600,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
             contact={customer}
             onSuccess={() => {
               setIsEditDialogOpen(false);
-              queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+              queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
             }}
             onCancel={() => setIsEditDialogOpen(false)}
           />
@@ -491,18 +608,22 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
       </Dialog>
 
       {/* Delete Customer Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center text-red-600">
               <AlertTriangle className="h-5 w-5 mr-2" /> Delete Customer
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {customer.name}? This action cannot be undone.
+              Are you sure you want to delete {customer.name}? This action
+              cannot be undone.
               {customerTransactions.length > 0 && (
                 <p className="mt-2 text-red-500 font-medium">
-                  This customer has {customerTransactions.length} associated transaction(s).
-                  Please delete all transactions first.
+                  This customer has {customerTransactions.length} associated
+                  transaction(s). Please delete all transactions first.
                 </p>
               )}
             </AlertDialogDescription>
@@ -523,7 +644,7 @@ export default function CustomerDetailView({ customerId, homeCurrency }: Custome
                   Deleting...
                 </>
               ) : (
-                'Delete'
+                "Delete"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
