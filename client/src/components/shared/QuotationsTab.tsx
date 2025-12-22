@@ -139,25 +139,20 @@ export default function QuotationsTab({
   return (
     <Card className="border-0 shadow-sm rounded-2xl">
       <CardContent className="p-0">
-        {/* Header with stats and actions */}
-        <div className="p-4 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-800">
-                Quotations
-              </h3>
-              <p className="text-sm text-slate-500">
-                {pendingCount} quotation{pendingCount !== 1 ? "s" : ""} totaling{" "}
-                {formatCurrency(totalQuoted, homeCurrency, homeCurrency)}
-              </p>
-            </div>
+        {/* Compact Header: Stats + Actions + Filters */}
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm text-slate-600">
+              <span className="font-medium">{pendingCount}</span> quotation{pendingCount !== 1 ? "s" : ""} · {formatCurrency(totalQuoted, homeCurrency, homeCurrency)} total
+            </p>
             <Button
               onClick={() =>
                 navigate(`/quotations/new?customerId=${customerId}`)
               }
-              className="bg-indigo-600 hover:bg-indigo-700"
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 h-8"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4 mr-1.5" />
               New Quotation
             </Button>
           </div>

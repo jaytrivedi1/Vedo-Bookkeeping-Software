@@ -396,14 +396,8 @@ export default function TransactionList({
   return (
     <>
       <Card className="border-0 shadow-sm rounded-2xl overflow-hidden">
-        <CardHeader className="pb-0 px-4">
-          <CardTitle className="text-base font-semibold text-slate-800">
-            Transaction History
-          </CardTitle>
-        </CardHeader>
-
         {/* Filter Bar */}
-        <div className="px-4 py-3 border-b border-slate-100">
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
             {/* Search Input */}
             <div className="relative flex-1 max-w-[220px]">

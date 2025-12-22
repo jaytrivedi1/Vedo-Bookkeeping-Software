@@ -191,23 +191,19 @@ export default function NotesTab({ contactId, contactType }: NotesTabProps) {
 
   return (
     <Card className="border-0 shadow-sm rounded-2xl">
-      <CardContent className="p-6">
-        {/* Header with Add Note button */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-800">
-              Internal Notes
-            </h3>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Private notes about this {contactType}. Not visible to them.
-            </p>
-          </div>
+      <CardContent className="px-4 pt-4 pb-6">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-slate-600">
+            Private notes · Not visible to {contactType}
+          </p>
           {!isAddingNote && (
             <Button
               onClick={() => setIsAddingNote(true)}
-              className="bg-indigo-600 hover:bg-indigo-700"
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 h-8"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4 mr-1.5" />
               Add Note
             </Button>
           )}
@@ -215,7 +211,7 @@ export default function NotesTab({ contactId, contactType }: NotesTabProps) {
 
         {/* Add Note Form */}
         {isAddingNote && (
-          <div className="mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
             <Textarea
               value={newNoteContent}
               onChange={(e) => setNewNoteContent(e.target.value)}
