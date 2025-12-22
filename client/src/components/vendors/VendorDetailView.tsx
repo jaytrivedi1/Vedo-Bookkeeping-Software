@@ -20,7 +20,7 @@ import TransactionList from "@/components/shared/TransactionList";
 import NewTransactionDropdown from "@/components/shared/NewTransactionDropdown";
 import StatementConfigModal from "@/components/shared/StatementConfigModal";
 import WorkspaceTabs, { TabItem } from "@/components/shared/WorkspaceTabs";
-import PinnedNoteBanner from "@/components/shared/PinnedNoteBanner";
+import PinnedNotesCard from "@/components/shared/PinnedNotesCard";
 import NotesTab from "@/components/shared/NotesTab";
 import { useTabFromUrl } from "@/hooks/useTabFromUrl";
 import { apiRequest } from "@/lib/queryClient";
@@ -289,8 +289,8 @@ export default function VendorDetailView({
           </div>
         </Card>
 
-        {/* Contact Info and Address Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Contact Info, Address, and Pinned Notes Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Contact Info */}
           <Card className="border-0 shadow-sm rounded-2xl">
             <CardHeader className="pb-3">
@@ -365,6 +365,12 @@ export default function VendorDetailView({
               )}
             </CardContent>
           </Card>
+
+          {/* Pinned Notes */}
+          <PinnedNotesCard
+            contactId={vendorId}
+            onNavigateToNotes={() => setActiveTab("notes")}
+          />
         </div>
 
         {/* Account Summary Banner */}
@@ -529,11 +535,6 @@ export default function VendorDetailView({
             </div>
           </div>
         </Card>
-
-        {/* Pinned Note Banner (visible on all tabs except Notes) */}
-        {vendor.pinnedNote && activeTab !== "notes" && (
-          <PinnedNoteBanner note={vendor.pinnedNote} />
-        )}
 
         {/* Tab Navigation */}
         <WorkspaceTabs
