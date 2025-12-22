@@ -12896,8 +12896,305 @@ Respond in JSON format:
     }
   });
 
+  // ==================== STATEMENT ROUTES ====================
+
+  // Get statement data (for preview)
+  apiRouter.get("/statements/data", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate } = req.query;
+
+      if (!contactId || !contactType || !type) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId as string));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId as string));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      const stmtType = type as string;
+      if (stmtType === 'balance_forward' || stmtType === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate as string);
+          const end = new Date(endDate as string);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (stmtType === 'open_item') {
+        // Only include unpaid invoices/bills
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate totals
+      const balanceDue = contactTransactions
+        .filter(t => (t.type === 'invoice' || t.type === 'bill') && t.balance && t.balance > 0)
+        .reduce((sum, t) => sum + (t.balance || 0), 0);
+
+      res.json({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: stmtType,
+        statementDate: statementDate || new Date().toISOString(),
+        startDate: startDate || null,
+        endDate: endDate || null,
+        balanceDue,
+      });
+    } catch (error: any) {
+      console.error("Error fetching statement data:", error);
+      res.status(500).json({ error: "Failed to fetch statement data" });
+    }
+  });
+
+  // Generate statement PDF
+  apiRouter.get("/statements/pdf", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate } = req.query;
+
+      if (!contactId || !contactType || !type) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId as string));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId as string));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      const stmtType = type as string;
+      if (stmtType === 'balance_forward' || stmtType === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate as string);
+          const end = new Date(endDate as string);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (stmtType === 'open_item') {
+        // Only include unpaid invoices/bills
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Generate PDF
+      const { generateStatementPDF } = await import('./statement-pdf-generator');
+      const pdfBuffer = await generateStatementPDF({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: stmtType as any,
+        statementDate: statementDate ? new Date(statementDate as string) : new Date(),
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="statement-${contact.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error("Error generating statement PDF:", error);
+      res.status(500).json({ error: "Failed to generate statement PDF" });
+    }
+  });
+
+  // Send statement via email
+  apiRouter.post("/statements/send", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate, recipientEmail, ccEmails, subject, message } = req.body;
+
+      if (!contactId || !contactType || !type || !recipientEmail) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      if (type === 'balance_forward' || type === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (type === 'open_item') {
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate balance due for email
+      const balanceDue = contactTransactions
+        .filter(t => (t.type === 'invoice' || t.type === 'bill') && t.balance && t.balance > 0)
+        .reduce((sum, t) => sum + (t.balance || 0), 0);
+
+      // Generate PDF
+      const { generateStatementPDF } = await import('./statement-pdf-generator');
+      const pdfBuffer = await generateStatementPDF({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: type as any,
+        statementDate: statementDate ? new Date(statementDate) : new Date(),
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      });
+
+      // Send email via Resend
+      const { getUncachableResendClient } = await import('./resend-client');
+      const { client, fromEmail } = await getUncachableResendClient();
+
+      const typeLabel = type === 'balance_forward' ? 'Balance Forward' :
+                        type === 'open_item' ? 'Open Item' : 'Transaction';
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+            .statement-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .balance-box { background: #4f46e5; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+            .balance-amount { font-size: 32px; font-weight: bold; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">${company.name}</h1>
+              <p style="margin: 10px 0 0 0; opacity: 0.9;">${typeLabel} Statement</p>
+            </div>
+            <div class="content">
+              <p>Dear ${contact.name},</p>
+              ${message ? `<p>${message}</p>` : `<p>Please find attached your ${typeLabel.toLowerCase()} statement.</p>`}
+
+              <div class="balance-box">
+                <p style="margin: 0 0 5px 0; opacity: 0.9;">Balance Due</p>
+                <div class="balance-amount">$${balanceDue.toFixed(2)}</div>
+              </div>
+
+              <div class="statement-details">
+                <p><strong>Statement Date:</strong> ${new Date(statementDate || Date.now()).toLocaleDateString()}</p>
+                ${startDate && endDate ? `<p><strong>Period:</strong> ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}</p>` : ''}
+                <p><strong>Statement Type:</strong> ${typeLabel}</p>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px;">
+                The statement PDF is attached to this email for your records.
+              </p>
+
+              <div class="footer">
+                <p>Thank you for your business!</p>
+                <p style="font-size: 12px;">${company.name}${company.phone ? ` | ${company.phone}` : ''}${company.email ? ` | ${company.email}` : ''}</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const emailResult = await client.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        cc: ccEmails || undefined,
+        subject: subject || `${typeLabel} Statement from ${company.name}`,
+        html: emailHtml,
+        attachments: [{
+          filename: `statement-${contact.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          content: pdfBuffer.toString('base64'),
+        }],
+      });
+
+      res.json({ success: true, emailId: emailResult.data?.id });
+    } catch (error: any) {
+      console.error("Error sending statement email:", error);
+      res.status(500).json({ error: "Failed to send statement email" });
+    }
+  });
+
   app.use("/api", apiRouter);
-  
+
   const httpServer = createServer(app);
   
   return httpServer;
