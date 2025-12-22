@@ -12,12 +12,20 @@ import {
   Mail,
   Download,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Search,
+  Calendar,
+  CircleDot,
+  X,
+  FileSpreadsheet,
+  Check
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/currencyUtils";
 import { useSortableData, SortConfig } from "@/hooks/useSortableData";
+import { useTransactionFilters, STATUS_OPTIONS, TransactionType, TransactionStatus, DatePreset } from "@/hooks/useTransactionFilters";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -35,6 +43,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +67,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface TransactionListProps {
   contactId: number;
@@ -104,20 +118,82 @@ export default function TransactionList({
     : [];
 
   // Filter transactions based on contact type
-  const filteredTransactions = contactType === 'customer'
+  const baseFilteredTransactions = contactType === 'customer'
     ? contactTransactions.filter(transaction =>
         transaction.type === 'invoice' ||
         transaction.type === 'payment' ||
         transaction.type === 'deposit' ||
         transaction.type === 'cheque' ||
         transaction.type === 'sales_receipt' ||
+        transaction.type === 'customer_credit' ||
         transaction.type === 'transfer')
     : contactTransactions.filter(transaction =>
         transaction.type === 'bill' ||
         transaction.type === 'expense' ||
         transaction.type === 'payment' ||
         transaction.type === 'cheque' ||
+        transaction.type === 'vendor_credit' ||
         transaction.type === 'transfer');
+
+  // Use filter hook for advanced filtering
+  const {
+    filters,
+    setSearchQuery,
+    toggleType,
+    setSelectedStatus,
+    setDatePreset,
+    setCustomDateRange,
+    clearAllFilters,
+    filteredTransactions,
+    hasActiveFilters,
+    availableTypes,
+    formatDatePresetLabel,
+  } = useTransactionFilters({
+    contactType,
+    transactions: baseFilteredTransactions,
+  });
+
+  // Date preset options
+  const datePresetOptions: { value: DatePreset; label: string }[] = [
+    { value: 'all', label: 'All Time' },
+    { value: 'today', label: 'Today' },
+    { value: 'this_week', label: 'This Week' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_30_days', label: 'Last 30 Days' },
+    { value: 'last_90_days', label: 'Last 90 Days' },
+    { value: 'this_year', label: 'This Year' },
+  ];
+
+  // Export to CSV
+  const exportToCSV = () => {
+    const headers = ['Date', 'Type', 'Number', 'Description', 'Amount', 'Balance', 'Status'];
+    const rows = filteredTransactions.map(t => [
+      format(new Date(t.date), 'yyyy-MM-dd'),
+      t.type,
+      t.reference || '',
+      t.description || t.memo || '',
+      t.amount.toString(),
+      t.balance?.toString() || '',
+      t.status || ''
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `transactions_${contactType}_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export successful",
+      description: `Exported ${filteredTransactions.length} transactions to CSV`,
+    });
+  };
 
   // Delete transaction mutation
   const deleteTransactionMutation = useMutation({
@@ -292,20 +368,277 @@ export default function TransactionList({
             Transaction History
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-3 px-0">
+
+        {/* Filter Bar */}
+        <div className="px-4 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-[220px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search..."
+                value={filters.searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-8 text-sm bg-white border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+              />
+            </div>
+
+            {/* Divider */}
+            <div className="h-5 w-px bg-slate-200" />
+
+            {/* Type Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    filters.selectedTypes.length > 0
+                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Type
+                  {filters.selectedTypes.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-indigo-200 text-indigo-800 rounded-full">
+                      {filters.selectedTypes.length}
+                    </span>
+                  )}
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="start">
+                <div className="space-y-1">
+                  {availableTypes.map((type) => (
+                    <button
+                      key={type.value}
+                      onClick={() => toggleType(type.value)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+                        filters.selectedTypes.includes(type.value)
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      <div className={cn(
+                        "h-4 w-4 rounded border flex items-center justify-center",
+                        filters.selectedTypes.includes(type.value)
+                          ? "bg-indigo-600 border-indigo-600"
+                          : "border-slate-300"
+                      )}>
+                        {filters.selectedTypes.includes(type.value) && (
+                          <Check className="h-3 w-3 text-white" />
+                        )}
+                      </div>
+                      {type.label}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Status Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    filters.selectedStatus !== 'all'
+                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  <CircleDot className="h-3.5 w-3.5 mr-1.5" />
+                  Status
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2" align="start">
+                <div className="space-y-1">
+                  {STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setSelectedStatus(option.value)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+                        filters.selectedStatus === option.value
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      {filters.selectedStatus === option.value && (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      <span className={filters.selectedStatus === option.value ? '' : 'ml-5'}>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Date Filter */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    filters.datePreset !== 'all'
+                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  <Calendar className="h-3.5 w-3.5 mr-1.5" />
+                  {filters.datePreset !== 'all' ? formatDatePresetLabel(filters.datePreset) : 'Date'}
+                  <ChevronDown className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2" align="start">
+                <div className="space-y-1">
+                  {datePresetOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setDatePreset(option.value)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+                        filters.datePreset === option.value
+                          ? "bg-indigo-50 text-indigo-700"
+                          : "hover:bg-slate-50 text-slate-600"
+                      )}
+                    >
+                      {filters.datePreset === option.value && (
+                        <Check className="h-3.5 w-3.5" />
+                      )}
+                      <span className={filters.datePreset === option.value ? '' : 'ml-5'}>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Export Button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem onClick={exportToCSV}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Export CSV
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Clear Filters */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearAllFilters}
+                className="text-xs text-slate-500 hover:text-indigo-600 transition-colors whitespace-nowrap"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {/* Active Filter Pills */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 mr-1">Filtered:</span>
+
+              {/* Type Pills */}
+              {filters.selectedTypes.map((type) => {
+                const typeLabel = availableTypes.find(t => t.value === type)?.label || type;
+                return (
+                  <span
+                    key={type}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-white border border-indigo-200 text-indigo-700"
+                  >
+                    {typeLabel}
+                    <X
+                      className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+                      onClick={() => toggleType(type)}
+                    />
+                  </span>
+                );
+              })}
+
+              {/* Status Pill */}
+              {filters.selectedStatus !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-white border border-indigo-200 text-indigo-700">
+                  {STATUS_OPTIONS.find(s => s.value === filters.selectedStatus)?.label}
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+                    onClick={() => setSelectedStatus('all')}
+                  />
+                </span>
+              )}
+
+              {/* Date Pill */}
+              {filters.datePreset !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-white border border-indigo-200 text-indigo-700">
+                  {formatDatePresetLabel(filters.datePreset)}
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+                    onClick={() => setDatePreset('all')}
+                  />
+                </span>
+              )}
+
+              {/* Search Pill */}
+              {filters.searchQuery && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-white border border-indigo-200 text-indigo-700">
+                  "{filters.searchQuery}"
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-indigo-900"
+                    onClick={() => setSearchQuery('')}
+                  />
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <CardContent className="pt-0 px-0">
           {transactionsLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600"></div>
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
             </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="text-center py-10 text-slate-500 px-4">
               <FileText className="mx-auto h-10 w-10 text-slate-300 mb-2" />
-              <h3 className="text-sm font-medium text-slate-600">No transactions yet</h3>
+              <h3 className="text-sm font-medium text-slate-600">
+                {hasActiveFilters ? 'No matching transactions' : 'No transactions yet'}
+              </h3>
               <p className="mt-1 text-xs text-slate-400">
-                {contactType === 'customer'
-                  ? 'Create an invoice to get started.'
-                  : 'Create a bill to get started.'}
+                {hasActiveFilters
+                  ? 'Try adjusting your filters to find what you\'re looking for.'
+                  : contactType === 'customer'
+                    ? 'Create an invoice to get started.'
+                    : 'Create a bill to get started.'
+                }
               </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                >
+                  Clear all filters
+                </button>
+              )}
             </div>
           ) : (
             <div>
