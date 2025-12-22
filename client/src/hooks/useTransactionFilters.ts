@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Transaction } from '@shared/schema';
-import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, isWithinInterval } from 'date-fns';
+import { startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, isWithinInterval, format } from 'date-fns';
 
 export type TransactionType = 'invoice' | 'payment' | 'deposit' | 'cheque' | 'sales_receipt' | 'transfer' | 'bill' | 'expense' | 'customer_credit' | 'vendor_credit';
 export type TransactionStatus = 'all' | 'open' | 'overdue' | 'paid' | 'voided' | 'unapplied_credit';
@@ -44,7 +44,7 @@ export interface UseTransactionFiltersReturn {
 
   // Date range helpers
   getDateRangeFromPreset: (preset: DatePreset) => DateRange;
-  formatDatePresetLabel: (preset: DatePreset) => string;
+  formatDatePresetLabel: (preset: DatePreset, customRange?: DateRange) => string;
 }
 
 const CUSTOMER_TYPES: { value: TransactionType; label: string }[] = [
@@ -110,7 +110,7 @@ export function useTransactionFilters({
     }
   }, []);
 
-  const formatDatePresetLabel = useCallback((preset: DatePreset): string => {
+  const formatDatePresetLabel = useCallback((preset: DatePreset, customRange?: DateRange): string => {
     switch (preset) {
       case 'today': return 'Today';
       case 'this_week': return 'This Week';
@@ -118,7 +118,11 @@ export function useTransactionFilters({
       case 'last_30_days': return 'Last 30 Days';
       case 'last_90_days': return 'Last 90 Days';
       case 'this_year': return 'This Year';
-      case 'custom': return 'Custom Range';
+      case 'custom':
+        if (customRange?.from && customRange?.to) {
+          return `${format(customRange.from, 'MMM d')} - ${format(customRange.to, 'MMM d')}`;
+        }
+        return 'Custom Range';
       case 'all':
       default: return 'All Time';
     }

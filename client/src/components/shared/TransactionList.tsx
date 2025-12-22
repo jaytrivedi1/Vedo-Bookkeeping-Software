@@ -18,7 +18,9 @@ import {
   CircleDot,
   X,
   FileSpreadsheet,
-  Check
+  Check,
+  List,
+  SearchX
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -95,6 +97,11 @@ export default function TransactionList({
   const [selectedTransactionToDelete, setSelectedTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Custom date range picker state
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [pendingFromDate, setPendingFromDate] = useState<string>('');
+  const [pendingToDate, setPendingToDate] = useState<string>('');
+
   // Fetch transactions
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
@@ -163,6 +170,32 @@ export default function TransactionList({
     { value: 'last_90_days', label: 'Last 90 Days' },
     { value: 'this_year', label: 'This Year' },
   ];
+
+  // Apply custom date range
+  const applyCustomDateRange = () => {
+    if (pendingFromDate && pendingToDate) {
+      const fromDate = new Date(pendingFromDate);
+      const toDate = new Date(pendingToDate);
+      // Set time to start and end of day
+      fromDate.setHours(0, 0, 0, 0);
+      toDate.setHours(23, 59, 59, 999);
+      setCustomDateRange({ from: fromDate, to: toDate });
+      setShowCustomDatePicker(false);
+    }
+  };
+
+  // Reset custom date picker when opening
+  const handleOpenCustomPicker = () => {
+    // If we have an existing custom range, pre-fill the inputs
+    if (filters.datePreset === 'custom' && filters.customDateRange.from && filters.customDateRange.to) {
+      setPendingFromDate(format(filters.customDateRange.from, 'yyyy-MM-dd'));
+      setPendingToDate(format(filters.customDateRange.to, 'yyyy-MM-dd'));
+    } else {
+      setPendingFromDate('');
+      setPendingToDate('');
+    }
+    setShowCustomDatePicker(true);
+  };
 
   // Export to CSV
   const exportToCSV = () => {
@@ -393,13 +426,13 @@ export default function TransactionList({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-all border",
                     filters.selectedTypes.length > 0
-                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                   )}
                 >
-                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  <List className="h-3.5 w-3.5 mr-1.5" />
                   Type
                   {filters.selectedTypes.length > 0 && (
                     <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-indigo-200 text-indigo-800 rounded-full">
@@ -446,10 +479,10 @@ export default function TransactionList({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-all border",
                     filters.selectedStatus !== 'all'
-                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                   )}
                 >
                   <CircleDot className="h-3.5 w-3.5 mr-1.5" />
@@ -487,36 +520,92 @@ export default function TransactionList({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-8 px-3 rounded-lg text-sm font-medium transition-colors",
+                    "h-8 px-3 rounded-lg text-sm font-medium transition-all border",
                     filters.datePreset !== 'all'
-                      ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-150"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                   )}
                 >
                   <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                  {filters.datePreset !== 'all' ? formatDatePresetLabel(filters.datePreset) : 'Date'}
+                  {filters.datePreset !== 'all' ? formatDatePresetLabel(filters.datePreset, filters.customDateRange) : 'Date'}
                   <ChevronDown className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" align="start">
+              <PopoverContent className="w-56 p-2" align="start">
                 <div className="space-y-1">
                   {datePresetOptions.map((option) => (
                     <button
                       key={option.value}
-                      onClick={() => setDatePreset(option.value)}
+                      onClick={() => {
+                        setDatePreset(option.value);
+                        setShowCustomDatePicker(false);
+                      }}
                       className={cn(
                         "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
-                        filters.datePreset === option.value
+                        filters.datePreset === option.value && !showCustomDatePicker
                           ? "bg-indigo-50 text-indigo-700"
                           : "hover:bg-slate-50 text-slate-600"
                       )}
                     >
-                      {filters.datePreset === option.value && (
+                      {filters.datePreset === option.value && !showCustomDatePicker && (
                         <Check className="h-3.5 w-3.5" />
                       )}
-                      <span className={filters.datePreset === option.value ? '' : 'ml-5'}>{option.label}</span>
+                      <span className={filters.datePreset === option.value && !showCustomDatePicker ? '' : 'ml-5'}>{option.label}</span>
                     </button>
                   ))}
+
+                  {/* Divider */}
+                  <div className="h-px bg-slate-200 my-2" />
+
+                  {/* Custom Range Option */}
+                  <button
+                    onClick={handleOpenCustomPicker}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-colors",
+                      filters.datePreset === 'custom' || showCustomDatePicker
+                        ? "bg-indigo-50 text-indigo-700"
+                        : "hover:bg-slate-50 text-slate-600"
+                    )}
+                  >
+                    {filters.datePreset === 'custom' && !showCustomDatePicker && (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    <span className={filters.datePreset === 'custom' && !showCustomDatePicker ? '' : 'ml-5'}>Custom Range...</span>
+                  </button>
+
+                  {/* Custom Date Picker Panel */}
+                  {showCustomDatePicker && (
+                    <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">From</label>
+                          <input
+                            type="date"
+                            value={pendingFromDate}
+                            onChange={(e) => setPendingFromDate(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">To</label>
+                          <input
+                            type="date"
+                            value={pendingToDate}
+                            onChange={(e) => setPendingToDate(e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={applyCustomDateRange}
+                          disabled={!pendingFromDate || !pendingToDate}
+                          className="w-full h-8 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium"
+                        >
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
@@ -530,7 +619,7 @@ export default function TransactionList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-2 rounded-lg bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700"
+                  className="h-8 px-2.5 rounded-lg bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200 text-slate-600 hover:text-indigo-700 transition-all"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
@@ -590,10 +679,13 @@ export default function TransactionList({
               {/* Date Pill */}
               {filters.datePreset !== 'all' && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-full bg-white border border-indigo-200 text-indigo-700">
-                  {formatDatePresetLabel(filters.datePreset)}
+                  {formatDatePresetLabel(filters.datePreset, filters.customDateRange)}
                   <X
                     className="h-3 w-3 cursor-pointer hover:text-indigo-900"
-                    onClick={() => setDatePreset('all')}
+                    onClick={() => {
+                      setDatePreset('all');
+                      setShowCustomDatePicker(false);
+                    }}
                   />
                 </span>
               )}
@@ -618,25 +710,36 @@ export default function TransactionList({
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
             </div>
           ) : filteredTransactions.length === 0 ? (
-            <div className="text-center py-10 text-slate-500 px-4">
-              <FileText className="mx-auto h-10 w-10 text-slate-300 mb-2" />
-              <h3 className="text-sm font-medium text-slate-600">
+            <div className="text-center py-16 px-6">
+              {/* Empty state illustration */}
+              <div className="mx-auto w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                {hasActiveFilters ? (
+                  <SearchX className="h-8 w-8 text-slate-400" />
+                ) : (
+                  <FileText className="h-8 w-8 text-slate-400" />
+                )}
+              </div>
+              <h3 className="text-base font-semibold text-slate-700 mb-1">
                 {hasActiveFilters ? 'No matching transactions' : 'No transactions yet'}
               </h3>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="text-sm text-slate-500 max-w-xs mx-auto">
                 {hasActiveFilters
                   ? 'Try adjusting your filters to find what you\'re looking for.'
                   : contactType === 'customer'
-                    ? 'Create an invoice to get started.'
-                    : 'Create a bill to get started.'
+                    ? 'Create an invoice to get started with this customer.'
+                    : 'Create a bill to get started with this vendor.'
                 }
               </p>
               {hasActiveFilters && (
                 <button
-                  onClick={clearAllFilters}
-                  className="mt-3 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                  onClick={() => {
+                    clearAllFilters();
+                    setShowCustomDatePicker(false);
+                  }}
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
                 >
-                  Clear all filters
+                  <X className="h-4 w-4" />
+                  Reset all filters
                 </button>
               )}
             </div>
