@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
@@ -177,7 +177,8 @@ export default function Invoices() {
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
   // Helper function to check if an invoice is overdue based on due date (not status field)
-  const isOverdue = (invoice: Transaction): boolean => {
+  // Memoized with useCallback to prevent unnecessary recalculations
+  const isOverdue = useCallback((invoice: Transaction): boolean => {
     // Must have a due date to be overdue
     if (!invoice.dueDate) return false;
 
@@ -199,7 +200,7 @@ export default function Invoices() {
     if (nonOverdueStatuses.includes(invoice.status)) return false;
 
     return true;
-  };
+  }, []);
 
   // Filter invoices (excluding quotations)
   const invoices = transactions
@@ -238,9 +239,13 @@ export default function Invoices() {
     : [];
 
   // Get all invoices (unfiltered by status, but filtered by period for stats)
-  const allInvoicesUnfiltered = transactions
-    ? transactions.filter((transaction) => transaction.type === "invoice" && transaction.status !== "quotation")
-    : [];
+  // Memoized to prevent unnecessary recalculations on every render
+  const allInvoicesUnfiltered = useMemo(() =>
+    transactions
+      ? transactions.filter((transaction) => transaction.type === "invoice" && transaction.status !== "quotation")
+      : [],
+    [transactions]
+  );
 
   // Apply period filter to invoices for stats calculation (memoized for performance)
   const allInvoices = useMemo(() => {
@@ -292,7 +297,7 @@ export default function Invoices() {
     const overdueCount = overdueInvoices.length;
 
     return { totalInvoiced, totalPaid, totalPending, overdueAmount, paidCount, openCount, overdueCount };
-  }, [allInvoices, allInvoicesUnfiltered]);
+  }, [allInvoices, allInvoicesUnfiltered, isOverdue]);
 
   // Quotation metrics
   const totalQuotations = quotations.reduce((sum, quotation) => sum + quotation.amount, 0);

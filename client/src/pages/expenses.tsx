@@ -174,9 +174,13 @@ export default function Expenses() {
   };
 
   // Get all expenses (unfiltered by search/date filters)
-  const allExpensesUnfiltered = transactions
-    ? transactions.filter((transaction) => transaction.type === "expense")
-    : [];
+  // Memoized to prevent unnecessary recalculations on every render
+  const allExpensesUnfiltered = useMemo(() =>
+    transactions
+      ? transactions.filter((transaction) => transaction.type === "expense")
+      : [],
+    [transactions]
+  );
 
   // Apply period filter to expenses for stats
   const allExpenses = useMemo(
