@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
@@ -30,6 +30,8 @@ import TransactionTable from "@/components/dashboard/TransactionTable";
 import CustomerDialog from "@/components/customers/CustomerDialog";
 import CustomerList from "@/components/customers/CustomerList";
 import SalesReceiptForm from "@/components/forms/SalesReceiptForm";
+import { PeriodSelector, ActiveFilterIndicator } from "@/components/PeriodSelector";
+import { usePeriodFilter } from "@/hooks/usePeriodFilter";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -70,13 +72,17 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Transaction, RecurringTemplate } from "@shared/schema";
+import { Transaction, RecurringTemplate, CompanySettings } from "@shared/schema";
 import { formatCurrency } from "@/lib/currencyUtils";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 interface Preferences {
   homeCurrency?: string;
+}
+
+interface CompanySettingsResponse extends CompanySettings {
+  fiscalYearStartMonth?: number;
 }
 
 export default function Invoices() {
@@ -104,6 +110,25 @@ export default function Invoices() {
   // Fetch preferences for home currency
   const { data: preferences } = useQuery<Preferences>({
     queryKey: ['/api/settings/preferences'],
+  });
+
+  // Fetch company settings for fiscal year
+  const { data: companySettings } = useQuery<CompanySettingsResponse>({
+    queryKey: ['/api/settings/company'],
+  });
+
+  // Period filter hook
+  const {
+    period,
+    setPeriod,
+    customRange,
+    setCustomRange,
+    periodLabel,
+    isFiltered,
+    filterByPeriod,
+    clearFilter,
+  } = usePeriodFilter({
+    fiscalYearStartMonth: companySettings?.fiscalYearStartMonth || 1,
   });
 
   // Recurring template mutations
@@ -177,50 +202,59 @@ export default function Invoices() {
         })
     : [];
 
-  // Get all invoices for stats (unfiltered by status)
-  const allInvoices = transactions
+  // Get all invoices (unfiltered by status, but filtered by period for stats)
+  const allInvoicesUnfiltered = transactions
     ? transactions.filter((transaction) => transaction.type === "invoice" && transaction.status !== "quotation")
     : [];
 
-  // Get total amounts
-  const totalInvoiced = allInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  // Apply period filter to invoices for stats calculation (memoized for performance)
+  const allInvoices = useMemo(() => {
+    return filterByPeriod(allInvoicesUnfiltered);
+  }, [allInvoicesUnfiltered, filterByPeriod]);
 
-  // Calculate paid amounts based on original amounts minus remaining balance
-  const totalPaid = allInvoices.reduce((sum, invoice) => {
-    // If invoice is completed, add full amount
-    if (invoice.status === "completed" || invoice.status === "paid") {
-      return sum + invoice.amount;
-    }
-    // For partially paid invoices, add the paid portion (original amount - balance)
-    else if ((invoice.status === "open" || invoice.status === "partial") &&
-             invoice.balance !== null && invoice.balance !== undefined) {
-      return sum + (invoice.amount - invoice.balance);
-    }
-    return sum;
-  }, 0);
+  // Get total amounts (memoized)
+  const { totalInvoiced, totalPaid, totalPending, overdueAmount, paidCount, openCount, overdueCount } = useMemo(() => {
+    const totalInvoiced = allInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
 
-  // Calculate open amounts based on remaining balances
-  const totalPending = allInvoices.reduce((sum, invoice) => {
-    if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") &&
-        invoice.balance !== null && invoice.balance !== undefined) {
-      return sum + invoice.balance;
-    } else if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") &&
-               (invoice.balance === null || invoice.balance === undefined)) {
-      return sum + invoice.amount;
-    }
-    return sum;
-  }, 0);
+    // Calculate paid amounts based on original amounts minus remaining balance
+    const totalPaid = allInvoices.reduce((sum, invoice) => {
+      // If invoice is completed, add full amount
+      if (invoice.status === "completed" || invoice.status === "paid") {
+        return sum + invoice.amount;
+      }
+      // For partially paid invoices, add the paid portion (original amount - balance)
+      else if ((invoice.status === "open" || invoice.status === "partial") &&
+               invoice.balance !== null && invoice.balance !== undefined) {
+        return sum + (invoice.amount - invoice.balance);
+      }
+      return sum;
+    }, 0);
 
-  // Calculate overdue amount
-  const overdueInvoices = allInvoices.filter(inv => inv.status === "overdue");
-  const overdueAmount = overdueInvoices.reduce((sum, inv) => {
-    return sum + (inv.balance !== null && inv.balance !== undefined ? inv.balance : inv.amount);
-  }, 0);
+    // Calculate open amounts based on remaining balances
+    const totalPending = allInvoices.reduce((sum, invoice) => {
+      if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") &&
+          invoice.balance !== null && invoice.balance !== undefined) {
+        return sum + invoice.balance;
+      } else if ((invoice.status === "open" || invoice.status === "overdue" || invoice.status === "partial") &&
+                 (invoice.balance === null || invoice.balance === undefined)) {
+        return sum + invoice.amount;
+      }
+      return sum;
+    }, 0);
 
-  // Count stats
-  const paidCount = allInvoices.filter(inv => inv.status === "paid" || inv.status === "completed").length;
-  const openCount = allInvoices.filter(inv => inv.status === "open" || inv.status === "partial").length;
-  const overdueCount = overdueInvoices.length;
+    // Calculate overdue amount
+    const overdueInvoices = allInvoices.filter(inv => inv.status === "overdue");
+    const overdueAmount = overdueInvoices.reduce((sum, inv) => {
+      return sum + (inv.balance !== null && inv.balance !== undefined ? inv.balance : inv.amount);
+    }, 0);
+
+    // Count stats
+    const paidCount = allInvoices.filter(inv => inv.status === "paid" || inv.status === "completed").length;
+    const openCount = allInvoices.filter(inv => inv.status === "open" || inv.status === "partial").length;
+    const overdueCount = overdueInvoices.length;
+
+    return { totalInvoiced, totalPaid, totalPending, overdueAmount, paidCount, openCount, overdueCount };
+  }, [allInvoices]);
 
   // Quotation metrics
   const totalQuotations = quotations.reduce((sum, quotation) => sum + quotation.amount, 0);
@@ -301,6 +335,16 @@ export default function Invoices() {
               <span className="text-sm text-slate-500 hidden sm:block">
                 {format(new Date(), 'MMMM d, yyyy')}
               </span>
+
+              <PeriodSelector
+                period={period}
+                onPeriodChange={setPeriod}
+                customRange={customRange}
+                onCustomRangeChange={setCustomRange}
+                periodLabel={periodLabel}
+                isFiltered={isFiltered}
+                onClear={clearFilter}
+              />
 
               <TooltipProvider>
                 <Tooltip>
@@ -449,6 +493,12 @@ export default function Invoices() {
               </div>
             </div>
           </div>
+          {/* Active Period Filter Indicator */}
+          <ActiveFilterIndicator
+            periodLabel={periodLabel}
+            isFiltered={isFiltered}
+            onClear={clearFilter}
+          />
         </Card>
 
         {/* Main Content Card */}

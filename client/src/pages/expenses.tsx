@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import VendorDialog from "@/components/vendors/VendorDialog";
 import VendorList from "@/components/vendors/VendorList";
+import { PeriodSelector, ActiveFilterIndicator } from "@/components/PeriodSelector";
+import { usePeriodFilter } from "@/hooks/usePeriodFilter";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -76,7 +78,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Transaction, Contact } from "@shared/schema";
+import { Transaction, Contact, CompanySettings } from "@shared/schema";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
@@ -84,6 +86,10 @@ import { cn } from "@/lib/utils";
 
 interface Preferences {
   homeCurrency?: string;
+}
+
+interface CompanySettingsResponse extends CompanySettings {
+  fiscalYearStartMonth?: number;
 }
 
 export default function Expenses() {
@@ -111,6 +117,25 @@ export default function Expenses() {
   // Fetch preferences for home currency
   const { data: preferences } = useQuery<Preferences>({
     queryKey: ['/api/settings/preferences'],
+  });
+
+  // Fetch company settings for fiscal year
+  const { data: companySettings } = useQuery<CompanySettingsResponse>({
+    queryKey: ['/api/settings/company'],
+  });
+
+  // Period filter hook
+  const {
+    period,
+    setPeriod,
+    customRange,
+    setCustomRange,
+    periodLabel,
+    isFiltered: isPeriodFiltered,
+    filterByPeriod,
+    clearFilter,
+  } = usePeriodFilter({
+    fiscalYearStartMonth: companySettings?.fiscalYearStartMonth || 1,
   });
 
   const homeCurrency = preferences?.homeCurrency || 'CAD';
@@ -148,10 +173,16 @@ export default function Expenses() {
     }
   };
 
-  // Get all expenses for stats (unfiltered)
-  const allExpenses = transactions
+  // Get all expenses (unfiltered by search/date filters)
+  const allExpensesUnfiltered = transactions
     ? transactions.filter((transaction) => transaction.type === "expense")
     : [];
+
+  // Apply period filter to expenses for stats
+  const allExpenses = useMemo(
+    () => filterByPeriod(allExpensesUnfiltered),
+    [allExpensesUnfiltered, filterByPeriod]
+  );
 
   const expenses = transactions
     ? transactions
@@ -217,17 +248,27 @@ export default function Expenses() {
         })
     : [];
 
-  const totalExpenses = allExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const completedExpenses = allExpenses
-    .filter((expense) => expense.status === "completed")
-    .reduce((sum, expense) => sum + expense.amount, 0);
-  const openExpenses = allExpenses
-    .filter((expense) => expense.status === "open")
-    .reduce((sum, expense) => sum + expense.amount, 0);
+  // Memoized stats calculations for period-filtered data
+  const { totalExpenses, completedExpenses, openExpenses, completedCount, openCount } = useMemo(() => {
+    const total = allExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const completed = allExpenses
+      .filter((expense) => expense.status === "completed")
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    const open = allExpenses
+      .filter((expense) => expense.status === "open")
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    const completedCnt = allExpenses.filter(e => e.status === "completed").length;
+    const openCnt = allExpenses.filter(e => e.status === "open").length;
 
-  // Count stats
-  const completedCount = allExpenses.filter(e => e.status === "completed").length;
-  const openCount = allExpenses.filter(e => e.status === "open").length;
+    return {
+      totalExpenses: total,
+      completedExpenses: completed,
+      openExpenses: open,
+      completedCount: completedCnt,
+      openCount: openCnt,
+    };
+  }, [allExpenses]);
+
   const billCount = transactions?.filter(t => t.type === "bill").length || 0;
 
   const handleDelete = async () => {
@@ -357,6 +398,16 @@ export default function Expenses() {
                 {format(new Date(), 'MMMM d, yyyy')}
               </span>
 
+              <PeriodSelector
+                period={period}
+                onPeriodChange={setPeriod}
+                customRange={customRange}
+                onCustomRangeChange={setCustomRange}
+                periodLabel={periodLabel}
+                isFiltered={isPeriodFiltered}
+                onClear={clearFilter}
+              />
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -459,6 +510,11 @@ export default function Expenses() {
               </div>
             </div>
           </div>
+          <ActiveFilterIndicator
+            periodLabel={periodLabel}
+            isFiltered={isPeriodFiltered}
+            onClear={clearFilter}
+          />
         </Card>
 
         {/* Main Content Card */}
