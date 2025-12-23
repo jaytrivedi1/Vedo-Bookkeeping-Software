@@ -263,6 +263,7 @@ export default function TransactionTable({ transactions, loading = false, onDele
   };
 
   return (
+    <>
     <div className="overflow-x-auto relative">
       {loading ? (
         <div className="flex justify-center items-center py-8">
@@ -422,88 +423,89 @@ export default function TransactionTable({ transactions, loading = false, onDele
               </Pagination>
             </div>
           </div>
-
-          {/* Floating Bulk Actions Bar */}
-          {selectedIds.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
-              <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
-                <span className="text-sm font-medium">
-                  {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
-                </span>
-                <div className="h-5 w-px bg-slate-700" />
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-slate-800 h-8 px-3"
-                    onClick={() => setShowBulkDeleteDialog(true)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-slate-800 h-8 px-3"
-                    onClick={() => {
-                      // Print functionality would go here
-                      console.log('Batch print:', Array.from(selectedIds));
-                    }}
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-white hover:bg-slate-800 h-8 px-3"
-                    onClick={() => {
-                      // Send reminders functionality would go here
-                      console.log('Send reminders:', Array.from(selectedIds));
-                    }}
-                  >
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Reminder
-                  </Button>
-                </div>
-                <div className="h-5 w-px bg-slate-700" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8 p-0"
-                  onClick={clearSelection}
-                >
-                  <X className="h-4 w-4" />
-                  <span className="sr-only">Clear selection</span>
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Bulk Delete Confirmation Dialog */}
-          <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {selectedIds.size} transaction{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the selected transactions and all associated records.
-                  This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleBulkDelete}
-                  className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-                  disabled={isBulkDeleteLoading}
-                >
-                  {isBulkDeleteLoading ? 'Deleting...' : 'Delete All'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </>
       )}
     </div>
+
+      {/* Floating Bulk Actions Bar - rendered outside overflow container for proper fixed positioning */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+            <span className="text-sm font-medium">
+              {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="h-5 w-px bg-slate-700" />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => setShowBulkDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => {
+                  // Print functionality would go here
+                  console.log('Batch print:', Array.from(selectedIds));
+                }}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => {
+                  // Send reminders functionality would go here
+                  console.log('Send reminders:', Array.from(selectedIds));
+                }}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Send Reminder
+              </Button>
+            </div>
+            <div className="h-5 w-px bg-slate-700" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8 p-0"
+              onClick={clearSelection}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Clear selection</span>
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} transaction{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected transactions and all associated records.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={isBulkDeleteLoading}
+            >
+              {isBulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
