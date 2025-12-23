@@ -214,7 +214,7 @@ export default function CustomerDetailView({
         description: "Customer has been successfully deleted",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/contacts"] });
-      navigate("/customers");
+      navigate("/invoices?tab=customers");
     },
     onError: (error: any) => {
       toast({

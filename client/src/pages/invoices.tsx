@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { format } from "date-fns";
 import {
   PlusIcon,
@@ -88,11 +88,21 @@ interface CompanySettingsResponse extends CompanySettings {
 export default function Invoices() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
+  const searchString = useSearch();
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Read tab from URL query parameter on mount
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const tabParam = params.get('tab');
+    if (tabParam && ['invoices', 'quotations', 'recurring', 'customers'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchString]);
   const [selectedRecurringIds, setSelectedRecurringIds] = useState<Set<number>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleteLoading, setIsBulkDeleteLoading] = useState(false);

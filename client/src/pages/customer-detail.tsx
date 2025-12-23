@@ -28,7 +28,7 @@ export default function CustomerDetail() {
       <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/customers">
+            <Link href="/invoices?tab=customers">
               <Button variant="ghost" size="sm" className="gap-2 text-slate-600 hover:text-slate-900">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Customers
