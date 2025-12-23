@@ -534,9 +534,14 @@ export default function InvoiceForm({
 
   const saveInvoice = useMutation({
     mutationFn: async (data: BaseInvoice) => {
+      console.log("=== saveInvoice mutation called ===");
+      console.log("isEditing:", isEditing);
+      console.log("invoice?.id:", invoice?.id);
       if (isEditing) {
         console.log("Updating invoice/quotation with data:", JSON.stringify(data, null, 2));
-        return await apiRequest(`/api/invoices/${invoice?.id}`, 'PATCH', data);
+        const url = `/api/invoices/${invoice?.id}`;
+        console.log("PATCH URL:", url);
+        return await apiRequest(url, 'PATCH', data);
       } else {
         console.log("Creating invoice/quotation with data:", JSON.stringify(data, null, 2));
         return await apiRequest('/api/invoices', 'POST', data);
@@ -961,7 +966,10 @@ export default function InvoiceForm({
   }, [form.watch, paymentTerms]);
 
   const onSubmit = (data: Invoice) => {
+    console.log("=== onSubmit called ===");
     console.log("Form data before submit:", data);
+    console.log("isEditing:", isEditing);
+    console.log("invoice?.id:", invoice?.id);
     
     // Filter out empty line items
     const filteredLineItems = data.lineItems.filter(item => 
@@ -1941,11 +1949,52 @@ export default function InvoiceForm({
 
                 {/* Save Button */}
                 <Button
-                  type="submit"
+                  type="button"
                   disabled={saveInvoice.isPending}
                   variant="outline"
                   className="flex-1 sm:flex-none h-11 border-slate-300 hover:bg-slate-50 transition-colors px-6"
                   data-testid="button-save"
+                  onClick={async () => {
+                    console.log("Save button clicked");
+                    console.log("Form values:", form.getValues());
+                    console.log("Form errors:", form.formState.errors);
+
+                    // Trigger validation first
+                    const isValid = await form.trigger();
+                    console.log("Form is valid:", isValid);
+
+                    if (!isValid) {
+                      console.error("Form validation failed:", form.formState.errors);
+                      // Show toast with validation errors
+                      const errors = form.formState.errors;
+                      const errorMessages: string[] = [];
+
+                      if (errors.contactId) errorMessages.push("Customer is required");
+                      if (errors.reference) errorMessages.push("Invoice number is required");
+                      if (errors.date) errorMessages.push("Invoice date is required");
+                      if (errors.lineItems) {
+                        if (Array.isArray(errors.lineItems)) {
+                          errors.lineItems.forEach((itemError, index) => {
+                            if (itemError?.description) errorMessages.push(`Line ${index + 1}: Description is required`);
+                            if (itemError?.quantity) errorMessages.push(`Line ${index + 1}: Quantity must be greater than 0`);
+                            if (itemError?.unitPrice) errorMessages.push(`Line ${index + 1}: Invalid price`);
+                          });
+                        } else if (errors.lineItems.message) {
+                          errorMessages.push(errors.lineItems.message as string);
+                        }
+                      }
+
+                      toast({
+                        title: "Please fix the following errors",
+                        description: errorMessages.join(", ") || "Please check the form for errors",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    // If valid, submit the form
+                    form.handleSubmit(onSubmit)();
+                  }}
                 >
                   {saveInvoice.isPending ? 'Saving...' : 'Save'}
                 </Button>
@@ -1955,7 +2004,41 @@ export default function InvoiceForm({
                   type="button"
                   disabled={saveInvoice.isPending}
                   className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
-                  onClick={() => {
+                  onClick={async () => {
+                    console.log("Save & Send button clicked");
+
+                    // Trigger validation first
+                    const isValid = await form.trigger();
+                    console.log("Form is valid:", isValid);
+
+                    if (!isValid) {
+                      console.error("Form validation failed:", form.formState.errors);
+                      const errors = form.formState.errors;
+                      const errorMessages: string[] = [];
+
+                      if (errors.contactId) errorMessages.push("Customer is required");
+                      if (errors.reference) errorMessages.push("Invoice number is required");
+                      if (errors.date) errorMessages.push("Invoice date is required");
+                      if (errors.lineItems) {
+                        if (Array.isArray(errors.lineItems)) {
+                          errors.lineItems.forEach((itemError, index) => {
+                            if (itemError?.description) errorMessages.push(`Line ${index + 1}: Description is required`);
+                            if (itemError?.quantity) errorMessages.push(`Line ${index + 1}: Quantity must be greater than 0`);
+                            if (itemError?.unitPrice) errorMessages.push(`Line ${index + 1}: Invalid price`);
+                          });
+                        } else if (errors.lineItems.message) {
+                          errorMessages.push(errors.lineItems.message as string);
+                        }
+                      }
+
+                      toast({
+                        title: "Please fix the following errors",
+                        description: errorMessages.join(", ") || "Please check the form for errors",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
                     isSaveAndSendRef.current = true;
                     form.handleSubmit(onSubmit)();
                   }}
