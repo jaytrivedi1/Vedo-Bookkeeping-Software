@@ -32,6 +32,7 @@ import {
 import { Trash2, Printer, Mail, X } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Transaction, Contact } from "@shared/schema";
@@ -427,8 +428,8 @@ export default function TransactionTable({ transactions, loading = false, onDele
       )}
     </div>
 
-      {/* Floating Bulk Actions Bar - rendered outside overflow container for proper fixed positioning */}
-      {selectedIds.size > 0 && (
+      {/* Floating Bulk Actions Bar - rendered via portal to document.body for proper fixed positioning */}
+      {selectedIds.size > 0 && createPortal(
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
             <span className="text-sm font-medium">
@@ -481,7 +482,8 @@ export default function TransactionTable({ transactions, loading = false, onDele
               <span className="sr-only">Clear selection</span>
             </Button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Bulk Delete Confirmation Dialog */}
