@@ -243,12 +243,19 @@ export default function InvoiceView() {
     enabled: !!invoiceId
   });
   
-  // Fetch contacts for customer info
-  const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+  // Fetch only the specific customer for this invoice (not ALL contacts)
+  const { data: customer, isLoading: customerLoading } = useQuery<Contact>({
+    queryKey: ['/api/contacts', invoice?.contactId],
+    queryFn: async () => {
+      if (!invoice?.contactId) return null;
+      const response = await fetch(`/api/contacts/${invoice.contactId}`);
+      if (!response.ok) throw new Error('Failed to fetch customer');
+      return response.json();
+    },
+    enabled: !!invoice?.contactId,
   });
-  
-  // Fetch sales taxes for tax names
+
+  // Fetch sales taxes for tax names (needed for display)
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
@@ -281,9 +288,6 @@ export default function InvoiceView() {
   // Extract data once fetched
   const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
   const lineItems: LineItem[] = invoiceData?.lineItems || [];
-  
-  // Find customer
-  const customer = contacts?.find(c => c.id === invoice?.contactId);
   
   // Get default company for email subject
   const { data: defaultCompany } = useQuery({
@@ -430,7 +434,7 @@ ${companyName}`;
     }
   };
   
-  if (invoiceLoading || contactsLoading || taxesLoading || paymentsLoading || activitiesLoading) {
+  if (invoiceLoading || customerLoading || taxesLoading || paymentsLoading || activitiesLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="animate-pulse">

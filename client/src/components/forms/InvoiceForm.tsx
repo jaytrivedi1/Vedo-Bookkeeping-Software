@@ -186,17 +186,20 @@ export default function InvoiceForm({
   // Fetch next invoice number from backend when creating a new invoice
   const { data: nextInvoiceData } = useQuery<{ nextNumber: string }>({
     queryKey: ['/api/invoices/next-number'],
-    enabled: !isEditing,
+    enabled: !isEditing && !readOnly,
   });
-  
+
   const defaultInvoiceNumber = isEditing ? invoice?.reference : (nextInvoiceData?.nextNumber || '1001');
 
+  // Skip heavy data fetches in read-only mode - data is passed via props
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
+    enabled: !readOnly, // Skip in read-only mode - customer passed via prop
   });
-  
+
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
+    enabled: !readOnly, // Skip in read-only mode - taxes already calculated
   });
 
   // Transform sales taxes for SearchableSelect (filter main taxes only)
@@ -208,23 +211,26 @@ export default function InvoiceForm({
   
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
+    enabled: !readOnly, // Skip in read-only mode - product data not needed for display
   });
-  
+
   // Fetch customer's unapplied credits when a contact is selected
+  // CRITICAL: This fetches ALL transactions - skip in read-only mode
   const { data: transactions } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
-    enabled: !!watchContactId,
+    enabled: !!watchContactId && !readOnly, // Skip in read-only mode - no credit selection available
   });
   
   // Fetch payment applications for this invoice when editing
   const { data: paymentApplications } = useQuery<any[]>({
     queryKey: ['/api/invoices', invoice?.id, 'payment-applications'],
-    enabled: isEditing && !!invoice?.id,
+    enabled: isEditing && !!invoice?.id && !readOnly,
   });
-  
-  // Fetch preferences for multi-currency settings
+
+  // Fetch preferences for multi-currency settings (only needed when editing)
   const { data: preferences } = useQuery<any>({
     queryKey: ['/api/preferences'],
+    enabled: !readOnly, // Skip in read-only - currency already set on invoice
   });
   
   // Get home currency from preferences
@@ -358,7 +364,7 @@ export default function InvoiceForm({
   const invoiceDate = form.watch("date") || new Date();
   const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
     queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: invoiceDate }],
-    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    enabled: !readOnly && isMultiCurrencyEnabled && currency !== homeCurrency,
     queryFn: async () => {
       const response = await fetch(
         `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(invoiceDate, 'yyyy-MM-dd')}`
