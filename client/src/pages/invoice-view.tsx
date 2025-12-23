@@ -434,7 +434,9 @@ ${companyName}`;
     }
   };
   
-  if (invoiceLoading || customerLoading || taxesLoading || paymentsLoading || activitiesLoading) {
+  // Don't block on payment history or activities - they can load asynchronously
+  // These are supplementary data that shouldn't delay the main invoice display
+  if (invoiceLoading || customerLoading || taxesLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="animate-pulse">
