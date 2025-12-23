@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { format } from "date-fns";
 import {
   PlusIcon,
@@ -20,7 +21,10 @@ import {
   Search,
   Filter,
   Calendar,
-  ChevronDown
+  ChevronDown,
+  Printer,
+  Mail,
+  X
 } from "lucide-react";
 import TransactionTable from "@/components/dashboard/TransactionTable";
 import CustomerDialog from "@/components/customers/CustomerDialog";
@@ -64,6 +68,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Transaction, RecurringTemplate } from "@shared/schema";
 import { formatCurrency } from "@/lib/currencyUtils";
@@ -76,11 +81,15 @@ interface Preferences {
 
 export default function Invoices() {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [salesReceiptDialogOpen, setSalesReceiptDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("invoices");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedRecurringIds, setSelectedRecurringIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkDeleteLoading, setIsBulkDeleteLoading] = useState(false);
 
   // Fetch all transactions
   const { data: transactions, isLoading, refetch } = useQuery<Transaction[]>({
@@ -216,6 +225,51 @@ export default function Invoices() {
   // Quotation metrics
   const totalQuotations = quotations.reduce((sum, quotation) => sum + quotation.amount, 0);
   const quotationCount = quotations.length;
+
+  // Recurring template selection helpers
+  const handleSelectAllRecurring = (checked: boolean) => {
+    if (checked) {
+      setSelectedRecurringIds(new Set(recurringTemplates.map(t => t.id)));
+    } else {
+      setSelectedRecurringIds(new Set());
+    }
+  };
+
+  const handleSelectOneRecurring = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedRecurringIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedRecurringIds(newSelected);
+  };
+
+  const isAllRecurringSelected = recurringTemplates.length > 0 && selectedRecurringIds.size === recurringTemplates.length;
+  const isSomeRecurringSelected = selectedRecurringIds.size > 0 && selectedRecurringIds.size < recurringTemplates.length;
+
+  const handleBulkDeleteRecurring = async () => {
+    setIsBulkDeleteLoading(true);
+    try {
+      const deletePromises = Array.from(selectedRecurringIds).map(id =>
+        apiRequest(`/api/recurring/${id}`, "DELETE")
+      );
+      await Promise.all(deletePromises);
+      setSelectedRecurringIds(new Set());
+      setShowBulkDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/recurring'] });
+      toast({ title: "Templates deleted successfully" });
+    } catch (error) {
+      console.error('Failed to delete templates:', error);
+      toast({ title: "Failed to delete templates", variant: "destructive" });
+    } finally {
+      setIsBulkDeleteLoading(false);
+    }
+  };
+
+  const clearRecurringSelection = () => {
+    setSelectedRecurringIds(new Set());
+  };
 
   // Tab styling helper
   const getTabClass = (tab: string) => {
@@ -501,7 +555,7 @@ export default function Invoices() {
             )}
 
             {activeTab === "recurring" && (
-              <div className="p-6">
+              <div className="p-6 relative">
                 {recurringLoading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -526,29 +580,37 @@ export default function Invoices() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-50 hover:bg-slate-50">
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={isAllRecurringSelected}
+                              onCheckedChange={handleSelectAllRecurring}
+                              aria-label="Select all"
+                              className={isSomeRecurringSelected ? "data-[state=checked]:bg-slate-400" : ""}
+                            />
+                          </TableHead>
+                          <TableHead className="w-24 font-semibold text-slate-600">Status</TableHead>
+                          <TableHead className="w-24 font-semibold text-slate-600">Frequency</TableHead>
+                          <TableHead className="w-28 font-semibold text-slate-600">Next Run</TableHead>
                           <TableHead className="font-semibold text-slate-600">Template Name</TableHead>
                           <TableHead className="font-semibold text-slate-600">Customer</TableHead>
-                          <TableHead className="font-semibold text-slate-600">Amount</TableHead>
-                          <TableHead className="font-semibold text-slate-600">Frequency</TableHead>
-                          <TableHead className="font-semibold text-slate-600">Next Run</TableHead>
-                          <TableHead className="font-semibold text-slate-600">Status</TableHead>
-                          <TableHead className="font-semibold text-slate-600 text-right">Actions</TableHead>
+                          <TableHead className="font-semibold text-slate-600 text-right">Amount</TableHead>
+                          <TableHead className="w-16 font-semibold text-slate-600 text-right">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {recurringTemplates.map((template) => (
-                          <TableRow key={template.id} className="hover:bg-slate-50/50">
-                            <TableCell>
-                              <Link href={`/recurring-invoices/${template.id}/edit`} className="text-blue-600 hover:text-blue-700 font-medium">
-                                {template.templateName}
-                              </Link>
+                          <TableRow
+                            key={template.id}
+                            className="hover:bg-slate-50 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/recurring-invoices/${template.id}/edit`)}
+                          >
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                checked={selectedRecurringIds.has(template.id)}
+                                onCheckedChange={(checked) => handleSelectOneRecurring(template.id, checked as boolean)}
+                                aria-label={`Select ${template.templateName}`}
+                              />
                             </TableCell>
-                            <TableCell className="text-slate-600">{(template as any).customerName}</TableCell>
-                            <TableCell className="font-medium">{formatCurrency(template.totalAmount, homeCurrency, homeCurrency)}</TableCell>
-                            <TableCell>
-                              <span className="capitalize text-slate-600">{template.frequency}</span>
-                            </TableCell>
-                            <TableCell className="text-slate-600">{format(new Date(template.nextRunAt), "MMM dd, yyyy")}</TableCell>
                             <TableCell>
                               <Badge
                                 variant={template.status === "active" ? "default" : "secondary"}
@@ -558,80 +620,39 @@ export default function Invoices() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center justify-end gap-1">
-                                <Link href={`/recurring-invoices/${template.id}/edit`}>
-                                  <Button size="sm" variant="ghost" className="h-8 px-2">
-                                    Edit
-                                  </Button>
-                                </Link>
-                                {template.status === "active" ? (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() => pauseMutation.mutate(template.id)}
-                                          disabled={pauseMutation.isPending}
-                                        >
-                                          <Pause className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Pause template</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                ) : (
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-8 w-8 p-0"
-                                          onClick={() => resumeMutation.mutate(template.id)}
-                                          disabled={resumeMutation.isPending}
-                                        >
-                                          <Play className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Resume template</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                )}
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0"
-                                        onClick={() => runNowMutation.mutate(template.id)}
-                                        disabled={runNowMutation.isPending}
-                                      >
-                                        <Clock className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Generate invoice now</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                        onClick={() => deleteMutation.mutate(template.id)}
-                                        disabled={deleteMutation.isPending}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete template</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800 capitalize">
+                                {template.frequency}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-600">
+                              {format(new Date(template.nextRunAt), "MMM dd, yyyy")}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-900">
+                              {template.templateName}
+                            </TableCell>
+                            <TableCell className="text-sm font-medium text-slate-900">
+                              {(template as any).customerName}
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-semibold text-slate-900">
+                              {formatCurrency(template.totalAmount, homeCurrency, homeCurrency)}
+                            </TableCell>
+                            <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                      onClick={() => deleteMutation.mutate(template.id)}
+                                      disabled={deleteMutation.isPending}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Delete template</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -639,6 +660,98 @@ export default function Invoices() {
                     </Table>
                   </div>
                 )}
+
+                {/* Floating Bulk Actions Bar for Recurring */}
+                {selectedRecurringIds.size > 0 && (
+                  <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+                    <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+                      <span className="text-sm font-medium">
+                        {selectedRecurringIds.size} template{selectedRecurringIds.size !== 1 ? 's' : ''} selected
+                      </span>
+                      <div className="h-5 w-px bg-slate-700" />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-white hover:bg-slate-800 h-8 px-3"
+                          onClick={() => setShowBulkDeleteDialog(true)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-white hover:bg-slate-800 h-8 px-3"
+                          onClick={() => {
+                            // Pause all selected templates
+                            selectedRecurringIds.forEach(id => {
+                              const template = recurringTemplates.find(t => t.id === id);
+                              if (template?.status === 'active') {
+                                pauseMutation.mutate(id);
+                              }
+                            });
+                          }}
+                        >
+                          <Pause className="h-4 w-4 mr-2" />
+                          Pause
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-white hover:bg-slate-800 h-8 px-3"
+                          onClick={() => {
+                            // Resume all selected templates
+                            selectedRecurringIds.forEach(id => {
+                              const template = recurringTemplates.find(t => t.id === id);
+                              if (template?.status === 'paused') {
+                                resumeMutation.mutate(id);
+                              }
+                            });
+                          }}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Resume
+                        </Button>
+                      </div>
+                      <div className="h-5 w-px bg-slate-700" />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8 p-0"
+                        onClick={clearRecurringSelection}
+                      >
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Clear selection</span>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bulk Delete Confirmation Dialog */}
+                <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Delete {selectedRecurringIds.size} template{selectedRecurringIds.size !== 1 ? 's' : ''}?</DialogTitle>
+                      <DialogDescription>
+                        This will permanently delete the selected recurring templates.
+                        This action cannot be undone.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-3 mt-4">
+                      <Button variant="outline" onClick={() => setShowBulkDeleteDialog(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={handleBulkDeleteRecurring}
+                        disabled={isBulkDeleteLoading}
+                      >
+                        {isBulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
 

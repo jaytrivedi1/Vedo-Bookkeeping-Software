@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
 import {
   PlusIcon,
-  Eye,
-  Edit2,
   Trash2,
   Receipt,
   Wallet,
@@ -15,9 +14,11 @@ import {
   Search,
   Filter,
   CalendarIcon,
-  ChevronDown
+  ChevronDown,
+  Printer,
+  Mail,
+  X
 } from "lucide-react";
-import { Link } from "wouter";
 import VendorDialog from "@/components/vendors/VendorDialog";
 import VendorList from "@/components/vendors/VendorList";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,6 +87,7 @@ interface Preferences {
 }
 
 export default function Expenses() {
+  const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -92,6 +95,10 @@ export default function Expenses() {
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("expenses");
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<number>>(new Set());
+  const [selectedBillIds, setSelectedBillIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkDeleteLoading, setIsBulkDeleteLoading] = useState(false);
 
   const { data: transactions, isLoading, refetch, error } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
@@ -238,6 +245,86 @@ export default function Expenses() {
       setIsDeleteLoading(false);
     }
   };
+
+  // Expense selection helpers
+  const handleSelectAllExpenses = (checked: boolean) => {
+    if (checked) {
+      setSelectedExpenseIds(new Set(expenses.map(e => e.id)));
+    } else {
+      setSelectedExpenseIds(new Set());
+    }
+  };
+
+  const handleSelectOneExpense = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedExpenseIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedExpenseIds(newSelected);
+  };
+
+  const isAllExpensesSelected = expenses.length > 0 && selectedExpenseIds.size === expenses.length;
+  const isSomeExpensesSelected = selectedExpenseIds.size > 0 && selectedExpenseIds.size < expenses.length;
+
+  // Bill selection helpers
+  const handleSelectAllBills = (checked: boolean) => {
+    if (checked) {
+      setSelectedBillIds(new Set(bills.map(b => b.id)));
+    } else {
+      setSelectedBillIds(new Set());
+    }
+  };
+
+  const handleSelectOneBill = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedBillIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedBillIds(newSelected);
+  };
+
+  const isAllBillsSelected = bills.length > 0 && selectedBillIds.size === bills.length;
+  const isSomeBillsSelected = selectedBillIds.size > 0 && selectedBillIds.size < bills.length;
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    setIsBulkDeleteLoading(true);
+    const idsToDelete = activeTab === "expenses" ? selectedExpenseIds : selectedBillIds;
+
+    try {
+      const deletePromises = Array.from(idsToDelete).map(id =>
+        apiRequest(`/api/transactions/${id}`, 'DELETE')
+      );
+      await Promise.all(deletePromises);
+
+      if (activeTab === "expenses") {
+        setSelectedExpenseIds(new Set());
+      } else {
+        setSelectedBillIds(new Set());
+      }
+      setShowBulkDeleteDialog(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+      refetch();
+    } catch (error) {
+      console.error('Failed to delete:', error);
+    } finally {
+      setIsBulkDeleteLoading(false);
+    }
+  };
+
+  const clearSelection = () => {
+    if (activeTab === "expenses") {
+      setSelectedExpenseIds(new Set());
+    } else {
+      setSelectedBillIds(new Set());
+    }
+  };
+
+  const currentSelectionCount = activeTab === "expenses" ? selectedExpenseIds.size : selectedBillIds.size;
 
   // Tab styling helper
   const getTabClass = (tab: string) => {
@@ -526,7 +613,7 @@ export default function Expenses() {
           {/* Tab Content */}
           <div className="bg-white">
             {activeTab === "expenses" && (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto relative">
                 {isLoading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -554,122 +641,93 @@ export default function Expenses() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-reference">Reference</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-date">Date</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-payee">Payee</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-payment-method">Payment Method</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-amount">Amount</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-status">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-600 text-right" data-testid="header-actions">Actions</TableHead>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={isAllExpensesSelected}
+                            onCheckedChange={handleSelectAllExpenses}
+                            aria-label="Select all"
+                            className={isSomeExpensesSelected ? "data-[state=checked]:bg-slate-400" : ""}
+                          />
+                        </TableHead>
+                        <TableHead className="w-24 font-semibold text-slate-600" data-testid="header-status">Status</TableHead>
+                        <TableHead className="w-28 font-semibold text-slate-600" data-testid="header-date">Date</TableHead>
+                        <TableHead className="font-semibold text-slate-600" data-testid="header-reference">Number</TableHead>
+                        <TableHead className="font-semibold text-slate-600" data-testid="header-payee">Vendor</TableHead>
+                        <TableHead className="font-semibold text-slate-600 text-right" data-testid="header-amount">Amount</TableHead>
+                        <TableHead className="w-16 font-semibold text-slate-600 text-right" data-testid="header-actions">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {expenses.map((expense) => (
-                        <TableRow key={expense.id} className="hover:bg-slate-50/50" data-testid={`row-expense-${expense.id}`}>
-                          <TableCell className="font-medium text-slate-900" data-testid={`text-reference-${expense.id}`}>
-                            {expense.reference}
-                          </TableCell>
-                          <TableCell className="text-slate-600" data-testid={`text-date-${expense.id}`}>
-                            {format(new Date(expense.date), 'MMM dd, yyyy')}
-                          </TableCell>
-                          <TableCell className="font-medium text-slate-900" data-testid={`text-payee-${expense.id}`}>
-                            {(() => {
-                              const contact = contacts?.find(c => c.id === expense.contactId);
-                              const contactName = getContactName(expense.contactId);
-                              return formatContactName(contactName, contact?.currency, homeCurrency);
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-slate-600" data-testid={`text-payment-method-${expense.id}`}>
-                            {getPaymentMethodLabel(expense.paymentMethod)}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-900" data-testid={`text-amount-${expense.id}`}>
-                            {formatCurrency(expense.amount, expense.currency, homeCurrency)}
+                        <TableRow
+                          key={expense.id}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/expenses/${expense.id}`)}
+                          data-testid={`row-expense-${expense.id}`}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedExpenseIds.has(expense.id)}
+                              onCheckedChange={(checked) => handleSelectOneExpense(expense.id, checked as boolean)}
+                              aria-label={`Select expense ${expense.reference}`}
+                            />
                           </TableCell>
                           <TableCell data-testid={`badge-status-${expense.id}`}>
                             <Badge className={getStatusBadgeStyle(expense.status)}>
                               {expense.status.charAt(0).toUpperCase() + expense.status.slice(1)}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1 justify-end">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Link href={`/expenses/${expense.id}`}>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0"
-                                        data-testid={`button-view-${expense.id}`}
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </Link>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Link href={`/expenses/${expense.id}/edit`}>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                        data-testid={`button-edit-${expense.id}`}
-                                      >
-                                        <Edit2 className="h-4 w-4" />
-                                      </Button>
-                                    </Link>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Edit</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <AlertDialog>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                          onClick={() => setTransactionToDelete(expense)}
-                                          data-testid={`button-delete-${expense.id}`}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will permanently delete this expense and all associated records.
-                                      This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
-                                      Cancel
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={handleDelete}
-                                      className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-                                      disabled={isDeleteLoading}
-                                    >
-                                      {isDeleteLoading ? 'Deleting...' : 'Delete'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
+                          <TableCell className="text-sm text-slate-600" data-testid={`text-date-${expense.id}`}>
+                            {format(new Date(expense.date), 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium text-slate-900" data-testid={`text-reference-${expense.id}`}>
+                            {expense.reference || '—'}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium text-slate-900" data-testid={`text-payee-${expense.id}`}>
+                            {(() => {
+                              const contact = contacts?.find(c => c.id === expense.contactId);
+                              const contactName = getContactName(expense.contactId);
+                              return formatContactName(contactName, contact?.currency, homeCurrency);
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-semibold text-slate-900" data-testid={`text-amount-${expense.id}`}>
+                            {formatCurrency(expense.amount, expense.currency, homeCurrency)}
+                          </TableCell>
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                  onClick={() => setTransactionToDelete(expense)}
+                                  data-testid={`button-delete-${expense.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete this expense and all associated records.
+                                    This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={handleDelete}
+                                    className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                                    disabled={isDeleteLoading}
+                                  >
+                                    {isDeleteLoading ? 'Deleting...' : 'Delete'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -680,7 +738,7 @@ export default function Expenses() {
             )}
 
             {activeTab === "bills" && (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto relative">
                 {isLoading ? (
                   <div className="text-center py-12">
                     <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -708,122 +766,93 @@ export default function Expenses() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-reference">Reference</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-date">Date</TableHead>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={isAllBillsSelected}
+                            onCheckedChange={handleSelectAllBills}
+                            aria-label="Select all"
+                            className={isSomeBillsSelected ? "data-[state=checked]:bg-slate-400" : ""}
+                          />
+                        </TableHead>
+                        <TableHead className="w-24 font-semibold text-slate-600" data-testid="header-bill-status">Status</TableHead>
+                        <TableHead className="w-28 font-semibold text-slate-600" data-testid="header-bill-date">Date</TableHead>
+                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-reference">Number</TableHead>
                         <TableHead className="font-semibold text-slate-600" data-testid="header-bill-vendor">Vendor</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-payment-method">Payment Method</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-amount">Amount</TableHead>
-                        <TableHead className="font-semibold text-slate-600" data-testid="header-bill-status">Status</TableHead>
-                        <TableHead className="font-semibold text-slate-600 text-right" data-testid="header-bill-actions">Actions</TableHead>
+                        <TableHead className="font-semibold text-slate-600 text-right" data-testid="header-bill-amount">Amount</TableHead>
+                        <TableHead className="w-16 font-semibold text-slate-600 text-right" data-testid="header-bill-actions">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {bills.map((bill) => (
-                        <TableRow key={bill.id} className="hover:bg-slate-50/50" data-testid={`row-bill-${bill.id}`}>
-                          <TableCell className="font-medium text-slate-900" data-testid={`text-bill-reference-${bill.id}`}>
-                            {bill.reference}
-                          </TableCell>
-                          <TableCell className="text-slate-600" data-testid={`text-bill-date-${bill.id}`}>
-                            {format(new Date(bill.date), 'MMM dd, yyyy')}
-                          </TableCell>
-                          <TableCell className="font-medium text-slate-900" data-testid={`text-bill-vendor-${bill.id}`}>
-                            {(() => {
-                              const contact = contacts?.find(c => c.id === bill.contactId);
-                              const contactName = getContactName(bill.contactId);
-                              return formatContactName(contactName, contact?.currency, homeCurrency);
-                            })()}
-                          </TableCell>
-                          <TableCell className="text-slate-600" data-testid={`text-bill-payment-method-${bill.id}`}>
-                            {getPaymentMethodLabel(bill.paymentMethod)}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-900" data-testid={`text-bill-amount-${bill.id}`}>
-                            {formatCurrency(bill.amount, bill.currency, homeCurrency)}
+                        <TableRow
+                          key={bill.id}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/bill-view/${bill.id}`)}
+                          data-testid={`row-bill-${bill.id}`}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedBillIds.has(bill.id)}
+                              onCheckedChange={(checked) => handleSelectOneBill(bill.id, checked as boolean)}
+                              aria-label={`Select bill ${bill.reference}`}
+                            />
                           </TableCell>
                           <TableCell data-testid={`badge-bill-status-${bill.id}`}>
                             <Badge className={getStatusBadgeStyle(bill.status)}>
                               {bill.status.charAt(0).toUpperCase() + bill.status.slice(1)}
                             </Badge>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1 justify-end">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Link href={`/bills/${bill.id}`}>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0"
-                                        data-testid={`button-view-bill-${bill.id}`}
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </Link>
-                                  </TooltipTrigger>
-                                  <TooltipContent>View</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Link href={`/bills/${bill.id}/edit`}>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8 w-8 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                                        data-testid={`button-edit-bill-${bill.id}`}
-                                      >
-                                        <Edit2 className="h-4 w-4" />
-                                      </Button>
-                                    </Link>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Edit</TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                              <AlertDialog>
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
-                                          onClick={() => setTransactionToDelete(bill)}
-                                          data-testid={`button-delete-bill-${bill.id}`}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      This will permanently delete this bill and all associated records.
-                                      This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
-                                      Cancel
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={handleDelete}
-                                      className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
-                                      disabled={isDeleteLoading}
-                                    >
-                                      {isDeleteLoading ? 'Deleting...' : 'Delete'}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
+                          <TableCell className="text-sm text-slate-600" data-testid={`text-bill-date-${bill.id}`}>
+                            {format(new Date(bill.date), 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium text-slate-900" data-testid={`text-bill-reference-${bill.id}`}>
+                            {bill.reference || '—'}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium text-slate-900" data-testid={`text-bill-vendor-${bill.id}`}>
+                            {(() => {
+                              const contact = contacts?.find(c => c.id === bill.contactId);
+                              const contactName = getContactName(bill.contactId);
+                              return formatContactName(contactName, contact?.currency, homeCurrency);
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-semibold text-slate-900" data-testid={`text-bill-amount-${bill.id}`}>
+                            {formatCurrency(bill.amount, bill.currency, homeCurrency)}
+                          </TableCell>
+                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                  onClick={() => setTransactionToDelete(bill)}
+                                  data-testid={`button-delete-bill-${bill.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete this bill and all associated records.
+                                    This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setTransactionToDelete(null)}>
+                                    Cancel
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={handleDelete}
+                                    className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                                    disabled={isDeleteLoading}
+                                  >
+                                    {isDeleteLoading ? 'Deleting...' : 'Delete'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -840,6 +869,75 @@ export default function Expenses() {
             )}
           </div>
         </Card>
+
+        {/* Floating Bulk Actions Bar */}
+        {currentSelectionCount > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+            <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+              <span className="text-sm font-medium">
+                {currentSelectionCount} {activeTab === "expenses" ? "expense" : "bill"}{currentSelectionCount !== 1 ? 's' : ''} selected
+              </span>
+              <div className="h-5 w-px bg-slate-700" />
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-slate-800 h-8 px-3"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-slate-800 h-8 px-3"
+                  onClick={() => {
+                    console.log('Batch print:', activeTab === "expenses" ? Array.from(selectedExpenseIds) : Array.from(selectedBillIds));
+                  }}
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print
+                </Button>
+              </div>
+              <div className="h-5 w-px bg-slate-700" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8 p-0"
+                onClick={clearSelection}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Clear selection</span>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Delete Confirmation Dialog */}
+        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Delete {currentSelectionCount} {activeTab === "expenses" ? "expense" : "bill"}{currentSelectionCount !== 1 ? 's' : ''}?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete the selected {activeTab === "expenses" ? "expenses" : "bills"} and all associated records.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleBulkDelete}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                disabled={isBulkDeleteLoading}
+              >
+                {isBulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
