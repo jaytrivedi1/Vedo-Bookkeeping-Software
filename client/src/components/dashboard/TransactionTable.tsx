@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/pagination";
 import { Trash2, Printer, Mail, X } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Transaction, Contact } from "@shared/schema";
@@ -73,14 +73,36 @@ export default function TransactionTable({ transactions, loading = false, onDele
 
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
-  // Function to get contact name by ID
-  const getContactName = (contactId: number | null): string => {
-    if (!contactId) return 'No client';
-    if (!contacts) return `ID: ${contactId}`;
+  // Create a contact lookup Map for O(1) access instead of O(n) .find()
+  const contactMap = useMemo(() => {
+    if (!contacts) return new Map<number, Contact>();
+    return new Map(contacts.map(c => [c.id, c]));
+  }, [contacts]);
 
-    const contact = contacts.find(c => c.id === contactId);
+  // Function to get contact name by ID - uses Map for O(1) lookup
+  const getContactName = useCallback((contactId: number | null): string => {
+    if (!contactId) return 'No client';
+    if (!contactMap.size) return `ID: ${contactId}`;
+    const contact = contactMap.get(contactId);
     return contact ? contact.name : `ID: ${contactId}`;
-  };
+  }, [contactMap]);
+
+  // Pre-compute contact data for all transactions to avoid repeated lookups during render
+  const transactionContactData = useMemo(() => {
+    return new Map(transactions.map(t => {
+      const contact = contactMap.get(t.contactId || 0);
+      return [t.id, {
+        contact,
+        contactName: getContactName(t.contactId),
+        formattedContactName: formatContactName(
+          contact ? contact.name : (t.contactId ? `ID: ${t.contactId}` : 'No client'),
+          contact?.currency,
+          homeCurrency
+        ),
+        isVendorPayment: t.type === 'payment' && contact?.type === 'vendor',
+      }];
+    }));
+  }, [transactions, contactMap, getContactName, homeCurrency]);
 
   // Handle row click - navigate to view page
   const handleRowClick = (transaction: Transaction) => {
@@ -92,24 +114,26 @@ export default function TransactionTable({ transactions, loading = false, onDele
     navigate(`/${route}/${transaction.id}`);
   };
 
-  // Handle checkbox selection
-  const handleSelectAll = (checked: boolean) => {
+  // Handle checkbox selection - memoized to prevent unnecessary re-renders
+  const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       setSelectedIds(new Set(transactions.map(t => t.id)));
     } else {
       setSelectedIds(new Set());
     }
-  };
+  }, [transactions]);
 
-  const handleSelectOne = (id: number, checked: boolean) => {
-    const newSelected = new Set(selectedIds);
-    if (checked) {
-      newSelected.add(id);
-    } else {
-      newSelected.delete(id);
-    }
-    setSelectedIds(newSelected);
-  };
+  const handleSelectOne = useCallback((id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(id);
+      } else {
+        newSelected.delete(id);
+      }
+      return newSelected;
+    });
+  }, []);
 
   const isAllSelected = transactions.length > 0 && selectedIds.size === transactions.length;
   const isSomeSelected = selectedIds.size > 0 && selectedIds.size < transactions.length;
@@ -314,29 +338,23 @@ export default function TransactionTable({ transactions, loading = false, onDele
                     </TableCell>
                     <TableCell>
                       <div className="text-sm font-medium text-slate-900">
-                        {(() => {
-                          const contact = contacts?.find(c => c.id === transaction.contactId);
-                          const contactName = getContactName(transaction.contactId);
-                          return formatContactName(contactName, contact?.currency, homeCurrency);
-                        })()}
+                        {transactionContactData.get(transaction.id)?.formattedContactName || 'No client'}
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-sm font-semibold text-slate-900">
                       {(() => {
-                        const contact = contacts?.find(c => c.id === transaction.contactId);
                         const formattedAmount = formatCurrency(transaction.amount, transaction.currency, homeCurrency);
+                        const contactData = transactionContactData.get(transaction.id);
                         // Vendor payments are negative (money going out)
-                        if (transaction.type === 'payment' && contact?.type === 'vendor') {
+                        if (contactData?.isVendorPayment) {
                           return '-' + formattedAmount;
                         }
                         // Expenses and deposits are negative (money going out)
-                        else if (transaction.type === 'expense' || transaction.type === 'deposit') {
+                        if (transaction.type === 'expense' || transaction.type === 'deposit') {
                           return '-' + formattedAmount;
                         }
                         // Everything else is positive (bills, invoices, customer payments)
-                        else {
-                          return formattedAmount;
-                        }
+                        return formattedAmount;
                       })()}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
