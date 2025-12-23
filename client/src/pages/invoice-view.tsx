@@ -243,6 +243,10 @@ export default function InvoiceView() {
     enabled: !!invoiceId
   });
   
+  // Extract invoice data for dependent queries
+  const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
+  const lineItems: LineItem[] = invoiceData?.lineItems || [];
+
   // Fetch only the specific customer for this invoice (not ALL contacts)
   const { data: customer, isLoading: customerLoading } = useQuery<Contact>({
     queryKey: ['/api/contacts', invoice?.contactId],
@@ -284,11 +288,7 @@ export default function InvoiceView() {
     queryKey: ['/api/invoices', invoiceId, 'activities'],
     enabled: !!invoiceId
   });
-  
-  // Extract data once fetched
-  const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
-  const lineItems: LineItem[] = invoiceData?.lineItems || [];
-  
+
   // Get default company for email subject
   const { data: defaultCompany } = useQuery({
     queryKey: ['/api/companies/default'],
