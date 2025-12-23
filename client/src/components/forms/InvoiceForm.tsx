@@ -227,15 +227,18 @@ export default function InvoiceForm({
     enabled: isEditing && !!invoice?.id && !readOnly,
   });
 
-  // Fetch preferences for multi-currency settings (only needed when editing)
+  // Fetch preferences for multi-currency settings
+  // Note: We need this in readOnly mode too for correct currency display
   const { data: preferences } = useQuery<any>({
     queryKey: ['/api/preferences'],
-    enabled: !readOnly, // Skip in read-only - currency already set on invoice
   });
-  
-  // Get home currency from preferences
-  const homeCurrency = preferences?.homeCurrency || 'USD';
+
+  // Get home currency from preferences (default to CAD for this Canadian system)
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
+
+  // In readOnly mode, use the invoice's currency for display
+  const displayCurrency = readOnly ? (invoice?.currency || homeCurrency) : currency;
   
   // Initialize currency to homeCurrency when preferences load
   useEffect(() => {
@@ -1344,7 +1347,15 @@ export default function InvoiceForm({
                     {/* Payment Terms - Full Width */}
                     <ReadOnlyValue
                       label="Payment Terms"
-                      value={invoice?.paymentTerms || 'Due upon receipt'}
+                      value={(() => {
+                        const terms = invoice?.paymentTerms;
+                        if (!terms || terms === '0') return 'Due upon receipt';
+                        if (terms === '7') return 'Net 7';
+                        if (terms === '14') return 'Net 14';
+                        if (terms === '30') return 'Net 30';
+                        if (terms === '60') return 'Net 60';
+                        return terms; // For custom or other values
+                      })()}
                       className={cn(readOnly ? 'col-span-2' : 'hidden')}
                     />
                     {!readOnly && (
@@ -1369,12 +1380,12 @@ export default function InvoiceForm({
                       </div>
                     )}
 
-                    {/* Currency - if multi-currency enabled */}
-                    {isMultiCurrencyEnabled && (
+                    {/* Currency - always show in readOnly mode, otherwise only if multi-currency enabled */}
+                    {(readOnly || isMultiCurrencyEnabled) && (
                       <>
                         <ReadOnlyValue
                           label="Currency"
-                          value={invoice?.currency || currency}
+                          value={invoice?.currency || homeCurrency}
                           className={cn(readOnly ? 'col-span-2' : 'hidden')}
                         />
                         {!readOnly && (
@@ -1452,222 +1463,249 @@ export default function InvoiceForm({
 
               {/* Modern Line Items */}
               <div className="divide-y divide-slate-100">
-                {fields.map((field, index) => (
-                  <div key={field.id} className="p-4 hover:bg-slate-50/50 transition-colors group">
-                    <div className="flex items-start gap-4">
-                      {/* Line Number */}
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 mt-1">
-                        {index + 1}
-                      </div>
+                {fields.map((field, index) => {
+                  // Get current values for read-only display
+                  const lineItem = form.watch(`lineItems.${index}`);
+                  const productId = lineItem?.productId;
+                  const product = productId ? typedProducts.find(p => p.id === parseInt(productId)) : null;
+                  const taxId = lineItem?.salesTaxId;
+                  const tax = taxId ? salesTaxes?.find(t => t.id === taxId) : null;
 
-                      {/* Main Content - Reordered: Product/Service → Description → Qty → Rate → Amount → Tax */}
-                      <div className="flex-grow grid grid-cols-1 md:grid-cols-[minmax(140px,1.5fr)_minmax(180px,2fr)_70px_90px_100px_minmax(120px,1fr)] gap-3">
-                        {/* Product/Service */}
-                        <div>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.productId`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <SearchableSelect
-                                    items={productItems}
-                                    value={field.value ? field.value.toString() : ''}
-                                    onValueChange={(value) => {
-                                      if (!value) {
-                                        field.onChange(undefined);
-                                        form.setValue(`lineItems.${index}.description`, '');
-                                        form.setValue(`lineItems.${index}.unitPrice`, 0);
-                                        form.setValue(`lineItems.${index}.salesTaxId`, undefined);
-                                        updateLineItemAmount(index);
-                                      } else {
-                                        const productId = parseInt(value);
-                                        const product = typedProducts.find(p => p.id === productId);
-                                        if (product) {
-                                          field.onChange(value);
-                                          form.setValue(`lineItems.${index}.description`, product.name);
-                                          form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
+                  return (
+                    <div key={field.id} className="p-4 hover:bg-slate-50/50 transition-colors group">
+                      <div className="flex items-start gap-4">
+                        {/* Line Number */}
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 mt-1">
+                          {index + 1}
+                        </div>
 
-                                          if (product.salesTaxId) {
-                                            form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
+                        {/* Main Content - Reordered: Product/Service → Description → Qty → Rate → Amount → Tax */}
+                        <div className="flex-grow grid grid-cols-1 md:grid-cols-[minmax(140px,1.5fr)_minmax(180px,2fr)_70px_90px_100px_minmax(120px,1fr)] gap-3">
+                          {/* Product/Service */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {product?.name || lineItem?.description || '—'}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.productId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <SearchableSelect
+                                        items={productItems}
+                                        value={field.value ? field.value.toString() : ''}
+                                        onValueChange={(value) => {
+                                          if (!value) {
+                                            field.onChange(undefined);
+                                            form.setValue(`lineItems.${index}.description`, '');
+                                            form.setValue(`lineItems.${index}.unitPrice`, 0);
+                                            form.setValue(`lineItems.${index}.salesTaxId`, undefined);
+                                            updateLineItemAmount(index);
+                                          } else {
+                                            const productId = parseInt(value);
+                                            const product = typedProducts.find(p => p.id === productId);
+                                            if (product) {
+                                              field.onChange(value);
+                                              form.setValue(`lineItems.${index}.description`, product.name);
+                                              form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
+
+                                              if (product.salesTaxId) {
+                                                form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
+                                              }
+
+                                              updateLineItemAmount(index);
+                                            }
                                           }
+                                        }}
+                                        onAddNew={() => {
+                                          setCurrentLineItemIndex(index);
+                                          setShowAddProductDialog(true);
+                                        }}
+                                        addNewText="Add New Product/Service"
+                                        placeholder="Select or search..."
+                                        searchPlaceholder="Search products..."
+                                        emptyText={productsLoading ? "Loading..." : "No products found"}
+                                        disabled={productsLoading}
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
 
+                          {/* Description */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Description</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.description || '—'}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.description`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        placeholder="Item description..."
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {/* Quantity */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center justify-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.quantity || 0}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.quantity`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 text-center rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        {...field}
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value));
                                           updateLineItemAmount(index);
-                                        }
-                                      }
-                                    }}
-                                    onAddNew={() => {
-                                      setCurrentLineItemIndex(index);
-                                      setShowAddProductDialog(true);
-                                    }}
-                                    addNewText="Add New Product/Service"
-                                    placeholder="Select or search..."
-                                    searchPlaceholder="Search products..."
-                                    emptyText={productsLoading ? "Loading..." : "No products found"}
-                                    disabled={productsLoading}
-                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             )}
-                          />
-                        </div>
+                          </div>
 
-                        {/* Description - Editable text field */}
-                        <div>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Description</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.description`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                    placeholder="Item description..."
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
+                          {/* Rate */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Rate</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center justify-end px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.unitPrice || 0}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.unitPrice`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 text-right rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        {...field}
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value));
+                                          updateLineItemAmount(index);
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             )}
-                          />
-                        </div>
+                          </div>
 
-                        {/* Quantity */}
-                        <div>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.quantity`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    className="bg-white border-slate-200 h-11 text-center rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(parseFloat(e.target.value));
-                                      updateLineItemAmount(index);
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        {/* Rate */}
-                        <div>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Rate</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.unitPrice`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    className="bg-white border-slate-200 h-11 text-right rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    {...field}
-                                    onChange={(e) => {
-                                      field.onChange(parseFloat(e.target.value));
-                                      updateLineItemAmount(index);
-                                    }}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        {/* Amount - Display Only (moved before Tax) */}
-                        <div>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.amount`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
-                                    ${formatCurrency(field.value)}
-                                  </div>
-                                </FormControl>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        {/* Tax (moved to end) - disabled when "No Tax" mode */}
-                        <div className={taxSetting === 'no-tax' ? 'opacity-50' : ''}>
-                          <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
-                          {taxSetting === 'no-tax' ? (
-                            <div className="h-11 flex items-center justify-center px-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm">
-                              N/A
+                          {/* Amount - Display Only (moved before Tax) */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
+                            <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
+                              ${formatCurrency(lineItem?.amount || 0)}
                             </div>
-                          ) : (
-                            <FormField
-                              control={form.control}
-                              name={`lineItems.${index}.salesTaxId`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormControl>
-                                    <SearchableSelect
-                                      items={taxItems}
-                                      value={field.value?.toString() || "0"}
-                                      onValueChange={(value) => {
-                                        const numValue = parseInt(value);
-                                        if (numValue === 0) {
-                                          field.onChange(undefined);
-                                        } else {
-                                          field.onChange(numValue);
-                                        }
-                                        updateLineItemAmount(index);
-                                        calculateTotals();
-                                      }}
-                                      placeholder="Select Tax"
-                                      searchPlaceholder="Search taxes..."
-                                      emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                                      className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                    />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          )}
-                        </div>
-                      </div>
+                          </div>
 
-                      {/* Delete Button - only in edit mode */}
-                      {!readOnly && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
-                          onClick={() => {
-                            if (fields.length > 1) {
-                              remove(index);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                          {/* Tax (moved to end) */}
+                          <div className={taxSetting === 'no-tax' && !readOnly ? 'opacity-50' : ''}>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {tax ? `${tax.name} (${tax.rate}%)` : 'No tax'}
+                              </div>
+                            ) : taxSetting === 'no-tax' ? (
+                              <div className="h-11 flex items-center justify-center px-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm">
+                                N/A
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.salesTaxId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <SearchableSelect
+                                        items={taxItems}
+                                        value={field.value?.toString() || "0"}
+                                        onValueChange={(value) => {
+                                          const numValue = parseInt(value);
+                                          if (numValue === 0) {
+                                            field.onChange(undefined);
+                                          } else {
+                                            field.onChange(numValue);
+                                          }
+                                          updateLineItemAmount(index);
+                                          calculateTotals();
+                                        }}
+                                        placeholder="Select Tax"
+                                        searchPlaceholder="Search taxes..."
+                                        emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Delete Button - only in edit mode */}
+                        {!readOnly && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
+                            onClick={() => {
+                              if (fields.length > 1) {
+                                remove(index);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Add Line Button - only in edit mode */}
@@ -1797,10 +1835,10 @@ export default function InvoiceForm({
                     {/* Balance Due - Highlighted */}
                     <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 -mx-4 px-4 py-4 rounded-xl">
                       <span className="text-base font-bold text-blue-900">Balance Due</span>
-                      {currency !== homeCurrency ? (
+                      {displayCurrency !== homeCurrency ? (
                         <div className="text-right">
                           <div className="text-xl font-bold text-blue-700">
-                            {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
+                            {CURRENCIES.find(c => c.code === displayCurrency)?.symbol || displayCurrency}{formatCurrency(balanceDue)}
                           </div>
                           <div className="text-xs text-blue-500">
                             ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
@@ -1876,9 +1914,9 @@ export default function InvoiceForm({
               <div className="text-center sm:text-right">
                 <div className="text-xs text-slate-500 uppercase tracking-wide">Balance Due</div>
                 <div className="text-xl font-bold text-slate-900">
-                  {currency !== homeCurrency ? (
+                  {displayCurrency !== homeCurrency ? (
                     <>
-                      {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}
+                      {CURRENCIES.find(c => c.code === displayCurrency)?.symbol || displayCurrency}{formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}
                     </>
                   ) : (
                     <>${formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}</>
