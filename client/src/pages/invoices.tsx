@@ -166,6 +166,31 @@ export default function Invoices() {
 
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
+  // Helper function to check if an invoice is overdue based on due date (not status field)
+  const isOverdue = (invoice: Transaction): boolean => {
+    // Must have a due date to be overdue
+    if (!invoice.dueDate) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dueDate = new Date(invoice.dueDate);
+    dueDate.setHours(0, 0, 0, 0);
+
+    // Not overdue if due date is today or in the future
+    if (dueDate >= today) return false;
+
+    // Must have an unpaid balance
+    const balance = invoice.balance ?? invoice.amount;
+    if (balance <= 0) return false;
+
+    // Exclude paid, completed, cancelled, and quotation statuses
+    const nonOverdueStatuses = ['paid', 'completed', 'cancelled', 'quotation'];
+    if (nonOverdueStatuses.includes(invoice.status)) return false;
+
+    return true;
+  };
+
   // Filter invoices (excluding quotations)
   const invoices = transactions
     ? transactions
@@ -213,6 +238,8 @@ export default function Invoices() {
   }, [allInvoicesUnfiltered, filterByPeriod]);
 
   // Get total amounts (memoized)
+  // Note: Overdue is calculated from ALL invoices (not period-filtered) because an invoice
+  // created months ago can become overdue today - we always want to show the true overdue amount
   const { totalInvoiced, totalPaid, totalPending, overdueAmount, paidCount, openCount, overdueCount } = useMemo(() => {
     const totalInvoiced = allInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
 
@@ -242,8 +269,9 @@ export default function Invoices() {
       return sum;
     }, 0);
 
-    // Calculate overdue amount
-    const overdueInvoices = allInvoices.filter(inv => inv.status === "overdue");
+    // Calculate overdue amount using real-time due date check (from ALL invoices, not period-filtered)
+    // This ensures we always show the true overdue amount regardless of period selection
+    const overdueInvoices = allInvoicesUnfiltered.filter(isOverdue);
     const overdueAmount = overdueInvoices.reduce((sum, inv) => {
       return sum + (inv.balance !== null && inv.balance !== undefined ? inv.balance : inv.amount);
     }, 0);
@@ -254,7 +282,7 @@ export default function Invoices() {
     const overdueCount = overdueInvoices.length;
 
     return { totalInvoiced, totalPaid, totalPending, overdueAmount, paidCount, openCount, overdueCount };
-  }, [allInvoices]);
+  }, [allInvoices, allInvoicesUnfiltered]);
 
   // Quotation metrics
   const totalQuotations = quotations.reduce((sum, quotation) => sum + quotation.amount, 0);
