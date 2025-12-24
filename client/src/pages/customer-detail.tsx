@@ -1,14 +1,15 @@
-import { useRoute, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
+import { useRoute } from "wouter";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 import CustomerSidebar from "@/components/customers/CustomerSidebar";
 import CustomerDetailView from "@/components/customers/CustomerDetailView";
+import CustomerDialog from "@/components/customers/CustomerDialog";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function CustomerDetail() {
   const [, params] = useRoute("/customers/:id");
-  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const customerId = params?.id ? parseInt(params.id, 10) : null;
 
   // Fetch preferences for home currency
@@ -18,8 +19,9 @@ export default function CustomerDetail() {
 
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
-  const handleNewCustomer = () => {
-    navigate('/customers?new=true');
+  const handleCustomerCreated = () => {
+    // Invalidate contacts query to refresh the sidebar
+    queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
   };
 
   return (
@@ -35,14 +37,11 @@ export default function CustomerDetail() {
               </Button>
             </Link>
           </div>
-          <Button
-            onClick={handleNewCustomer}
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            New Customer
-          </Button>
+          <CustomerDialog
+            buttonLabel="New Customer"
+            buttonVariant="default"
+            onSuccess={handleCustomerCreated}
+          />
         </div>
       </div>
 
