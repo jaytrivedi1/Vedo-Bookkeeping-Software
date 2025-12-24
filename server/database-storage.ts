@@ -1997,8 +1997,9 @@ export class DatabaseStorage implements IStorage {
         invoiceStats.deposited.amount += Math.abs(balance);
       } else {
         const isOverdue = invoice.dueDate && new Date(invoice.dueDate) < today;
-        
-        if (isOverdue && invoice.status === 'open' || invoice.status === 'overdue') {
+
+        // Fixed operator precedence: invoice is overdue if due date is past AND status is open/partial/overdue
+        if (isOverdue && (invoice.status === 'open' || invoice.status === 'partial' || invoice.status === 'overdue')) {
           invoiceStats.overdue.count++;
           invoiceStats.overdue.amount += balance;
         }

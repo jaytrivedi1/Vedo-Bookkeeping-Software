@@ -198,12 +198,24 @@ export function useTransactionFilters({
         switch (filters.selectedStatus) {
           case 'open':
             return t.status === 'open' || t.status === 'draft';
-          case 'overdue':
-            return t.status === 'overdue';
+          case 'overdue': {
+            // Check if transaction is actually overdue based on due date
+            if (!t.dueDate) return false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dueDate = new Date(t.dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate >= today) return false;
+            // Must have unpaid balance
+            const balance = t.balance ?? t.amount;
+            if (balance <= 0) return false;
+            // Exclude paid, completed, cancelled, quotation statuses
+            const nonOverdueStatuses = ['paid', 'completed', 'cancelled', 'quotation'];
+            if (nonOverdueStatuses.includes(t.status)) return false;
+            return true;
+          }
           case 'paid':
             return t.status === 'paid' || t.status === 'completed';
-          case 'voided':
-            return t.status === 'voided';
           case 'unapplied_credit':
             return t.status === 'unapplied_credit';
           default:
