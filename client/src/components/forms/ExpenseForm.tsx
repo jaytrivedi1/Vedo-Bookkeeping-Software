@@ -634,206 +634,217 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FormField
-            control={form.control}
-            name="contactId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payee</FormLabel>
-                <div className="flex gap-2 items-center">
-                  <FormControl>
+        {/* Expense Details Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Expense Details</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <FormField
+                control={form.control}
+                name="contactId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payee</FormLabel>
+                    <div className="flex gap-2 items-center">
+                      <FormControl>
+                        <SearchableSelect
+                          items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
+                          value={field.value?.toString() || ""}
+                          onValueChange={(value) => {
+                            if (value === "") {
+                              field.onChange(undefined);
+                            } else {
+                              field.onChange(parseInt(value));
+                            }
+                          }}
+                          onAddNew={() => setShowAddVendorDialog(true)}
+                          addNewText="Add New Vendor"
+                          placeholder="Select a payee"
+                          emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
+                          searchPlaceholder="Search contacts..."
+                          disabled={contactsLoading}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="select-payee"
+                        />
+                      </FormControl>
+                      {field.value !== undefined && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => field.onChange(undefined)}
+                          className="text-slate-400 hover:text-slate-600"
+                          data-testid="button-clear-payee"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="paymentAccountId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Account</FormLabel>
                     <SearchableSelect
-                      items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
-                      value={field.value?.toString() || ""}
-                      onValueChange={(value) => {
-                        if (value === "") {
-                          field.onChange(undefined);
-                        } else {
-                          field.onChange(parseInt(value));
-                        }
+                      items={paymentAccountItems}
+                      value={field.value?.toString()}
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      placeholder="Select payment account"
+                      searchPlaceholder="Search accounts..."
+                      emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
+                      disabled={accountsLoading}
+                      onAddNew={() => {
+                        setAccountDialogContext({type: 'payment'});
+                        setShowAddAccountDialog(true);
                       }}
-                      onAddNew={() => setShowAddVendorDialog(true)}
-                      addNewText="Add New Vendor"
-                      placeholder="Select a payee"
-                      emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
-                      searchPlaceholder="Search contacts..."
-                      disabled={contactsLoading}
-                      data-testid="select-payee"
+                      addNewText="Add New Account"
+                      className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                      data-testid="select-payment-account"
                     />
-                  </FormControl>
-                  {field.value !== undefined && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => field.onChange(undefined)}
-                      data-testid="button-clear-payee"
-                    >
-                      <XIcon className="h-4 w-4" />
-                    </Button>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="paymentDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Date</FormLabel>
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-payment-date"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                            {field.value ? format(field.value, "MMM dd, yyyy") : <span>Pick a date</span>}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <FormField
+                control={form.control}
+                name="paymentMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Method</FormLabel>
+                    <SearchableSelect
+                      items={paymentMethodItems}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      placeholder="Select payment method"
+                      searchPlaceholder="Search methods..."
+                      emptyText="No payment methods found"
+                      className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                      data-testid="select-payment-method"
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="reference"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Ref No.</FormLabel>
+                    <FormControl>
+                      <Input
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        {...field}
+                        data-testid="input-reference"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {isMultiCurrencyEnabled && (
+              <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Currency</FormLabel>
+                    <FormItem>
+                      <FormControl>
+                        <Select
+                          value={currency}
+                          onValueChange={(value) => setCurrency(value)}
+                          disabled={isEditing || isForeignCurrency}
+                        >
+                          <SelectTrigger className="bg-white border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                            <SelectValue placeholder="Select currency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CURRENCIES.map(curr => (
+                              <SelectItem key={curr.code} value={curr.code}>
+                                {curr.code} - {curr.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                    </FormItem>
+                  </div>
+
+                  {currency !== homeCurrency && (
+                    <ExchangeRateInput
+                      fromCurrency={currency}
+                      toCurrency={homeCurrency}
+                      value={exchangeRate}
+                      onChange={handleExchangeRateChange}
+                      isLoading={exchangeRateLoading}
+                      date={expenseDate}
+                    />
                   )}
                 </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="paymentAccountId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Account</FormLabel>
-                <SearchableSelect
-                  items={paymentAccountItems}
-                  value={field.value?.toString()}
-                  onValueChange={(value) => field.onChange(parseInt(value))}
-                  placeholder="Select payment account"
-                  searchPlaceholder="Search accounts..."
-                  emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
-                  disabled={accountsLoading}
-                  onAddNew={() => {
-                    setAccountDialogContext({type: 'payment'});
-                    setShowAddAccountDialog(true);
-                  }}
-                  addNewText="Add New Account"
-                  data-testid="select-payment-account"
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="paymentDate"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Payment Date</FormLabel>
-                <Popover modal={true}>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={cn(
-                          "w-full pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                        data-testid="button-payment-date"
-                      >
-                        {field.value ? (
-                          format(field.value, "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="paymentMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Method</FormLabel>
-                <SearchableSelect
-                  items={paymentMethodItems}
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  placeholder="Select payment method"
-                  searchPlaceholder="Search methods..."
-                  emptyText="No payment methods found"
-                  data-testid="select-payment-method"
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="reference"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ref No.</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-reference" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        {isMultiCurrencyEnabled && (
-          <div className="border rounded-lg p-4 bg-gray-50">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <FormLabel className="text-sm font-medium">Currency</FormLabel>
-                <FormItem>
-                  <FormControl>
-                    <Select 
-                      value={currency} 
-                      onValueChange={(value) => setCurrency(value)}
-                      disabled={isEditing || isForeignCurrency}
-                    >
-                      <SelectTrigger className="bg-white border-gray-300 h-10">
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CURRENCIES.map(curr => (
-                          <SelectItem key={curr.code} value={curr.code}>
-                            {curr.code} - {curr.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                </FormItem>
               </div>
-
-              {currency !== homeCurrency && (
-                <ExchangeRateInput
-                  fromCurrency={currency}
-                  toCurrency={homeCurrency}
-                  value={exchangeRate}
-                  onChange={handleExchangeRateChange}
-                  isLoading={exchangeRateLoading}
-                  date={expenseDate}
-                />
-              )}
-            </div>
+            )}
           </div>
-        )}
+        </div>
 
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Line Items</h3>
-          <div className="w-full flex justify-end mb-2">
-            <div className="flex items-center">
-              <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
+        {/* Line Items Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">Amounts are</span>
               <Select
                 value={isExclusiveOfTax ? "exclusive" : "inclusive"}
                 onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
               >
-                <SelectTrigger className="w-[180px] h-9">
+                <SelectTrigger className="w-[160px] h-9 bg-slate-50 border-slate-200 rounded-lg text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -843,160 +854,173 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               </Select>
             </div>
           </div>
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted/50 grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 font-medium text-sm">
-              <div>Account</div>
-              <div>Description</div>
-              <div>Amount</div>
-              <div>Sales Tax</div>
-              <div></div>
-            </div>
-            
-            {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 border-t items-start">
-                <div>
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.accountId`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <SearchableSelect
-                          items={allAccountItems}
-                          value={field.value?.toString()}
-                          onValueChange={(value) => field.onChange(parseInt(value))}
-                          placeholder="Select account"
-                          searchPlaceholder="Search accounts..."
-                          emptyText={accountsLoading ? "Loading..." : "No accounts available"}
-                          disabled={accountsLoading}
-                          onAddNew={() => {
-                            setAccountDialogContext({type: 'lineItem', index});
-                            setShowAddAccountDialog(true);
-                          }}
-                          addNewText="Add New Account"
-                          data-testid={`select-account-${index}`}
-                        />
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div>
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.description`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input placeholder="Description" {...field} data-testid={`input-description-${index}`} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div>
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.amount`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            placeholder="0.00"
-                            className="text-right"
-                            {...field} 
-                            onChange={(e) => {
-                              field.onChange(parseFloat(e.target.value) || 0);
-                              updateLineItemAmount(index);
-                            }}
-                            data-testid={`input-amount-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div>
-                  <FormField
-                    control={form.control}
-                    name={`lineItems.${index}.salesTaxId`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <SearchableSelect
-                            items={taxItems}
-                            value={field.value?.toString() || "0"}
-                            onValueChange={(value) => {
-                              const numValue = parseInt(value);
-                              if (numValue === 0) {
-                                field.onChange(undefined);
-                              } else {
-                                field.onChange(numValue);
-                              }
-                              updateLineItemAmount(index);
-                            }}
-                            placeholder="None"
-                            searchPlaceholder="Search taxes..."
-                            emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                            data-testid={`select-tax-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-end">
-                  {fields.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => remove(index)}
-                      data-testid={`button-remove-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => append({ accountId: undefined, description: '', amount: 0, salesTaxId: undefined })}
-            data-testid="button-add-line-item"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Line Item
-          </Button>
-        </div>
 
-        <div className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Totals</h3>
+          <div className="overflow-x-auto">
+            <div className="min-w-[700px]">
+              <div className="bg-slate-50 grid grid-cols-[25%_35%_20%_20%_auto] gap-2 px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                <div>Account</div>
+                <div>Description</div>
+                <div>Amount</div>
+                <div>Sales Tax</div>
+                <div></div>
+              </div>
+
+              {fields.map((field, index) => (
+                <div key={field.id} className="grid grid-cols-[25%_35%_20%_20%_auto] gap-2 px-6 py-3 border-t border-slate-100 items-start">
+                  <div>
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.accountId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <SearchableSelect
+                            items={allAccountItems}
+                            value={field.value?.toString()}
+                            onValueChange={(value) => field.onChange(parseInt(value))}
+                            placeholder="Select account"
+                            searchPlaceholder="Search accounts..."
+                            emptyText={accountsLoading ? "Loading..." : "No accounts available"}
+                            disabled={accountsLoading}
+                            onAddNew={() => {
+                              setAccountDialogContext({type: 'lineItem', index});
+                              setShowAddAccountDialog(true);
+                            }}
+                            addNewText="Add New Account"
+                            className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                            data-testid={`select-account-${index}`}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Description"
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              {...field}
+                              data-testid={`input-description-${index}`}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.amount`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="bg-white border-slate-200 h-10 text-right focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(parseFloat(e.target.value) || 0);
+                                updateLineItemAmount(index);
+                              }}
+                              data-testid={`input-amount-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div>
+                    <FormField
+                      control={form.control}
+                      name={`lineItems.${index}.salesTaxId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <SearchableSelect
+                              items={taxItems}
+                              value={field.value?.toString() || "0"}
+                              onValueChange={(value) => {
+                                const numValue = parseInt(value);
+                                if (numValue === 0) {
+                                  field.onChange(undefined);
+                                } else {
+                                  field.onChange(numValue);
+                                }
+                                updateLineItemAmount(index);
+                              }}
+                              placeholder="None"
+                              searchPlaceholder="Search taxes..."
+                              emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`select-tax-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end">
+                    {fields.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => remove(index)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                        data-testid={`button-remove-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="px-6 py-3 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+              onClick={() => append({ accountId: undefined, description: '', amount: 0, salesTaxId: undefined })}
+              data-testid="button-add-line-item"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Line Item
+            </Button>
+          </div>
+
+          {/* Totals */}
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50">
+            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Totals</h3>
           <div className="space-y-3 max-w-md ml-auto">
-            <div className="flex justify-between items-center text-gray-700">
+            <div className="flex justify-between items-center text-slate-600">
               <span className="text-sm font-medium">Subtotal</span>
               <span className="font-medium text-right">${formatCurrency(subTotal)}</span>
             </div>
-            
+
             {/* Tax Section - show EITHER main input OR components */}
             {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
               // COMPOSITE TAX: Show only editable components (no total line)
               <div className="space-y-1">
                 {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                  <div key={taxComponent.id} className="flex justify-between items-center text-gray-700">
+                  <div key={taxComponent.id} className="flex justify-between items-center text-slate-600">
                     <span className="text-sm">
                       {taxComponent.name} ({taxComponent.rate}%)
                     </span>
@@ -1013,7 +1037,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                             handleComponentChange(taxComponent.id, value);
                           }
                         }}
-                        className="w-24 h-8 text-right px-2 font-medium border-gray-300"
+                        className="w-24 h-8 text-right px-2 font-medium bg-white border-slate-200 rounded-lg"
                       />
                     </div>
                   </div>
@@ -1021,7 +1045,7 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
               </div>
             ) : (
               // SIMPLE TAX: Show only main tax input (no components)
-              <div className="flex justify-between items-center text-gray-700">
+              <div className="flex justify-between items-center text-slate-600">
                 <span className="text-sm">
                   {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
                 </span>
@@ -1056,102 +1080,116 @@ export default function ExpenseForm({ expense, lineItems, onSuccess, onCancel }:
                         calculateTotals(roundedValue);
                       }
                     }}
-                    className="w-24 h-8 text-right px-2 font-medium border-gray-300"
+                    className="w-24 h-8 text-right px-2 font-medium bg-white border-slate-200 rounded-lg"
                   />
                 </div>
               </div>
             )}
-            
-            <div className="flex justify-between border-t border-gray-300 pt-3">
-              <span className="text-sm font-semibold text-gray-900">Total</span>
-              <span className="font-semibold text-gray-900 text-right">${formatCurrency(totalAmount)}</span>
+
+            <div className="flex justify-between border-t border-slate-200 pt-3">
+              <span className="text-sm font-semibold text-slate-900">Total</span>
+              <span className="font-semibold text-slate-900 text-right">${formatCurrency(totalAmount)}</span>
             </div>
+          </div>
           </div>
         </div>
 
-        <FormField
-          control={form.control}
-          name="memo"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Memo</FormLabel>
-              <FormControl>
-                <Textarea 
-                  placeholder="Add notes or memo..." 
-                  className="min-h-[80px]"
-                  {...field} 
-                  data-testid="textarea-memo"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Memo Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <FormField
+              control={form.control}
+              name="memo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Add notes or memo..."
+                      className="resize-none bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl min-h-[80px]"
+                      {...field}
+                      data-testid="textarea-memo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
 
-        <div className="border rounded-lg p-4">
-          <FormLabel className="text-sm font-medium mb-3 block">Attachments</FormLabel>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input
-                id="file-upload"
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-file"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById('file-upload')?.click()}
-                data-testid="button-upload"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Files
-              </Button>
+        {/* Attachments Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3 block">Attachments</FormLabel>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  id="file-upload"
+                  type="file"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                  data-testid="input-file"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                  className="bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                  data-testid="button-upload"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Files
+                </Button>
+                {selectedFiles.length > 0 && (
+                  <span className="text-sm text-slate-500">
+                    {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+                  </span>
+                )}
+              </div>
+
               {selectedFiles.length > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
-                </span>
+                <div className="space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-sm truncate flex-1 text-slate-700" data-testid={`file-name-${index}`}>
+                        {file.name}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveFile(index)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                        data-testid={`button-remove-file-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-            
-            {selectedFiles.length > 0 && (
-              <div className="space-y-2">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                    <span className="text-sm truncate flex-1" data-testid={`file-name-${index}`}>
-                      {file.name}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveFile(index)}
-                      data-testid={`button-remove-file-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
-        <div className="flex justify-between pt-4 border-t">
-          <Button 
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3 pt-4">
+          <Button
             type="button"
             variant="outline"
             onClick={onCancel}
+            className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl px-6"
             data-testid="button-cancel"
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             type="submit"
             disabled={saveExpense.isPending}
+            className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
             data-testid="button-save"
           >
             {saveExpense.isPending ? 'Saving...' : isEditing ? 'Update Expense' : 'Save Expense'}

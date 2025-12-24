@@ -400,180 +400,196 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Header Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Customer */}
-          <FormField
-            control={form.control}
-            name="contactId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Customer (Optional)</FormLabel>
-                <FormControl>
-                  <SearchableSelect
-                    items={customerItems}
-                    value={field.value?.toString() || ''}
-                    onValueChange={(value) => {
-                      field.onChange(value ? Number(value) : undefined);
-                    }}
-                    onAddNew={() => setShowAddCustomerDialog(true)}
-                    addNewText="Add New Customer"
-                    placeholder="Select customer (optional)"
-                    searchPlaceholder="Search customers..."
-                    emptyText="No customers found."
-                    data-testid="select-customer"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Receipt Number */}
-          <FormField
-            control={form.control}
-            name="reference"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Receipt Number *</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-receipt-number" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Date */}
-          <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Date *</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Receipt Details</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Customer */}
+              <FormField
+                control={form.control}
+                name="contactId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Customer (Optional)</FormLabel>
                     <FormControl>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                        data-testid="button-date"
-                      >
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
+                      <SearchableSelect
+                        items={customerItems}
+                        value={field.value?.toString() || ''}
+                        onValueChange={(value) => {
+                          field.onChange(value ? Number(value) : undefined);
+                        }}
+                        onAddNew={() => setShowAddCustomerDialog(true)}
+                        addNewText="Add New Customer"
+                        placeholder="Select customer (optional)"
+                        searchPlaceholder="Search customers..."
+                        emptyText="No customers found."
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        data-testid="select-customer"
+                      />
                     </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Payment Method */}
-          <FormField
-            control={form.control}
-            name="paymentMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Method *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger data-testid="select-payment-method">
-                      <SelectValue placeholder="Select method" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="credit_card">Credit Card</SelectItem>
-                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Deposit To */}
-          <FormField
-            control={form.control}
-            name="depositAccountId"
-            render={({ field }) => (
-              <FormItem className="md:col-span-2">
-                <FormLabel>Deposit To *</FormLabel>
-                <FormControl>
-                  <SearchableSelect
-                    items={depositAccountItems}
-                    value={field.value?.toString() || ''}
-                    onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
-                    placeholder="Select account"
-                    searchPlaceholder="Search accounts..."
-                    emptyText="No accounts found."
-                    data-testid="select-deposit-account"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Currency Selector - only show if multi-currency is enabled */}
-          {isMultiCurrencyEnabled && (
-            <FormItem className="md:col-span-1">
-              <FormLabel>Currency *</FormLabel>
-              <FormControl>
-                <SearchableSelect
-                  items={currencyItems}
-                  value={currency}
-                  onValueChange={setCurrency}
-                  placeholder="Select currency"
-                  searchPlaceholder="Search currencies..."
-                  emptyText="No currencies found."
-                  disabled={!!watchContactId}
-                  data-testid="select-currency"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-
-          {/* Exchange Rate Input - only show if currency is different from home currency */}
-          {isMultiCurrencyEnabled && currency !== homeCurrency && (
-            <div className="md:col-span-1">
-              <ExchangeRateInput
-                fromCurrency={currency}
-                toCurrency={homeCurrency}
-                value={exchangeRate}
-                onChange={handleExchangeRateChange}
-                isLoading={exchangeRateLoading}
-                date={receiptDate}
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
+
+              {/* Receipt Number */}
+              <FormField
+                control={form.control}
+                name="reference"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Receipt Number *</FormLabel>
+                    <FormControl>
+                      <Input
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        {...field}
+                        data-testid="input-receipt-number"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Date */}
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date *</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-date"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                            {field.value ? format(field.value, "MMM dd, yyyy") : <span>Pick a date</span>}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Payment Method */}
+              <FormField
+                control={form.control}
+                name="paymentMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Method *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="select-payment-method"
+                        >
+                          <SelectValue placeholder="Select method" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="cash">Cash</SelectItem>
+                        <SelectItem value="check">Check</SelectItem>
+                        <SelectItem value="credit_card">Credit Card</SelectItem>
+                        <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Deposit To */}
+              <FormField
+                control={form.control}
+                name="depositAccountId"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Deposit To *</FormLabel>
+                    <FormControl>
+                      <SearchableSelect
+                        items={depositAccountItems}
+                        value={field.value?.toString() || ''}
+                        onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
+                        placeholder="Select account"
+                        searchPlaceholder="Search accounts..."
+                        emptyText="No accounts found."
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        data-testid="select-deposit-account"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Currency Selector - only show if multi-currency is enabled */}
+              {isMultiCurrencyEnabled && (
+                <FormItem className="md:col-span-1">
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Currency *</FormLabel>
+                  <FormControl>
+                    <SearchableSelect
+                      items={currencyItems}
+                      value={currency}
+                      onValueChange={setCurrency}
+                      placeholder="Select currency"
+                      searchPlaceholder="Search currencies..."
+                      emptyText="No currencies found."
+                      disabled={!!watchContactId}
+                      className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                      data-testid="select-currency"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+
+              {/* Exchange Rate Input - only show if currency is different from home currency */}
+              {isMultiCurrencyEnabled && currency !== homeCurrency && (
+                <div className="md:col-span-1">
+                  <ExchangeRateInput
+                    fromCurrency={currency}
+                    toCurrency={homeCurrency}
+                    value={exchangeRate}
+                    onChange={handleExchangeRateChange}
+                    isLoading={exchangeRateLoading}
+                    date={receiptDate}
+                  />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         {/* Line Items */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Line Items</h3>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+            <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined })}
+              className="bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
               data-testid="button-add-line-item"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -581,12 +597,12 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
             </Button>
           </div>
 
-          <div className="space-y-3">
+          <div className="p-6 space-y-3">
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-12 gap-3 items-start p-4 border rounded-lg">
+              <div key={field.id} className="grid grid-cols-12 gap-3 items-start p-4 bg-slate-50 border border-slate-200 rounded-xl">
                 {/* Product/Service */}
                 <div className="col-span-12 md:col-span-3">
-                  <label className="text-sm font-medium">Product/Service</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Product/Service</label>
                   <SearchableSelect
                     items={productItems}
                     value={form.watch(`lineItems.${index}.productId`) || ''}
@@ -599,47 +615,51 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                     placeholder="Select product"
                     searchPlaceholder="Search products..."
                     emptyText="No products found"
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                   />
                 </div>
 
                 {/* Description */}
                 <div className="col-span-12 md:col-span-3">
-                  <label className="text-sm font-medium">Description *</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Description *</label>
                   <Input
                     {...form.register(`lineItems.${index}.description`)}
                     placeholder="Item description"
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                   />
                 </div>
 
                 {/* Quantity */}
                 <div className="col-span-3 md:col-span-1">
-                  <label className="text-sm font-medium">Qty *</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Qty *</label>
                   <Input
                     type="number"
                     step="0.01"
-                    {...form.register(`lineItems.${index}.quantity`, { 
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                    {...form.register(`lineItems.${index}.quantity`, {
                       valueAsNumber: true,
-                      onChange: recalculateTotals 
+                      onChange: recalculateTotals
                     })}
                   />
                 </div>
 
                 {/* Unit Price */}
                 <div className="col-span-3 md:col-span-2">
-                  <label className="text-sm font-medium">Price *</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Price *</label>
                   <Input
                     type="number"
                     step="0.01"
-                    {...form.register(`lineItems.${index}.unitPrice`, { 
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                    {...form.register(`lineItems.${index}.unitPrice`, {
                       valueAsNumber: true,
-                      onChange: recalculateTotals 
+                      onChange: recalculateTotals
                     })}
                   />
                 </div>
 
                 {/* Tax */}
                 <div className="col-span-3 md:col-span-2">
-                  <label className="text-sm font-medium">Tax</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Tax</label>
                   <Select
                     value={form.watch(`lineItems.${index}.salesTaxId`)?.toString() || ''}
                     onValueChange={(value) => {
@@ -647,7 +667,7 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
                       recalculateTotals();
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg">
                       <SelectValue placeholder="Select Tax" />
                     </SelectTrigger>
                     <SelectContent>
@@ -662,23 +682,23 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
 
                 {/* Amount */}
                 <div className="col-span-2 md:col-span-1">
-                  <label className="text-sm font-medium">Amount</label>
+                  <label className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Amount</label>
                   <Input
                     value={formatCurrency(form.watch(`lineItems.${index}.amount`) || 0)}
                     disabled
-                    className="bg-gray-50"
+                    className="bg-slate-100 border-slate-200 h-10 rounded-lg text-slate-600"
                   />
                 </div>
 
                 {/* Delete Button */}
                 {fields.length > 1 && (
-                  <div className="col-span-1 flex items-end">
+                  <div className="col-span-1 flex items-end pb-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => remove(index)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -687,60 +707,68 @@ export default function SalesReceiptForm({ onSuccess, onCancel }: SalesReceiptFo
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Totals */}
-        <div className="flex justify-end">
-          <div className="w-full md:w-1/3 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal:</span>
-              <span>{formatCurrency(subTotal)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Tax:</span>
-              <span>{formatCurrency(taxAmount)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-bold border-t pt-2">
-              <span>Total:</span>
-              <span>{formatCurrency(totalAmount)}</span>
+          {/* Totals */}
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50">
+            <div className="flex justify-end">
+              <div className="w-full md:w-72 space-y-2">
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Subtotal:</span>
+                  <span className="font-medium">{formatCurrency(subTotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Tax:</span>
+                  <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold text-slate-900 border-t border-slate-200 pt-2">
+                  <span>Total:</span>
+                  <span>{formatCurrency(totalAmount)}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Memo */}
-        <FormField
-          control={form.control}
-          name="memo"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Memo (Internal Note)</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Optional note for internal reference..."
-                  className="resize-none"
-                  rows={3}
-                  {...field}
-                  data-testid="textarea-memo"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <FormField
+              control={form.control}
+              name="memo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo (Internal Note)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Optional note for internal reference..."
+                      className="resize-none bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl min-h-[80px]"
+                      rows={3}
+                      {...field}
+                      data-testid="textarea-memo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t">
-          <Button 
-            type="button" 
-            variant="outline" 
+        <div className="flex justify-end gap-3 pt-4">
+          <Button
+            type="button"
+            variant="outline"
             onClick={onCancel}
+            className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl px-6"
             data-testid="button-cancel"
           >
             Cancel
           </Button>
-          <Button 
-            type="submit" 
+          <Button
+            type="submit"
             disabled={createSalesReceiptMutation.isPending}
+            className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
             data-testid="button-submit"
           >
             {createSalesReceiptMutation.isPending ? "Saving..." : "Save Sales Receipt"}
