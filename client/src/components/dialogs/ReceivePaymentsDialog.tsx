@@ -368,9 +368,9 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
           {/* Filters */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Customer</Label>
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Customer</Label>
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
-                <SelectTrigger data-testid="select-customer-filter">
+                <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl" data-testid="select-customer-filter">
                   <SelectValue placeholder="All Customers" />
                 </SelectTrigger>
                 <SelectContent>
@@ -385,23 +385,24 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
             </div>
 
             <div className="space-y-2">
-              <Label>Search</Label>
+              <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Search</Label>
               <Input
                 placeholder="Search by invoice # or description..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                 data-testid="input-search-invoices"
               />
             </div>
           </div>
 
           {/* Invoices List */}
-          <ScrollArea className="flex-1 border rounded-md">
+          <ScrollArea className="flex-1 border border-slate-200 rounded-xl">
             <div className="p-4 space-y-2">
               {isLoading ? (
-                <div className="text-center text-muted-foreground py-8">Loading invoices...</div>
+                <div className="text-center text-slate-500 py-8">Loading invoices...</div>
               ) : filteredInvoices.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">No outstanding invoices found</div>
+                <div className="text-center text-slate-500 py-8">No outstanding invoices found</div>
               ) : (
                 filteredInvoices.map(invoice => {
                   const isSelected = selectedInvoices.has(invoice.id);
@@ -411,8 +412,8 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                   return (
                     <div
                       key={invoice.id}
-                      className={`flex items-center gap-4 p-3 rounded-md border ${
-                        isSelected ? 'bg-green-50 border-green-300' : 'hover:bg-gray-50'
+                      className={`flex items-center gap-4 p-4 rounded-xl border ${
+                        isSelected ? 'bg-green-50 border-green-300' : 'border-slate-200 hover:bg-slate-50/50'
                       }`}
                     >
                       <Checkbox
@@ -420,24 +421,24 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                         onCheckedChange={() => handleToggleInvoice(invoice.id, invoiceBalance)}
                         data-testid={`checkbox-invoice-${invoice.id}`}
                       />
-                      
+
                       <div className="flex-1 grid grid-cols-4 gap-4">
                         <div>
-                          <div className="font-medium text-sm">{invoice.contactName}</div>
-                          <div className="text-xs text-gray-500">{invoice.reference}</div>
+                          <div className="font-medium text-sm text-slate-900">{invoice.contactName}</div>
+                          <div className="text-xs text-slate-500">{invoice.reference}</div>
                         </div>
                         <div className="text-sm">
-                          <div className="text-gray-500">Date</div>
-                          <div>{format(new Date(invoice.date), 'PP')}</div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">Date</div>
+                          <div className="text-slate-700">{format(new Date(invoice.date), 'PP')}</div>
                         </div>
                         <div className="text-sm">
-                          <div className="text-gray-500">Balance Due</div>
-                          <div className="font-medium">${invoiceBalance.toFixed(2)}</div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">Balance Due</div>
+                          <div className="font-medium text-slate-900">${invoiceBalance.toFixed(2)}</div>
                         </div>
                         <div className="text-sm">
                           {isSelected ? (
                             <div>
-                              <div className="text-gray-500">Amount to Apply</div>
+                              <div className="text-xs text-slate-500 uppercase tracking-wide">Amount to Apply</div>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -445,7 +446,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                                 max={invoiceBalance}
                                 value={amountToApply}
                                 onChange={(e) => handleAmountChange(invoice.id, e.target.value, invoiceBalance)}
-                                className="h-8 w-32"
+                                className="h-10 w-32 bg-white border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                                 data-testid={`input-amount-${invoice.id}`}
                               />
                             </div>
@@ -461,7 +462,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
 
           {/* Exchange Rate Section for Foreign Currency Invoices */}
           {isForeignCurrency && selectedInvoiceCurrency && (
-            <div className="rounded-lg border bg-muted/50 p-4">
+            <div className="rounded-xl border border-slate-200 bg-blue-50 p-4">
               <ExchangeRateInput
                 fromCurrency={selectedInvoiceCurrency}
                 toCurrency={homeCurrency}
@@ -469,7 +470,7 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                 onChange={handleExchangeRateChange}
                 isLoading={exchangeRateLoading}
               />
-              <div className="text-xs text-muted-foreground mt-2">
+              <div className="text-xs text-slate-500 mt-2">
                 Selected invoices are in {selectedInvoiceCurrency}. Payment will use this exchange rate.
               </div>
             </div>
@@ -477,16 +478,16 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
 
           {/* Difference Section */}
           {Math.abs(remainingAmount) > 0.01 && (
-            <div className="space-y-3 border rounded-md p-4 bg-blue-50">
-              <div className="font-medium text-sm">Record Difference</div>
-              <div className="text-xs text-muted-foreground mb-2">
+            <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-blue-50">
+              <div className="font-semibold text-sm text-slate-900">Record Difference</div>
+              <div className="text-xs text-slate-500 mb-2">
                 Allocate the remaining ${Math.abs(remainingAmount).toFixed(2)} to an income account
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Account</Label>
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Account</Label>
                   <Select value={differenceAccountId} onValueChange={setDifferenceAccountId}>
-                    <SelectTrigger data-testid="select-difference-account">
+                    <SelectTrigger className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg" data-testid="select-difference-account">
                       <SelectValue placeholder="Select account" />
                     </SelectTrigger>
                     <SelectContent>
@@ -499,22 +500,24 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Amount</Label>
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Amount</Label>
                   <Input
                     type="number"
                     step="0.01"
                     value={differenceAmount}
                     onChange={(e) => setDifferenceAmount(e.target.value)}
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                     data-testid="input-difference-amount"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Description</Label>
+                  <Label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Description</Label>
                   <Input
                     type="text"
                     placeholder="e.g., Bank interest"
                     value={differenceDescription}
                     onChange={(e) => setDifferenceDescription(e.target.value)}
+                    className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                     data-testid="input-difference-description"
                   />
                 </div>
@@ -523,25 +526,25 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
           )}
 
           {/* Summary */}
-          <div className="space-y-2 border-t pt-4">
+          <div className="space-y-2 border-t border-slate-200 pt-4">
             <div className="flex justify-between text-sm">
-              <span>Bank Deposit Amount:</span>
-              <span className="font-medium">${bankTransactionAmount.toFixed(2)}</span>
+              <span className="text-slate-600">Bank Deposit Amount:</span>
+              <span className="font-medium text-slate-900">${bankTransactionAmount.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Total Selected:</span>
-              <span className="font-medium">${totalSelected.toFixed(2)}</span>
+              <span className="text-slate-600">Total Selected:</span>
+              <span className="font-medium text-slate-900">${totalSelected.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold">
-              <span>Remaining:</span>
+              <span className="text-slate-900">Remaining:</span>
               <span className={remainingAmount !== 0 ? 'text-red-600' : 'text-green-600'}>
                 ${remainingAmount.toFixed(2)}
               </span>
             </div>
 
             {!totalsMatch && Math.abs(remainingAmount) > 0.01 && (
-              <Alert>
-                <AlertDescription>
+              <Alert className="border-orange-200 bg-orange-50">
+                <AlertDescription className="text-orange-700">
                   {Math.abs(remainingAmount) > 0.01 && !differenceAccountId
                     ? "Please select an account to record the difference or adjust your selections"
                     : "The difference amount must match the remaining amount"}
@@ -552,12 +555,13 @@ export function ReceivePaymentsDialog({ open, onOpenChange, bankTransactionAmoun
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel} data-testid="button-cancel">
+          <Button variant="outline" onClick={handleCancel} className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl px-6" data-testid="button-cancel">
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={!totalsMatch || selectedInvoices.size === 0}
+            className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
             data-testid="button-confirm-receive-payments"
           >
             Match & Receive {selectedInvoices.size} Payment{selectedInvoices.size !== 1 ? 's' : ''}

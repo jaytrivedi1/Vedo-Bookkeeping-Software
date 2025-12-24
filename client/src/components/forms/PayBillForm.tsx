@@ -39,13 +39,6 @@ import {
 } from "@/components/ui/select";
 import { SearchableSelect, SearchableSelectItem } from "@/components/ui/searchable-select";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Table,
   TableBody,
   TableCell,
@@ -526,38 +519,25 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
   const isLoading = isLoadingVendors || isLoadingTransactions || isLoadingAccounts;
 
   return (
-    <div className="container mx-auto py-6 max-w-6xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <DollarSign className="h-8 w-8 text-primary" />
-            Pay Bills
-          </h1>
-          <p className="text-muted-foreground">Pay outstanding vendor bills</p>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Payment Details Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                 <Receipt className="h-5 w-5" />
                 Payment Details
-              </CardTitle>
-              <CardDescription>
-                Enter the basic information for this payment
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              </h3>
+            </div>
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <FormField
                 control={form.control}
                 name="vendorId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Vendor</FormLabel>
-                    <Select 
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vendor</FormLabel>
+                    <Select
                       onValueChange={(value) => {
                         field.onChange(value);
                         setSelectedVendorId(parseInt(value));
@@ -565,7 +545,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       disabled={isLoading}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
                           <SelectValue placeholder="Select vendor" />
                         </SelectTrigger>
                       </FormControl>
@@ -587,7 +567,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="paymentDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment Date</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Date</FormLabel>
                     <FormControl>
                       <DatePicker
                         date={field.value}
@@ -604,10 +584,10 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="paymentMethod"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment Method</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Method</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
                           <SelectValue placeholder="Select method" />
                         </SelectTrigger>
                       </FormControl>
@@ -635,7 +615,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="paymentAccountId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Pay From Account</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Pay From Account</FormLabel>
                     <SearchableSelect
                       items={accountItems}
                       value={field.value?.toString()}
@@ -644,6 +624,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       searchPlaceholder="Search accounts..."
                       emptyText={isLoadingAccounts ? "Loading accounts..." : "No accounts found."}
                       disabled={isLoadingAccounts}
+                      className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                       onAddNew={() => setAddAccountOpen(true)}
                       addNewText="Add New Account"
                     />
@@ -653,7 +634,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
               />
 
               {isForeignCurrency && (
-                <div className="md:col-span-2 lg:col-span-1">
+                <div className="md:col-span-2 lg:col-span-1 bg-blue-50 p-4 rounded-xl">
                   <ExchangeRateInput
                     fromCurrency={accountCurrency}
                     toCurrency={homeCurrency}
@@ -670,11 +651,15 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="referenceNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reference Number</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Reference Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="Check #, confirmation #, etc." {...field} />
+                      <Input
+                        placeholder="Check #, confirmation #, etc."
+                        {...field}
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                      />
                     </FormControl>
-                    <FormDescription>
+                    <FormDescription className="text-xs text-slate-400">
                       Optional reference number for this payment
                     </FormDescription>
                     <FormMessage />
@@ -687,7 +672,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="totalAmount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Payment Amount</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Amount</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -697,9 +682,10 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                         {...field}
                         value={field.value || ''}
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                       />
                     </FormControl>
-                    <FormDescription>
+                    <FormDescription className="text-xs text-slate-400">
                       Total amount being paid to the vendor
                     </FormDescription>
                     <FormMessage />
@@ -712,30 +698,34 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                 name="notes"
                 render={({ field }) => (
                   <FormItem className="md:col-span-2 lg:col-span-1">
-                    <FormLabel>Notes</FormLabel>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Notes</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Additional notes..." {...field} />
+                      <Textarea
+                        placeholder="Additional notes..."
+                        {...field}
+                        className="bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl resize-none"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Outstanding Bills Card */}
           {selectedVendorId && (
-            <Card>
-              <CardHeader>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                       <Calculator className="h-5 w-5" />
                       Outstanding Bills
-                    </CardTitle>
-                    <CardDescription>
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
                       Select bills to pay for {vendors?.find(v => v.id === selectedVendorId)?.name}
-                    </CardDescription>
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -744,6 +734,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       size="sm"
                       onClick={allocateRemaining}
                       disabled={billItems.filter(item => item.selected).length === 0 || remainingToAllocate <= 0}
+                      className="border-slate-300 text-slate-600 hover:bg-slate-100 rounded-xl"
                     >
                       Allocate
                     </Button>
@@ -753,6 +744,7 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       size="sm"
                       onClick={payAllSelected}
                       disabled={billItems.length === 0}
+                      className="border-slate-300 text-slate-600 hover:bg-slate-100 rounded-xl"
                     >
                       Pay All
                     </Button>
@@ -762,156 +754,159 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                       size="sm"
                       onClick={clearAllSelections}
                       disabled={billItems.length === 0}
+                      className="border-slate-300 text-slate-600 hover:bg-slate-100 rounded-xl"
                     >
                       Clear All
                     </Button>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent>
+              </div>
+              <div className="p-6">
                 {isLoadingTransactions ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-                      <p className="text-muted-foreground">Loading bills...</p>
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                      <p className="text-slate-500">Loading bills...</p>
                     </div>
                   </div>
                 ) : billItems.length === 0 ? (
                   <div className="text-center py-8">
                     <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-2" />
-                    <p className="text-lg font-medium">No Outstanding Bills</p>
-                    <p className="text-muted-foreground">This vendor has no unpaid bills.</p>
+                    <p className="text-lg font-medium text-slate-900">No Outstanding Bills</p>
+                    <p className="text-slate-500">This vendor has no unpaid bills.</p>
                   </div>
                 ) : (
                   <>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">Pay</TableHead>
-                          <TableHead>Bill #</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Due Date</TableHead>
-                          <TableHead className="text-right">Original Amount</TableHead>
-                          <TableHead className="text-right">Outstanding</TableHead>
-                          <TableHead className="text-right">Payment Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {billItems.map((bill) => (
-                          <TableRow key={bill.billId}>
-                            <TableCell>
-                              <Checkbox
-                                checked={bill.selected}
-                                onCheckedChange={(checked) => 
-                                  toggleBillSelection(bill.billId, checked as boolean)
-                                }
-                              />
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {bill.billReference}
-                            </TableCell>
-                            <TableCell>
-                              {format(new Date(bill.billDate), 'MMM dd, yyyy')}
-                            </TableCell>
-                            <TableCell>
-                              {bill.dueDate ? (
-                                <div>
-                                  {format(new Date(bill.dueDate), 'MMM dd, yyyy')}
-                                  {new Date(bill.dueDate) < new Date() && (
-                                    <Badge variant="destructive" className="ml-2 text-xs">
-                                      Overdue
-                                    </Badge>
-                                  )}
-                                </div>
-                              ) : (
-                                '-'
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(bill.originalAmount)}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {formatCurrency(bill.outstandingBalance)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max={bill.outstandingBalance}
-                                value={bill.paymentAmount || ''}
-                                onChange={(e) => {
-                                  const rawValue = e.target.value;
-                                  const amount = rawValue === '' ? 0 : parseFloat(rawValue);
-                                  
-                                  // Update bill payment amount directly without constraints during typing
-                                  setBillItems(prev => prev.map(item => 
-                                    item.billId === bill.billId 
-                                      ? { 
-                                          ...item, 
-                                          paymentAmount: isNaN(amount) ? 0 : amount,
-                                          selected: amount > 0
-                                        }
-                                      : item
-                                  ));
-                                }}
-                                className="w-24 text-right"
-                              />
-                            </TableCell>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-slate-50 border-b border-slate-200">
+                            <TableHead className="w-12 text-xs font-medium text-slate-500 uppercase tracking-wide">Pay</TableHead>
+                            <TableHead className="text-xs font-medium text-slate-500 uppercase tracking-wide">Bill #</TableHead>
+                            <TableHead className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date</TableHead>
+                            <TableHead className="text-xs font-medium text-slate-500 uppercase tracking-wide">Due Date</TableHead>
+                            <TableHead className="text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Original Amount</TableHead>
+                            <TableHead className="text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Outstanding</TableHead>
+                            <TableHead className="text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Amount</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {billItems.map((bill) => (
+                            <TableRow key={bill.billId} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <TableCell>
+                                <Checkbox
+                                  checked={bill.selected}
+                                  onCheckedChange={(checked) =>
+                                    toggleBillSelection(bill.billId, checked as boolean)
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium text-slate-900">
+                                {bill.billReference}
+                              </TableCell>
+                              <TableCell className="text-slate-700">
+                                {format(new Date(bill.billDate), 'MMM dd, yyyy')}
+                              </TableCell>
+                              <TableCell className="text-slate-700">
+                                {bill.dueDate ? (
+                                  <div>
+                                    {format(new Date(bill.dueDate), 'MMM dd, yyyy')}
+                                    {new Date(bill.dueDate) < new Date() && (
+                                      <Badge variant="destructive" className="ml-2 text-xs">
+                                        Overdue
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ) : (
+                                  '-'
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-700">
+                                {formatCurrency(bill.originalAmount)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium text-slate-900">
+                                {formatCurrency(bill.outstandingBalance)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  max={bill.outstandingBalance}
+                                  value={bill.paymentAmount || ''}
+                                  onChange={(e) => {
+                                    const rawValue = e.target.value;
+                                    const amount = rawValue === '' ? 0 : parseFloat(rawValue);
+
+                                    // Update bill payment amount directly without constraints during typing
+                                    setBillItems(prev => prev.map(item =>
+                                      item.billId === bill.billId
+                                        ? {
+                                            ...item,
+                                            paymentAmount: isNaN(amount) ? 0 : amount,
+                                            selected: amount > 0
+                                          }
+                                        : item
+                                    ));
+                                  }}
+                                  className="w-24 text-right bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
 
                     <Separator className="my-4" />
-                    
+
                     {/* Payment Summary */}
-                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    <div className="bg-slate-50 rounded-xl p-4 space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="font-medium">Payment Amount:</span>
-                        <span className="font-semibold">{formatCurrency(paymentAmount)}</span>
+                        <span className="font-medium text-slate-700">Payment Amount:</span>
+                        <span className="font-semibold text-slate-900">{formatCurrency(paymentAmount)}</span>
                       </div>
                       {totalChequeCredits > 0 && (
                         <div className="flex justify-between items-center">
-                          <span className="font-medium">Cheque Credits:</span>
+                          <span className="font-medium text-slate-700">Cheque Credits:</span>
                           <span className="font-semibold text-green-600">{formatCurrency(totalChequeCredits)}</span>
                         </div>
                       )}
                       <div className="flex justify-between items-center">
-                        <span className="font-medium">Allocated to Bills:</span>
-                        <span className="font-semibold">{formatCurrency(totalSelected)}</span>
+                        <span className="font-medium text-slate-700">Allocated to Bills:</span>
+                        <span className="font-semibold text-slate-900">{formatCurrency(totalSelected)}</span>
                       </div>
-                      <div className="flex justify-between items-center text-lg">
-                        <span className="font-semibold">Remaining to Allocate:</span>
+                      <div className="flex justify-between items-center text-lg border-t border-slate-200 pt-2 mt-2">
+                        <span className="font-semibold text-slate-900">Remaining to Allocate:</span>
                         <span className={`font-bold ${
-                          remainingToAllocate > 0 ? 'text-orange-600' : 
-                          remainingToAllocate < 0 ? 'text-red-600' : 
+                          remainingToAllocate > 0 ? 'text-orange-600' :
+                          remainingToAllocate < 0 ? 'text-red-600' :
                           'text-green-600'
                         }`}>
                           {formatCurrency(remainingToAllocate)}
                         </span>
                       </div>
                       {billItems.filter(item => item.selected).length > 0 && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-slate-500">
                           Paying {billItems.filter(item => item.selected).length} bill(s)
                         </p>
                       )}
-                      
+
                       {/* Validation Messages */}
                       {paymentAmount > 0 && Math.abs(remainingToAllocate) > 0.001 && (
                         <div className="flex items-center gap-2 text-sm">
                           <AlertCircle className="h-4 w-4 text-orange-600" />
                           <span className="text-orange-600">
-                            {remainingToAllocate > 0 
+                            {remainingToAllocate > 0
                               ? `You need to allocate ${formatCurrency(remainingToAllocate)} more`
                               : `You have over-allocated by ${formatCurrency(Math.abs(remainingToAllocate))}`
                             }
                           </span>
                         </div>
                       )}
-                      
+
                       {paymentAmount === 0 && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 text-sm text-slate-500">
                           <AlertCircle className="h-4 w-4" />
                           <span>Enter a payment amount to begin</span>
                         </div>
@@ -919,100 +914,107 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
                     </div>
                   </>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* Unapplied Cheques Card */}
           {selectedVendorId && chequeItems.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide flex items-center gap-2">
                   <Receipt className="h-5 w-5" />
                   Available Unapplied Cheques
-                </CardTitle>
-                <CardDescription>
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
                   Apply existing cheque credits to these bills
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">Apply</TableHead>
-                      <TableHead>Cheque #</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Available Credit</TableHead>
-                      <TableHead className="text-right">Apply Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {chequeItems.map((cheque) => (
-                      <TableRow key={cheque.chequeId}>
-                        <TableCell>
-                          <Checkbox
-                            checked={cheque.selected}
-                            onCheckedChange={(checked) => 
-                              toggleChequeSelection(cheque.chequeId, checked as boolean)
-                            }
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {cheque.chequeReference}
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(cheque.chequeDate), 'MMM dd, yyyy')}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(cheque.availableCredit)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max={cheque.availableCredit}
-                            value={cheque.appliedAmount || ''}
-                            disabled={!cheque.selected}
-                            onChange={(e) => {
-                              const rawValue = e.target.value;
-                              const amount = rawValue === '' ? 0 : parseFloat(rawValue);
-                              updateChequeAmount(cheque.chequeId, isNaN(amount) ? 0 : amount);
-                            }}
-                            className="w-24 text-right"
-                          />
-                        </TableCell>
+                </p>
+              </div>
+              <div className="p-6">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-slate-50 border-b border-slate-200">
+                        <TableHead className="w-12 text-xs font-medium text-slate-500 uppercase tracking-wide">Apply</TableHead>
+                        <TableHead className="text-xs font-medium text-slate-500 uppercase tracking-wide">Cheque #</TableHead>
+                        <TableHead className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date</TableHead>
+                        <TableHead className="text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Available Credit</TableHead>
+                        <TableHead className="text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Apply Amount</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                
+                    </TableHeader>
+                    <TableBody>
+                      {chequeItems.map((cheque) => (
+                        <TableRow key={cheque.chequeId} className="border-b border-slate-100 hover:bg-slate-50/50">
+                          <TableCell>
+                            <Checkbox
+                              checked={cheque.selected}
+                              onCheckedChange={(checked) =>
+                                toggleChequeSelection(cheque.chequeId, checked as boolean)
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900">
+                            {cheque.chequeReference}
+                          </TableCell>
+                          <TableCell className="text-slate-700">
+                            {format(new Date(cheque.chequeDate), 'MMM dd, yyyy')}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-slate-900">
+                            {formatCurrency(cheque.availableCredit)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max={cheque.availableCredit}
+                              value={cheque.appliedAmount || ''}
+                              disabled={!cheque.selected}
+                              onChange={(e) => {
+                                const rawValue = e.target.value;
+                                const amount = rawValue === '' ? 0 : parseFloat(rawValue);
+                                updateChequeAmount(cheque.chequeId, isNaN(amount) ? 0 : amount);
+                              }}
+                              className="w-24 text-right bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
                 {totalChequeCredits > 0 && (
-                  <div className="mt-4 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                  <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4">
                     <div className="flex justify-between items-center">
-                      <span className="font-medium text-green-900 dark:text-green-100">Total Cheque Credits Applied:</span>
-                      <span className="font-bold text-green-900 dark:text-green-100">{formatCurrency(totalChequeCredits)}</span>
+                      <span className="font-medium text-green-900">Total Cheque Credits Applied:</span>
+                      <span className="font-bold text-green-900">{formatCurrency(totalChequeCredits)}</span>
                     </div>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button type="button" variant="outline" onClick={onCancel}>
+          <div className="flex justify-between pt-6">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl px-6"
+            >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={
-                payBillMutation.isPending || 
-                (paymentAmount === 0 && totalChequeCredits === 0) || 
-                totalSelected === 0 || 
+                payBillMutation.isPending ||
+                (paymentAmount === 0 && totalChequeCredits === 0) ||
+                totalSelected === 0 ||
                 Math.abs(remainingToAllocate) > 0.001  // Allow for floating point precision
               }
-              className="min-w-32"
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6 min-w-32"
             >
               {payBillMutation.isPending ? (
                 <>
@@ -1051,3 +1053,4 @@ export default function PayBillForm({ onSuccess, onCancel }: PayBillFormProps) {
     </div>
   );
 }
+

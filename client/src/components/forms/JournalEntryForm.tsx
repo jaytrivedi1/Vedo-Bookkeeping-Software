@@ -285,368 +285,399 @@ export default function JournalEntryForm({ journalEntry, ledgerEntries, onSucces
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-6">
           {/* Header Section */}
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Journal Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Journal Entry Details</h3>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Journal Date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full pl-3 text-left font-normal bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl",
+                                !field.value && "text-muted-foreground"
+                              )}
+                              data-testid="input-journal-date"
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="reference"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Journal Number</FormLabel>
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                          data-testid="input-journal-date"
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
+                        <Input
+                          placeholder="JE-YYYY-MM-DD"
+                          {...field}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="input-journal-number"
+                        />
                       </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        initialFocus
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Enter journal entry memo..."
+                        {...field}
+                        rows={2}
+                        className="bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl resize-none"
+                        data-testid="input-memo"
                       />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="reference"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Journal Number</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="JE-YYYY-MM-DD" 
-                      {...field} 
-                      data-testid="input-journal-number"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="attachments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Attachments</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="Enter attachment URLs or paths (comma-separated)"
+                          {...field}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="input-attachments"
+                        />
+                        <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-300">
+                          <Upload className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
-
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Memo</FormLabel>
-                <FormControl>
-                  <Textarea 
-                    placeholder="Enter journal entry memo..." 
-                    {...field} 
-                    rows={2}
-                    data-testid="input-memo"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="attachments"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Attachments</FormLabel>
-                <FormControl>
-                  <div className="flex items-center gap-2">
-                    <Input 
-                      placeholder="Enter attachment URLs or paths (comma-separated)" 
-                      {...field} 
-                      data-testid="input-attachments"
-                    />
-                    <Button type="button" variant="outline" size="icon">
-                      <Upload className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           {/* Exchange Rate Input */}
           {hasForeignCurrency && foreignCurrency && (
-            <ExchangeRateInput
-              fromCurrency={foreignCurrency}
-              toCurrency={homeCurrency}
-              value={exchangeRate}
-              onChange={handleExchangeRateChange}
-              isLoading={exchangeRateLoading}
-              date={journalDate}
-            />
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 bg-blue-50">
+                <ExchangeRateInput
+                  fromCurrency={foreignCurrency}
+                  toCurrency={homeCurrency}
+                  value={exchangeRate}
+                  onChange={handleExchangeRateChange}
+                  isLoading={exchangeRateLoading}
+                  date={journalDate}
+                />
+              </div>
+            </div>
           )}
 
           {/* Entry Table Section */}
-          <div className="border rounded-lg p-4">
-            <h3 className="text-lg font-semibold mb-4">Journal Entries</h3>
-            
-            {/* Table Header */}
-            <div className="grid grid-cols-12 gap-2 mb-3 pb-2 border-b">
-              <div className="col-span-3 text-sm font-medium text-gray-700">Account</div>
-              <div className="col-span-2 text-sm font-medium text-gray-700">Name</div>
-              <div className="col-span-2 text-sm font-medium text-gray-700">Description</div>
-              <div className="col-span-2 text-sm font-medium text-gray-700">Debits</div>
-              <div className="col-span-2 text-sm font-medium text-gray-700">Credits</div>
-              <div className="col-span-1 text-sm font-medium text-gray-700">Tax</div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Journal Entries</h3>
             </div>
-            
-            {/* Entry Rows */}
-            {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-12 gap-2 mb-3 items-start">
-                {/* Account */}
-                <div className="col-span-3">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.accountId`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <SearchableSelect
-                            items={accountItems}
-                            value={field.value?.toString() || ""}
-                            onValueChange={(value) => field.onChange(parseInt(value))}
-                            placeholder="Select account"
-                            searchPlaceholder="Search accounts..."
-                            emptyText={accountsLoading ? "Loading..." : "No accounts found."}
-                            disabled={accountsLoading}
-                            onAddNew={() => {
-                              setCurrentEntryIndex(index);
-                              setShowAddAccountDialog(true);
-                            }}
-                            addNewText="Add New Account"
-                            data-testid={`select-account-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
-                {/* Name (Contact) */}
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.contactId`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <SearchableSelect
-                            items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
-                            value={field.value?.toString() || ""}
-                            onValueChange={(value) => {
-                              if (value === 'ADD_NEW_CUSTOMER') {
-                                setCurrentEntryIndex(index);
-                                setShowAddCustomerDialog(true);
-                                return;
-                              }
-                              if (value === 'ADD_NEW_VENDOR') {
-                                setCurrentEntryIndex(index);
-                                setShowAddVendorDialog(true);
-                                return;
-                              }
-                              field.onChange(value === "" ? undefined : parseInt(value));
-                            }}
-                            placeholder="None"
-                            emptyText={contactsLoading ? "Loading..." : "No contacts found"}
-                            searchPlaceholder="Search contacts..."
-                            disabled={contactsLoading}
-                            data-testid={`select-name-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.description`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            placeholder="Description" 
-                            {...field} 
-                            data-testid={`input-description-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Debits */}
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.debit`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            placeholder="0.00"
-                            {...field} 
-                            onChange={(e) => {
-                              field.onChange(parseFloat(e.target.value) || 0);
-                              form.trigger('entries');
-                            }}
-                            data-testid={`input-debit-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Credits */}
-                <div className="col-span-2">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.credit`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
-                            placeholder="0.00"
-                            {...field} 
-                            onChange={(e) => {
-                              field.onChange(parseFloat(e.target.value) || 0);
-                              form.trigger('entries');
-                            }}
-                            data-testid={`input-credit-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {/* Sales Tax */}
-                <div className="col-span-1 flex items-center gap-1">
-                  <FormField
-                    control={form.control}
-                    name={`entries.${index}.salesTaxId`}
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <FormControl>
-                          <SearchableSelect
-                            items={taxItems}
-                            value={field.value?.toString() || "none"}
-                            onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))}
-                            placeholder="-"
-                            searchPlaceholder="Search taxes..."
-                            emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                            data-testid={`select-tax-${index}`}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  {/* Delete Button */}
-                  {fields.length > 2 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => remove(index)}
-                      data-testid={`button-delete-entry-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  )}
-                </div>
+            <div className="overflow-x-auto">
+              {/* Table Header */}
+              <div className="bg-slate-50 grid grid-cols-12 gap-2 p-4 border-b border-slate-200">
+                <div className="col-span-3 text-xs font-medium text-slate-500 uppercase tracking-wide">Account</div>
+                <div className="col-span-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Name</div>
+                <div className="col-span-2 text-xs font-medium text-slate-500 uppercase tracking-wide">Description</div>
+                <div className="col-span-2 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">Debits</div>
+                <div className="col-span-2 text-xs font-medium text-slate-500 uppercase tracking-wide text-right">Credits</div>
+                <div className="col-span-1 text-xs font-medium text-slate-500 uppercase tracking-wide">Tax</div>
               </div>
-            ))}
-            
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={() => append({ accountId: 0, contactId: undefined, description: '', debit: 0, credit: 0, salesTaxId: undefined })}
-              data-testid="button-add-entry"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Entry
-            </Button>
-            
+
+              {/* Entry Rows */}
+              {fields.map((field, index) => (
+                <div key={field.id} className="grid grid-cols-12 gap-2 p-4 border-b border-slate-100 items-start hover:bg-slate-50/50">
+                  {/* Account */}
+                  <div className="col-span-3">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.accountId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <SearchableSelect
+                              items={accountItems}
+                              value={field.value?.toString() || ""}
+                              onValueChange={(value) => field.onChange(parseInt(value))}
+                              placeholder="Select account"
+                              searchPlaceholder="Search accounts..."
+                              emptyText={accountsLoading ? "Loading..." : "No accounts found."}
+                              disabled={accountsLoading}
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              onAddNew={() => {
+                                setCurrentEntryIndex(index);
+                                setShowAddAccountDialog(true);
+                              }}
+                              addNewText="Add New Account"
+                              data-testid={`select-account-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Name (Contact) */}
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.contactId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <SearchableSelect
+                              items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
+                              value={field.value?.toString() || ""}
+                              onValueChange={(value) => {
+                                if (value === 'ADD_NEW_CUSTOMER') {
+                                  setCurrentEntryIndex(index);
+                                  setShowAddCustomerDialog(true);
+                                  return;
+                                }
+                                if (value === 'ADD_NEW_VENDOR') {
+                                  setCurrentEntryIndex(index);
+                                  setShowAddVendorDialog(true);
+                                  return;
+                                }
+                                field.onChange(value === "" ? undefined : parseInt(value));
+                              }}
+                              placeholder="None"
+                              emptyText={contactsLoading ? "Loading..." : "No contacts found"}
+                              searchPlaceholder="Search contacts..."
+                              disabled={contactsLoading}
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`select-name-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.description`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Description"
+                              {...field}
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`input-description-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Debits */}
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.debit`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(parseFloat(e.target.value) || 0);
+                                form.trigger('entries');
+                              }}
+                              className="text-right bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`input-debit-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Credits */}
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.credit`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder="0.00"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(parseFloat(e.target.value) || 0);
+                                form.trigger('entries');
+                              }}
+                              className="text-right bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`input-credit-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Sales Tax */}
+                  <div className="col-span-1 flex items-center gap-1">
+                    <FormField
+                      control={form.control}
+                      name={`entries.${index}.salesTaxId`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <SearchableSelect
+                              items={taxItems}
+                              value={field.value?.toString() || "none"}
+                              onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))}
+                              placeholder="-"
+                              searchPlaceholder="Search taxes..."
+                              emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                              className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              data-testid={`select-tax-${index}`}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Delete Button */}
+                    {fields.length > 2 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => remove(index)}
+                        className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                        data-testid={`button-delete-entry-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t border-slate-200">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-dashed border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 rounded-xl"
+                onClick={() => append({ accountId: 0, contactId: undefined, description: '', debit: 0, credit: 0, salesTaxId: undefined })}
+                data-testid="button-add-entry"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Entry
+              </Button>
+            </div>
+
             {/* Totals Section */}
-            <div className="flex justify-end gap-6 mt-6 pt-4 border-t text-sm">
-              <div>
-                <p className="text-gray-600">Total Debits:</p>
-                <p className="font-bold text-lg" data-testid="text-total-debits">
-                  ${totalDebits.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-600">Total Credits:</p>
-                <p className="font-bold text-lg" data-testid="text-total-credits">
-                  ${totalCredits.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="text-gray-600">Difference:</p>
-                <p className={cn(
-                  "font-bold text-lg",
-                  difference > 0.001 ? "text-red-500" : "text-green-600"
-                )} data-testid="text-difference">
-                  ${difference.toFixed(2)}
-                </p>
+            <div className="p-6 bg-slate-50 border-t border-slate-200">
+              <div className="flex justify-end gap-8 text-sm">
+                <div className="text-right">
+                  <p className="text-slate-500 mb-1">Total Debits</p>
+                  <p className="font-semibold text-lg text-slate-900" data-testid="text-total-debits">
+                    ${totalDebits.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-slate-500 mb-1">Total Credits</p>
+                  <p className="font-semibold text-lg text-slate-900" data-testid="text-total-credits">
+                    ${totalCredits.toFixed(2)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-slate-500 mb-1">Difference</p>
+                  <p className={cn(
+                    "font-semibold text-lg",
+                    difference > 0.001 ? "text-red-500" : "text-green-600"
+                  )} data-testid="text-difference">
+                    ${difference.toFixed(2)}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-between pt-4">
-            <Button 
+          <div className="flex justify-between pt-6">
+            <Button
               type="button"
               variant="outline"
               onClick={onCancel}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl px-6"
               data-testid="button-cancel"
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               type="submit"
               disabled={createJournalEntry.isPending || difference > 0.001}
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
               data-testid="button-save"
             >
               {createJournalEntry.isPending ? 'Saving...' : 'Save Journal Entry'}
