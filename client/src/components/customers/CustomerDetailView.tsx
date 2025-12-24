@@ -166,42 +166,26 @@ export default function CustomerDetailView({
   const openInvoiceCount = openInvoices.length;
 
   // Calculate total unapplied credits for this customer
-  // A credit is unapplied if:
-  // 1. It has status "unapplied_credit" with non-zero balance, OR
-  // 2. It's a payment/deposit/cheque with balance equal to amount (nothing applied yet)
-  // Note: Deposits use negative balance (-amount), payments use positive balance
-  const getUnappliedCreditAmount = (t: Transaction): number => {
-    if (t.type !== "payment" && t.type !== "deposit" && t.type !== "cheque") {
-      return 0;
-    }
-
-    // If explicitly marked as unapplied_credit with a balance
-    if (t.status === "unapplied_credit" && t.balance !== null && t.balance !== undefined) {
-      return Math.abs(t.balance);
-    }
-
-    // For payments: if balance equals amount, nothing was applied (it's all credit)
-    // This catches payments incorrectly marked as "completed" when they should be "unapplied_credit"
-    if (t.type === "payment" && t.balance !== null && t.balance !== undefined && t.balance > 0) {
-      return t.balance;
-    }
-
-    // For deposits: balance is stored as negative (-amount)
-    // If |balance| equals amount, nothing was applied
-    if (t.type === "deposit" && t.balance !== null && t.balance !== undefined && t.balance < 0) {
-      return Math.abs(t.balance);
-    }
-
-    return 0;
-  };
-
-  const unappliedCredits = customerTransactions.reduce(
-    (sum, t) => sum + getUnappliedCreditAmount(t),
-    0
-  );
+  // Only count transactions with explicit "unapplied_credit" status - the balance field
+  // represents the remaining unapplied amount after invoice applications
+  const unappliedCredits = customerTransactions
+    .filter(
+      (t) =>
+        t.status === "unapplied_credit" &&
+        (t.type === "payment" || t.type === "deposit" || t.type === "cheque") &&
+        t.balance !== null &&
+        t.balance !== undefined &&
+        Math.abs(t.balance) > 0
+    )
+    .reduce((sum, t) => sum + Math.abs(t.balance || 0), 0);
 
   const unappliedCreditCount = customerTransactions.filter(
-    (t) => getUnappliedCreditAmount(t) > 0
+    (t) =>
+      t.status === "unapplied_credit" &&
+      (t.type === "payment" || t.type === "deposit" || t.type === "cheque") &&
+      t.balance !== null &&
+      t.balance !== undefined &&
+      Math.abs(t.balance) > 0
   ).length;
 
   // Net balance due = outstanding invoices minus available credits

@@ -3648,7 +3648,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message });
     }
   });
-  
+
+  // Recalculate payment balance based on actual invoice applications
+  // This fixes payments that were created with incorrect balance/status
+  apiRouter.post("/payments/:id/recalculate-balance", async (req: Request, res: Response) => {
+    const paymentId = parseInt(req.params.id);
+
+    try {
+      const payment = await storage.getTransaction(paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (payment.type !== 'payment') {
+        return res.status(400).json({ message: "Transaction is not a payment" });
+      }
+
+      // Get payment applications from the payment_applications table
+      const { paymentApplications } = await import('@shared/schema');
+      const applications = await db
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.paymentId, paymentId));
+
+      // Calculate total amount applied to invoices
+      const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
+
+      // Calculate unapplied amount
+      const unappliedAmount = Math.max(0, payment.amount - totalApplied);
+
+      // Determine new status
+      const newStatus = unappliedAmount > 0 ? 'unapplied_credit' : 'completed';
+
+      console.log(`Recalculating payment #${paymentId}:
+- Original amount: ${payment.amount}
+- Total applied to invoices: ${totalApplied}
+- Unapplied amount: ${unappliedAmount}
+- New status: ${newStatus}
+- Previous balance: ${payment.balance}
+- Previous status: ${payment.status}`);
+
+      // Update the payment
+      const updatedPayment = await storage.updateTransaction(paymentId, {
+        balance: unappliedAmount,
+        status: newStatus as any
+      });
+
+      res.json({
+        success: true,
+        payment: updatedPayment,
+        calculation: {
+          originalAmount: payment.amount,
+          totalApplied,
+          unappliedAmount,
+          previousBalance: payment.balance,
+          previousStatus: payment.status,
+          newStatus
+        }
+      });
+    } catch (error: any) {
+      console.error("Error recalculating payment balance:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Pay bills endpoint
   apiRouter.post("/payments/pay-bills", async (req: Request, res: Response) => {
     const data = req.body;
