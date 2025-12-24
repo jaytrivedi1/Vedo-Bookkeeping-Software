@@ -2173,8 +2173,9 @@ export default function Banking() {
                   tx.accountId && activeFeedAccountIds.has(tx.accountId)
                 );
 
-                const uncategorizedCount = relevantTransactions.filter(tx => !tx.matchedTransactionId && !tx.deleted).length;
-                const categorizedCount = relevantTransactions.filter(tx => tx.matchedTransactionId && !tx.deleted).length;
+                // Use the same status field that the server uses for filtering
+                const uncategorizedCount = relevantTransactions.filter(tx => tx.status === 'unmatched').length;
+                const categorizedCount = relevantTransactions.filter(tx => tx.status === 'matched').length;
                 const totalActive = uncategorizedCount + categorizedCount;
                 const progressPercent = totalActive > 0 ? Math.round((categorizedCount / totalActive) * 100) : 0;
 
