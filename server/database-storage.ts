@@ -2580,6 +2580,37 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
+    // Ensure AI settings columns exist (inline migration for immediate availability)
+    const hasAiFields = 'aiCategorizationEnabled' in updates ||
+                        'aiAutoPostEnabled' in updates ||
+                        'aiAutoPostMinConfidence' in updates ||
+                        'aiRuleGenerationEnabled' in updates;
+
+    if (hasAiFields) {
+      try {
+        // Add AI columns if they don't exist
+        await db.execute(sql`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_categorization_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_categorization_enabled BOOLEAN NOT NULL DEFAULT true;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_auto_post_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_auto_post_enabled BOOLEAN NOT NULL DEFAULT false;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_auto_post_min_confidence') THEN
+              ALTER TABLE preferences ADD COLUMN ai_auto_post_min_confidence DECIMAL(3, 2) NOT NULL DEFAULT 0.95;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_rule_generation_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_rule_generation_enabled BOOLEAN NOT NULL DEFAULT true;
+            END IF;
+          END $$;
+        `);
+      } catch (migrationError) {
+        console.error('Warning: Could not ensure AI columns exist:', migrationError);
+      }
+    }
+
     // Check if preferences already exist
     const existing = await this.getPreferences();
 
