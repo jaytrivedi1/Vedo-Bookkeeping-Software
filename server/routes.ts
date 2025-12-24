@@ -1164,11 +1164,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get related data
       const lineItems = await storage.getLineItemsByTransaction(invoiceId);
       const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
-      const company = await storage.getDefaultCompany();
+      const companyData = await storage.getDefaultCompany();
+
+      // Provide fallback company if none exists
+      const company = companyData || {
+        id: 0,
+        name: 'Company Name',
+        street1: null,
+        street2: null,
+        city: null,
+        state: null,
+        postalCode: null,
+        country: null,
+        phone: null,
+        email: null,
+        website: null,
+        taxId: null,
+        logo: null,
+        isDefault: true,
+        createdAt: new Date()
+      };
 
       // Get preferences for template selection
       const preferences = await storage.getPreferences();
-      const template = preferences?.invoiceTemplate || 'classic';
+      const template = (preferences?.invoiceTemplate || 'classic') as 'classic' | 'modern' | 'minimal';
 
       // Generate PDF with selected template
       const { generateInvoicePDF } = await import('./invoice-pdf-generator');
