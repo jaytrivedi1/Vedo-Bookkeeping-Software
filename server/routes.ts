@@ -10092,6 +10092,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .where(eq(importedTransactionsSchema.id, transactionId));
 
+      // Record feedback for AI learning
+      try {
+        const { recordCategorizationFeedback } = await import('./services/feedback-service');
+        const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+
+        // Create storage adapter for feedback service
+        const feedbackStorage = {
+          getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+          createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
+          updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
+          getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+          createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+          getAccount: (id: number) => storage.getAccount(id),
+          getContact: (id: number) => storage.getContact(id),
+          createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
+          getPreferences: () => storage.getPreferences(),
+        };
+
+        // Determine suggestion source based on what was suggested vs what was chosen
+        let suggestionSource: 'pattern' | 'rule' | 'ai' | 'none' = 'none';
+        if (importedTx.suggestedAccountId) {
+          suggestionSource = 'rule'; // Rule-based suggestion was available
+        }
+
+        await recordCategorizationFeedback(feedbackStorage, {
+          importedTransactionId: transactionId,
+          merchantName: importedTx.merchantName || importedTx.name,
+          transactionAmount: importedTx.amount,
+          transactionDate: new Date(importedTx.date),
+          suggestionSource,
+          suggestedAccountId: importedTx.suggestedAccountId,
+          suggestedContactId: null,
+          suggestedTaxId: importedTx.suggestedSalesTaxId,
+          aiConfidence: null,
+          chosenAccountId: accountId,
+          chosenContactId: contactId,
+          chosenTaxId: salesTaxId,
+          chosenTransactionType: transactionType,
+        });
+      } catch (feedbackError) {
+        // Log but don't fail the request if feedback recording fails
+        console.error('Error recording categorization feedback:', feedbackError);
+      }
+
       res.json({
         success: true,
         transaction: createdTransaction,
@@ -11572,14 +11616,239 @@ Respond in JSON format:
         }
       }
 
-      res.json({ 
+      res.json({
         success: true,
         categorizedCount,
-        totalUncategorized: uncategorizedTransactions.length 
+        totalUncategorized: uncategorizedTransactions.length
       });
     } catch (error) {
       console.error("Error applying categorization rules:", error);
       res.status(500).json({ message: "Failed to apply categorization rules" });
+    }
+  });
+
+  // ============= AI Categorization Routes =============
+
+  // Get categorization rules by type (manual/ai)
+  apiRouter.get("/categorization-rules/type/:ruleType", async (req: Request, res: Response) => {
+    try {
+      const ruleType = req.params.ruleType as 'manual' | 'ai';
+      if (ruleType !== 'manual' && ruleType !== 'ai') {
+        return res.status(400).json({ message: "Invalid rule type. Must be 'manual' or 'ai'" });
+      }
+      const rules = await storage.getCategorizationRulesByType(ruleType);
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching categorization rules by type:", error);
+      res.status(500).json({ message: "Failed to fetch categorization rules" });
+    }
+  });
+
+  // Promote an AI rule to manual
+  apiRouter.post("/categorization-rules/:id/promote", async (req: Request, res: Response) => {
+    try {
+      const ruleId = Number(req.params.id);
+      const rule = await storage.getCategorizationRule(ruleId);
+
+      if (!rule) {
+        return res.status(404).json({ message: "Rule not found" });
+      }
+
+      if (rule.ruleType !== 'ai') {
+        return res.status(400).json({ message: "Only AI rules can be promoted to manual" });
+      }
+
+      const promotedRule = await storage.promoteAiRule(ruleId);
+      res.json({ success: true, rule: promotedRule });
+    } catch (error) {
+      console.error("Error promoting AI rule:", error);
+      res.status(500).json({ message: "Failed to promote rule" });
+    }
+  });
+
+  // Promote all AI rules to manual
+  apiRouter.post("/categorization-rules/ai/promote-all", async (req: Request, res: Response) => {
+    try {
+      const promotedCount = await storage.promoteAllAiRules();
+      res.json({ success: true, promotedCount });
+    } catch (error) {
+      console.error("Error promoting all AI rules:", error);
+      res.status(500).json({ message: "Failed to promote all AI rules" });
+    }
+  });
+
+  // Delete all AI rules
+  apiRouter.delete("/categorization-rules/ai/all", async (req: Request, res: Response) => {
+    try {
+      const deletedCount = await storage.deleteAiRules();
+      res.json({ success: true, deletedCount });
+    } catch (error) {
+      console.error("Error deleting AI rules:", error);
+      res.status(500).json({ message: "Failed to delete AI rules" });
+    }
+  });
+
+  // Get merchant patterns
+  apiRouter.get("/merchant-patterns", async (req: Request, res: Response) => {
+    try {
+      const patterns = await storage.getMerchantPatterns();
+      res.json(patterns);
+    } catch (error) {
+      console.error("Error fetching merchant patterns:", error);
+      res.status(500).json({ message: "Failed to fetch merchant patterns" });
+    }
+  });
+
+  // Get a specific merchant pattern
+  apiRouter.get("/merchant-patterns/:id", async (req: Request, res: Response) => {
+    try {
+      const pattern = await storage.getMerchantPattern(Number(req.params.id));
+      if (!pattern) {
+        return res.status(404).json({ message: "Pattern not found" });
+      }
+      res.json(pattern);
+    } catch (error) {
+      console.error("Error fetching merchant pattern:", error);
+      res.status(500).json({ message: "Failed to fetch merchant pattern" });
+    }
+  });
+
+  // Delete a merchant pattern
+  apiRouter.delete("/merchant-patterns/:id", async (req: Request, res: Response) => {
+    try {
+      const deleted = await storage.deleteMerchantPattern(Number(req.params.id));
+      if (!deleted) {
+        return res.status(404).json({ message: "Pattern not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting merchant pattern:", error);
+      res.status(500).json({ message: "Failed to delete merchant pattern" });
+    }
+  });
+
+  // Get AI categorization settings
+  apiRouter.get("/settings/categorization", async (req: Request, res: Response) => {
+    try {
+      const preferences = await storage.getPreferences();
+      res.json({
+        aiCategorizationEnabled: preferences?.aiCategorizationEnabled ?? true,
+        aiAutoPostEnabled: preferences?.aiAutoPostEnabled ?? false,
+        aiAutoPostMinConfidence: preferences?.aiAutoPostMinConfidence ?? '0.95',
+        aiRuleGenerationEnabled: preferences?.aiRuleGenerationEnabled ?? true,
+      });
+    } catch (error) {
+      console.error("Error fetching AI categorization settings:", error);
+      res.status(500).json({ message: "Failed to fetch settings" });
+    }
+  });
+
+  // Update AI categorization settings
+  apiRouter.patch("/settings/categorization", async (req: Request, res: Response) => {
+    try {
+      const {
+        aiCategorizationEnabled,
+        aiAutoPostEnabled,
+        aiAutoPostMinConfidence,
+        aiRuleGenerationEnabled,
+      } = req.body;
+
+      const updateData: any = {};
+      if (aiCategorizationEnabled !== undefined) updateData.aiCategorizationEnabled = aiCategorizationEnabled;
+      if (aiAutoPostEnabled !== undefined) updateData.aiAutoPostEnabled = aiAutoPostEnabled;
+      if (aiAutoPostMinConfidence !== undefined) updateData.aiAutoPostMinConfidence = aiAutoPostMinConfidence.toString();
+      if (aiRuleGenerationEnabled !== undefined) updateData.aiRuleGenerationEnabled = aiRuleGenerationEnabled;
+
+      const updated = await storage.updatePreferences(updateData);
+      res.json({ success: true, preferences: updated });
+    } catch (error) {
+      console.error("Error updating AI categorization settings:", error);
+      res.status(500).json({ message: "Failed to update settings" });
+    }
+  });
+
+  // Get categorization statistics
+  apiRouter.get("/categorization/stats", async (req: Request, res: Response) => {
+    try {
+      const [
+        totalFeedback,
+        acceptedCount,
+        patternCount,
+        manualRuleCount,
+        aiRuleCount,
+        topPatterns,
+      ] = await Promise.all([
+        storage.getCategorizationFeedbackCount(),
+        storage.getAcceptedFeedbackCount(),
+        storage.getMerchantPatternCount(),
+        storage.getRuleCountByType('manual'),
+        storage.getRuleCountByType('ai'),
+        storage.getTopMerchantPatterns(10),
+      ]);
+
+      const acceptanceRate = totalFeedback > 0 ? acceptedCount / totalFeedback : 0;
+
+      res.json({
+        totalFeedback,
+        acceptanceRate,
+        patternCount,
+        manualRuleCount,
+        aiRuleCount,
+        topMerchants: topPatterns.map(p => ({
+          merchant: p.merchantNameNormalized,
+          count: p.totalOccurrences,
+          confidence: parseFloat(p.confidenceScore?.toString() || '0'),
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching categorization stats:", error);
+      res.status(500).json({ message: "Failed to fetch statistics" });
+    }
+  });
+
+  // Get smart categorization suggestion (multi-layer)
+  apiRouter.post("/bank-feeds/smart-suggestion", async (req: Request, res: Response) => {
+    try {
+      const { transactionId } = req.body;
+
+      if (!transactionId) {
+        return res.status(400).json({ message: "Transaction ID is required" });
+      }
+
+      const transaction = await storage.getImportedTransaction(transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      // Import categorization service
+      const { getFullCategorization } = await import('./services/categorization-service');
+
+      // Create a storage adapter for the categorization service
+      const categorizationStorage = {
+        getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+        getEnabledCategorizationRules: () => storage.getEnabledCategorizationRules(),
+        getAccount: (id: number) => storage.getAccount(id),
+        getAccounts: () => storage.getAccounts(),
+        getContact: (id: number) => storage.getContact(id),
+        getContacts: () => storage.getContacts(),
+        getPreferences: () => storage.getPreferences(),
+      };
+
+      const suggestion = await getFullCategorization(categorizationStorage, transaction);
+
+      res.json({
+        transaction: {
+          id: transaction.id,
+          name: transaction.name,
+          merchantName: transaction.merchantName,
+          amount: transaction.amount,
+          date: transaction.date,
+        },
+        suggestion,
+      });
+    } catch (error) {
+      console.error("Error getting smart suggestion:", error);
+      res.status(500).json({ message: "Failed to get suggestion" });
     }
   });
 
