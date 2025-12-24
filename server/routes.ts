@@ -3230,13 +3230,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/payments", async (req: Request, res: Response) => {
     const data = req.body;
     const lineItems = data.lineItems || [];
-    const unappliedAmount = data.unappliedAmount || 0;
     const totalCreditsApplied = data.totalCreditsApplied || 0;
-    
+
+    // Calculate the actual unapplied amount based on payment amount vs what's applied to invoices
+    // This ensures correct status even if frontend doesn't send unappliedAmount
+    const invoiceItemsForCalc = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
+    const totalAppliedToInvoices = invoiceItemsForCalc.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
+    const calculatedUnappliedAmount = Math.max(0, Number(data.amount || 0) - totalAppliedToInvoices);
+
+    // Use calculated value, fall back to frontend-provided value
+    const unappliedAmount = calculatedUnappliedAmount > 0 ? calculatedUnappliedAmount : (data.unappliedAmount || 0);
+
     console.log("Payment request received:", {
       data,
       lineItems,
       unappliedAmount,
+      calculatedUnappliedAmount,
+      totalAppliedToInvoices,
       totalCreditsApplied,
       invoiceItems: lineItems.filter((item: any) => !item.type || item.type === 'invoice'),
       depositItems: lineItems.filter((item: any) => item.type === 'deposit')

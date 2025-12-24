@@ -283,18 +283,18 @@ export default function TransactionList({
       return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-amber-100 text-amber-700 font-medium">Open</Badge>;
     }
 
-    // For deposits
+    // For deposits - show Credit if has unapplied balance (negative for deposits)
     if (type === 'deposit') {
-      if (status === 'unapplied_credit') {
+      if (status === 'unapplied_credit' || (balance !== null && balance !== undefined && balance < 0)) {
         return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
       }
       return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Done</Badge>;
     }
 
-    // For payments
+    // For payments - show Credit if has positive balance (unapplied amount)
+    // This catches payments with incorrect "completed" status that actually have unapplied credit
     if (type === 'payment') {
-      // Show "Credit" badge if payment has unapplied amount
-      if (status === 'unapplied_credit' && balance !== null && balance !== undefined && balance > 0) {
+      if (balance !== null && balance !== undefined && balance > 0) {
         return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
       }
       return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Rcvd</Badge>;
@@ -302,7 +302,7 @@ export default function TransactionList({
 
     // For cheques with unapplied credit
     if (type === 'cheque') {
-      if (status === 'unapplied_credit' && balance !== null && balance !== undefined && balance > 0) {
+      if (status === 'unapplied_credit' || (balance !== null && balance !== undefined && Math.abs(balance) > 0)) {
         return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-blue-100 text-blue-700 font-medium">Credit</Badge>;
       }
       return <Badge className="text-[10px] px-1.5 py-0 h-[18px] bg-emerald-100 text-emerald-700 font-medium">Done</Badge>;
@@ -760,11 +760,28 @@ export default function TransactionList({
                       transaction.balance !== null && transaction.balance !== undefined;
 
                     // For payments/deposits/cheques: show unapplied credit amount
-                    const hasUnappliedCredit =
-                      (transaction.type === 'payment' || transaction.type === 'deposit' || transaction.type === 'cheque') &&
-                      transaction.status === 'unapplied_credit' &&
-                      transaction.balance !== null && transaction.balance !== undefined &&
-                      transaction.balance > 0;
+                    // Check both explicit unapplied_credit status AND payments with positive balance (may have wrong status)
+                    const hasUnappliedCredit = (() => {
+                      if (transaction.type !== 'payment' && transaction.type !== 'deposit' && transaction.type !== 'cheque') {
+                        return false;
+                      }
+                      if (transaction.balance === null || transaction.balance === undefined) {
+                        return false;
+                      }
+                      // Explicit unapplied_credit status with any non-zero balance
+                      if (transaction.status === 'unapplied_credit' && Math.abs(transaction.balance) > 0) {
+                        return true;
+                      }
+                      // Payments with positive balance (catches payments with incorrect "completed" status)
+                      if (transaction.type === 'payment' && transaction.balance > 0) {
+                        return true;
+                      }
+                      // Deposits use negative balance
+                      if (transaction.type === 'deposit' && transaction.balance < 0) {
+                        return true;
+                      }
+                      return false;
+                    })();
 
                     const hasBalance = isInvoiceOrBill || hasUnappliedCredit;
 
