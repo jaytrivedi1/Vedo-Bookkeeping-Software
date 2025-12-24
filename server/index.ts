@@ -28,6 +28,7 @@ import { fetchYesterdayRates } from "./startup-exchange-rates";
 import { migrateInvoiceActivities } from "./migrations/add-invoice-activities";
 import { addUserCompaniesTable } from "./migrations/add-user-companies";
 import { addCompanyCodeMigration } from "./migrations/add-company-code";
+import { addAiSettings } from "./migrations/add-ai-settings";
 
 const app = express();
 app.use(express.json());
@@ -141,6 +142,9 @@ app.use((req, res, next) => {
     
     // Add invoice activities and secure token support
     await migrateInvoiceActivities();
+
+    // Add AI categorization settings to preferences table
+    await addAiSettings();
   } catch (error) {
     log(`Error in database migrations: ${error}`);
   }
