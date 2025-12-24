@@ -2167,8 +2167,14 @@ export default function Banking() {
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
               {/* Progress Stats Bar */}
               {(() => {
-                const uncategorizedCount = allImportedTransactions.filter(tx => !tx.matchedTransactionId && !tx.deleted).length;
-                const categorizedCount = allImportedTransactions.filter(tx => tx.matchedTransactionId && !tx.deleted).length;
+                // Only count transactions from accounts with active bank feeds
+                const activeFeedAccountIds = new Set(accountsWithFeedStatus.map(a => a.id));
+                const relevantTransactions = allImportedTransactions.filter(tx =>
+                  tx.accountId && activeFeedAccountIds.has(tx.accountId)
+                );
+
+                const uncategorizedCount = relevantTransactions.filter(tx => !tx.matchedTransactionId && !tx.deleted).length;
+                const categorizedCount = relevantTransactions.filter(tx => tx.matchedTransactionId && !tx.deleted).length;
                 const totalActive = uncategorizedCount + categorizedCount;
                 const progressPercent = totalActive > 0 ? Math.round((categorizedCount / totalActive) * 100) : 0;
 
