@@ -99,7 +99,7 @@ export default function Invoices() {
   useEffect(() => {
     const params = new URLSearchParams(searchString);
     const tabParam = params.get('tab');
-    if (tabParam && ['invoices', 'quotations', 'recurring', 'customers'].includes(tabParam)) {
+    if (tabParam && ['invoices', 'quotations', 'recurring', 'sales-receipts', 'customers'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [searchString]);
@@ -234,6 +234,20 @@ export default function Invoices() {
           return (
             quotation.reference?.toLowerCase().includes(query) ||
             quotation.description?.toLowerCase().includes(query)
+          );
+        })
+    : [];
+
+  // Filter sales receipts
+  const salesReceipts = transactions
+    ? transactions
+        .filter((transaction) => transaction.type === "sales_receipt")
+        .filter((receipt) => {
+          if (!searchQuery) return true;
+          const query = searchQuery.toLowerCase();
+          return (
+            receipt.reference?.toLowerCase().includes(query) ||
+            receipt.description?.toLowerCase().includes(query)
           );
         })
     : [];
@@ -574,6 +588,17 @@ export default function Invoices() {
                   Recurring
                 </button>
                 <button
+                  onClick={() => setActiveTab("sales-receipts")}
+                  className={getTabClass("sales-receipts")}
+                >
+                  Sales Receipts
+                  {salesReceipts.length > 0 && (
+                    <span className="ml-2 px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700 rounded-full">
+                      {salesReceipts.length}
+                    </span>
+                  )}
+                </button>
+                <button
                   onClick={() => setActiveTab("customers")}
                   className={getTabClass("customers")}
                 >
@@ -595,6 +620,7 @@ export default function Invoices() {
                     placeholder={
                       activeTab === "recurring" ? "Search templates..." :
                       activeTab === "quotations" ? "Search quotations..." :
+                      activeTab === "sales-receipts" ? "Search sales receipts..." :
                       activeTab === "customers" ? "Search customers..." :
                       "Search invoices..."
                     }
@@ -846,6 +872,14 @@ export default function Invoices() {
                   </DialogContent>
                 </Dialog>
               </div>
+            )}
+
+            {activeTab === "sales-receipts" && (
+              <TransactionTable
+                transactions={salesReceipts}
+                loading={isLoading}
+                onDeleteSuccess={() => refetch()}
+              />
             )}
 
             {activeTab === "customers" && (
