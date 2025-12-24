@@ -1,6 +1,7 @@
 import {
   accounts,
   contacts,
+  contactNotesSchema,
   transactions,
   lineItems,
   ledgerEntries,
@@ -20,6 +21,8 @@ import {
   type InsertAccount,
   type Contact,
   type InsertContact,
+  type ContactNote,
+  type InsertContactNote,
   type Transaction,
   type InsertTransaction,
   type LineItem,
@@ -130,6 +133,14 @@ export interface IStorage {
   updateContact(id: number, contact: Partial<Contact>): Promise<Contact | undefined>;
   deleteContact(id: number): Promise<boolean>;
   hasContactTransactions(contactId: number): Promise<boolean>;
+
+  // Contact Notes
+  getContactNotes(contactId: number): Promise<ContactNote[]>;
+  getContactNote(id: number): Promise<ContactNote | undefined>;
+  createContactNote(note: InsertContactNote): Promise<ContactNote>;
+  updateContactNote(id: number, note: Partial<ContactNote>): Promise<ContactNote | undefined>;
+  deleteContactNote(id: number): Promise<boolean>;
+  unpinAllContactNotes(contactId: number): Promise<void>;
 
   // Transactions
   getTransactions(): Promise<Transaction[]>;

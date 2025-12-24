@@ -539,27 +539,16 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Header with basic deposit info */}
-          <Card className="shadow-sm">
-            <CardHeader className="bg-muted/50 pb-3">
-              <CardTitle className="text-xl font-bold flex items-center">
-                <DollarSign className="h-6 w-6 mr-2 text-primary" />
-                <span>{isEditing ? 'Edit Deposit' : 'Create Deposit'}</span>
-              </CardTitle>
-              <CardDescription>
-                {isEditing 
-                  ? 'Update the details of this deposit' 
-                  : 'Record funds deposited into your account'
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="flex flex-row gap-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6">
+              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Deposit Details</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="depositAccountId"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Deposit Account</FormLabel>
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Deposit Account</FormLabel>
                       <SearchableSelect
                         items={bankAccountItems}
                         value={field.value?.toString()}
@@ -572,6 +561,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                           setShowAddAccountDialog(true);
                         }}
                         addNewText="Add New Account"
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                       />
                       <FormMessage />
                     </FormItem>
@@ -582,12 +572,12 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                   control={form.control}
                   name="reference"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Reference #</FormLabel>
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Reference #</FormLabel>
                       <FormControl>
-                        <Input 
-                          {...field} 
-                          className="h-10"
+                        <Input
+                          {...field}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
                           placeholder="Enter a unique reference number"
                         />
                       </FormControl>
@@ -600,21 +590,17 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                   control={form.control}
                   name="date"
                   render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Date</FormLabel>
+                    <FormItem className="flex flex-col">
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date</FormLabel>
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
                             <Button
                               variant="outline"
-                              className="pl-3 text-left font-normal w-full h-10"
+                              className="w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
                             >
-                              {field.value ? (
-                                format(field.value, "MMMM dd, yyyy")
-                              ) : (
-                                <span>Pick a date</span>
-                              )}
-                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                              {field.value ? format(field.value, "MMM dd, yyyy") : <span>Pick a date</span>}
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
@@ -638,7 +624,7 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
 
               {/* Exchange Rate Input - Show when foreign currency is detected */}
               {isForeignCurrency && (
-                <div className="mt-4">
+                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
                   <ExchangeRateInput
                     fromCurrency={accountCurrency}
                     toCurrency={homeCurrency}
@@ -649,398 +635,364 @@ export default function DepositForm({ onSuccess, initialData, ledgerEntries, isE
                   />
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Line Items */}
-          <div className="w-full flex justify-end mb-2">
-            <div className="flex items-center">
-              <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
-              <Select
-                value={isExclusiveOfTax ? "exclusive" : "inclusive"}
-                onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
-              >
-                <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                  <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
-          
-          <Card className="shadow-sm">
-            <CardHeader className="bg-muted/50 pb-3">
-              <CardTitle className="text-lg flex items-center">
-                <PlusCircle className="h-5 w-5 mr-2" />
-                <span>Add funds to this deposit</span>
-              </CardTitle>
-              <CardDescription>Record all funds to be added in this deposit</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-muted/50 border-t border-b">
-                      <th className="w-10 px-4 py-3 text-left"></th>
-                      <th className="px-4 py-3 text-left">RECEIVED FROM</th>
-                      <th className="px-4 py-3 text-left">ACCOUNT</th>
-                      <th className="px-4 py-3 text-left">DESCRIPTION</th>
-                      <th className="px-4 py-3 text-left">PAYMENT METHOD</th>
-                      <th className="px-4 py-3 text-right">AMOUNT (CAD)</th>
-                      <th className="px-4 py-3 text-left">SALES TAX</th>
-                      <th className="w-10 px-4 py-3 text-left"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fields.map((field, index) => (
-                      <tr key={field.id} className="border-b">
-                        <td className="px-4 py-3 text-center text-gray-500">
-                          {index + 1}
-                        </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.receivedFrom`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <SearchableSelect
-                                    items={[{ value: "none", label: "-- Select a source --", subtitle: undefined }, ...contactItems]}
-                                    value={field.value || "none"}
-                                    onValueChange={(value) => {
-                                      field.onChange(value === "none" ? "" : value);
-                                      // When a contact is selected, update the contactId
-                                      if (value !== "none") {
-                                        const contact = contacts?.find(c => c.name === value);
-                                        if (contact) {
-                                          form.setValue(`lineItems.${index}.contactId`, contact.id);
-                                        }
-                                      } else {
-                                        form.setValue(`lineItems.${index}.contactId`, undefined);
-                                      }
-                                    }}
-                                    placeholder="Select source"
-                                    emptyText="No contacts found"
-                                    searchPlaceholder="Search contacts..."
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.accountId`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <SearchableSelect
-                                  items={allAccountItems}
-                                  value={field.value?.toString()}
-                                  onValueChange={(value) => field.onChange(parseInt(value))}
-                                  placeholder="Select account"
-                                  searchPlaceholder="Search accounts..."
-                                  emptyText="No accounts found."
-                                  onAddNew={() => {
-                                    setAccountDialogContext({type: 'lineItem', index});
-                                    setShowAddAccountDialog(true);
-                                  }}
-                                  addNewText="Add New Account"
-                                />
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.description`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    placeholder="Description"
-                                    className="border border-input rounded-md px-3 py-1 w-full"
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.paymentMethod`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <SearchableSelect
-                                  items={paymentMethodItems}
-                                  value={field.value?.toString()}
-                                  onValueChange={(value) => field.onChange(value)}
-                                  placeholder="Select method"
-                                  searchPlaceholder="Search methods..."
-                                  emptyText="No payment methods found"
-                                />
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
 
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.amount`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <Input
-                                    {...field}
-                                    type="number"
-                                    step="0.01"
-                                    placeholder="0.00"
-                                    className="border border-input rounded-md px-3 py-1 w-full text-right"
-                                    onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <FormField
-                            control={form.control}
-                            name={`lineItems.${index}.salesTaxId`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormControl>
-                                  <SearchableSelect
-                                    items={taxItems}
-                                    value={field.value?.toString() || "0"}
-                                    onValueChange={(value) => {
-                                      const numValue = parseInt(value);
-                                      if (numValue === 0) {
-                                        field.onChange(undefined);
-                                      } else {
-                                        field.onChange(numValue);
+          {/* Line Items */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Deposit Line Items</h2>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500">Amounts are</span>
+                <Select
+                  value={isExclusiveOfTax ? "exclusive" : "inclusive"}
+                  onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
+                >
+                  <SelectTrigger className="w-[160px] h-9 bg-slate-50 border-slate-200 rounded-lg text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                    <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="w-10 px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide"></th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Received From</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Account</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Description</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Method</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">Sales Tax</th>
+                    <th className="w-10 px-4 py-3 text-left"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fields.map((field, index) => (
+                    <tr key={field.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 text-center text-slate-400 text-sm">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.receivedFrom`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <SearchableSelect
+                                  items={[{ value: "none", label: "-- Select a source --", subtitle: undefined }, ...contactItems]}
+                                  value={field.value || "none"}
+                                  onValueChange={(value) => {
+                                    field.onChange(value === "none" ? "" : value);
+                                    if (value !== "none") {
+                                      const contact = contacts?.find(c => c.name === value);
+                                      if (contact) {
+                                        form.setValue(`lineItems.${index}.contactId`, contact.id);
                                       }
-                                    }}
-                                    placeholder="Tax rate"
-                                    searchPlaceholder="Search taxes..."
-                                    emptyText="No taxes found."
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center">
+                                    } else {
+                                      form.setValue(`lineItems.${index}.contactId`, undefined);
+                                    }
+                                  }}
+                                  placeholder="Select source"
+                                  emptyText="No contacts found"
+                                  searchPlaceholder="Search contacts..."
+                                  className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.accountId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <SearchableSelect
+                                items={allAccountItems}
+                                value={field.value?.toString()}
+                                onValueChange={(value) => field.onChange(parseInt(value))}
+                                placeholder="Select account"
+                                searchPlaceholder="Search accounts..."
+                                emptyText="No accounts found."
+                                onAddNew={() => {
+                                  setAccountDialogContext({type: 'lineItem', index});
+                                  setShowAddAccountDialog(true);
+                                }}
+                                addNewText="Add New Account"
+                                className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.description`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  placeholder="Description"
+                                  className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.paymentMethod`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <SearchableSelect
+                                items={paymentMethodItems}
+                                value={field.value?.toString()}
+                                onValueChange={(value) => field.onChange(value)}
+                                placeholder="Select method"
+                                searchPlaceholder="Search methods..."
+                                emptyText="No payment methods found"
+                                className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                              />
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.amount`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0.00"
+                                  className="bg-white border-slate-200 h-10 text-right focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                                  onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <FormField
+                          control={form.control}
+                          name={`lineItems.${index}.salesTaxId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <SearchableSelect
+                                  items={taxItems}
+                                  value={field.value?.toString() || "0"}
+                                  onValueChange={(value) => {
+                                    const numValue = parseInt(value);
+                                    if (numValue === 0) {
+                                      field.onChange(undefined);
+                                    } else {
+                                      field.onChange(numValue);
+                                    }
+                                  }}
+                                  placeholder="Tax rate"
+                                  searchPlaceholder="Search taxes..."
+                                  emptyText="No taxes found."
+                                  className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => remove(index)}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="px-6 py-3 border-t border-slate-100 flex justify-between items-center">
+              <div className="flex space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                  onClick={() => append({
+                    receivedFrom: '',
+                    contactId: undefined,
+                    accountId: undefined,
+                    description: '',
+                    paymentMethod: '',
+                    refNo: '',
+                    amount: 0,
+                    salesTaxId: undefined,
+                  })}
+                >
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  Add Line
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                  onClick={() => {
+                    form.setValue("lineItems", [
+                      {
+                        receivedFrom: '',
+                        contactId: undefined,
+                        accountId: undefined,
+                        description: '',
+                        paymentMethod: '',
+                        refNo: '',
+                        amount: 0,
+                        salesTaxId: undefined,
+                      }
+                    ]);
+                  }}
+                >
+                  Clear All
+                </Button>
+              </div>
+            </div>
+
+            {/* Totals */}
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50">
+              <div className="flex justify-end">
+                <div className="w-full md:w-72 space-y-2">
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Subtotal:</span>
+                    <span className="font-medium">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600">
+                    <span>Tax:</span>
+                    <span className="font-medium">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold text-slate-900 border-t border-slate-200 pt-2">
+                    <span>Total:</span>
+                    <span>{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(total)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Information */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6">
+              <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Additional Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="memo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="Add any notes or details about this deposit"
+                          className="resize-none bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl min-h-[100px]"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="attachment"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Attachment</FormLabel>
+                      <div className="mt-2 flex items-center space-x-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-start bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl h-11"
+                          onClick={() => {
+                            field.onChange("example-attachment.pdf");
+                            toast({
+                              title: "Attachment added",
+                              description: "example-attachment.pdf has been added",
+                            });
+                          }}
+                        >
+                          <FileText className="mr-2 h-4 w-4 text-slate-400" />
+                          <span className="text-slate-600">{field.value ? field.value : "Add Attachment"}</span>
+                        </Button>
+                        {field.value && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => remove(index)}
-                            className="h-8 w-8 p-0"
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+                            onClick={() => field.onChange("")}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <X className="h-4 w-4" />
                           </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t">
-                      <td colSpan={8} className="px-4 py-3">
-                        <div className="flex justify-between items-center">
-                          <div className="flex space-x-2">
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => append({
-                                receivedFrom: '',
-                                contactId: undefined,
-                                accountId: undefined,
-                                description: '',
-                                paymentMethod: '',
-                                refNo: '',
-                                amount: 0,
-                                salesTaxId: undefined,
-                              })}
-                            >
-                              Add Items
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => {
-                                form.setValue("lineItems", [
-                                  {
-                                    receivedFrom: '',
-                                    contactId: undefined,
-                                    accountId: undefined,
-                                    description: '',
-                                    paymentMethod: '',
-                                    refNo: '',
-                                    amount: 0,
-                                    salesTaxId: undefined,
-                                  }
-                                ]);
-                              }}
-                            >
-                              Clear all lines
-                            </Button>
-                          </div>
-                          <div className="text-right space-y-2">
-                            <div className="flex justify-end items-center">
-                              <span className="w-32 text-right">Subtotal</span>
-                              <span className="ml-4 w-32 text-right font-medium">
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(subtotal)}
-                              </span>
-                            </div>
-                            <div className="flex justify-end items-center">
-                              <span className="w-32 text-right">Tax</span>
-                              <span className="ml-4 w-32 text-right font-medium">
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(taxAmount)}
-                              </span>
-                            </div>
-                            <div className="flex justify-end items-center">
-                              <span className="w-32 text-right font-bold">Total</span>
-                              <span className="ml-4 w-32 text-right font-bold">
-                                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD' }).format(total)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Attach receipts or other documents (PDF, JPG, PNG)
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Additional Information */}
-          <Card className="shadow-sm">
-            <CardHeader className="bg-muted/50 pb-3">
-              <CardTitle className="text-lg flex items-center">
-                <InfoIcon className="h-5 w-5 mr-2" />
-                <span>Additional Information</span>
-              </CardTitle>
-              <CardDescription>Add notes, memos, and file attachments</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <FormField
-                    control={form.control}
-                    name="memo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Memo</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            {...field}
-                            placeholder="Add any notes or details about this deposit" 
-                            className="min-h-[100px]"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div>
-                  <FormField
-                    control={form.control}
-                    name="attachment"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Attachment</FormLabel>
-                        <div className="mt-2 flex items-center space-x-2">
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            className="w-full justify-start"
-                            onClick={() => {
-                              // In a real implementation, this would open a file dialog
-                              // For now, we'll just set a placeholder value
-                              field.onChange("example-attachment.pdf");
-                              toast({
-                                title: "Attachment added",
-                                description: "example-attachment.pdf has been added",
-                              });
-                            }}
-                          >
-                            <FileText className="mr-2 h-4 w-4" />
-                            <span>{field.value ? field.value : "Add Attachment"}</span>
-                          </Button>
-                          {field.value && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => field.onChange("")}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Attach receipts or other documents (PDF, JPG, PNG)
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Footer buttons */}
-          <div className="flex justify-between items-center pt-6 mt-4 border-t">
-            <div>
-              <Button
-                type="button"
-                variant="outline"
-                className="mr-2"
-                onClick={() => window.history.back()}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
             </div>
-            <div className="space-x-2">
-              <Button
-                type="submit"
-                className="px-6"
-                disabled={createDepositMutation.isPending}
-              >
-                {createDepositMutation.isPending ? (
-                  <>
-                    <span className="animate-spin mr-2">⟳</span> 
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="h-4 w-4 mr-2" />
-                    {isEditing ? 'Update Deposit' : 'Save Deposit'}
-                  </>
-                )}
-              </Button>
-            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => window.history.back()}
+              className="bg-white border-slate-200 hover:bg-slate-50 rounded-xl px-6"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
+              disabled={createDepositMutation.isPending}
+            >
+              {createDepositMutation.isPending ? "Saving..." : isEditing ? 'Update Deposit' : 'Save Deposit'}
+            </Button>
           </div>
         </form>
 

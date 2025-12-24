@@ -233,179 +233,203 @@ export default function TransferForm({ transfer, onSuccess, onCancel }: Transfer
     <>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* From Account */}
-            <FormField
-              control={form.control}
-              name="fromAccountId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>From Account *</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      items={accountItems}
-                      value={field.value?.toString() || ''}
-                      onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
-                      placeholder="Select account"
-                      searchPlaceholder="Search accounts..."
-                      emptyText="No accounts found."
-                      data-testid="select-from-account"
-                      onAddNew={() => {
-                        setAccountDialogContext('from');
-                        setShowAddAccountDialog(true);
-                      }}
-                      addNewText="Add New Account"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* To Account */}
-            <FormField
-              control={form.control}
-              name="toAccountId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>To Account *</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      items={accountItems}
-                      value={field.value?.toString() || ''}
-                      onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
-                      placeholder="Select account"
-                      searchPlaceholder="Search accounts..."
-                      emptyText="No accounts found."
-                      data-testid="select-to-account"
-                      onAddNew={() => {
-                        setAccountDialogContext('to');
-                        setShowAddAccountDialog(true);
-                      }}
-                      addNewText="Add New Account"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Amount */}
-            <FormField
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Amount *</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      placeholder="0.00"
-                      {...field}
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      data-testid="input-amount"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Date */}
-            <FormField
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Date *</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
+          {/* Transfer Details Section */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Transfer Details</h3>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* From Account */}
+                <FormField
+                  control={form.control}
+                  name="fromAccountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">From Account *</FormLabel>
                       <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                          data-testid="button-date"
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
+                        <SearchableSelect
+                          items={accountItems}
+                          value={field.value?.toString() || ''}
+                          onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
+                          placeholder="Select account"
+                          searchPlaceholder="Search accounts..."
+                          emptyText="No accounts found."
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="select-from-account"
+                          onAddNew={() => {
+                            setAccountDialogContext('from');
+                            setShowAddAccountDialog(true);
+                          }}
+                          addNewText="Add New Account"
+                        />
                       </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* To Account */}
+                <FormField
+                  control={form.control}
+                  name="toAccountId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">To Account *</FormLabel>
+                      <FormControl>
+                        <SearchableSelect
+                          items={accountItems}
+                          value={field.value?.toString() || ''}
+                          onValueChange={(value) => field.onChange(value ? Number(value) : undefined)}
+                          placeholder="Select account"
+                          searchPlaceholder="Search accounts..."
+                          emptyText="No accounts found."
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="select-to-account"
+                          onAddNew={() => {
+                            setAccountDialogContext('to');
+                            setShowAddAccountDialog(true);
+                          }}
+                          addNewText="Add New Account"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Amount */}
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Amount *</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="input-amount"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Date */}
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Date *</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full pl-3 text-left font-normal bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl",
+                                !field.value && "text-muted-foreground"
+                              )}
+                              data-testid="button-date"
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date > new Date() || date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Memo */}
-          <FormField
-            control={form.control}
-            name="memo"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Memo / Description</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="Optional note about this transfer..."
-                    className="resize-none"
-                    rows={3}
-                    {...field}
-                    data-testid="textarea-memo"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Exchange Rate Input - Show when foreign currency is detected */}
+          {/* Exchange Rate Section - Show when foreign currency is detected */}
           {hasForeignCurrency && (
-            <ExchangeRateInput
-              fromCurrency={foreignCurrency}
-              toCurrency={homeCurrency}
-              value={exchangeRate}
-              onChange={handleExchangeRateChange}
-              isLoading={exchangeRateLoading}
-              date={transferDate}
-            />
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-6 bg-blue-50">
+                <ExchangeRateInput
+                  fromCurrency={foreignCurrency}
+                  toCurrency={homeCurrency}
+                  value={exchangeRate}
+                  onChange={handleExchangeRateChange}
+                  isLoading={exchangeRateLoading}
+                  date={transferDate}
+                />
+              </div>
+            </div>
           )}
 
+          {/* Additional Information Section */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Additional Information</h3>
+            </div>
+            <div className="p-6">
+              <FormField
+                control={form.control}
+                name="memo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo / Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Optional note about this transfer..."
+                        className="resize-none bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        rows={3}
+                        {...field}
+                        data-testid="textarea-memo"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
+          <div className="flex justify-between pt-6">
+            <Button
+              type="button"
+              variant="outline"
               onClick={onCancel}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl px-6"
               data-testid="button-cancel"
             >
               Cancel
             </Button>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={createTransferMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
               data-testid="button-submit"
             >
               {createTransferMutation.isPending ? "Saving..." : "Save Transfer"}

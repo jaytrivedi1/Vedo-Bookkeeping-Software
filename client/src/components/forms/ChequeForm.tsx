@@ -644,176 +644,191 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <FormField
-            control={form.control}
-            name="contactId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payee</FormLabel>
-                <div className="flex gap-2 items-center">
-                  <FormControl>
+        {/* Header Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <FormField
+                control={form.control}
+                name="contactId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payee</FormLabel>
+                    <div className="flex gap-2 items-center">
+                      <FormControl>
+                        <SearchableSelect
+                          items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
+                          value={field.value?.toString() || ""}
+                          onValueChange={(value) => {
+                            if (value === "") {
+                              field.onChange(undefined);
+                            } else {
+                              field.onChange(parseInt(value));
+                            }
+                          }}
+                          placeholder="Select a payee"
+                          emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
+                          searchPlaceholder="Search contacts..."
+                          disabled={contactsLoading}
+                          className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                          data-testid="select-payee"
+                        />
+                      </FormControl>
+                      {field.value !== undefined && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => field.onChange(undefined)}
+                          className="h-11 w-11 p-0 rounded-xl"
+                          data-testid="button-clear-payee"
+                        >
+                          <XIcon className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="paymentAccountId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Bank Account *</FormLabel>
                     <SearchableSelect
-                      items={[{ value: "", label: "None", subtitle: undefined }, ...contactItems]}
-                      value={field.value?.toString() || ""}
-                      onValueChange={(value) => {
-                        if (value === "") {
-                          field.onChange(undefined);
-                        } else {
-                          field.onChange(parseInt(value));
-                        }
+                      items={bankAccountItems}
+                      value={field.value?.toString()}
+                      onValueChange={(value) => field.onChange(parseInt(value))}
+                      placeholder="Select payment account"
+                      searchPlaceholder="Search accounts..."
+                      emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
+                      disabled={accountsLoading}
+                      className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                      onAddNew={() => {
+                        setAccountDialogContext({type: 'payment'});
+                        setShowAddAccountDialog(true);
                       }}
-                      placeholder="Select a payee"
-                      emptyText={contactsLoading ? "Loading contacts..." : "No contacts found"}
-                      searchPlaceholder="Search contacts..."
-                      disabled={contactsLoading}
-                      data-testid="select-payee"
+                      addNewText="Add New Account"
+                      data-testid="select-bank-account"
                     />
-                  </FormControl>
-                  {field.value !== undefined && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => field.onChange(undefined)}
-                      data-testid="button-clear-payee"
-                    >
-                      <XIcon className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="paymentAccountId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Bank Account *</FormLabel>
-                <SearchableSelect
-                  items={bankAccountItems}
-                  value={field.value?.toString()}
-                  onValueChange={(value) => field.onChange(parseInt(value))}
-                  placeholder="Select payment account"
-                  searchPlaceholder="Search accounts..."
-                  emptyText={accountsLoading ? "Loading accounts..." : "No payment accounts available"}
-                  disabled={accountsLoading}
-                  onAddNew={() => {
-                    setAccountDialogContext({type: 'payment'});
-                    setShowAddAccountDialog(true);
-                  }}
-                  addNewText="Add New Account"
-                  data-testid="select-bank-account"
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              <FormField
+                control={form.control}
+                name="paymentDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Payment Date</FormLabel>
+                    <Popover modal={true}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            data-testid="button-payment-date"
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          <FormField
-            control={form.control}
-            name="paymentDate"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Payment Date</FormLabel>
-                <Popover modal={true}>
-                  <PopoverTrigger asChild>
+              <FormField
+                control={form.control}
+                name="reference"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Ref No.</FormLabel>
                     <FormControl>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className={cn(
-                          "w-full pl-3 text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                        data-testid="button-payment-date"
-                      >
-                        {field.value ? (
-                          format(field.value, "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
+                      <Input
+                        {...field}
+                        className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        data-testid="input-reference"
+                      />
                     </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-          <FormField
-            control={form.control}
-            name="reference"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Ref No.</FormLabel>
-                <FormControl>
-                  <Input {...field} data-testid="input-reference" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
         </div>
 
         {isMultiCurrencyEnabled && currency !== homeCurrency && (
-          <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950">
-            <ExchangeRateInput
-              fromCurrency={currency}
-              toCurrency={homeCurrency}
-              value={exchangeRate}
-              onChange={handleExchangeRateChange}
-              isLoading={exchangeRateLoading}
-              date={chequeDate}
-            />
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-6 bg-blue-50">
+              <ExchangeRateInput
+                fromCurrency={currency}
+                toCurrency={homeCurrency}
+                value={exchangeRate}
+                onChange={handleExchangeRateChange}
+                isLoading={exchangeRateLoading}
+                date={chequeDate}
+              />
+            </div>
           </div>
         )}
 
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Line Items</h3>
-          <div className="w-full flex justify-end mb-2">
-            <div className="flex items-center">
-              <span className="mr-2 text-sm text-muted-foreground">Amounts are</span>
-              <Select
-                value={isExclusiveOfTax ? "exclusive" : "inclusive"}
-                onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
-              >
-                <SelectTrigger className="w-[180px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                  <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* Line Items Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h3>
+              <div className="flex items-center">
+                <span className="mr-2 text-sm text-slate-500">Amounts are</span>
+                <Select
+                  value={isExclusiveOfTax ? "exclusive" : "inclusive"}
+                  onValueChange={(value) => setIsExclusiveOfTax(value === "exclusive")}
+                >
+                  <SelectTrigger className="w-[180px] h-9 bg-slate-50 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                    <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-          <div className="border rounded-lg overflow-hidden">
-            <div className="bg-muted/50 grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 font-medium text-sm">
+          <div className="overflow-x-auto">
+            <div className="bg-slate-50 grid grid-cols-[25%_35%_15%_15%_10%] gap-2 p-4 text-xs font-medium text-slate-500 uppercase tracking-wide border-b border-slate-200">
               <div>Account</div>
               <div>Description</div>
-              <div>Amount</div>
+              <div className="text-right">Amount</div>
               <div>Sales Tax</div>
               <div></div>
             </div>
             
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-[25%_35%_20%_20%_auto] gap-2 p-3 border-t items-start">
+              <div key={field.id} className="grid grid-cols-[25%_35%_15%_15%_10%] gap-2 p-4 border-b border-slate-100 items-start hover:bg-slate-50/50">
                 <div>
                   <FormField
                     control={form.control}
@@ -828,6 +843,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                           searchPlaceholder="Search accounts..."
                           emptyText={accountsLoading ? "Loading..." : "No accounts available"}
                           disabled={accountsLoading}
+                          className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                           onAddNew={() => {
                             setAccountDialogContext({type: 'lineItem', index});
                             setShowAddAccountDialog(true);
@@ -840,7 +856,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     )}
                   />
                 </div>
-                
+
                 <div>
                   <FormField
                     control={form.control}
@@ -848,13 +864,18 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Input placeholder="Description" {...field} data-testid={`input-description-${index}`} />
+                          <Input
+                            placeholder="Description"
+                            {...field}
+                            className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                            data-testid={`input-description-${index}`}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
                   />
                 </div>
-                
+
                 <div>
                   <FormField
                     control={form.control}
@@ -862,13 +883,13 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     render={({ field }) => (
                       <FormItem>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            min="0" 
-                            step="0.01" 
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
                             placeholder="0.00"
-                            className="text-right"
-                            {...field} 
+                            className="text-right bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
+                            {...field}
                             onChange={(e) => {
                               field.onChange(parseFloat(e.target.value) || 0);
                               updateLineItemAmount(index);
@@ -881,7 +902,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     )}
                   />
                 </div>
-                
+
                 <div>
                   <FormField
                     control={form.control}
@@ -904,6 +925,7 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                             placeholder="None"
                             searchPlaceholder="Search taxes..."
                             emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                            className="bg-white border-slate-200 h-10 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-lg"
                             data-testid={`select-tax-${index}`}
                           />
                         </FormControl>
@@ -912,14 +934,15 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
                     )}
                   />
                 </div>
-                
-                <div className="flex items-center justify-end">
+
+                <div className="flex items-center justify-center pt-1">
                   {fields.length > 1 && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => remove(index)}
+                      className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
                       data-testid={`button-remove-${index}`}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -929,189 +952,209 @@ export default function ChequeForm({ cheque, lineItems, onSuccess, onCancel }: C
               </div>
             ))}
           </div>
-          
+
+          <div className="p-4 border-t border-slate-200">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-dashed border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 rounded-xl"
+              onClick={() => append({ accountId: undefined, description: '', amount: 0, salesTaxId: undefined })}
+              data-testid="button-add-line-item"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Line Item
+            </Button>
+          </div>
+        </div>
+
+        {/* Totals Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Totals</h3>
+          </div>
+          <div className="p-6">
+            <div className="space-y-3 max-w-md ml-auto">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="text-sm font-medium">Subtotal</span>
+                <span className="font-medium text-right">${formatCurrency(subTotal)}</span>
+              </div>
+
+              {/* Tax Section - show EITHER main input OR components */}
+              {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+                // COMPOSITE TAX: Show only editable components (no total line)
+                <div className="space-y-1">
+                  {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                    <div key={taxComponent.id} className="flex justify-between items-center text-slate-700">
+                      <span className="text-sm">
+                        {taxComponent.name} ({taxComponent.rate}%)
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={manualComponentAmounts[taxComponent.id] !== undefined ? manualComponentAmounts[taxComponent.id].toFixed(2) : taxComponent.amount.toFixed(2)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value);
+                            if (!isNaN(value)) {
+                              handleComponentChange(taxComponent.id, value);
+                            }
+                          }}
+                          className="w-24 h-8 text-right px-2 font-medium border-slate-200 bg-slate-50 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                // SIMPLE TAX: Show only main tax input (no components)
+                <div className="flex justify-between items-center text-slate-700">
+                  <span className="text-sm">
+                    {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value);
+                        if (!isNaN(value) && e.target.value.trim() !== '') {
+                          const roundedValue = roundTo2Decimals(value);
+                          setManualTaxAmount(roundedValue);
+                          setManualComponentAmounts({});
+                          calculateTotals(roundedValue);
+                        } else {
+                          setManualTaxAmount(null);
+                          setManualComponentAmounts({});
+                          calculateTotals(null);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.trim() === '') {
+                          setManualTaxAmount(null);
+                          setManualComponentAmounts({});
+                          calculateTotals(null);
+                        } else if (manualTaxAmount !== null) {
+                          const roundedValue = roundTo2Decimals(manualTaxAmount);
+                          setManualTaxAmount(roundedValue);
+                          calculateTotals(roundedValue);
+                        }
+                      }}
+                      className="w-24 h-8 text-right px-2 font-medium border-slate-200 bg-slate-50 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-between border-t border-slate-200 pt-3">
+                <span className="text-sm font-semibold text-slate-900">Total</span>
+                <span className="font-semibold text-slate-900 text-right">${formatCurrency(totalAmount)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Information Section */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Additional Information</h3>
+          </div>
+          <div className="p-6 space-y-6">
+            <FormField
+              control={form.control}
+              name="memo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide">Memo</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Add notes or memo..."
+                      className="min-h-[100px] bg-slate-50 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl resize-none"
+                      {...field}
+                      data-testid="textarea-memo"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div>
+              <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-3 block">Attachments</FormLabel>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    data-testid="input-file"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('file-upload')?.click()}
+                    className="border-dashed border-slate-300 text-slate-600 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 rounded-xl"
+                    data-testid="button-upload"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Files
+                  </Button>
+                  {selectedFiles.length > 0 && (
+                    <span className="text-sm text-slate-500">
+                      {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
+                    </span>
+                  )}
+                </div>
+
+                {selectedFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <span className="text-sm truncate flex-1 text-slate-700" data-testid={`file-name-${index}`}>
+                          {file.name}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveFile(index)}
+                          className="h-8 w-8 p-0 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"
+                          data-testid={`button-remove-file-${index}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-between pt-6">
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => append({ accountId: undefined, description: '', amount: 0, salesTaxId: undefined })}
-            data-testid="button-add-line-item"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Line Item
-          </Button>
-        </div>
-
-        <div className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">Totals</h3>
-          <div className="space-y-3 max-w-md ml-auto">
-            <div className="flex justify-between items-center text-gray-700">
-              <span className="text-sm font-medium">Subtotal</span>
-              <span className="font-medium text-right">${formatCurrency(subTotal)}</span>
-            </div>
-            
-            {/* Tax Section - show EITHER main input OR components */}
-            {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
-              // COMPOSITE TAX: Show only editable components (no total line)
-              <div className="space-y-1">
-                {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                  <div key={taxComponent.id} className="flex justify-between items-center text-gray-700">
-                    <span className="text-sm">
-                      {taxComponent.name} ({taxComponent.rate}%)
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">$</span>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={manualComponentAmounts[taxComponent.id] !== undefined ? manualComponentAmounts[taxComponent.id].toFixed(2) : taxComponent.amount.toFixed(2)}
-                        onChange={(e) => {
-                          const value = parseFloat(e.target.value);
-                          if (!isNaN(value)) {
-                            handleComponentChange(taxComponent.id, value);
-                          }
-                        }}
-                        className="w-24 h-8 text-right px-2 font-medium border-gray-300"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // SIMPLE TAX: Show only main tax input (no components)
-              <div className="flex justify-between items-center text-gray-700">
-                <span className="text-sm">
-                  {taxNames.length > 0 ? taxNames.join(', ') : 'Tax'}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="font-medium">$</span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (!isNaN(value) && e.target.value.trim() !== '') {
-                        const roundedValue = roundTo2Decimals(value);
-                        setManualTaxAmount(roundedValue);
-                        setManualComponentAmounts({});
-                        calculateTotals(roundedValue);
-                      } else {
-                        setManualTaxAmount(null);
-                        setManualComponentAmounts({});
-                        calculateTotals(null);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      if (e.target.value.trim() === '') {
-                        setManualTaxAmount(null);
-                        setManualComponentAmounts({});
-                        calculateTotals(null);
-                      } else if (manualTaxAmount !== null) {
-                        const roundedValue = roundTo2Decimals(manualTaxAmount);
-                        setManualTaxAmount(roundedValue);
-                        calculateTotals(roundedValue);
-                      }
-                    }}
-                    className="w-24 h-8 text-right px-2 font-medium border-gray-300"
-                  />
-                </div>
-              </div>
-            )}
-            
-            <div className="flex justify-between border-t border-gray-300 pt-3">
-              <span className="text-sm font-semibold text-gray-900">Total</span>
-              <span className="font-semibold text-gray-900 text-right">${formatCurrency(totalAmount)}</span>
-            </div>
-          </div>
-        </div>
-
-        <FormField
-          control={form.control}
-          name="memo"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Memo</FormLabel>
-              <FormControl>
-                <Textarea 
-                  placeholder="Add notes or memo..." 
-                  className="min-h-[80px]"
-                  {...field} 
-                  data-testid="textarea-memo"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="border rounded-lg p-4">
-          <FormLabel className="text-sm font-medium mb-3 block">Attachments</FormLabel>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input
-                id="file-upload"
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-                data-testid="input-file"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById('file-upload')?.click()}
-                data-testid="button-upload"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Files
-              </Button>
-              {selectedFiles.length > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected
-                </span>
-              )}
-            </div>
-            
-            {selectedFiles.length > 0 && (
-              <div className="space-y-2">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                    <span className="text-sm truncate flex-1" data-testid={`file-name-${index}`}>
-                      {file.name}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveFile(index)}
-                      data-testid={`button-remove-file-${index}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex justify-between pt-4 border-t">
-          <Button 
-            type="button"
-            variant="outline"
             onClick={onCancel}
+            className="border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl px-6"
             data-testid="button-cancel"
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             type="submit"
             disabled={saveCheque.isPending}
+            className="bg-blue-600 hover:bg-blue-700 rounded-xl px-6"
             data-testid="button-save"
           >
             {saveCheque.isPending ? 'Saving...' : isEditing ? 'Update Cheque' : 'Save Cheque'}

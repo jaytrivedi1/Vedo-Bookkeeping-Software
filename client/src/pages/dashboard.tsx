@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { TrendingUp, TrendingDown } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, FileText, Building2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
@@ -53,7 +53,8 @@ interface Company {
   logoUrl?: string;
 }
 
-const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+// Professional color palette
+const COLORS = ['#3b82f6', '#14b8a6', '#8b5cf6', '#22c55e', '#f59e0b'];
 
 export default function Dashboard() {
   // Fetch company data
@@ -77,100 +78,84 @@ export default function Dashboard() {
   ].filter(item => item.value > 0) : [];
 
   return (
-    <div className="py-6 min-h-screen">
-      {/* Company Header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
-        {companyLoading ? (
-          <div className="flex items-center gap-4">
-            <Skeleton className="h-16 w-16 rounded-lg" />
-            <Skeleton className="h-8 w-48" />
+    <div className="py-6 min-h-screen bg-background">
+      {/* Page Header */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Welcome back{company?.name ? `, ${company.name}` : ''}
+            </p>
           </div>
-        ) : company ? (
-          <div className="flex items-center gap-4">
-            {company.logoUrl && (
-              <img
-                src={company.logoUrl}
-                alt={`${company.name} logo`}
-                className="h-16 w-16 object-contain rounded-lg border border-border bg-card p-2"
-                data-testid="company-logo"
-              />
-            )}
-            <div>
-              <h2 className="text-2xl font-bold text-foreground" data-testid="company-name">
-                {company.name}
-              </h2>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Dashboard Title */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mb-6">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-          Dashboard
-        </h1>
+          {company?.logoUrl && (
+            <img
+              src={company.logoUrl}
+              alt={`${company.name} logo`}
+              className="h-12 w-12 object-contain rounded-lg border border-border bg-white p-1.5"
+              data-testid="company-logo"
+            />
+          )}
+        </div>
       </div>
 
       {/* Dashboard Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
           {/* Profit & Loss Card */}
-          <Card className="glass border-border/50" data-testid="card-profit-loss">
-            <CardHeader>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow" data-testid="card-profit-loss">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">PROFIT & LOSS</CardTitle>
-                <span className="text-sm text-muted-foreground">Last month</span>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-blue-50">
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Profit & Loss</CardTitle>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Last 30 days</span>
               </div>
-              <div className="text-sm text-muted-foreground">Net profit for October</div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <div className="space-y-4">
                   <Skeleton className="h-10 w-32" />
-                  <Skeleton className="h-6 w-24" />
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-full" />
                 </div>
               ) : metrics ? (
                 <div className="space-y-4">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold" data-testid="text-net-profit">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-3xl font-bold text-slate-900" data-testid="text-net-profit">
                       {formatCurrencyCompact(metrics.profitLoss.netProfit, 'CAD', 'CAD')}
                     </span>
-                    <div className="flex items-center gap-1 text-sm">
+                    <div className={`flex items-center gap-1 text-sm font-medium px-2 py-0.5 rounded-full ${
+                      metrics.profitLoss.percentageChange >= 0
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-red-50 text-red-700'
+                    }`}>
                       {metrics.profitLoss.percentageChange >= 0 ? (
-                        <>
-                          <TrendingUp className="h-4 w-4 text-green-600" />
-                          <span className="text-green-600" data-testid="text-profit-change">
-                            {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}%
-                          </span>
-                        </>
+                        <TrendingUp className="h-3.5 w-3.5" />
                       ) : (
-                        <>
-                          <TrendingDown className="h-4 w-4 text-red-600" />
-                          <span className="text-red-600" data-testid="text-profit-change">
-                            {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}%
-                          </span>
-                        </>
+                        <TrendingDown className="h-3.5 w-3.5" />
                       )}
+                      <span data-testid="text-profit-change">
+                        {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}%
+                      </span>
                     </div>
                   </div>
 
-                  <div className="text-sm text-muted-foreground">
-                    {metrics.profitLoss.percentageChange >= 0 ? 'Up' : 'Down'} {Math.abs(metrics.profitLoss.percentageChange).toFixed(0)}% from prior 30 days
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="space-y-1">
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground" data-testid="text-income-label">Income</span>
-                        <span className="font-medium" data-testid="text-income-amount">
+                        <span className="text-slate-500" data-testid="text-income-label">Income</span>
+                        <span className="font-semibold text-slate-700" data-testid="text-income-amount">
                           {formatCurrencyCompact(metrics.profitLoss.income, 'CAD', 'CAD')}
                         </span>
                       </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-green-500"
+                          className="h-full bg-emerald-500 rounded-full transition-all"
                           style={{
                             width: `${(metrics.profitLoss.income / (metrics.profitLoss.income + metrics.profitLoss.expenses)) * 100}%`,
                           }}
@@ -178,16 +163,16 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground" data-testid="text-expenses-label">Expenses</span>
-                        <span className="font-medium" data-testid="text-expenses-amount">
+                        <span className="text-slate-500" data-testid="text-expenses-label">Expenses</span>
+                        <span className="font-semibold text-slate-700" data-testid="text-expenses-amount">
                           {formatCurrencyCompact(metrics.profitLoss.expenses, 'CAD', 'CAD')}
                         </span>
                       </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-cyan-500"
+                          className="h-full bg-blue-500 rounded-full transition-all"
                           style={{
                             width: `${(metrics.profitLoss.expenses / (metrics.profitLoss.income + metrics.profitLoss.expenses)) * 100}%`,
                           }}
@@ -201,13 +186,17 @@ export default function Dashboard() {
           </Card>
 
           {/* Expenses Card */}
-          <Card className="glass border-border/50" data-testid="card-expenses">
-            <CardHeader>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow" data-testid="card-expenses">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">EXPENSES</CardTitle>
-                <span className="text-sm text-muted-foreground">Last 30 days</span>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-purple-50">
+                    <CreditCard className="h-4 w-4 text-purple-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Expenses</CardTitle>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Last 30 days</span>
               </div>
-              <div className="text-sm text-muted-foreground">Spending for last 30 days</div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -216,17 +205,17 @@ export default function Dashboard() {
                 </div>
               ) : metrics && metrics.expensesByCategory.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="text-3xl font-bold" data-testid="text-total-expenses">
+                  <div className="text-3xl font-bold text-slate-900" data-testid="text-total-expenses">
                     {formatCurrencyCompact(metrics.expensesByCategory.reduce((sum, cat) => sum + cat.amount, 0), 'CAD', 'CAD')}
                   </div>
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
                       <Pie
                         data={metrics.expensesByCategory}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
+                        innerRadius={55}
+                        outerRadius={75}
                         fill="#8884d8"
                         paddingAngle={2}
                         dataKey="amount"
@@ -235,7 +224,15 @@ export default function Dashboard() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')} />
+                      <Tooltip
+                        formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')}
+                        contentStyle={{
+                          backgroundColor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-2">
@@ -243,27 +240,22 @@ export default function Dashboard() {
                       <div key={index} className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div
-                            className="h-3 w-3 rounded-full"
+                            className="h-2.5 w-2.5 rounded-full"
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
-                          <span className="text-muted-foreground" data-testid={`text-expense-category-${index}`}>
+                          <span className="text-slate-600" data-testid={`text-expense-category-${index}`}>
                             {category.category}
                           </span>
                         </div>
-                        <span className="font-medium" data-testid={`text-expense-amount-${index}`}>
+                        <span className="font-medium text-slate-700" data-testid={`text-expense-amount-${index}`}>
                           {formatCurrencyCompact(category.amount, 'CAD', 'CAD')}
                         </span>
                       </div>
                     ))}
-                    {metrics.expensesByCategory.length > 4 && (
-                      <div className="text-sm text-muted-foreground">
-                        +{metrics.expensesByCategory.length - 4} more
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="flex items-center justify-center h-64 text-slate-400">
                   No expense data available
                 </div>
               )}
@@ -271,9 +263,14 @@ export default function Dashboard() {
           </Card>
 
           {/* Invoices Card */}
-          <Card className="glass border-border/50" data-testid="card-invoices">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold">INVOICES</CardTitle>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow" data-testid="card-invoices">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-teal-50">
+                  <FileText className="h-4 w-4 text-teal-600" />
+                </div>
+                <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Invoices</CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -284,57 +281,44 @@ export default function Dashboard() {
                 </div>
               ) : metrics ? (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium" data-testid="text-unpaid-label">
-                        ${metrics.invoices.unpaid.amount.toLocaleString()} Unpaid
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        Last 365 days
+                  {/* Unpaid */}
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700" data-testid="text-unpaid-label">Unpaid</span>
+                      <span className="text-lg font-bold text-slate-900">
+                        ${metrics.invoices.unpaid.amount.toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 space-y-1">
-                        <div className="h-8 bg-orange-500 flex items-center justify-center text-white text-sm font-medium rounded">
-                          Overdue
-                        </div>
-                        <div className="text-xs text-center text-muted-foreground">
-                          {metrics.invoices.overdue.count}
-                        </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1 text-center py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">
+                        {metrics.invoices.overdue.count} Overdue
                       </div>
-                      <div className="flex-1 space-y-1">
-                        <div className="h-8 bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-gray-700 dark:text-gray-200 text-sm font-medium rounded">
-                          Not due yet
-                        </div>
-                        <div className="text-xs text-center text-muted-foreground">
-                          {metrics.invoices.unpaid.count - metrics.invoices.overdue.count}
-                        </div>
+                      <div className="flex-1 text-center py-1.5 bg-slate-200 text-slate-600 text-xs font-medium rounded">
+                        {metrics.invoices.unpaid.count - metrics.invoices.overdue.count} Not due
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  {/* Paid */}
+                  <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-100">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium" data-testid="text-paid-label">
-                        ${metrics.invoices.paid.amount.toLocaleString()} Paid
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        Last 30 days
+                      <span className="text-sm font-medium text-emerald-700" data-testid="text-paid-label">Paid (30 days)</span>
+                      <span className="text-lg font-bold text-emerald-700">
+                        ${metrics.invoices.paid.amount.toLocaleString()}
                       </span>
                     </div>
-                    <div className="h-8 bg-green-500 flex items-center justify-center text-white text-sm font-medium rounded">
-                      {metrics.invoices.paid.count} paid
+                    <div className="text-xs text-emerald-600 mt-1">
+                      {metrics.invoices.paid.count} invoices paid
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  {/* Deposited */}
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium" data-testid="text-deposited-label">
-                        Deposited
+                      <span className="text-sm font-medium text-blue-700" data-testid="text-deposited-label">Deposited</span>
+                      <span className="text-sm font-medium text-blue-600">
+                        {metrics.invoices.deposited.count} deposits
                       </span>
-                    </div>
-                    <div className="h-8 bg-green-600 flex items-center justify-center text-white text-sm font-medium rounded">
-                      {metrics.invoices.deposited.count} deposited
                     </div>
                   </div>
                 </div>
@@ -343,13 +327,17 @@ export default function Dashboard() {
           </Card>
 
           {/* Bank Accounts Card */}
-          <Card className="glass border-border/50" data-testid="card-bank-accounts">
-            <CardHeader>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow" data-testid="card-bank-accounts">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">BANK ACCOUNTS</CardTitle>
-                <span className="text-sm text-muted-foreground">As of today</span>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-green-50">
+                    <Building2 className="h-4 w-4 text-green-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Bank Accounts</CardTitle>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Today</span>
               </div>
-              <div className="text-sm text-muted-foreground">Today's cash balance</div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -360,33 +348,30 @@ export default function Dashboard() {
                 </div>
               ) : metrics ? (
                 <div className="space-y-4">
-                  <div className="text-3xl font-bold" data-testid="text-total-balance">
+                  <div className="text-3xl font-bold text-slate-900" data-testid="text-total-balance">
                     {formatCurrencyCompact(metrics.bankAccounts.total, 'CAD', 'CAD')}
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {metrics.bankAccounts.accounts.map((account, index) => (
                       <div
                         key={index}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/30 transition-colors"
+                        className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors"
                         data-testid={`bank-account-${index}`}
                       >
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <div className="h-6 w-6 rounded-full bg-primary/20" />
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-white font-semibold text-sm">
+                          {account.name.charAt(0)}
                         </div>
-                        <div className="flex-1">
-                          <div className="font-medium" data-testid={`text-bank-name-${index}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-slate-800 truncate" data-testid={`text-bank-name-${index}`}>
                             {account.name}
                           </div>
-                          <div className="text-sm text-muted-foreground">
-                            Bank Balance
-                          </div>
-                          <div className="text-xs text-muted-foreground" data-testid={`text-bank-updated-${index}`}>
+                          <div className="text-xs text-slate-500" data-testid={`text-bank-updated-${index}`}>
                             Updated {account.updated}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-semibold" data-testid={`text-bank-balance-${index}`}>
+                          <div className="font-bold text-slate-900" data-testid={`text-bank-balance-${index}`}>
                             {formatCurrencyCompact(account.balance, 'CAD', 'CAD')}
                           </div>
                         </div>
@@ -399,13 +384,17 @@ export default function Dashboard() {
           </Card>
 
           {/* Sales Card */}
-          <Card className="glass border-border/50 md:col-span-2" data-testid="card-sales">
-            <CardHeader>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow md:col-span-2" data-testid="card-sales">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">SALES</CardTitle>
-                <span className="text-sm text-muted-foreground">This year to date</span>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-blue-50">
+                    <DollarSign className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Sales</CardTitle>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Year to date</span>
               </div>
-              <div className="text-sm text-muted-foreground">Total Amount</div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -415,43 +404,48 @@ export default function Dashboard() {
                 </div>
               ) : metrics && metrics.sales.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="text-3xl font-bold" data-testid="text-total-sales">
+                  <div className="text-3xl font-bold text-slate-900" data-testid="text-total-sales">
                     {formatCurrencyCompact(metrics.sales.reduce((sum, month) => sum + month.amount, 0), 'CAD', 'CAD')}
                   </div>
                   <ResponsiveContainer width="100%" height={250}>
                     <LineChart data={metrics.sales}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis
                         dataKey="month"
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="#64748b"
                         fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
                       />
                       <YAxis
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="#64748b"
                         fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip
                         formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')}
                         contentStyle={{
-                          backgroundColor: 'hsl(var(--card))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '0.5rem',
+                          backgroundColor: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                         }}
                       />
                       <Line
                         type="monotone"
                         dataKey="amount"
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2}
-                        dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                        activeDot={{ r: 6 }}
+                        stroke="#3b82f6"
+                        strokeWidth={2.5}
+                        dot={{ fill: '#3b82f6', r: 4, strokeWidth: 2, stroke: '#fff' }}
+                        activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="flex items-center justify-center h-64 text-slate-400">
                   No sales data available
                 </div>
               )}
@@ -459,13 +453,17 @@ export default function Dashboard() {
           </Card>
 
           {/* Accounts Receivable Card */}
-          <Card className="glass border-border/50" data-testid="card-accounts-receivable">
-            <CardHeader>
+          <Card className="bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow" data-testid="card-accounts-receivable">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold">ACCOUNTS RECEIVABLE</CardTitle>
-                <span className="text-sm text-muted-foreground">As of today</span>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-lg bg-amber-50">
+                    <FileText className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wide">Receivables</CardTitle>
+                </div>
+                <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded-full">Today</span>
               </div>
-              <div className="text-sm text-muted-foreground">Total</div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -475,20 +473,20 @@ export default function Dashboard() {
                 </div>
               ) : metrics ? (
                 <div className="space-y-4">
-                  <div className="text-3xl font-bold" data-testid="text-ar-total">
+                  <div className="text-3xl font-bold text-slate-900" data-testid="text-ar-total">
                     {formatCurrencyCompact(metrics.accountsReceivable.total, 'CAD', 'CAD')}
                   </div>
 
                   {arData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={180}>
                         <PieChart>
                           <Pie
                             data={arData}
                             cx="50%"
                             cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
+                            innerRadius={55}
+                            outerRadius={75}
                             fill="#8884d8"
                             paddingAngle={2}
                             dataKey="value"
@@ -497,7 +495,15 @@ export default function Dashboard() {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')} />
+                          <Tooltip
+                            formatter={(value) => formatCurrencyCompact(Number(value), 'CAD', 'CAD')}
+                            contentStyle={{
+                              backgroundColor: '#fff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                            }}
+                          />
                         </PieChart>
                       </ResponsiveContainer>
 
@@ -506,14 +512,14 @@ export default function Dashboard() {
                           <div key={index} className="flex items-center justify-between text-sm">
                             <div className="flex items-center gap-2">
                               <div
-                                className="h-3 w-3 rounded-full"
+                                className="h-2.5 w-2.5 rounded-full"
                                 style={{ backgroundColor: COLORS[index % COLORS.length] }}
                               />
-                              <span className="text-muted-foreground" data-testid={`text-ar-bucket-${index}`}>
+                              <span className="text-slate-600" data-testid={`text-ar-bucket-${index}`}>
                                 {bucket.name}
                               </span>
                             </div>
-                            <span className="font-medium" data-testid={`text-ar-amount-${index}`}>
+                            <span className="font-medium text-slate-700" data-testid={`text-ar-amount-${index}`}>
                               {formatCurrencyCompact(bucket.value, 'CAD', 'CAD')}
                             </span>
                           </div>
@@ -521,7 +527,7 @@ export default function Dashboard() {
                       </div>
                     </>
                   ) : (
-                    <div className="flex items-center justify-center h-48 text-muted-foreground">
+                    <div className="flex items-center justify-center h-48 text-slate-400">
                       No receivables
                     </div>
                   )}

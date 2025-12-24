@@ -1,14 +1,15 @@
-import { Link } from "wouter";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import { useLocation } from "wouter";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,25 +21,26 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { 
-  Pagination, 
-  PaginationContent, 
-  PaginationItem, 
-  PaginationLink, 
-  PaginationNext, 
-  PaginationPrevious 
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious
 } from "@/components/ui/pagination";
-import { Trash2, Edit2 } from "lucide-react";
+import { Trash2, Printer, Mail, X } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Transaction, Contact } from "@shared/schema";
 import ExportMenu from "@/components/ExportMenu";
-import { 
-  exportTransactionsToCSV, 
+import {
+  exportTransactionsToCSV,
   exportTransactionsToPDF,
-  generateFilename 
+  generateFilename
 } from "@/lib/exportUtils";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 
@@ -53,56 +55,150 @@ interface TransactionTableProps {
 }
 
 export default function TransactionTable({ transactions, loading = false, onDeleteSuccess }: TransactionTableProps) {
+  const [, navigate] = useLocation();
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
-  
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkDeleteLoading, setIsBulkDeleteLoading] = useState(false);
+
   // Fetch contacts to display their names instead of just IDs
   const { data: contacts } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
   });
-  
+
   // Fetch preferences for home currency
   const { data: preferences } = useQuery<Preferences>({
     queryKey: ['/api/settings/preferences'],
   });
-  
+
   const homeCurrency = preferences?.homeCurrency || 'CAD';
-  
-  // Function to get contact name by ID
-  const getContactName = (contactId: number | null): string => {
+
+  // Create a contact lookup Map for O(1) access instead of O(n) .find()
+  const contactMap = useMemo(() => {
+    if (!contacts) return new Map<number, Contact>();
+    return new Map(contacts.map(c => [c.id, c]));
+  }, [contacts]);
+
+  // Function to get contact name by ID - uses Map for O(1) lookup
+  const getContactName = useCallback((contactId: number | null): string => {
     if (!contactId) return 'No client';
-    if (!contacts) return `ID: ${contactId}`;
-    
-    const contact = contacts.find(c => c.id === contactId);
+    if (!contactMap.size) return `ID: ${contactId}`;
+    const contact = contactMap.get(contactId);
     return contact ? contact.name : `ID: ${contactId}`;
+  }, [contactMap]);
+
+  // Pre-compute contact data for all transactions to avoid repeated lookups during render
+  const transactionContactData = useMemo(() => {
+    return new Map(transactions.map(t => {
+      const contact = contactMap.get(t.contactId || 0);
+      return [t.id, {
+        contact,
+        contactName: getContactName(t.contactId),
+        formattedContactName: formatContactName(
+          contact ? contact.name : (t.contactId ? `ID: ${t.contactId}` : 'No client'),
+          contact?.currency,
+          homeCurrency
+        ),
+        isVendorPayment: t.type === 'payment' && contact?.type === 'vendor',
+      }];
+    }));
+  }, [transactions, contactMap, getContactName, homeCurrency]);
+
+  // Handle row click - navigate to view page
+  const handleRowClick = (transaction: Transaction) => {
+    const route = transaction.type === 'journal_entry'
+      ? 'journals'
+      : transaction.type === 'bill'
+        ? 'bill-view'
+        : transaction.type + 's';
+    navigate(`/${route}/${transaction.id}`);
   };
-  
+
+  // Handle checkbox selection - memoized to prevent unnecessary re-renders
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(transactions.map(t => t.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [transactions]);
+
+  const handleSelectOne = useCallback((id: number, checked: boolean) => {
+    setSelectedIds(prev => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(id);
+      } else {
+        newSelected.delete(id);
+      }
+      return newSelected;
+    });
+  }, []);
+
+  const isAllSelected = transactions.length > 0 && selectedIds.size === transactions.length;
+  const isSomeSelected = selectedIds.size > 0 && selectedIds.size < transactions.length;
+
   const handleDelete = async () => {
     if (!transactionToDelete) return;
-    
+
     setIsDeleteLoading(true);
     try {
       // Use the dedicated payment deletion endpoint for payments
-      const endpoint = transactionToDelete.type === 'payment' 
+      const endpoint = transactionToDelete.type === 'payment'
         ? `/api/payments/${transactionToDelete.id}/delete`
         : `/api/transactions/${transactionToDelete.id}`;
-      
+
       await apiRequest(endpoint, 'DELETE');
-      
+
       // Clear the transaction to delete
       setTransactionToDelete(null);
-      
+
       // Trigger refresh
       if (onDeleteSuccess) {
         onDeleteSuccess();
       }
     } catch (error) {
       console.error('Failed to delete transaction:', error);
-      // You could add toast notification here
     } finally {
       setIsDeleteLoading(false);
     }
   };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    setIsBulkDeleteLoading(true);
+    try {
+      const deletePromises = Array.from(selectedIds).map(id => {
+        const transaction = transactions.find(t => t.id === id);
+        if (!transaction) return Promise.resolve();
+
+        const endpoint = transaction.type === 'payment'
+          ? `/api/payments/${id}/delete`
+          : `/api/transactions/${id}`;
+
+        return apiRequest(endpoint, 'DELETE');
+      });
+
+      await Promise.all(deletePromises);
+      setSelectedIds(new Set());
+      setShowBulkDeleteDialog(false);
+
+      if (onDeleteSuccess) {
+        onDeleteSuccess();
+      }
+    } catch (error) {
+      console.error('Failed to delete transactions:', error);
+    } finally {
+      setIsBulkDeleteLoading(false);
+    }
+  };
+
+  // Clear selection
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
   // Helper function to get status badge color
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -126,15 +222,15 @@ export default function TransactionTable({ transactions, loading = false, onDele
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'invoice':
-        return 'bg-green-100 text-green-800';
+        return 'bg-blue-100 text-blue-800';
       case 'expense':
         return 'bg-red-100 text-red-800';
       case 'bill':
         return 'bg-orange-100 text-orange-800';
       case 'journal_entry':
-        return 'bg-blue-100 text-blue-800';
-      case 'deposit':
         return 'bg-purple-100 text-purple-800';
+      case 'deposit':
+        return 'bg-emerald-100 text-emerald-800';
       case 'payment':
         return 'bg-indigo-100 text-indigo-800';
       default:
@@ -143,28 +239,33 @@ export default function TransactionTable({ transactions, loading = false, onDele
   };
 
   const formatType = (type: string) => {
-    if (type === 'journal_entry') return 'Journal Entry';
+    if (type === 'journal_entry') return 'Journal';
     return type.charAt(0).toUpperCase() + type.slice(1);
+  };
+
+  const formatStatus = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1);
   };
 
   // Handle export to CSV
   const handleExportCSV = () => {
     if (!contacts || !transactions.length) return;
-    
+
     const filename = generateFilename('transactions', undefined);
     exportTransactionsToCSV(transactions, contacts, `${filename}.csv`);
   };
-  
+
   // Handle export to PDF
   const handleExportPDF = () => {
     if (!contacts || !transactions.length) return;
-    
+
     const filename = generateFilename('transactions', undefined);
     exportTransactionsToPDF(transactions, contacts, `${filename}.pdf`);
   };
 
   return (
-    <div className="overflow-x-auto">
+    <>
+    <div className="overflow-x-auto relative">
       {loading ? (
         <div className="flex justify-center items-center py-8">
           <p>Loading transactions...</p>
@@ -183,110 +284,88 @@ export default function TransactionTable({ transactions, loading = false, onDele
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Reference</TableHead>
-                <TableHead>Client Name</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={isAllSelected}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all"
+                    className={isSomeSelected ? "data-[state=checked]:bg-slate-400" : ""}
+                  />
+                </TableHead>
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-24">Type</TableHead>
+                <TableHead className="w-28">Date</TableHead>
+                <TableHead>Number</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="w-16 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-6">
+                  <TableCell colSpan={8} className="text-center py-6">
                     No transactions found
                   </TableCell>
                 </TableRow>
               ) : (
                 transactions.map((transaction) => (
-                  <TableRow key={transaction.id} className="hover:bg-gray-50">
-                    <TableCell className="text-sm text-gray-500">
-                      {format(new Date(transaction.date), 'MMM dd, yyyy')}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">
-                      {transaction.reference}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium text-gray-900">
-                        {(() => {
-                          const contact = contacts?.find(c => c.id === transaction.contactId);
-                          const contactName = getContactName(transaction.contactId);
-                          return formatContactName(contactName, contact?.currency, homeCurrency);
-                        })()}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm font-medium text-gray-900">
-                      {(() => {
-                        const contact = contacts?.find(c => c.id === transaction.contactId);
-                        const formattedAmount = formatCurrency(transaction.amount, transaction.currency, homeCurrency);
-                        // Vendor payments are negative (money going out)
-                        if (transaction.type === 'payment' && contact?.type === 'vendor') {
-                          return '-' + formattedAmount;
-                        }
-                        // Expenses and deposits are negative (money going out)
-                        else if (transaction.type === 'expense' || transaction.type === 'deposit') {
-                          return '-' + formattedAmount;
-                        }
-                        // Everything else is positive (bills, invoices, customer payments)
-                        else {
-                          return formattedAmount;
-                        }
-                      })()}
+                  <TableRow
+                    key={transaction.id}
+                    className="hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={() => handleRowClick(transaction)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(transaction.id)}
+                        onCheckedChange={(checked) => handleSelectOne(transaction.id, checked as boolean)}
+                        aria-label={`Select transaction ${transaction.reference}`}
+                      />
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(transaction.status)}`}>
+                        {formatStatus(transaction.status)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getTypeColor(transaction.type)}`}>
                         {formatType(transaction.type)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right text-sm font-medium flex gap-3 justify-end">
-                      <Link 
-                        href={`/${transaction.type === 'journal_entry' ? 'journals' : transaction.type === 'bill' ? 'bill-view' : transaction.type + 's'}/${transaction.id}`} 
-                        className="text-primary hover:text-primary/90"
-                      >
-                        View
-                      </Link>
-                      
-                      {/* Edit buttons for invoices and deposits */}
-                      {transaction.type === 'invoice' && (
-                        <Link 
-                          href={`/invoices/${transaction.id}/edit`}
-                          className="text-blue-500 hover:text-blue-600"
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            <span className="sr-only">Edit</span>
-                          </Button>
-                        </Link>
-                      )}
-                      
-                      {/* Edit button for deposits */}
-                      {transaction.type === 'deposit' && (
-                        <Link 
-                          href={`/deposits/${transaction.id}`}
-                          className="text-blue-500 hover:text-blue-600"
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            <span className="sr-only">Edit</span>
-                          </Button>
-                        </Link>
-                      )}
-                      
+                    <TableCell className="text-sm text-slate-600">
+                      {format(new Date(transaction.date), 'MMM dd, yyyy')}
+                    </TableCell>
+                    <TableCell className="text-sm font-medium text-slate-900">
+                      {transaction.reference || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium text-slate-900">
+                        {transactionContactData.get(transaction.id)?.formattedContactName || 'No client'}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-sm font-semibold text-slate-900">
+                      {(() => {
+                        const formattedAmount = formatCurrency(transaction.amount, transaction.currency, homeCurrency);
+                        const contactData = transactionContactData.get(transaction.id);
+                        // Vendor payments are negative (money going out)
+                        if (contactData?.isVendorPayment) {
+                          return '-' + formattedAmount;
+                        }
+                        // Expenses and deposits are negative (money going out)
+                        if (transaction.type === 'expense' || transaction.type === 'deposit') {
+                          return '-' + formattedAmount;
+                        }
+                        // Everything else is positive (bills, invoices, customer payments)
+                        return formattedAmount;
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 px-2 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
                             onClick={() => setTransactionToDelete(transaction)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -348,5 +427,87 @@ export default function TransactionTable({ transactions, loading = false, onDele
         </>
       )}
     </div>
+
+      {/* Floating Bulk Actions Bar - rendered via portal to document.body for proper fixed positioning */}
+      {selectedIds.size > 0 && createPortal(
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-slate-900 text-white rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4">
+            <span className="text-sm font-medium">
+              {selectedIds.size} item{selectedIds.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="h-5 w-px bg-slate-700" />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => setShowBulkDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => {
+                  // Print functionality would go here
+                  console.log('Batch print:', Array.from(selectedIds));
+                }}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-slate-800 h-8 px-3"
+                onClick={() => {
+                  // Send reminders functionality would go here
+                  console.log('Send reminders:', Array.from(selectedIds));
+                }}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                Send Reminder
+              </Button>
+            </div>
+            <div className="h-5 w-px bg-slate-700" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white hover:bg-slate-800 h-8 w-8 p-0"
+              onClick={clearSelection}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Clear selection</span>
+            </Button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} transaction{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the selected transactions and all associated records.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={isBulkDeleteLoading}
+            >
+              {isBulkDeleteLoading ? 'Deleting...' : 'Delete All'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

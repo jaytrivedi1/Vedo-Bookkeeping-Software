@@ -769,16 +769,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const contactId = parseInt(req.params.id);
       const contact = await storage.getContact(contactId);
-      
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
-      
+
       const transactions = await storage.getTransactionsByContact(contactId);
       res.json(transactions);
     } catch (error) {
       console.error("Error fetching contact transactions:", error);
       res.status(500).json({ message: "Failed to fetch contact transactions" });
+    }
+  });
+
+  // ========================
+  // Contact Notes Routes
+  // ========================
+
+  // Get all notes for a contact
+  apiRouter.get("/contacts/:id/notes", async (req: Request, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const notes = await storage.getContactNotes(contactId);
+      res.json(notes);
+    } catch (error) {
+      console.error("Error fetching contact notes:", error);
+      res.status(500).json({ message: "Failed to fetch contact notes" });
+    }
+  });
+
+  // Create a new note for a contact
+  apiRouter.post("/contacts/:id/notes", async (req: Request, res: Response) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const { content, isPinned } = req.body;
+
+      // Get the current user ID from the session if available
+      const userId = req.user?.id || null;
+
+      const note = await storage.createContactNote({
+        contactId,
+        content,
+        isPinned: isPinned || false,
+        createdBy: userId,
+      });
+
+      // If this note is pinned, update the contact's pinnedNote field
+      if (isPinned) {
+        await storage.updateContact(contactId, { pinnedNote: content });
+      }
+
+      res.status(201).json(note);
+    } catch (error) {
+      console.error("Error creating contact note:", error);
+      res.status(500).json({ message: "Failed to create contact note" });
+    }
+  });
+
+  // Update a contact note
+  apiRouter.patch("/contact-notes/:noteId", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+      const { content, isPinned } = req.body;
+
+      const existingNote = await storage.getContactNote(noteId);
+      if (!existingNote) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      const updatedNote = await storage.updateContactNote(noteId, { content, isPinned });
+
+      // Handle pinned note updates on the contact
+      if (isPinned !== undefined) {
+        if (isPinned) {
+          // Unpin all other notes for this contact
+          await storage.unpinAllContactNotes(existingNote.contactId);
+          await storage.updateContactNote(noteId, { isPinned: true });
+          await storage.updateContact(existingNote.contactId, { pinnedNote: content || existingNote.content });
+        } else {
+          // Clear the contact's pinnedNote if this was the pinned note
+          const contact = await storage.getContact(existingNote.contactId);
+          if (contact?.pinnedNote === existingNote.content) {
+            await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+          }
+        }
+      }
+
+      res.json(updatedNote);
+    } catch (error) {
+      console.error("Error updating contact note:", error);
+      res.status(500).json({ message: "Failed to update contact note" });
+    }
+  });
+
+  // Delete a contact note
+  apiRouter.delete("/contact-notes/:noteId", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const existingNote = await storage.getContactNote(noteId);
+      if (!existingNote) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      // If this was the pinned note, clear it from the contact
+      if (existingNote.isPinned) {
+        await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+      }
+
+      await storage.deleteContactNote(noteId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting contact note:", error);
+      res.status(500).json({ message: "Failed to delete contact note" });
+    }
+  });
+
+  // Pin/Unpin a note (convenience endpoint)
+  apiRouter.post("/contact-notes/:noteId/pin", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const note = await storage.getContactNote(noteId);
+      if (!note) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      // Unpin all other notes for this contact first
+      await storage.unpinAllContactNotes(note.contactId);
+
+      // Pin this note
+      await storage.updateContactNote(noteId, { isPinned: true });
+      await storage.updateContact(note.contactId, { pinnedNote: note.content });
+
+      res.json({ success: true, pinnedNoteId: noteId });
+    } catch (error) {
+      console.error("Error pinning contact note:", error);
+      res.status(500).json({ message: "Failed to pin contact note" });
+    }
+  });
+
+  // Unpin a note
+  apiRouter.post("/contact-notes/:noteId/unpin", async (req: Request, res: Response) => {
+    try {
+      const noteId = parseInt(req.params.noteId);
+
+      const note = await storage.getContactNote(noteId);
+      if (!note) {
+        return res.status(404).json({ message: "Note not found" });
+      }
+
+      await storage.updateContactNote(noteId, { isPinned: false });
+      await storage.updateContact(note.contactId, { pinnedNote: null });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unpinning contact note:", error);
+      res.status(500).json({ message: "Failed to unpin contact note" });
     }
   });
 
@@ -995,7 +1142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: new Date()
       });
-      
+
       res.json({ message: "View tracked successfully" });
     } catch (error) {
       console.error("Error tracking invoice view:", error);
@@ -1003,11 +1150,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate invoice PDF for preview (uses selected template from preferences)
+  apiRouter.get("/invoices/:id/pdf", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+
+      // Get invoice data
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      // Get related data
+      const lineItems = await storage.getLineItemsByTransaction(invoiceId);
+      const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
+      const companyData = await storage.getDefaultCompany();
+
+      // Provide fallback company if none exists
+      const company = companyData || {
+        id: 0,
+        name: 'Company Name',
+        street1: null,
+        street2: null,
+        city: null,
+        state: null,
+        postalCode: null,
+        country: null,
+        phone: null,
+        email: null,
+        website: null,
+        taxId: null,
+        logo: null,
+        isDefault: true,
+        createdAt: new Date()
+      };
+
+      // Get preferences for template selection
+      const preferences = await storage.getPreferences();
+      const template = (preferences?.invoiceTemplate || 'classic') as 'classic' | 'modern' | 'minimal';
+
+      // Generate PDF with selected template
+      const { generateInvoicePDF } = await import('./invoice-pdf-generator');
+      const pdfBuffer = await generateInvoicePDF({
+        transaction: invoice,
+        lineItems,
+        customer,
+        company,
+        template
+      });
+
+      // Return PDF for inline display
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.reference || invoice.id}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating invoice PDF:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
+    }
+  });
+
   // Send invoice via email (requires authentication)
   apiRouter.post("/invoices/:id/send-email", requireAuth, async (req: Request, res: Response) => {
     try {
       const invoiceId = parseInt(req.params.id);
-      const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;
+      const { recipientEmail, recipientName, cc, bcc, subject, message, includeAttachment = true } = req.body;
       
       if (!recipientEmail) {
         return res.status(400).json({ message: "Recipient email is required" });
@@ -1115,10 +1322,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const emailData: any = {
         from: fromEmail,
         to: recipientEmail,
-        subject: `Invoice ${invoice.reference || invoice.id} from ${company.name}`,
+        subject: subject || `Invoice ${invoice.reference || invoice.id} from ${company.name}`,
         html: emailHtml
       };
-      
+
+      // Add CC recipients if provided
+      if (cc && Array.isArray(cc) && cc.length > 0) {
+        emailData.cc = cc;
+      }
+
+      // Add BCC recipients if provided
+      if (bcc && Array.isArray(bcc) && bcc.length > 0) {
+        emailData.bcc = bcc;
+      }
+
       if (pdfAttachment) {
         emailData.attachments = [pdfAttachment];
       }
@@ -1133,6 +1350,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         metadata: {
           recipientEmail,
           recipientName,
+          cc: cc || [],
+          bcc: bcc || [],
           sentAt: new Date().toISOString()
         },
         timestamp: new Date()
@@ -1498,6 +1717,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         contactId: body.contactId,
         dueDate: body.dueDate,
         paymentTerms: body.paymentTerms,
+        taxType: body.taxType, // 'exclusive' | 'inclusive' | 'no-tax'
         // Amount will be recalculated if line items are updated
       };
       
@@ -1506,12 +1726,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Delete existing line items - we'll recreate them
         // This is a simple approach, a more sophisticated one would update existing items
         
-        // Calculate the new subtotal from line items with rounding
-        const subTotal = roundTo2Decimals(body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0));
+        // Use provided subTotal and taxAmount from frontend (already properly calculated based on tax mode)
+        const subTotal = roundTo2Decimals(body.subTotal || body.lineItems.reduce((sum: number, item: any) => sum + item.amount, 0));
         const taxAmount = roundTo2Decimals(body.taxAmount || 0);
-        
+
         // Update transaction amount with rounding
         transactionUpdate.amount = roundTo2Decimals(subTotal + taxAmount);
+        transactionUpdate.subTotal = subTotal;
+        transactionUpdate.taxAmount = taxAmount;
         
         // Update the transaction
         const updatedTransaction = await storage.updateTransaction(invoiceId, transactionUpdate);
@@ -1878,6 +2100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount: totalAmount,  // Will be converted to CAD by createTransaction if foreign currency
         subTotal: subTotal,
         taxAmount: taxAmount,
+        taxType: invoiceData.taxType || 'exclusive', // 'exclusive' | 'inclusive' | 'no-tax'
         balance: totalAmount,
         contactId: invoiceData.contactId,
         status: invoiceData.status,
@@ -3067,13 +3290,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/payments", async (req: Request, res: Response) => {
     const data = req.body;
     const lineItems = data.lineItems || [];
-    const unappliedAmount = data.unappliedAmount || 0;
     const totalCreditsApplied = data.totalCreditsApplied || 0;
-    
+
+    // Calculate the actual unapplied amount based on payment amount vs what's applied to invoices
+    // This ensures correct status even if frontend doesn't send unappliedAmount
+    const invoiceItemsForCalc = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
+    const totalAppliedToInvoices = invoiceItemsForCalc.reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
+    const calculatedUnappliedAmount = Math.max(0, Number(data.amount || 0) - totalAppliedToInvoices);
+
+    // Use calculated value, fall back to frontend-provided value
+    const unappliedAmount = calculatedUnappliedAmount > 0 ? calculatedUnappliedAmount : (data.unappliedAmount || 0);
+
     console.log("Payment request received:", {
       data,
       lineItems,
       unappliedAmount,
+      calculatedUnappliedAmount,
+      totalAppliedToInvoices,
       totalCreditsApplied,
       invoiceItems: lineItems.filter((item: any) => !item.type || item.type === 'invoice'),
       depositItems: lineItems.filter((item: any) => item.type === 'deposit')
@@ -3460,7 +3693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const invoiceItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
       if (invoiceItems && invoiceItems.length > 0) {
         console.log(`Recalculating balances for ${invoiceItems.length} invoices...`);
-        
+
         for (const item of invoiceItems as any[]) {
           if (item.transactionId) {
             const updatedInvoice = await storage.recalculateInvoiceBalance(item.transactionId);
@@ -3468,14 +3701,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
-      
-      res.status(201).json(payment);
+
+      // SAFEGUARD: Recalculate payment balance based on actual payment_applications
+      // This ensures the payment balance is always correct, regardless of frontend calculations
+      const { paymentApplications } = await import('@shared/schema');
+      const actualApplications = await db
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.paymentId, payment.id));
+
+      const actualTotalApplied = actualApplications.reduce((sum, app) => sum + app.amountApplied, 0);
+      const actualUnapplied = Math.max(0, payment.amount - actualTotalApplied);
+      const finalStatus = actualUnapplied > 0 ? 'unapplied_credit' : 'completed';
+
+      // Only update if different from what was set
+      if (payment.balance !== actualUnapplied || payment.status !== finalStatus) {
+        console.log(`Correcting payment #${payment.id}: balance ${payment.balance} -> ${actualUnapplied}, status ${payment.status} -> ${finalStatus}`);
+        await storage.updateTransaction(payment.id, {
+          balance: actualUnapplied,
+          status: finalStatus as any
+        });
+      }
+
+      // Return the corrected payment data
+      const finalPayment = await storage.getTransaction(payment.id);
+      res.status(201).json(finalPayment);
     } catch (error: any) {
       console.error("Error processing payment:", error);
       res.status(500).json({ error: error.message });
     }
   });
-  
+
+  // Recalculate payment balance based on actual invoice applications
+  // This fixes payments that were created with incorrect balance/status
+  apiRouter.post("/payments/:id/recalculate-balance", async (req: Request, res: Response) => {
+    const paymentId = parseInt(req.params.id);
+
+    try {
+      const payment = await storage.getTransaction(paymentId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+
+      if (payment.type !== 'payment') {
+        return res.status(400).json({ message: "Transaction is not a payment" });
+      }
+
+      // Get payment applications from the payment_applications table
+      const { paymentApplications } = await import('@shared/schema');
+      const applications = await db
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.paymentId, paymentId));
+
+      // Calculate total amount applied to invoices
+      const totalApplied = applications.reduce((sum, app) => sum + app.amountApplied, 0);
+
+      // Calculate unapplied amount
+      const unappliedAmount = Math.max(0, payment.amount - totalApplied);
+
+      // Determine new status
+      const newStatus = unappliedAmount > 0 ? 'unapplied_credit' : 'completed';
+
+      console.log(`Recalculating payment #${paymentId}:
+- Original amount: ${payment.amount}
+- Total applied to invoices: ${totalApplied}
+- Unapplied amount: ${unappliedAmount}
+- New status: ${newStatus}
+- Previous balance: ${payment.balance}
+- Previous status: ${payment.status}`);
+
+      // Update the payment
+      const updatedPayment = await storage.updateTransaction(paymentId, {
+        balance: unappliedAmount,
+        status: newStatus as any
+      });
+
+      res.json({
+        success: true,
+        payment: updatedPayment,
+        calculation: {
+          originalAmount: payment.amount,
+          totalApplied,
+          unappliedAmount,
+          previousBalance: payment.balance,
+          previousStatus: payment.status,
+          newStatus
+        }
+      });
+    } catch (error: any) {
+      console.error("Error recalculating payment balance:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Pay bills endpoint
   apiRouter.post("/payments/pay-bills", async (req: Request, res: Response) => {
     const data = req.body;
@@ -8380,6 +8699,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create link token for Plaid Link
   apiRouter.post("/plaid/link-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const request = {
         user: {
           client_user_id: `user_${req.user?.id || 'default'}`,
@@ -8401,8 +8723,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Exchange public token for access token and save bank connection
   apiRouter.post("/plaid/exchange-token", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const { public_token, accountId } = req.body;
-      
+
       if (!public_token) {
         return res.status(400).json({ error: 'public_token is required' });
       }
@@ -8513,6 +8838,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Sync transactions for a bank account
   apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!plaidClient) {
+        return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
+      }
       const accountId = parseInt(req.params.accountId);
       const bankAccount = await storage.getBankAccount(accountId);
       
@@ -12871,8 +13199,305 @@ Respond in JSON format:
     }
   });
 
+  // ==================== STATEMENT ROUTES ====================
+
+  // Get statement data (for preview)
+  apiRouter.get("/statements/data", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate } = req.query;
+
+      if (!contactId || !contactType || !type) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId as string));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId as string));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      const stmtType = type as string;
+      if (stmtType === 'balance_forward' || stmtType === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate as string);
+          const end = new Date(endDate as string);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (stmtType === 'open_item') {
+        // Only include unpaid invoices/bills
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate totals
+      const balanceDue = contactTransactions
+        .filter(t => (t.type === 'invoice' || t.type === 'bill') && t.balance && t.balance > 0)
+        .reduce((sum, t) => sum + (t.balance || 0), 0);
+
+      res.json({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: stmtType,
+        statementDate: statementDate || new Date().toISOString(),
+        startDate: startDate || null,
+        endDate: endDate || null,
+        balanceDue,
+      });
+    } catch (error: any) {
+      console.error("Error fetching statement data:", error);
+      res.status(500).json({ error: "Failed to fetch statement data" });
+    }
+  });
+
+  // Generate statement PDF
+  apiRouter.get("/statements/pdf", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate } = req.query;
+
+      if (!contactId || !contactType || !type) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId as string));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId as string));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      const stmtType = type as string;
+      if (stmtType === 'balance_forward' || stmtType === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate as string);
+          const end = new Date(endDate as string);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (stmtType === 'open_item') {
+        // Only include unpaid invoices/bills
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Generate PDF
+      const { generateStatementPDF } = await import('./statement-pdf-generator');
+      const pdfBuffer = await generateStatementPDF({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: stmtType as any,
+        statementDate: statementDate ? new Date(statementDate as string) : new Date(),
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="statement-${contact.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error: any) {
+      console.error("Error generating statement PDF:", error);
+      res.status(500).json({ error: "Failed to generate statement PDF" });
+    }
+  });
+
+  // Send statement via email
+  apiRouter.post("/statements/send", async (req, res) => {
+    try {
+      const { contactId, contactType, type, statementDate, startDate, endDate, recipientEmail, ccEmails, subject, message } = req.body;
+
+      if (!contactId || !contactType || !type || !recipientEmail) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const contact = await storage.getContact(parseInt(contactId));
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+
+      const company = await storage.getDefaultCompany();
+      const allTransactions = await storage.getTransactions();
+
+      // Filter transactions for this contact
+      let contactTransactions = allTransactions.filter(t => t.contactId === parseInt(contactId));
+
+      // Filter by contact type transactions
+      if (contactType === 'customer') {
+        contactTransactions = contactTransactions.filter(t =>
+          ['invoice', 'payment', 'deposit', 'sales_receipt', 'customer_credit', 'cheque'].includes(t.type)
+        );
+      } else {
+        contactTransactions = contactTransactions.filter(t =>
+          ['bill', 'payment', 'expense', 'vendor_credit', 'cheque'].includes(t.type)
+        );
+      }
+
+      // Apply date filtering based on statement type
+      if (type === 'balance_forward' || type === 'transaction') {
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          contactTransactions = contactTransactions.filter(t => {
+            const txDate = new Date(t.date);
+            return txDate >= start && txDate <= end;
+          });
+        }
+      } else if (type === 'open_item') {
+        const invoiceType = contactType === 'customer' ? 'invoice' : 'bill';
+        contactTransactions = contactTransactions.filter(t =>
+          t.type === invoiceType && t.balance && t.balance > 0
+        );
+      }
+
+      // Sort by date
+      contactTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      // Calculate balance due for email
+      const balanceDue = contactTransactions
+        .filter(t => (t.type === 'invoice' || t.type === 'bill') && t.balance && t.balance > 0)
+        .reduce((sum, t) => sum + (t.balance || 0), 0);
+
+      // Generate PDF
+      const { generateStatementPDF } = await import('./statement-pdf-generator');
+      const pdfBuffer = await generateStatementPDF({
+        contact,
+        company,
+        transactions: contactTransactions,
+        statementType: type as any,
+        statementDate: statementDate ? new Date(statementDate) : new Date(),
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
+      });
+
+      // Send email via Resend
+      const { getUncachableResendClient } = await import('./resend-client');
+      const { client, fromEmail } = await getUncachableResendClient();
+
+      const typeLabel = type === 'balance_forward' ? 'Balance Forward' :
+                        type === 'open_item' ? 'Open Item' : 'Transaction';
+
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+            .statement-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .balance-box { background: #4f46e5; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0; }
+            .balance-amount { font-size: 32px; font-weight: bold; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1 style="margin: 0;">${company.name}</h1>
+              <p style="margin: 10px 0 0 0; opacity: 0.9;">${typeLabel} Statement</p>
+            </div>
+            <div class="content">
+              <p>Dear ${contact.name},</p>
+              ${message ? `<p>${message}</p>` : `<p>Please find attached your ${typeLabel.toLowerCase()} statement.</p>`}
+
+              <div class="balance-box">
+                <p style="margin: 0 0 5px 0; opacity: 0.9;">Balance Due</p>
+                <div class="balance-amount">$${balanceDue.toFixed(2)}</div>
+              </div>
+
+              <div class="statement-details">
+                <p><strong>Statement Date:</strong> ${new Date(statementDate || Date.now()).toLocaleDateString()}</p>
+                ${startDate && endDate ? `<p><strong>Period:</strong> ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}</p>` : ''}
+                <p><strong>Statement Type:</strong> ${typeLabel}</p>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px;">
+                The statement PDF is attached to this email for your records.
+              </p>
+
+              <div class="footer">
+                <p>Thank you for your business!</p>
+                <p style="font-size: 12px;">${company.name}${company.phone ? ` | ${company.phone}` : ''}${company.email ? ` | ${company.email}` : ''}</p>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const emailResult = await client.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        cc: ccEmails || undefined,
+        subject: subject || `${typeLabel} Statement from ${company.name}`,
+        html: emailHtml,
+        attachments: [{
+          filename: `statement-${contact.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          content: pdfBuffer.toString('base64'),
+        }],
+      });
+
+      res.json({ success: true, emailId: emailResult.data?.id });
+    } catch (error: any) {
+      console.error("Error sending statement email:", error);
+      res.status(500).json({ error: "Failed to send statement email" });
+    }
+  });
+
   app.use("/api", apiRouter);
-  
+
   const httpServer = createServer(app);
   
   return httpServer;

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { format } from "date-fns";
-import { 
-  ArrowLeft, 
-  FileText, 
-  Printer, 
-  FileDown, 
+import {
+  ArrowLeft,
+  FileText,
+  Printer,
+  FileDown,
   Edit2,
   Mail,
   HelpCircle,
@@ -22,12 +22,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -48,6 +48,7 @@ import { useInvoiceTemplate } from "@/hooks/use-invoice-template";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatCurrency, formatContactName } from "@/lib/currencyUtils";
 import { Transaction, LineItem, Contact, SalesTax } from "@shared/schema";
+import InvoiceForm from "@/components/forms/InvoiceForm";
 
 export default function InvoiceView() {
   const [, navigate] = useLocation();
@@ -60,9 +61,16 @@ export default function InvoiceView() {
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientName, setRecipientName] = useState("");
+  const [emailCC, setEmailCC] = useState("");
+  const [emailBCC, setEmailBCC] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [personalMessage, setPersonalMessage] = useState("");
   const [includePdfAttachment, setIncludePdfAttachment] = useState(true);
-  
+
+  // PDF preview state for optimistic loading
+  const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [pdfKey, setPdfKey] = useState(0); // Used to force iframe reload on retry
+
   // Extract the invoice ID from the URL
   useEffect(() => {
     const path = window.location.pathname;
@@ -71,6 +79,17 @@ export default function InvoiceView() {
       setInvoiceId(parseInt(match[1]));
     } else {
       handleBack();
+    }
+
+    // Check if we should auto-open the send dialog (from Save & Send button)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('openSendDialog') === 'true') {
+      setSendDialogOpen(true);
+      // Pre-fill CC/BCC from URL params if provided
+      if (urlParams.get('cc')) setEmailCC(urlParams.get('cc') || '');
+      if (urlParams.get('bcc')) setEmailBCC(urlParams.get('bcc') || '');
+      // Clean up the URL by removing the query param
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, [handleBack]);
   
@@ -144,12 +163,19 @@ export default function InvoiceView() {
       if (!invoiceId) {
         throw new Error('No invoice ID available');
       }
+      // Parse CC and BCC into arrays
+      const ccArray = emailCC ? emailCC.split(',').map(e => e.trim()).filter(e => e) : [];
+      const bccArray = emailBCC ? emailBCC.split(',').map(e => e.trim()).filter(e => e) : [];
+
       const response = await apiRequest(
         `/api/invoices/${invoiceId}/send-email`,
         'POST',
         {
           recipientEmail,
           recipientName,
+          cc: ccArray,
+          bcc: bccArray,
+          subject: emailSubject,
           message: personalMessage,
           includeAttachment: includePdfAttachment
         }
@@ -221,12 +247,23 @@ export default function InvoiceView() {
     enabled: !!invoiceId
   });
   
-  // Fetch contacts for customer info
-  const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
-    queryKey: ['/api/contacts'],
+  // Extract invoice data for dependent queries
+  const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
+  const lineItems: LineItem[] = invoiceData?.lineItems || [];
+
+  // Fetch only the specific customer for this invoice (not ALL contacts)
+  const { data: customer, isLoading: customerLoading } = useQuery<Contact>({
+    queryKey: ['/api/contacts', invoice?.contactId],
+    queryFn: async () => {
+      if (!invoice?.contactId) return null;
+      const response = await fetch(`/api/contacts/${invoice.contactId}`);
+      if (!response.ok) throw new Error('Failed to fetch customer');
+      return response.json();
+    },
+    enabled: !!invoice?.contactId,
   });
-  
-  // Fetch sales taxes for tax names
+
+  // Fetch sales taxes for tax names (needed for display)
   const { data: salesTaxes, isLoading: taxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
   });
@@ -255,30 +292,87 @@ export default function InvoiceView() {
     queryKey: ['/api/invoices', invoiceId, 'activities'],
     enabled: !!invoiceId
   });
-  
-  // Extract data once fetched
-  const invoice: InvoiceWithExtras | undefined = invoiceData?.transaction;
-  const lineItems: LineItem[] = invoiceData?.lineItems || [];
-  
-  // Find customer
-  const customer = contacts?.find(c => c.id === invoice?.contactId);
-  
+
+  // Get default company for email subject
+  const { data: defaultCompany } = useQuery({
+    queryKey: ['/api/companies/default'],
+    queryFn: () => apiRequest('/api/companies/default'),
+  });
+
+  // Helper function to generate default email message
+  const generateDefaultMessage = () => {
+    if (!invoice) return "";
+
+    const customerName = customer?.name || "Valued Customer";
+    const invoiceRef = invoice.reference || `#${invoice.id}`;
+    const totalAmount = formatCurrency(invoice.balance ?? invoice.amount ?? 0, homeCurrency);
+    const dueDate = invoice.dueDate ? format(new Date(invoice.dueDate), 'MMMM d, yyyy') : 'upon receipt';
+    const companyName = defaultCompany?.name || 'Our Company';
+
+    // Generate public link if token exists
+    const baseUrl = window.location.origin;
+    const publicLink = invoice.secureToken
+      ? `${baseUrl}/invoice/public/${invoice.secureToken}`
+      : null;
+
+    let message = `Hi ${customerName},
+
+Please find attached Invoice ${invoiceRef} for ${totalAmount}, due on ${dueDate}.`;
+
+    if (publicLink) {
+      message += `
+
+You can view and pay your invoice online here:
+${publicLink}`;
+    }
+
+    message += `
+
+Best regards,
+${companyName}`;
+
+    return message;
+  };
+
   // Helper function to reset send form
   const resetSendForm = () => {
     setRecipientEmail(customer?.email || "");
     setRecipientName(customer?.name || "");
-    setPersonalMessage("");
+    setEmailCC("");
+    setEmailBCC("");
+    setEmailSubject(invoice ? `Invoice ${invoice.reference || invoice.id} from ${defaultCompany?.name || 'Your Company'}` : "");
+    setPersonalMessage(generateDefaultMessage());
     setIncludePdfAttachment(true);
   };
-  
+
   // Pre-fill customer data when customer changes or send dialog opens
   useEffect(() => {
     if (sendDialogOpen && customer) {
       setRecipientEmail(customer.email || "");
       setRecipientName(customer.name || "");
     }
-  }, [sendDialogOpen, customer]);
-  
+    if (sendDialogOpen && invoice) {
+      setEmailSubject(`Invoice ${invoice.reference || invoice.id} from ${defaultCompany?.name || 'Your Company'}`);
+      // Only set default message if it's empty (avoid overwriting user edits)
+      if (!personalMessage) {
+        setPersonalMessage(generateDefaultMessage());
+      }
+    }
+  }, [sendDialogOpen, customer, invoice, defaultCompany]);
+
+  // Reset PDF status when dialog opens
+  useEffect(() => {
+    if (sendDialogOpen) {
+      setPdfStatus('loading');
+    }
+  }, [sendDialogOpen]);
+
+  // Helper function to retry PDF loading
+  const handleRetryPdf = () => {
+    setPdfStatus('loading');
+    setPdfKey(prev => prev + 1);
+  };
+
   // Helper function to get activity icon
   const getActivityIcon = (activityType: string) => {
     switch (activityType) {
@@ -357,7 +451,9 @@ export default function InvoiceView() {
     }
   };
   
-  if (invoiceLoading || contactsLoading || taxesLoading || paymentsLoading || activitiesLoading) {
+  // Don't block on payment history or activities - they can load asynchronously
+  // These are supplementary data that shouldn't delay the main invoice display
+  if (invoiceLoading || customerLoading || taxesLoading) {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="animate-pulse">
@@ -383,287 +479,21 @@ export default function InvoiceView() {
   }
   
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center">
-          <Button variant="ghost" onClick={handleBack}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to {backLabel}
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setSendDialogOpen(true)}
-            data-testid="button-send-invoice"
-          >
-            <Send className="mr-2 h-4 w-4" />
-            Send Invoice
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => generateTokenMutation.mutate()}
-            disabled={generateTokenMutation.isPending}
-            data-testid="button-copy-link"
-          >
-            <LinkIcon className="mr-2 h-4 w-4" />
-            Copy Link
-          </Button>
-          <Link href={`/invoices/${invoice.id}/edit`}>
-            <Button size="sm" data-testid="button-edit-invoice">
-              <Edit2 className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-          </Link>
-        </div>
-      </div>
-      
-      {/* Invoice Details */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-        {/* Invoice header with status */}
-        <div className="px-6 py-4 border-b flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Invoice #{invoice.reference}</h1>
-            <p className="text-gray-500">
-              {invoice.date ? format(new Date(invoice.date), 'MMMM d, yyyy') : 'No date'}
-            </p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-gray-400">Template:</span>
-              <Badge variant="outline" className="text-xs capitalize">
-                {template}
-              </Badge>
-            </div>
-          </div>
-          <Badge 
-            className={`px-3 py-1 text-sm ${getStatusColor(invoice.status)}`}
-          >
-            {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-          </Badge>
-        </div>
-        
-        {/* Invoice body */}
-        <div className="px-6 py-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {/* Left side - From/To */}
-            <div>
-              <div className="mb-6">
-                <h2 className="text-sm font-medium text-gray-500 mb-2">FROM</h2>
-                <p className="font-medium">Your Company Name</p>
-                <p className="text-gray-600">123 Business Avenue</p>
-                <p className="text-gray-600">Business City, State 12345</p>
-                <p className="text-gray-600">accounting@yourcompany.com</p>
-              </div>
-              
-              <div>
-                <h2 className="text-sm font-medium text-gray-500 mb-2">TO</h2>
-                {customer ? (
-                  <>
-                    <p className="font-medium">{formatContactName(customer.name, customer.currency, homeCurrency)}</p>
-                    {customer.contactName && <p className="text-gray-600">{customer.contactName}</p>}
-                    {customer.address && <p className="text-gray-600">{customer.address}</p>}
-                    {customer.email && <p className="text-gray-600">{customer.email}</p>}
-                  </>
-                ) : (
-                  <p className="text-gray-600">No customer information</p>
-                )}
-              </div>
-            </div>
-            
-            {/* Right side - Payment details */}
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Invoice Number:</span>
-                <span>{invoice.reference}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Invoice Date:</span>
-                <span>{invoice.date ? format(new Date(invoice.date), 'MMMM d, yyyy') : 'No date'}</span>
-              </div>
-              {/* Due Date - only show if available */}
-              <div className="flex justify-between">
-                <span className="text-gray-500">Due Date:</span>
-                <span>
-                  {invoice.dueDate 
-                    ? format(new Date(invoice.dueDate), 'MMMM d, yyyy') 
-                    : 'Not specified'
-                  }
-                </span>
-              </div>
-              <div className="flex justify-between font-medium pt-2">
-                <span>Amount Due:</span>
-                <span>{formatCurrency(invoice.amount || 0, invoice.currency, homeCurrency)}</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Line Items */}
-          <div className="mb-8">
-            <h2 className="text-lg font-medium mb-3">Items</h2>
-            <div className="bg-gray-50 rounded-md">
-              <div className="grid grid-cols-8 gap-4 px-4 py-3 border-b text-sm font-medium text-gray-500">
-                <div className="col-span-3">Description</div>
-                <div className="col-span-1 text-center">Quantity</div>
-                <div className="col-span-1 text-center">Unit Price</div>
-                <div className="col-span-1 text-center">Tax</div>
-                <div className="col-span-2 text-right">Amount</div>
-              </div>
-              
-              {lineItems.length > 0 ? (
-                <div className="divide-y">
-                  {lineItems.map((item, index) => {
-                    const tax = item.salesTaxId ? salesTaxes?.find(t => t.id === item.salesTaxId) : null;
-                    
-                    return (
-                      <div key={index} className="grid grid-cols-8 gap-4 px-4 py-3 items-center">
-                        <div className="col-span-3">
-                          <p className="font-medium">{item.description}</p>
-                        </div>
-                        <div className="col-span-1 text-center">{item.quantity}</div>
-                        <div className="col-span-1 text-center">{formatCurrency(item.unitPrice, invoice.currency, homeCurrency)}</div>
-                        <div className="col-span-1 text-center">
-                          {tax ? `${tax.name} (${tax.rate}%)` : 'None'}
-                        </div>
-                        <div className="col-span-2 text-right">{formatCurrency(item.amount, invoice.currency, homeCurrency)}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="px-4 py-3 text-center text-gray-500">
-                  No items
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Totals */}
-          <div className="flex justify-end">
-            <div className="w-72">
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="text-gray-500">Subtotal:</div>
-                <div className="text-right">{formatCurrency(subtotal, invoice.currency, homeCurrency)}</div>
-                
-                {totalTaxAmount > 0 && (
-                  <>
-                    <div className="text-gray-500">
-                      {taxNames.length > 0 
-                        ? taxNames.join(', ')  
-                        : 'Tax'}:
-                    </div>
-                    <div className="text-right">{formatCurrency(totalTaxAmount, invoice.currency, homeCurrency)}</div>
-                  </>
-                )}
-                
-                <div className="text-gray-800 font-medium pt-2 border-t">Total:</div>
-                <div className="text-right font-medium pt-2 border-t">{formatCurrency(total, invoice.currency, homeCurrency)}</div>
-                
-                {/* Use payment history values for accurate numbers */}
-                <div className="text-gray-800 font-medium">Amount Paid:</div>
-                <div className="text-right font-medium">
-                  {formatCurrency(paymentHistory?.summary?.totalPaid || 0, invoice.currency, homeCurrency)}
-                </div>
-                
-                <div className="text-gray-800 font-bold">Balance Due:</div>
-                <div className="text-right font-bold">
-                  {formatCurrency(
-                    // Calculate balance due as follows:
-                    // 1. Start with invoice total
-                    // 2. Subtract any payments from payment history
-                    // 3. Subtract any applied credits
-                    invoice.balance !== null && invoice.balance !== undefined 
-                    ? Math.max(0, invoice.balance) 
-                    : Math.max(0, (total - (paymentHistory?.summary?.totalPaid || 0))),
-                    invoice.currency,
-                    homeCurrency
-                  )}
-                </div>
-                
-                {paymentHistory && paymentHistory.summary && (
-                  <>
-                    <div className="col-span-2 border-t border-dashed mt-2 pt-2 text-xs text-gray-500 text-right">
-                      * Based on payment history shown below
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          {/* Payment History */}
-          {paymentHistory && paymentHistory.payments && paymentHistory.payments.length > 0 && (
-            <div className="mt-8 border-t pt-4">
-              <h2 className="text-lg font-medium mb-3">Payment History</h2>
-              <div className="bg-gray-50 rounded-md">
-                <div className="grid grid-cols-12 gap-4 px-4 py-3 border-b text-sm font-medium text-gray-500">
-                  <div className="col-span-3">Date</div>
-                  <div className="col-span-3">Transaction</div>
-                  <div className="col-span-4">Description</div>
-                  <div className="col-span-2 text-right">Amount</div>
-                </div>
-                <div className="divide-y">
-                  {paymentHistory.payments.map((payment, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-4 px-4 py-3 items-center">
-                      <div className="col-span-3">
-                        {payment.date && format(new Date(payment.date), 'MMM d, yyyy')}
-                      </div>
-                      <div className="col-span-3">
-                        <div className="font-medium">{payment.transaction.type.replace('_', ' ')}</div>
-                        <div className="text-sm text-gray-500">#{payment.transaction.reference || payment.transaction.id}</div>
-                      </div>
-                      <div className="col-span-4 text-gray-600">
-                        {payment.description}
-                      </div>
-                      <div className="col-span-2 text-right font-medium">
-                        {formatCurrency(payment.amountApplied, invoice.currency, homeCurrency)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Summary row */}
-                <div className="px-4 py-3 bg-gray-100 grid grid-cols-12 gap-4 font-medium">
-                  <div className="col-span-10 text-right">Total Applied:</div>
-                  <div className="col-span-2 text-right">{formatCurrency(paymentHistory.summary.totalPaid, invoice.currency, homeCurrency)}</div>
-                </div>
-              </div>
-              
-              {/* Balance calculation */}
-              <div className="mt-4 bg-blue-50 p-4 rounded-md">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="text-gray-700">Original Amount:</div>
-                  <div className="text-right">{formatCurrency(paymentHistory.summary.originalAmount, invoice.currency, homeCurrency)}</div>
-                  
-                  <div className="text-gray-700">Total Payments:</div>
-                  <div className="text-right">- {formatCurrency(paymentHistory.summary.totalPaid, invoice.currency, homeCurrency)}</div>
-                  
-                  <div className="text-gray-800 font-medium pt-2 border-t border-blue-200">Current Balance:</div>
-                  <div className="text-right font-medium pt-2 border-t border-blue-200">
-                    {formatCurrency(paymentHistory.summary.remainingBalance, invoice.currency, homeCurrency)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+    <div>
+      {/* Invoice Form in Read-Only Mode */}
+      <InvoiceForm
+        invoice={invoice}
+        lineItems={lineItems}
+        readOnly={true}
+        customer={customer}
+        onCancel={handleBack}
+        onSendInvoice={() => setSendDialogOpen(true)}
+        onCopyLink={() => generateTokenMutation.mutate()}
+        onEdit={() => navigate(`/invoices/${invoice.id}/edit`)}
+      />
 
-          {/* Notes */}
-          {invoice.description && (
-            <div className="mt-8 border-t pt-4">
-              <h2 className="text-lg font-medium mb-2">Notes</h2>
-              <p className="text-gray-600">{invoice.description}</p>
-            </div>
-          )}
-        </div>
-        
-        {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t text-center text-sm text-gray-500">
-          Thank you for your business!
-        </div>
-      </div>
-      
-      {/* Activity Timeline */}
+      {/* Activity Timeline - shown below the form */}
+      <div className="max-w-5xl mx-auto px-4 md:px-6 pb-6 -mt-4">
       <Card className="mt-6">
         <CardHeader>
           <CardTitle className="text-lg">Activity Timeline</CardTitle>
@@ -712,93 +542,212 @@ export default function InvoiceView() {
           )}
         </CardContent>
       </Card>
-      
-      {/* Send Invoice Dialog */}
+      </div>
+
+      {/* Send Invoice Dialog - Split Pane Layout */}
       <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]" data-testid="dialog-send-invoice" aria-describedby="send-invoice-description">
-          <DialogHeader>
-            <DialogTitle>Send Invoice</DialogTitle>
-            <DialogDescription id="send-invoice-description">
-              Send this invoice via email to the customer
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="recipientEmail">Recipient Email *</Label>
-              <Input
-                id="recipientEmail"
-                type="email"
-                placeholder="customer@example.com"
-                value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
-                data-testid="input-recipient-email"
-              />
+        <DialogContent className="max-w-[95vw] lg:max-w-5xl h-[90vh] max-h-[800px] p-0 gap-0" data-testid="dialog-send-invoice" aria-describedby="send-invoice-description">
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="px-6 py-4 border-b">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-blue-600" />
+                  Send Invoice Email
+                </DialogTitle>
+                <DialogDescription id="send-invoice-description">
+                  Review and customize the email before sending to your customer
+                </DialogDescription>
+              </DialogHeader>
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="recipientName">Recipient Name</Label>
-              <Input
-                id="recipientName"
-                type="text"
-                placeholder="Customer Name"
-                value={recipientName}
-                onChange={(e) => setRecipientName(e.target.value)}
-                data-testid="input-recipient-name"
-              />
+
+            {/* Split Pane Content */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-0 overflow-hidden">
+              {/* Left Column - Form */}
+              <div className="flex flex-col overflow-y-auto border-r border-slate-200">
+                <div className="p-6 space-y-4">
+                  {/* To Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="recipientEmail" className="text-sm font-medium text-slate-700">To *</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="recipientEmail"
+                        type="email"
+                        placeholder="customer@example.com"
+                        value={recipientEmail}
+                        onChange={(e) => setRecipientEmail(e.target.value)}
+                        className="flex-1"
+                        data-testid="input-recipient-email"
+                      />
+                      <Input
+                        id="recipientName"
+                        type="text"
+                        placeholder="Name"
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                        className="w-28"
+                        data-testid="input-recipient-name"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CC Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="emailCC" className="text-sm font-medium text-slate-700">CC</Label>
+                    <Input
+                      id="emailCC"
+                      type="text"
+                      placeholder="email1@example.com, email2@example.com"
+                      value={emailCC}
+                      onChange={(e) => setEmailCC(e.target.value)}
+                      data-testid="input-email-cc"
+                    />
+                  </div>
+
+                  {/* BCC Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="emailBCC" className="text-sm font-medium text-slate-700">BCC</Label>
+                    <Input
+                      id="emailBCC"
+                      type="text"
+                      placeholder="email1@example.com, email2@example.com"
+                      value={emailBCC}
+                      onChange={(e) => setEmailBCC(e.target.value)}
+                      data-testid="input-email-bcc"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* Subject Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="emailSubject" className="text-sm font-medium text-slate-700">Subject</Label>
+                    <Input
+                      id="emailSubject"
+                      type="text"
+                      placeholder="Invoice subject..."
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      data-testid="input-email-subject"
+                    />
+                  </div>
+
+                  {/* Message Field */}
+                  <div className="space-y-2">
+                    <Label htmlFor="personalMessage" className="text-sm font-medium text-slate-700">Message</Label>
+                    <Textarea
+                      id="personalMessage"
+                      placeholder="Add a personal message to include in the email..."
+                      value={personalMessage}
+                      onChange={(e) => setPersonalMessage(e.target.value)}
+                      rows={8}
+                      className="resize-none"
+                      data-testid="textarea-personal-message"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* PDF Attachment Checkbox */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="includePdf"
+                      checked={includePdfAttachment}
+                      onCheckedChange={(checked) => setIncludePdfAttachment(checked === true)}
+                      data-testid="checkbox-include-pdf"
+                    />
+                    <Label htmlFor="includePdf" className="cursor-pointer text-sm font-medium text-slate-700">
+                      Include Invoice PDF as attachment
+                    </Label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - PDF Preview (hidden on mobile) */}
+              <div className="hidden lg:flex flex-col bg-slate-100">
+                <div className="px-4 py-3 border-b bg-slate-50">
+                  <p className="text-sm font-medium text-slate-600">Invoice Preview</p>
+                </div>
+                <div className="flex-1 p-4 relative">
+                  {/* Loading skeleton */}
+                  {pdfStatus === 'loading' && (
+                    <div className="absolute inset-4 rounded-lg border border-slate-200 bg-white flex flex-col items-center justify-center z-10">
+                      <div className="animate-pulse space-y-4 w-3/4">
+                        <div className="h-6 bg-slate-200 rounded w-1/3"></div>
+                        <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                        <div className="h-32 bg-slate-100 rounded mt-8"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/4 ml-auto"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/3 ml-auto"></div>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-6">Loading preview...</p>
+                    </div>
+                  )}
+
+                  {/* Error state */}
+                  {pdfStatus === 'error' && (
+                    <div className="absolute inset-4 rounded-lg border border-slate-200 bg-white flex flex-col items-center justify-center z-10">
+                      <AlertCircle className="h-12 w-12 text-slate-400 mb-4" />
+                      <p className="text-sm font-medium text-slate-700 mb-2">Unable to load preview</p>
+                      <p className="text-xs text-slate-500 mb-4 text-center px-4">
+                        The PDF preview couldn't be generated. You can still send the email.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryPdf}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* PDF iframe */}
+                  <iframe
+                    key={pdfKey}
+                    src={`/api/invoices/${invoiceId}/pdf`}
+                    className={`w-full h-full rounded-lg border border-slate-200 bg-white transition-opacity duration-300 ${
+                      pdfStatus === 'ready' ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    title="Invoice PDF Preview"
+                    onLoad={() => setPdfStatus('ready')}
+                    onError={() => setPdfStatus('error')}
+                  />
+                </div>
+              </div>
             </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="personalMessage">Personal Message (Optional)</Label>
-              <Textarea
-                id="personalMessage"
-                placeholder="Add a personal message to include in the email..."
-                value={personalMessage}
-                onChange={(e) => setPersonalMessage(e.target.value)}
-                rows={4}
-                data-testid="textarea-personal-message"
-              />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="includePdf"
-                checked={includePdfAttachment}
-                onCheckedChange={(checked) => setIncludePdfAttachment(checked === true)}
-                data-testid="checkbox-include-pdf"
-              />
-              <Label htmlFor="includePdf" className="cursor-pointer">
-                Include PDF attachment
-              </Label>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-slate-50 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setSendDialogOpen(false)}
+                data-testid="button-cancel-send"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => sendInvoiceMutation.mutate()}
+                disabled={!recipientEmail || sendInvoiceMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="button-submit-send"
+              >
+                {sendInvoiceMutation.isPending ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Send Email
+                  </>
+                )}
+              </Button>
             </div>
           </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSendDialogOpen(false)}
-              data-testid="button-cancel-send"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => sendInvoiceMutation.mutate()}
-              disabled={!recipientEmail || sendInvoiceMutation.isPending}
-              data-testid="button-submit-send"
-            >
-              {sendInvoiceMutation.isPending ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send Invoice
-                </>
-              )}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

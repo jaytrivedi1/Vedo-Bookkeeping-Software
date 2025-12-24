@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, useFieldArray, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -30,7 +30,7 @@ interface Invoice extends Omit<BaseInvoice, 'lineItems'> {
   appliedCreditAmount?: number;
   appliedCredits?: {id: number, amount: number}[];
 }
-import { CalendarIcon, Plus, Trash2, SendIcon, XIcon, X, HelpCircle, Settings } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, XIcon, X, HelpCircle, Send, Link as LinkIcon, Edit2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,11 @@ interface InvoiceFormProps {
   onSuccess?: () => void;
   onCancel?: () => void;
   initialDocumentType?: 'invoice' | 'quotation';
+  readOnly?: boolean; // When true, displays as view-only mode
+  customer?: Contact; // Customer data for read-only mode
+  onSendInvoice?: () => void; // Callback when Send Invoice is clicked in read-only mode
+  onCopyLink?: () => void; // Callback when Copy Link is clicked in read-only mode
+  onEdit?: () => void; // Callback when Edit is clicked in read-only mode
 }
 
 type PaymentTerms = '0' | '7' | '14' | '30' | '60' | 'custom';
@@ -91,7 +96,42 @@ interface InvoiceFormType extends UseFormReturn<Invoice> {
   taxComponentsInfo?: TaxComponentInfo[];
 }
 
-export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, initialDocumentType }: InvoiceFormProps) {
+// Helper component for displaying read-only values with consistent styling
+function ReadOnlyValue({
+  label,
+  value,
+  className = ""
+}: {
+  label?: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {label && (
+        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">
+          {label}
+        </span>
+      )}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl h-11 px-3 flex items-center text-sm text-slate-700">
+        {value || <span className="text-slate-400">—</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function InvoiceForm({
+  invoice,
+  lineItems: propLineItems,
+  onSuccess,
+  onCancel,
+  initialDocumentType,
+  readOnly = false,
+  customer: propCustomer,
+  onSendInvoice,
+  onCopyLink,
+  onEdit
+}: InvoiceFormProps) {
   const [sendInvoiceEmail, setSendInvoiceEmail] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerms>('0');
@@ -101,7 +141,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   const [documentType, setDocumentType] = useState<'invoice' | 'quotation'>(
     invoice?.status === 'quotation' ? 'quotation' : (initialDocumentType || 'invoice')
   );
-  
+
+  // CC and BCC for email
+  const [emailCC, setEmailCC] = useState<string>('');
+  const [emailBCC, setEmailBCC] = useState<string>('');
+
+  // Ref to track if this is a "Save & Send" action (avoids async state issues)
+  const isSaveAndSendRef = useRef(false);
+
   // Initialize based on mode (create vs edit)
   const isEditing = Boolean(invoice);
   const initialDate = isEditing ? new Date(invoice!.date) : new Date();
@@ -117,7 +164,12 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   const [watchContactId, setWatchContactId] = useState<number | undefined>(invoice?.contactId);
   const [unappliedCredits, setUnappliedCredits] = useState<Transaction[]>([]);
   const [appliedCredits, setAppliedCredits] = useState<Array<{creditId: number, amount: number, credit: Transaction}>>([]);
-  const [isExclusiveOfTax, setIsExclusiveOfTax] = useState(true);
+
+  // Tax setting: 'exclusive' (add tax on top), 'inclusive' (tax within price), 'no-tax' (no tax)
+  type TaxSetting = 'exclusive' | 'inclusive' | 'no-tax';
+  const [taxSetting, setTaxSetting] = useState<TaxSetting>(
+    isEditing && invoice?.taxType ? (invoice.taxType as TaxSetting) : 'exclusive'
+  );
   
   // Multi-currency state
   const [currency, setCurrency] = useState<string>(invoice?.currency || 'USD');
@@ -134,17 +186,20 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   // Fetch next invoice number from backend when creating a new invoice
   const { data: nextInvoiceData } = useQuery<{ nextNumber: string }>({
     queryKey: ['/api/invoices/next-number'],
-    enabled: !isEditing,
+    enabled: !isEditing && !readOnly,
   });
-  
+
   const defaultInvoiceNumber = isEditing ? invoice?.reference : (nextInvoiceData?.nextNumber || '1001');
 
+  // Skip heavy data fetches in read-only mode - data is passed via props
   const { data: contacts, isLoading: contactsLoading } = useQuery<Contact[]>({
     queryKey: ['/api/contacts'],
+    enabled: !readOnly, // Skip in read-only mode - customer passed via prop
   });
-  
+
   const { data: salesTaxes, isLoading: salesTaxesLoading } = useQuery<SalesTax[]>({
     queryKey: ['/api/sales-taxes'],
+    enabled: !readOnly, // Skip in read-only mode - taxes already calculated
   });
 
   // Transform sales taxes for SearchableSelect (filter main taxes only)
@@ -156,28 +211,34 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   
   const { data: products, isLoading: productsLoading } = useQuery<Product[]>({
     queryKey: ['/api/products'],
+    enabled: !readOnly, // Skip in read-only mode - product data not needed for display
   });
-  
+
   // Fetch customer's unapplied credits when a contact is selected
+  // CRITICAL: This fetches ALL transactions - skip in read-only mode
   const { data: transactions } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions'],
-    enabled: !!watchContactId,
+    enabled: !!watchContactId && !readOnly, // Skip in read-only mode - no credit selection available
   });
   
   // Fetch payment applications for this invoice when editing
   const { data: paymentApplications } = useQuery<any[]>({
     queryKey: ['/api/invoices', invoice?.id, 'payment-applications'],
-    enabled: isEditing && !!invoice?.id,
+    enabled: isEditing && !!invoice?.id && !readOnly,
   });
-  
+
   // Fetch preferences for multi-currency settings
+  // Note: We need this in readOnly mode too for correct currency display
   const { data: preferences } = useQuery<any>({
     queryKey: ['/api/preferences'],
   });
-  
-  // Get home currency from preferences
-  const homeCurrency = preferences?.homeCurrency || 'USD';
+
+  // Get home currency from preferences (default to CAD for this Canadian system)
+  const homeCurrency = preferences?.homeCurrency || 'CAD';
   const isMultiCurrencyEnabled = preferences?.multiCurrencyEnabled || false;
+
+  // In readOnly mode, use the invoice's currency for display
+  const displayCurrency = readOnly ? (invoice?.currency || homeCurrency) : currency;
   
   // Initialize currency to homeCurrency when preferences load
   useEffect(() => {
@@ -265,7 +326,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       reference: invoice?.reference,
       description: invoice?.description || '',
       status: invoice?.status as "open" | "paid" | "overdue" | "partial",
-      lineItems: lineItems?.length ? lineItems.map(item => {
+      lineItems: propLineItems?.length ? propLineItems.map(item => {
         // Map line item for editing, converting productId to string for Select component
         return {
           description: item.description,
@@ -306,7 +367,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   const invoiceDate = form.watch("date") || new Date();
   const { data: exchangeRateData, isLoading: exchangeRateLoading } = useQuery<any>({
     queryKey: ['/api/exchange-rates/rate', { fromCurrency: currency, toCurrency: homeCurrency, date: invoiceDate }],
-    enabled: isMultiCurrencyEnabled && currency !== homeCurrency,
+    enabled: !readOnly && isMultiCurrencyEnabled && currency !== homeCurrency,
     queryFn: async () => {
       const response = await fetch(
         `/api/exchange-rates/rate?fromCurrency=${currency}&toCurrency=${homeCurrency}&date=${format(invoiceDate, 'yyyy-MM-dd')}`
@@ -392,18 +453,18 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   // Initialize totals from existing invoice data when in edit mode
   useEffect(() => {
-    if (isEditing && lineItems?.length && invoice) {
+    if (isEditing && propLineItems?.length && invoice) {
       // Don't recalculate - use existing data
-      const subtotal = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const subtotal = propLineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
       const taxTotal = (invoice.amount || 0) - subtotal;
-      
+
       setSubTotal(subtotal);
       setTaxAmount(taxTotal);
       setTotalAmount(invoice.amount || 0);
       // Keep the existing balance - don't recalculate it
       setBalanceDue(invoice.balance || invoice.amount || 0);
     }
-  }, [isEditing, lineItems, invoice]);
+  }, [isEditing, propLineItems, invoice]);
 
   // Set selected contact when editing an invoice
   useEffect(() => {
@@ -417,14 +478,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   // Reset form when invoice data loads (fixes empty form on navigation)
   useEffect(() => {
-    if (isEditing && invoice && lineItems) {
+    if (isEditing && invoice && propLineItems) {
       form.reset({
         date: new Date(invoice.date),
         contactId: invoice.contactId,
         reference: invoice.reference,
         description: invoice.description || '',
         status: invoice.status as "open" | "paid" | "overdue" | "partial",
-        lineItems: lineItems.length ? lineItems.map(item => ({
+        lineItems: propLineItems.length ? propLineItems.map(item => ({
           description: item.description,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -434,7 +495,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
         })) : [{ description: '', quantity: 1, unitPrice: 0, amount: 0, salesTaxId: undefined, productId: undefined }],
       });
     }
-  }, [invoice, lineItems, isEditing, form]);
+  }, [invoice, propLineItems, isEditing, form]);
 
   // Credit management functions
   const addCredit = (credit: Transaction) => {
@@ -473,9 +534,14 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   const saveInvoice = useMutation({
     mutationFn: async (data: BaseInvoice) => {
+      console.log("=== saveInvoice mutation called ===");
+      console.log("isEditing:", isEditing);
+      console.log("invoice?.id:", invoice?.id);
       if (isEditing) {
         console.log("Updating invoice/quotation with data:", JSON.stringify(data, null, 2));
-        return await apiRequest(`/api/invoices/${invoice?.id}`, 'PATCH', data);
+        const url = `/api/invoices/${invoice?.id}`;
+        console.log("PATCH URL:", url);
+        return await apiRequest(url, 'PATCH', data);
       } else {
         console.log("Creating invoice/quotation with data:", JSON.stringify(data, null, 2));
         return await apiRequest('/api/invoices', 'POST', data);
@@ -488,17 +554,26 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
         description: `${docType} has been saved successfully`,
         variant: "default",
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ['/api/transactions'] });
+
+      // If Save & Send was clicked, navigate to invoice view with send dialog open
+      if (isSaveAndSendRef.current && result?.transaction?.id) {
+        isSaveAndSendRef.current = false; // Reset the ref
+        const basePath = documentType === 'quotation' ? '/quotations' : '/invoices';
+        // Pass CC/BCC as query params so they can be pre-filled in the send dialog
+        const params = new URLSearchParams({ openSendDialog: 'true' });
+        if (emailCC) params.set('cc', emailCC);
+        if (emailBCC) params.set('bcc', emailBCC);
+        window.location.href = `${basePath}/${result.transaction.id}?${params.toString()}`;
+        return;
+      }
+
+      // Normal save - go back
       if (onSuccess) {
         onSuccess();
       } else {
         window.history.back();
-      }
-      
-      // Handle send email if requested
-      if (sendInvoiceEmail && selectedContact?.email && result?.id) {
-        handleSendEmail(result.id);
       }
     },
     onError: (error: any) => {
@@ -563,34 +638,6 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
     }
   });
 
-  // Handle sending email for invoice or quotation
-  const handleSendEmail = async (transactionId: number) => {
-    const endpoint = documentType === 'quotation' 
-      ? `/api/quotations/${transactionId}/send`
-      : `/api/invoices/${transactionId}/send`;
-    
-    try {
-      await apiRequest(endpoint, 'POST', {
-        recipientEmail: selectedContact?.email,
-        recipientName: selectedContact?.name,
-        includeAttachment: true
-      });
-      
-      const docType = documentType === 'quotation' ? 'Quotation' : 'Invoice';
-      toast({
-        title: `${docType} sent`,
-        description: `${docType} has been sent to ${selectedContact?.email}`,
-      });
-    } catch (error) {
-      console.error("Error sending email:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send email. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const calculateLineItemAmount = (quantity: number, unitPrice: number) => {
     return roundTo2Decimals(quantity * unitPrice);
   };
@@ -608,75 +655,174 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   const calculateTotals = (manualTaxOverride?: number | null) => {
     const lineItems = form.getValues('lineItems');
-    
+
     let calculatedSubtotal = 0;
     let totalTaxAmount = 0;
     const taxComponents = new Map<number, TaxComponentInfo>();
     const usedTaxes = new Map<number, SalesTax>();
-    
-    lineItems.forEach((item) => {
-      const itemAmount = item.amount || 0;
-      
-      if (item.salesTaxId) {
-        const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
-        if (salesTax) {
-          if (salesTax.isComposite) {
-            const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
-            
-            if (components.length > 0) {
-              let itemTotalTax = 0;
-              components.forEach(component => {
-                let componentTaxAmount: number;
-                if (isExclusiveOfTax) {
-                  componentTaxAmount = roundTo2Decimals(itemAmount * (component.rate / 100));
+
+    // NO TAX MODE: Simply sum all line amounts, no tax calculation
+    if (taxSetting === 'no-tax') {
+      lineItems.forEach((item) => {
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (item.amount || 0));
+      });
+      totalTaxAmount = 0;
+      // No tax components to track
+    }
+    // EXCLUSIVE MODE: Tax added on top of subtotal
+    else if (taxSetting === 'exclusive') {
+      lineItems.forEach((item) => {
+        const itemAmount = item.amount || 0;
+        // In exclusive mode, subtotal = sum of line amounts
+        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
+
+        if (item.salesTaxId) {
+          const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+          if (salesTax) {
+            if (salesTax.isComposite) {
+              const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+
+              if (components.length > 0) {
+                components.forEach(component => {
+                  const componentTaxAmount = roundTo2Decimals(itemAmount * (component.rate / 100));
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
+
+                  const existingComponent = taxComponents.get(component.id);
+                  if (existingComponent) {
+                    existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
+                    taxComponents.set(component.id, existingComponent);
+                  } else {
+                    taxComponents.set(component.id, {
+                      id: component.id,
+                      name: component.name,
+                      rate: component.rate,
+                      amount: componentTaxAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                });
+                usedTaxes.set(salesTax.id, salesTax);
+              } else {
+                // No components found, use main tax
+                const itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
+                totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+                usedTaxes.set(salesTax.id, salesTax);
+
+                const existingTax = taxComponents.get(salesTax.id);
+                if (existingTax) {
+                  existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                  taxComponents.set(salesTax.id, existingTax);
                 } else {
-                  componentTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + component.rate));
-                }
-                itemTotalTax = roundTo2Decimals(itemTotalTax + componentTaxAmount);
-                totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
-                
-                const existingComponent = taxComponents.get(component.id);
-                if (existingComponent) {
-                  existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
-                  taxComponents.set(component.id, existingComponent);
-                } else {
-                  taxComponents.set(component.id, {
-                    id: component.id,
-                    name: component.name,
-                    rate: component.rate,
-                    amount: componentTaxAmount,
-                    isComponent: true,
-                    parentId: salesTax.id
+                  taxComponents.set(salesTax.id, {
+                    id: salesTax.id,
+                    name: salesTax.name,
+                    rate: salesTax.rate,
+                    amount: itemTaxAmount,
+                    isComponent: false
                   });
                 }
-              });
-              
-              // Calculate subtotal for this line item
-              if (isExclusiveOfTax) {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-              } else {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTotalTax));
               }
-              
-              usedTaxes.set(salesTax.id, salesTax);
             } else {
-              let itemTaxAmount: number;
-              if (isExclusiveOfTax) {
-                itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
-              } else {
-                itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
-              }
+              // Regular non-composite tax
+              const itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
               totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
-              
-              // Calculate subtotal for this line item
-              if (isExclusiveOfTax) {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-              } else {
-                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
-              }
-              
               usedTaxes.set(salesTax.id, salesTax);
-              
+
+              const existingTax = taxComponents.get(salesTax.id);
+              if (existingTax) {
+                existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                taxComponents.set(salesTax.id, existingTax);
+              } else {
+                taxComponents.set(salesTax.id, {
+                  id: salesTax.id,
+                  name: salesTax.name,
+                  rate: salesTax.rate,
+                  amount: itemTaxAmount,
+                  isComponent: false
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+    // INCLUSIVE MODE: Tax is within the line amount, back-calculate
+    else if (taxSetting === 'inclusive') {
+      lineItems.forEach((item) => {
+        const itemAmount = item.amount || 0;
+
+        if (item.salesTaxId) {
+          const salesTax = salesTaxes?.find(tax => tax.id === item.salesTaxId);
+          if (salesTax) {
+            if (salesTax.isComposite) {
+              const components = salesTaxes?.filter(tax => tax.parentId === salesTax.id) || [];
+
+              if (components.length > 0) {
+                // Calculate combined rate for back-calculation
+                const combinedRate = components.reduce((sum, c) => sum + c.rate, 0);
+                const divisor = 1 + (combinedRate / 100);
+                const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+                const itemTotalTax = roundTo2Decimals(itemAmount - itemSubtotal);
+
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+
+                // Distribute tax proportionally across components
+                components.forEach(component => {
+                  const componentProportion = component.rate / combinedRate;
+                  const componentTaxAmount = roundTo2Decimals(itemTotalTax * componentProportion);
+                  totalTaxAmount = roundTo2Decimals(totalTaxAmount + componentTaxAmount);
+
+                  const existingComponent = taxComponents.get(component.id);
+                  if (existingComponent) {
+                    existingComponent.amount = roundTo2Decimals(existingComponent.amount + componentTaxAmount);
+                    taxComponents.set(component.id, existingComponent);
+                  } else {
+                    taxComponents.set(component.id, {
+                      id: component.id,
+                      name: component.name,
+                      rate: component.rate,
+                      amount: componentTaxAmount,
+                      isComponent: true,
+                      parentId: salesTax.id
+                    });
+                  }
+                });
+                usedTaxes.set(salesTax.id, salesTax);
+              } else {
+                // No components, use main tax rate
+                const divisor = 1 + (salesTax.rate / 100);
+                const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+                const itemTaxAmount = roundTo2Decimals(itemAmount - itemSubtotal);
+
+                calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+                totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+                usedTaxes.set(salesTax.id, salesTax);
+
+                const existingTax = taxComponents.get(salesTax.id);
+                if (existingTax) {
+                  existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
+                  taxComponents.set(salesTax.id, existingTax);
+                } else {
+                  taxComponents.set(salesTax.id, {
+                    id: salesTax.id,
+                    name: salesTax.name,
+                    rate: salesTax.rate,
+                    amount: itemTaxAmount,
+                    isComponent: false
+                  });
+                }
+              }
+            } else {
+              // Regular non-composite tax - back-calculate
+              const divisor = 1 + (salesTax.rate / 100);
+              const itemSubtotal = roundTo2Decimals(itemAmount / divisor);
+              const itemTaxAmount = roundTo2Decimals(itemAmount - itemSubtotal);
+
+              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemSubtotal);
+              totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
+              usedTaxes.set(salesTax.id, salesTax);
+
               const existingTax = taxComponents.get(salesTax.id);
               if (existingTax) {
                 existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
@@ -692,64 +838,41 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
               }
             }
           } else {
-            let itemTaxAmount: number;
-            if (isExclusiveOfTax) {
-              itemTaxAmount = roundTo2Decimals(itemAmount * (salesTax.rate / 100));
-            } else {
-              itemTaxAmount = roundTo2Decimals(itemAmount - (itemAmount * 100) / (100 + salesTax.rate));
-            }
-            totalTaxAmount = roundTo2Decimals(totalTaxAmount + itemTaxAmount);
-            
-            // Calculate subtotal for this line item
-            if (isExclusiveOfTax) {
-              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-            } else {
-              calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + (itemAmount - itemTaxAmount));
-            }
-            
-            usedTaxes.set(salesTax.id, salesTax);
-            
-            const existingTax = taxComponents.get(salesTax.id);
-            if (existingTax) {
-              existingTax.amount = roundTo2Decimals(existingTax.amount + itemTaxAmount);
-              taxComponents.set(salesTax.id, existingTax);
-            } else {
-              taxComponents.set(salesTax.id, {
-                id: salesTax.id,
-                name: salesTax.name,
-                rate: salesTax.rate,
-                amount: itemTaxAmount,
-                isComponent: false
-              });
-            }
+            // No tax found, treat as no-tax line
+            calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
           }
+        } else {
+          // No tax on this line item - add full amount to subtotal
+          calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
         }
-      } else {
-        // No tax on this line item - add full amount to subtotal
-        calculatedSubtotal = roundTo2Decimals(calculatedSubtotal + itemAmount);
-      }
-    });
-    
+      });
+    }
+
     // Use manual tax amount if set, otherwise use calculated tax
     // Priority: 1) manualTaxOverride parameter (null = use calculated), 2) manualTaxAmount state, 3) calculated tax
-    const finalTaxAmount = manualTaxOverride !== undefined 
-      ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
-      : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount);
+    // Note: In no-tax mode, always use 0 regardless of manual override
+    const finalTaxAmount = taxSetting === 'no-tax'
+      ? 0
+      : (manualTaxOverride !== undefined
+          ? (manualTaxOverride === null ? totalTaxAmount : manualTaxOverride)
+          : (manualTaxAmount !== null ? manualTaxAmount : totalTaxAmount));
+
     // Total is always subtotal + tax
     const total = roundTo2Decimals(calculatedSubtotal + finalTaxAmount);
-    
+
     // Get all unique tax names used in this invoice
     const taxNameList = Array.from(usedTaxes.values()).map(tax => tax.name);
-    
+
     // Convert tax components map to array and sort by displayOrder if available
     const taxComponentsArray = Array.from(taxComponents.values());
-    
+
     // Store in a property accessible during form rendering
     form.taxComponentsInfo = taxComponentsArray;
-    
-    console.log("Calculating totals:", { 
-      calculatedSubtotal, 
-      totalTaxAmount, 
+
+    console.log("Calculating totals:", {
+      taxSetting,
+      calculatedSubtotal,
+      totalTaxAmount,
       manualTaxAmount,
       finalTaxAmount,
       total,
@@ -757,22 +880,22 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       taxNames: taxNameList,
       taxComponents: taxComponentsArray
     });
-    
+
     // Make sure to persist these values
     setSubTotal(calculatedSubtotal);
     setTaxAmount(finalTaxAmount);
     setTotalAmount(total);
     setTaxNames(taxNameList);
-    
+
     // Calculate balance due (total - applied credits)
     // Sum all applied credits from the appliedCredits array
     const totalAppliedCredits = appliedCredits.reduce((sum, ac) => sum + ac.amount, 0);
-    
+
     console.log("Total applied credits:", totalAppliedCredits, "from", appliedCredits.length, "credits");
-    
+
     // Calculate balance due: total - applied credits
     const newBalanceDue = roundTo2Decimals(total - totalAppliedCredits);
-    
+
     console.log("Balance calculation:", {
       total,
       totalAppliedCredits,
@@ -780,7 +903,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       isEditMode: isEditing,
       existingBalance: invoice?.balance
     });
-    
+
     setBalanceDue(newBalanceDue > 0 ? newBalanceDue : 0);
   };
 
@@ -822,7 +945,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   // Update totals whenever line items change, tax mode changes, or credits are applied
   useEffect(() => {
     calculateTotals();
-  }, [fields.length, isExclusiveOfTax, appliedCredits]);
+  }, [fields.length, taxSetting, appliedCredits]);
 
   // Update due date when invoice date changes and watch for contactId changes
   useEffect(() => {
@@ -843,7 +966,10 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
   }, [form.watch, paymentTerms]);
 
   const onSubmit = (data: Invoice) => {
+    console.log("=== onSubmit called ===");
     console.log("Form data before submit:", data);
+    console.log("isEditing:", isEditing);
+    console.log("invoice?.id:", invoice?.id);
     
     // Filter out empty line items
     const filteredLineItems = data.lineItems.filter(item => 
@@ -874,6 +1000,7 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
       subTotal,
       taxAmount,
       totalAmount,
+      taxType: taxSetting, // 'exclusive' | 'inclusive' | 'no-tax'
       paymentTerms,
       // Multi-currency fields
       currency,
@@ -933,727 +1060,824 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="h-screen flex flex-col">
-        {/* Header */}
-        <div className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold">
-              {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference')}
-            </h1>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+        {/* Modern Compact Header */}
+        <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-3 flex justify-between items-center sticky top-0 z-20 shadow-sm">
+          <div className="flex items-center gap-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCancel}
+              className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 -ml-2"
+            >
+              <XIcon className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">{readOnly ? 'Back' : 'Close'}</span>
+            </Button>
+            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold text-slate-900">
+                {documentType === 'quotation' ? 'Quotation' : 'Invoice'} #{form.watch('reference') || invoice?.reference}
+              </h1>
+              {readOnly ? (
+                <span className={cn(
+                  "px-2.5 py-1 text-xs font-medium rounded-full capitalize",
+                  invoice?.status === 'paid' && "bg-green-100 text-green-700",
+                  invoice?.status === 'open' && "bg-blue-100 text-blue-700",
+                  invoice?.status === 'overdue' && "bg-red-100 text-red-700",
+                  invoice?.status === 'quotation' && "bg-purple-100 text-purple-700",
+                  !['paid', 'open', 'overdue', 'quotation'].includes(invoice?.status) && "bg-slate-100 text-slate-700"
+                )}>
+                  {invoice?.status || 'Draft'}
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                  Draft
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="icon">
-              <Settings className="h-5 w-5 text-gray-500" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon">
-              <HelpCircle className="h-5 w-5 text-gray-500" />
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={onCancel}>
-              <XIcon className="h-5 w-5 text-gray-500" />
-            </Button>
-          </div>
+
+          {/* Action buttons for read-only mode */}
+          {readOnly && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onSendInvoice}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <Send className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Send Invoice</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onCopyLink}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <LinkIcon className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Copy Link</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={onEdit}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Edit2 className="h-4 w-4 mr-1.5" />
+                <span className="hidden sm:inline">Edit</span>
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div className="p-6 overflow-y-auto flex-grow bg-gray-50">
-          {/* Main content area with improved 2-column layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
-            {/* Left column - Main content */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Customer section - with better alignment */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <FormField
-                      control={form.control}
-                      name="contactId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center gap-1 mb-2">
-                            <FormLabel className="text-sm font-medium">Customer</FormLabel>
-                            <HelpCircle className="h-4 w-4 text-gray-400" />
+        <div className="flex-grow overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+
+            {/* Customer & Invoice Details - Horizontal Layout */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100">
+                {/* Left: Customer Selection / Display */}
+                <div className="p-6">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Bill To</h2>
+
+                  {readOnly ? (
+                    /* Read-only customer display */
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        {(propCustomer || selectedContact) ? (
+                          <div className="space-y-2">
+                            <p className="font-semibold text-slate-900 text-base">
+                              {(propCustomer || selectedContact)?.name || 'Unknown Customer'}
+                            </p>
+                            {(propCustomer || selectedContact)?.contactName && (
+                              <p className="text-sm text-slate-600">{(propCustomer || selectedContact)?.contactName}</p>
+                            )}
+                            {(propCustomer || selectedContact)?.email && (
+                              <p className="text-sm text-slate-600">{(propCustomer || selectedContact)?.email}</p>
+                            )}
+                            {(propCustomer || selectedContact)?.address && (
+                              <p className="text-sm text-slate-600 whitespace-pre-line">{(propCustomer || selectedContact)?.address}</p>
+                            )}
                           </div>
-                          <FormControl>
-                            <SearchableSelect
-                              items={customerItems}
-                              value={field.value?.toString() || ""}
-                              onValueChange={(value) => {
-                                const contactId = parseInt(value);
-                                field.onChange(contactId);
-                                handleContactChange(contactId);
-                              }}
-                              placeholder="Select a customer"
-                              emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
-                              searchPlaceholder="Search customers..."
-                              className="bg-white border-gray-300 h-10"
-                              disabled={contactsLoading}
-                              onAddNew={() => setShowAddCustomerDialog(true)}
-                              addNewText="Add New Customer"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Customer email</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <Input 
-                        className="bg-white border-gray-300 h-10" 
-                        placeholder="Separate emails with a comma"
-                        value={selectedContact?.email || ''}
-                        readOnly
-                      />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="send-invoice" 
-                        checked={sendInvoiceEmail}
-                        onCheckedChange={(checked) => setSendInvoiceEmail(checked as boolean)}
-                      />
-                      <label
-                        htmlFor="send-invoice"
-                        className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                      >
-                        Send later
-                      </label>
-                      <HelpCircle className="h-4 w-4 text-gray-400" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Billing section - improved alignment */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div>
-                    <FormLabel className="text-sm font-medium block mb-2">Billing address</FormLabel>
-                    <Textarea 
-                      className="min-h-[120px] bg-white border-gray-300 resize-none" 
-                      value={selectedContact?.address || ''}
-                      readOnly
-                    />
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Type</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <FormItem>
-                        <FormControl>
-                          <Select 
-                            value={documentType} 
-                            onValueChange={(value: 'invoice' | 'quotation') => setDocumentType(value)}
-                            disabled={isEditing}
-                            data-testid="select-document-type"
-                          >
-                            <SelectTrigger className="bg-white border-gray-300 h-10">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="invoice">Invoice</SelectItem>
-                              <SelectItem value="quotation">Quotation</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    </div>
-                    
-                    <div>
-                      <div className="flex items-center gap-1 mb-2">
-                        <FormLabel className="text-sm font-medium">Terms</FormLabel>
-                        <HelpCircle className="h-4 w-4 text-gray-400" />
-                      </div>
-                      <FormItem>
-                        <FormControl>
-                          <Select 
-                            value={paymentTerms} 
-                            onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
-                          >
-                            <SelectTrigger className="bg-white border-gray-300 h-10">
-                              <SelectValue placeholder="Select payment terms" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0">Due upon receipt</SelectItem>
-                              <SelectItem value="7">Net 7</SelectItem>
-                              <SelectItem value="14">Net 14</SelectItem>
-                              <SelectItem value="30">Net 30</SelectItem>
-                              <SelectItem value="60">Net 60</SelectItem>
-                              <SelectItem value="custom">Custom</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                      </FormItem>
-                    </div>
-                    
-                    {isMultiCurrencyEnabled && (
-                      <div className="space-y-4">
-                        <div>
-                          <div className="flex items-center gap-1 mb-2">
-                            <FormLabel className="text-sm font-medium">Currency</FormLabel>
-                            <HelpCircle className="h-4 w-4 text-gray-400" />
-                          </div>
-                          <FormItem>
-                            <FormControl>
-                              <Select 
-                                value={currency} 
-                                onValueChange={(value) => setCurrency(value)}
-                                disabled={isEditing || !!watchContactId}
-                              >
-                                <SelectTrigger className="bg-white border-gray-300 h-10">
-                                  <SelectValue placeholder="Select currency" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {CURRENCIES.map(curr => (
-                                    <SelectItem key={curr.code} value={curr.code}>
-                                      {curr.code} - {curr.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </FormControl>
-                          </FormItem>
-                        </div>
-                        
-                        {currency !== homeCurrency && (
-                          <ExchangeRateInput
-                            fromCurrency={currency}
-                            toCurrency={homeCurrency}
-                            value={exchangeRate}
-                            onChange={handleExchangeRateChange}
-                            isLoading={exchangeRateLoading}
-                            date={invoiceDate}
-                          />
+                        ) : (
+                          <p className="text-slate-400 text-sm">No customer assigned</p>
                         )}
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <FormLabel className="text-sm font-medium block mb-2">Invoice date</FormLabel>
+                    </div>
+                  ) : (
+                    /* Editable customer selection */
+                    <>
                       <FormField
                         control={form.control}
-                        name="date"
+                        name="contactId"
                         render={({ field }) => (
                           <FormItem>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Input
-                                    className="bg-white border-gray-300 h-10"
-                                    value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
-                                    readOnly
-                                  />
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value}
-                                  onSelect={field.onChange}
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
+                            <FormControl>
+                              <SearchableSelect
+                                items={customerItems}
+                                value={field.value?.toString() || ""}
+                                onValueChange={(value) => {
+                                  const contactId = parseInt(value);
+                                  field.onChange(contactId);
+                                  handleContactChange(contactId);
+                                }}
+                                placeholder="Select a customer"
+                                emptyText={contactsLoading ? "Loading contacts..." : "No customers found"}
+                                searchPlaceholder="Search customers..."
+                                className="bg-slate-50 border-slate-200 h-12 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                                disabled={contactsLoading}
+                                onAddNew={() => setShowAddCustomerDialog(true)}
+                                addNewText="Add New Customer"
+                              />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                    </div>
-                    
-                    <div>
-                      <FormLabel className="text-sm font-medium block mb-2">Due date</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Input
-                            className="bg-white border-gray-300 h-10"
-                            value={format(dueDate, "dd/MM/yyyy")}
-                            readOnly
-                          />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={dueDate}
-                            onSelect={(date) => date && setDueDate(date)}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+
+                      {/* Customer Details Preview */}
+                      {selectedContact && (
+                        <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="text-sm text-slate-600 space-y-1">
+                            {selectedContact.email && (
+                              <p className="flex items-center gap-2">
+                                <span className="text-slate-400">Email:</span>
+                                <span className="font-medium text-slate-700">{selectedContact.email}</span>
+                              </p>
+                            )}
+                            {selectedContact.address && (
+                              <p className="flex items-start gap-2">
+                                <span className="text-slate-400">Address:</span>
+                                <span className="font-medium text-slate-700 whitespace-pre-line">{selectedContact.address}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* CC Field */}
+                      <div className="mt-4">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">CC (Optional)</FormLabel>
+                        <Input
+                          value={emailCC}
+                          onChange={(e) => setEmailCC(e.target.value)}
+                          placeholder="email1@example.com, email2@example.com"
+                          className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        />
+                        <p className="text-xs text-slate-400 mt-1">Separate multiple emails with commas</p>
+                      </div>
+
+                      {/* BCC Field */}
+                      <div className="mt-3">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">BCC (Optional)</FormLabel>
+                        <Input
+                          value={emailBCC}
+                          onChange={(e) => setEmailBCC(e.target.value)}
+                          placeholder="archive@example.com"
+                          className="bg-slate-50 border-slate-200 h-10 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Right: Invoice Details */}
+                <div className="p-6">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide mb-4">Invoice Details</h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Invoice Number */}
+                    <ReadOnlyValue
+                      label="Invoice No."
+                      value={<span className="font-semibold">{invoice?.reference || form.watch('reference') || '—'}</span>}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice No.</FormLabel>
+                        <FormField
+                          control={form.control}
+                          name="reference"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  className="bg-slate-50 border-slate-200 h-11 font-semibold text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {/* Invoice Date */}
+                    <ReadOnlyValue
+                      label="Invoice Date"
+                      value={invoice?.date ? format(new Date(invoice.date), "MMM dd, yyyy") : '—'}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Invoice Date</FormLabel>
+                        <FormField
+                          control={form.control}
+                          name="date"
+                          render={({ field }) => (
+                            <FormItem>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant="outline"
+                                      className={cn(
+                                        "w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                    >
+                                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                                      {field.value ? format(field.value, "MMM dd, yyyy") : "Select date"}
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {/* Due Date */}
+                    <ReadOnlyValue
+                      label="Due Date"
+                      value={invoice?.dueDate ? format(new Date(invoice.dueDate), "MMM dd, yyyy") : 'Not specified'}
+                      className={readOnly ? '' : 'hidden'}
+                    />
+                    {!readOnly && (
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Due Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-full h-11 justify-start text-left font-normal bg-slate-50 border-slate-200 hover:bg-slate-100 rounded-xl"
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+                              {format(dueDate, "MMM dd, yyyy")}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={dueDate}
+                              onSelect={(date) => date && setDueDate(date)}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
+
+                    {/* Payment Terms - Full Width */}
+                    <ReadOnlyValue
+                      label="Payment Terms"
+                      value={(() => {
+                        const terms = invoice?.paymentTerms;
+                        if (!terms || terms === '0') return 'Due upon receipt';
+                        if (terms === '7') return 'Net 7';
+                        if (terms === '14') return 'Net 14';
+                        if (terms === '30') return 'Net 30';
+                        if (terms === '60') return 'Net 60';
+                        return terms; // For custom or other values
+                      })()}
+                      className={cn(readOnly ? 'col-span-2' : 'hidden')}
+                    />
+                    {!readOnly && (
+                      <div className="col-span-2">
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Payment Terms</FormLabel>
+                        <Select
+                          value={paymentTerms}
+                          onValueChange={(value) => handlePaymentTermsChange(value as PaymentTerms)}
+                        >
+                          <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                            <SelectValue placeholder="Select payment terms" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Due upon receipt</SelectItem>
+                            <SelectItem value="7">Net 7</SelectItem>
+                            <SelectItem value="14">Net 14</SelectItem>
+                            <SelectItem value="30">Net 30</SelectItem>
+                            <SelectItem value="60">Net 60</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Currency - always show in readOnly mode, otherwise only if multi-currency enabled */}
+                    {(readOnly || isMultiCurrencyEnabled) && (
+                      <>
+                        <ReadOnlyValue
+                          label="Currency"
+                          value={invoice?.currency || homeCurrency}
+                          className={cn(readOnly ? 'col-span-2' : 'hidden')}
+                        />
+                        {!readOnly && (
+                          <div className="col-span-2">
+                            <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Currency</FormLabel>
+                            <Select
+                              value={currency}
+                              onValueChange={(value) => setCurrency(value)}
+                              disabled={isEditing || !!watchContactId}
+                            >
+                              <SelectTrigger className="bg-slate-50 border-slate-200 h-11 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl">
+                                <SelectValue placeholder="Select currency" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CURRENCIES.map(curr => (
+                                  <SelectItem key={curr.code} value={curr.code}>
+                                    {curr.code} - {curr.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {!readOnly && currency !== homeCurrency && (
+                          <div className="col-span-2">
+                            <ExchangeRateInput
+                              fromCurrency={currency}
+                              toCurrency={homeCurrency}
+                              value={exchangeRate}
+                              onChange={handleExchangeRateChange}
+                              isLoading={exchangeRateLoading}
+                              date={invoiceDate}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
-              
-              {/* Tags section removed as requested */}
-              
-              {/* Line Items - improved table */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="text-sm font-medium">Line Items</div>
-                  <FormItem>
-                    <FormControl>
-                      <Select defaultValue="exclusive">
-                        <SelectTrigger className="w-44 bg-white border-gray-300 h-10">
-                          <SelectValue placeholder="Tax setting" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
-                          <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
-                          <SelectItem value="no-tax">No Tax</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                </div>
-                
-                <div className="border rounded-lg overflow-hidden">
-                  {/* Header */}
-                  <div className="bg-gray-50 grid grid-cols-12 gap-2 text-xs font-semibold p-3 border-b uppercase text-gray-600">
-                    <div className="col-span-1 text-center">#</div>
-                    <div className="col-span-3">Product/Service</div>
-                    <div className="col-span-2">Description</div>
-                    <div className="col-span-1 text-center">Qty</div>
-                    <div className="col-span-1 text-center">Rate</div>
-                    <div className="col-span-1 text-center">Amount</div>
-                    <div className="col-span-2 text-center">Sales Tax</div>
-                    <div className="col-span-1"></div>
-                  </div>
-                  
-                  {/* Line Items */}
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="grid grid-cols-12 gap-2 p-3 border-b items-center hover:bg-gray-50 transition-colors">
-                      <div className="col-span-1 text-center text-sm text-gray-500">{index + 1}</div>
-                      <div className="col-span-3">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.productId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <SearchableSelect
-                                  items={productItems}
-                                  value={field.value ? field.value.toString() : ''}
-                                  onValueChange={(value) => {
-                                    if (!value) {
-                                      field.onChange(undefined);
-                                      form.setValue(`lineItems.${index}.description`, '');
-                                      form.setValue(`lineItems.${index}.unitPrice`, 0);
-                                      form.setValue(`lineItems.${index}.salesTaxId`, undefined);
-                                      updateLineItemAmount(index);
-                                    } else {
-                                      const productId = parseInt(value);
-                                      const product = typedProducts.find(p => p.id === productId);
-                                      if (product) {
-                                        field.onChange(value);
-                                        form.setValue(`lineItems.${index}.description`, product.name);
-                                        form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
-                                        
-                                        if (product.salesTaxId) {
-                                          form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
-                                        }
-                                        
-                                        updateLineItemAmount(index);
-                                      }
-                                    }
-                                  }}
-                                  onAddNew={() => {
-                                    setCurrentLineItemIndex(index);
-                                    setShowAddProductDialog(true);
-                                  }}
-                                  addNewText="Add New Product/Service"
-                                  placeholder="Select product/service"
-                                  searchPlaceholder="Search products..."
-                                  emptyText={productsLoading ? "Loading..." : "No products found"}
-                                  disabled={productsLoading}
-                                  className="bg-transparent border-0 border-b border-gray-200 rounded-none"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <Input 
-                          className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 hover:bg-gray-50" 
-                          placeholder="Enter description" 
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.quantity`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input 
-                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 hover:bg-gray-50" 
-                                  type="number" 
-                                  min="0"
-                                  step="1"
-                                  {...field} 
-                                  onChange={(e) => {
-                                    field.onChange(parseFloat(e.target.value));
-                                    updateLineItemAmount(index);
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.unitPrice`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input 
-                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 hover:bg-gray-50" 
-                                  type="number" 
-                                  min="0"
-                                  step="0.01"
-                                  {...field} 
-                                  onChange={(e) => {
-                                    field.onChange(parseFloat(e.target.value));
-                                    updateLineItemAmount(index);
-                                  }}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.amount`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <Input 
-                                  className="bg-transparent border-0 border-b border-gray-200 p-2 text-center focus:ring-0 font-medium" 
-                                  readOnly
-                                  value={formatCurrency(field.value)}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      {/* Sales Tax dropdown for each line item */}
-                      <div className="col-span-2">
-                        <FormField
-                          control={form.control}
-                          name={`lineItems.${index}.salesTaxId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormControl>
-                                <SearchableSelect
-                                  items={taxItems}
-                                  value={field.value?.toString() || "0"}
-                                  onValueChange={(value) => {
-                                    const numValue = parseInt(value);
-                                    if (numValue === 0) {
-                                      field.onChange(undefined);
-                                    } else {
-                                      field.onChange(numValue);
-                                    }
-                                    updateLineItemAmount(index);
-                                    calculateTotals();
-                                  }}
-                                  placeholder="Select Tax"
-                                  searchPlaceholder="Search taxes..."
-                                  emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
-                                  className="bg-transparent border-0 border-b border-gray-200 p-2 focus:ring-0 rounded-none h-10 hover:bg-gray-50"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      
-                      <div className="col-span-1 flex justify-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          onClick={() => {
-                            if (fields.length > 1) {
-                              remove(index);
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add lines
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (fields.length > 1) {
-                        remove();
+            </div>
+
+            {/* Line Items Section - Modern Full Width */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Line Items</h2>
+                {!readOnly && (
+                  <Select
+                    value={taxSetting}
+                    onValueChange={(value: 'exclusive' | 'inclusive' | 'no-tax') => {
+                      setTaxSetting(value);
+                      // If switching to "No Tax", clear all line item tax selections
+                      if (value === 'no-tax') {
+                        const lineItems = form.getValues('lineItems');
+                        lineItems.forEach((_, index) => {
+                          form.setValue(`lineItems.${index}.salesTaxId`, undefined);
+                        });
                       }
+                      // Recalculate totals immediately
+                      calculateTotals();
                     }}
                   >
-                    Clear all lines
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                  >
-                    Add subtotal
-                  </Button>
-                </div>
-                
-                {/* Totals */}
-                <div className="flex justify-end mt-6">
-                  <div className="w-72 space-y-3 bg-gray-50 p-4 rounded-lg border">
-                    <div className="flex justify-between items-center text-gray-700">
-                      <span className="text-sm font-medium">Subtotal</span>
-                      <span className="font-medium">${formatCurrency(subTotal)}</span>
-                    </div>
-                    
-                    {/* Tax Summary - Editable */}
-                    <div className="flex justify-between items-center text-gray-700">
-                      <span className="text-sm">
-                        {taxNames.length > 0 
-                          ? taxNames.join(', ')  
-                          : 'Tax'}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <span className="font-medium">$</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={manualTaxAmount !== null ? manualTaxAmount.toFixed(2) : taxAmount.toFixed(2)}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            if (!isNaN(value) && e.target.value.trim() !== '') {
-                              const roundedValue = roundTo2Decimals(value);
-                              setManualTaxAmount(roundedValue);
-                              // Pass the value directly to avoid state timing issues
-                              calculateTotals(roundedValue);
-                            } else {
-                              // If empty or invalid, clear the manual override
-                              setManualTaxAmount(null);
-                              // Pass null to explicitly use calculated tax
-                              calculateTotals(null);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            // Ensure value is rounded on blur, or cleared if empty
-                            if (e.target.value.trim() === '') {
-                              setManualTaxAmount(null);
-                              // Pass null to explicitly use calculated tax
-                              calculateTotals(null);
-                            } else if (manualTaxAmount !== null) {
-                              const roundedValue = roundTo2Decimals(manualTaxAmount);
-                              setManualTaxAmount(roundedValue);
-                              calculateTotals(roundedValue);
-                            }
-                          }}
-                          className="w-24 h-8 text-right px-2 font-medium border-gray-300"
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Show tax components breakdown if available (read-only, for info) */}
-                    {form.taxComponentsInfo && form.taxComponentsInfo.length > 0 && manualTaxAmount === null && (
-                      <div className="pl-4 space-y-1">
-                        {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
-                          <div key={taxComponent.id} className="flex justify-between items-center text-gray-600 text-xs">
-                            <span>
-                              {taxComponent.name} ({taxComponent.rate}%)
-                            </span>
-                            <span>${formatCurrency(taxComponent.amount)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="flex justify-between border-t border-gray-300 pt-3">
-                      <span className="text-sm font-semibold text-gray-900">Total</span>
-                      <span className="font-semibold text-gray-900">${formatCurrency(totalAmount)}</span>
-                    </div>
-                    
-                    {/* Applied credits with editable amounts */}
-                    {appliedCredits.length > 0 && (
-                      <div className="space-y-2 mt-3 pt-3 border-t border-gray-300">
-                        {appliedCredits.map(ac => (
-                          <div key={ac.creditId} className="flex justify-between items-center text-gray-700">
-                            <span className="text-sm">Credit #{ac.creditId}</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm text-green-600">-$</span>
-                              <Input
-                                type="number"
-                                min="0"
-                                max={Math.abs(ac.credit.balance || 0) + ac.amount}
-                                step="0.01"
-                                value={ac.amount}
-                                onChange={(e) => updateCreditAmount(ac.creditId, parseFloat(e.target.value) || 0)}
-                                className="w-20 h-7 text-right px-2 text-sm text-green-600 font-medium border-gray-300"
-                                data-testid={`input-credit-amount-totals-${ac.creditId}`}
+                    <SelectTrigger className="w-48 bg-slate-50 border-slate-200 h-10 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                      <SelectValue placeholder="Tax setting" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exclusive">Exclusive of Tax</SelectItem>
+                      <SelectItem value="inclusive">Inclusive of Tax</SelectItem>
+                      <SelectItem value="no-tax">No Tax</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              {/* Modern Line Items */}
+              <div className="divide-y divide-slate-100">
+                {fields.map((field, index) => {
+                  // Get current values for read-only display
+                  const lineItem = form.watch(`lineItems.${index}`);
+                  const productId = lineItem?.productId;
+                  const product = productId ? typedProducts.find(p => p.id === parseInt(productId)) : null;
+                  const taxId = lineItem?.salesTaxId;
+                  const tax = taxId ? salesTaxes?.find(t => t.id === taxId) : null;
+
+                  return (
+                    <div key={field.id} className="p-4 hover:bg-slate-50/50 transition-colors group">
+                      <div className="flex items-start gap-4">
+                        {/* Line Number */}
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm font-medium text-slate-500 mt-1">
+                          {index + 1}
+                        </div>
+
+                        {/* Main Content - Reordered: Product/Service → Description → Qty → Rate → Amount → Tax */}
+                        <div className="flex-grow grid grid-cols-1 md:grid-cols-[minmax(140px,1.5fr)_minmax(180px,2fr)_70px_90px_100px_minmax(120px,1fr)] gap-3">
+                          {/* Product/Service */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Product/Service</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {product?.name || lineItem?.description || '—'}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.productId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <SearchableSelect
+                                        items={productItems}
+                                        value={field.value ? field.value.toString() : ''}
+                                        onValueChange={(value) => {
+                                          if (!value) {
+                                            field.onChange(undefined);
+                                            form.setValue(`lineItems.${index}.description`, '');
+                                            form.setValue(`lineItems.${index}.unitPrice`, 0);
+                                            form.setValue(`lineItems.${index}.salesTaxId`, undefined);
+                                            updateLineItemAmount(index);
+                                          } else {
+                                            const productId = parseInt(value);
+                                            const product = typedProducts.find(p => p.id === productId);
+                                            if (product) {
+                                              field.onChange(value);
+                                              form.setValue(`lineItems.${index}.description`, product.name);
+                                              form.setValue(`lineItems.${index}.unitPrice`, parseFloat(product.price.toString()));
+
+                                              if (product.salesTaxId) {
+                                                form.setValue(`lineItems.${index}.salesTaxId`, product.salesTaxId);
+                                              }
+
+                                              updateLineItemAmount(index);
+                                            }
+                                          }
+                                        }}
+                                        onAddNew={() => {
+                                          setCurrentLineItemIndex(index);
+                                          setShowAddProductDialog(true);
+                                        }}
+                                        addNewText="Add New Product/Service"
+                                        placeholder="Select or search..."
+                                        searchPlaceholder="Search products..."
+                                        emptyText={productsLoading ? "Loading..." : "No products found"}
+                                        disabled={productsLoading}
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
                               />
+                            )}
+                          </div>
+
+                          {/* Description */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Description</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.description || '—'}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.description`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        placeholder="Item description..."
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {/* Quantity */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Qty</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center justify-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.quantity || 0}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.quantity`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 text-center rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        {...field}
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value));
+                                          updateLineItemAmount(index);
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {/* Rate */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Rate</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center justify-end px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {lineItem?.unitPrice || 0}
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.unitPrice`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <Input
+                                        className="bg-white border-slate-200 h-11 text-right rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        {...field}
+                                        onChange={(e) => {
+                                          field.onChange(parseFloat(e.target.value));
+                                          updateLineItemAmount(index);
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+
+                          {/* Amount - Display Only (moved before Tax) */}
+                          <div>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Amount</FormLabel>
+                            <div className="h-11 flex items-center justify-end px-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 text-right whitespace-nowrap">
+                              ${formatCurrency(lineItem?.amount || 0)}
                             </div>
                           </div>
+
+                          {/* Tax (moved to end) */}
+                          <div className={taxSetting === 'no-tax' && !readOnly ? 'opacity-50' : ''}>
+                            <FormLabel className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Tax</FormLabel>
+                            {readOnly ? (
+                              <div className="h-11 flex items-center px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700">
+                                {tax ? `${tax.name} (${tax.rate}%)` : 'No tax'}
+                              </div>
+                            ) : taxSetting === 'no-tax' ? (
+                              <div className="h-11 flex items-center justify-center px-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-400 text-sm">
+                                N/A
+                              </div>
+                            ) : (
+                              <FormField
+                                control={form.control}
+                                name={`lineItems.${index}.salesTaxId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormControl>
+                                      <SearchableSelect
+                                        items={taxItems}
+                                        value={field.value?.toString() || "0"}
+                                        onValueChange={(value) => {
+                                          const numValue = parseInt(value);
+                                          if (numValue === 0) {
+                                            field.onChange(undefined);
+                                          } else {
+                                            field.onChange(numValue);
+                                          }
+                                          updateLineItemAmount(index);
+                                          calculateTotals();
+                                        }}
+                                        placeholder="Select Tax"
+                                        searchPlaceholder="Search taxes..."
+                                        emptyText={salesTaxesLoading ? "Loading..." : "No taxes found."}
+                                        className="bg-white border-slate-200 h-11 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Delete Button - only in edit mode */}
+                        {!readOnly && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="flex-shrink-0 h-10 w-10 rounded-full opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 transition-all mt-6"
+                            onClick={() => {
+                              if (fields.length > 1) {
+                                remove(index);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Line Button - only in edit mode */}
+              {!readOnly && (
+                <div className="px-6 py-4 border-t border-slate-100">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => append({ description: '', quantity: 1, unitPrice: 0, amount: 0 })}
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 -ml-2"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add line item
+                  </Button>
+                </div>
+              )}
+
+              {/* Notes/Attachments + Totals Section - Side by Side */}
+              <div className="px-6 py-6 bg-slate-50 border-t border-slate-200">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left: Notes & Attachments */}
+                  <div className="space-y-4">
+                    {readOnly ? (
+                      /* Read-only notes display */
+                      <div>
+                        <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Notes</FormLabel>
+                        <div className="min-h-[100px] bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-600">
+                          {invoice?.description || <span className="text-slate-400 italic">No notes</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Notes */}
+                        <FormField
+                          control={form.control}
+                          name="description"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Message on Invoice</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  {...field}
+                                  className="min-h-[100px] bg-white border-slate-200 rounded-xl resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                  placeholder="Add a personal note or payment instructions..."
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        {/* Attachments */}
+                        <div>
+                          <FormLabel className="text-xs font-medium text-slate-500 uppercase tracking-wide block mb-2">Attachments</FormLabel>
+                          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer bg-white">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="rounded-lg"
+                              onClick={() => document.getElementById('file-upload-invoice')?.click()}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Select files
+                            </Button>
+                            <input
+                              type="file"
+                              id="file-upload-invoice"
+                              className="hidden"
+                              multiple
+                              onChange={(e) => {
+                                console.log("Files selected:", e.target.files);
+                              }}
+                            />
+                            <p className="text-xs text-slate-400 mt-2">or drag and drop</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right: Totals */}
+                  <div className="space-y-3">
+                    {/* Subtotal */}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-600">Subtotal</span>
+                      <span className="text-sm font-medium text-slate-900">${formatCurrency(subTotal)}</span>
+                    </div>
+
+                    {/* Tax - Single consolidated display (hidden when "No Tax" mode) */}
+                    {taxSetting !== 'no-tax' && (
+                      form.taxComponentsInfo && form.taxComponentsInfo.length > 0 ? (
+                        <div className="space-y-1">
+                          {form.taxComponentsInfo.map((taxComponent: TaxComponentInfo) => (
+                            <div key={taxComponent.id} className="flex justify-between items-center">
+                              <span className="text-sm text-slate-600">{taxComponent.name} ({taxComponent.rate}%)</span>
+                              <span className="text-sm font-medium text-slate-900">${formatCurrency(taxComponent.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-600">Tax</span>
+                          <span className="text-sm font-medium text-slate-900">${formatCurrency(taxAmount)}</span>
+                        </div>
+                      )
+                    )}
+
+                    {/* Total */}
+                    <div className="flex justify-between items-center pt-3 border-t border-slate-300">
+                      <span className="text-base font-semibold text-slate-900">Total</span>
+                      <span className="text-lg font-bold text-slate-900">${formatCurrency(totalAmount)}</span>
+                    </div>
+
+                    {/* Applied Credits */}
+                    {appliedCredits.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        {appliedCredits.map(ac => (
+                          <div key={ac.creditId} className="flex justify-between items-center text-slate-600">
+                            <span className="text-sm">Credit #{ac.creditId}</span>
+                            <span className="text-sm font-medium text-emerald-600">-${formatCurrency(ac.amount)}</span>
+                          </div>
                         ))}
                       </div>
                     )}
-                    
-                    <div className="flex justify-between font-bold border-t-2 border-gray-400 pt-3 mt-4 text-lg">
-                      <span>Balance due</span>
-                      {currency !== homeCurrency ? (
+
+                    {/* Balance Due - Highlighted */}
+                    <div className="flex justify-between items-center pt-3 mt-2 border-t-2 border-blue-500 bg-gradient-to-r from-blue-50 to-blue-100 -mx-4 px-4 py-4 rounded-xl">
+                      <span className="text-base font-bold text-blue-900">Balance Due</span>
+                      {displayCurrency !== homeCurrency ? (
                         <div className="text-right">
-                          <div>{CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}</div>
-                          <div className="text-xs font-normal text-gray-500">
+                          <div className="text-xl font-bold text-blue-700">
+                            {CURRENCIES.find(c => c.code === displayCurrency)?.symbol || displayCurrency}{formatCurrency(balanceDue)}
+                          </div>
+                          <div className="text-xs text-blue-500">
                             ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
                           </div>
                         </div>
                       ) : (
-                        <span>${formatCurrency(balanceDue)}</span>
+                        <span className="text-xl font-bold text-blue-700">${formatCurrency(balanceDue)}</span>
                       )}
                     </div>
                   </div>
                 </div>
               </div>
-              
-              {/* Invoice message */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <FormLabel className="text-sm font-medium block mb-2">Message on invoice</FormLabel>
-                <Textarea 
-                  className="min-h-[100px] bg-white border-gray-300 resize-none" 
-                  placeholder="Add a personal note or message for this invoice"
-                />
-              </div>
             </div>
-            
-            {/* Right column - Invoice details */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Balance Due Card */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <div className="text-center">
-                  <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">Balance Due</div>
-                  {currency !== homeCurrency ? (
-                    <div>
-                      <div className="text-3xl font-bold text-gray-900">
-                        {CURRENCIES.find(c => c.code === currency)?.symbol || currency}{formatCurrency(balanceDue)}
-                      </div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        ≈ {CURRENCIES.find(c => c.code === homeCurrency)?.symbol || homeCurrency}{formatCurrency(balanceDue * exchangeRate)}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-3xl font-bold text-gray-900">${formatCurrency(balanceDue)}</div>
-                  )}
+
+            {/* Credits Section - Only show if there are unapplied credits and in edit mode */}
+            {!readOnly && unappliedCredits.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Available Credits</h2>
+                  <span className="text-sm font-medium text-emerald-600">
+                    ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))} available
+                  </span>
                 </div>
-              </div>
-              
-              {/* Invoice Number Card */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <FormLabel className="text-sm font-medium block mb-2">Invoice no.</FormLabel>
-                <FormField
-                  control={form.control}
-                  name="reference"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input 
-                          className="bg-white border-gray-300 h-10" 
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              {/* Attach Documents Card */}
-              <div className="bg-white rounded-lg border shadow-sm p-6">
-                <FormLabel className="text-sm font-medium block mb-3">Attach documents</FormLabel>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
-                  <div className="relative inline-block">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      size="sm" 
-                      className="mb-2"
-                      onClick={() => document.getElementById('file-upload-invoice')?.click()}
-                    >
-                      Select files
-                    </Button>
-                    <input
-                      type="file"
-                      id="file-upload-invoice"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => {
-                        // Handle file selection here
-                        console.log("Files selected:", e.target.files);
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Drag and drop files here</p>
-                  <p className="text-xs text-gray-400 mt-1">PDF, Word, Excel, image files</p>
-                </div>
-              </div>
-              
-              {/* Available Credits Panel */}
-              {(unappliedCredits.length > 0 || appliedCredits.length > 0) && (
-                <div className="bg-white rounded-lg border shadow-sm p-6">
-                  <div className="mb-4">
-                    <div className="text-sm font-medium mb-2">Available Credits</div>
-                    {unappliedCredits.length === 0 && appliedCredits.length > 0 ? (
-                      <div className="text-xs text-gray-500">No additional credits available</div>
-                    ) : (
-                      <div className="text-sm text-green-600 font-medium">
-                        ${formatCurrency(unappliedCredits.reduce((sum, c) => sum + Math.abs(c.balance || 0), 0))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* List of unapplied credits with add button - with scrolling */}
-                  <div className="max-h-48 overflow-y-auto">
+                <div className="p-6">
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
                     {unappliedCredits.filter(c => !appliedCredits.some(ac => ac.creditId === c.id)).map(credit => (
-                      <div key={credit.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                        <div className="flex-grow">
-                          <div className="text-sm font-medium">Credit #{credit.id}</div>
-                          <div className="text-xs text-gray-500">
-                            {format(new Date(credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(credit.balance || 0))}
+                      <div key={credit.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                        <div>
+                          <div className="text-sm font-medium text-slate-900">Credit #{credit.id}</div>
+                          <div className="text-xs text-slate-500">
+                            {format(new Date(credit.date), 'MMM dd, yyyy')} · ${formatCurrency(Math.abs(credit.balance || 0))}
                           </div>
                         </div>
                         <Button
@@ -1661,116 +1885,169 @@ export default function InvoiceForm({ invoice, lineItems, onSuccess, onCancel, i
                           size="sm"
                           variant="outline"
                           onClick={() => addCredit(credit)}
-                          className="ml-2"
+                          className="rounded-lg border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-300"
                           data-testid={`button-add-credit-${credit.id}`}
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-4 w-4 mr-1" />
+                          Apply
                         </Button>
                       </div>
                     ))}
                   </div>
-                  
-                  {/* Applied credits with remove button - with scrolling */}
-                  {appliedCredits.length > 0 && (
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="text-sm font-medium mb-2">Applied to this invoice</div>
-                      <div className="max-h-48 overflow-y-auto space-y-2">
-                        {appliedCredits.map(ac => (
-                          <div key={ac.creditId} className="flex items-center gap-2 py-2">
-                            <div className="flex-grow">
-                              <div className="text-sm">Credit #{ac.creditId}</div>
-                              <div className="text-xs text-gray-500">
-                                {format(new Date(ac.credit.date), 'MMM dd, yyyy')} - ${formatCurrency(Math.abs(ac.credit.balance || 0))} available
-                              </div>
-                            </div>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => removeCredit(ac.creditId)}
-                              data-testid={`button-remove-credit-${ac.creditId}`}
-                            >
-                              <X className="h-4 w-4 text-gray-500" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-between items-center mt-3 pt-3 border-t font-medium text-green-600">
-                        <span>Total Applied:</span>
-                        <span>${formatCurrency(appliedCredits.reduce((sum, ac) => sum + ac.amount, 0))}</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
           </div>
         </div>
         
-        {/* Fixed footer - modernized */}
-        <div className="border-t bg-white py-4 px-6 flex flex-col md:flex-row gap-3 justify-between z-50 shadow-lg sticky bottom-0 mt-auto">
-          <Button type="button" variant="outline" onClick={onCancel} className="md:w-auto w-full h-10" data-testid="button-cancel">
-            Cancel
-          </Button>
-          
-          <div className="flex flex-wrap md:flex-nowrap gap-2 md:space-x-2">
-            <div className="flex md:hidden w-full justify-end">
-              {/* Mobile save button */}
-              <Button 
-                type="submit"
-                disabled={saveInvoice.isPending}
-                className="w-full md:w-auto"
-                data-testid="button-save-mobile"
+        {/* Modern Sticky Footer */}
+        <div className="border-t border-slate-200 bg-white/95 backdrop-blur-sm py-3 px-4 md:px-6 sticky bottom-0 z-20 shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.1)]">
+          <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Left: Cancel - only in edit mode */}
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onCancel}
+                className="hidden sm:flex text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                data-testid="button-cancel"
               >
-                {saveInvoice.isPending ? 'Saving...' : `Save and send ${documentType}`}
+                Cancel
               </Button>
-            </div>
-            
-            <div className="hidden md:flex md:space-x-2 flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
-                Print or Preview
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="hidden lg:inline-flex">
-                Customize
-              </Button>
-              
-              <div className="flex">
-                <Button 
-                  type="submit"
-                  disabled={saveInvoice.isPending}
-                  data-testid="button-save"
-                >
-                  {saveInvoice.isPending ? 'Saving...' : `Save ${documentType === 'quotation' ? 'Quotation' : 'Invoice'}`}
-                </Button>
-                <div className="relative ml-px">
-                  <FormItem>
-                    <FormControl>
-                      <Select 
-                        defaultValue="save" 
-                        onValueChange={(value) => {
-                          if (value === "save_send") {
-                            setSendInvoiceEmail(true);
-                            form.handleSubmit(onSubmit)();
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="px-2 rounded-l-none h-10 border-l-0" data-testid="select-save-options">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent align="end">
-                          <SelectItem value="save">
-                            {documentType === 'quotation' ? 'Save Quotation' : 'Save Invoice'}
-                          </SelectItem>
-                          <SelectItem value="save_send" data-testid="option-save-send">
-                            {documentType === 'quotation' ? 'Save and Send Quotation' : 'Save and Send Invoice'}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
+            )}
+
+            {/* Center: Balance Display */}
+            <div className={cn("flex items-center gap-4", readOnly ? "order-none flex-1 justify-center" : "order-first sm:order-none")}>
+              <div className="text-center sm:text-right">
+                <div className="text-xs text-slate-500 uppercase tracking-wide">Balance Due</div>
+                <div className="text-xl font-bold text-slate-900">
+                  {displayCurrency !== homeCurrency ? (
+                    <>
+                      {CURRENCIES.find(c => c.code === displayCurrency)?.symbol || displayCurrency}{formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}
+                    </>
+                  ) : (
+                    <>${formatCurrency(readOnly ? (invoice?.balance ?? invoice?.amount ?? 0) : balanceDue)}</>
+                  )}
                 </div>
               </div>
             </div>
+
+            {/* Right: Actions - only in edit mode */}
+            {!readOnly && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {/* Mobile Cancel */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onCancel}
+                  className="sm:hidden flex-1 h-11 border-slate-200"
+                  data-testid="button-cancel-mobile"
+                >
+                  Cancel
+                </Button>
+
+                {/* Save Button */}
+                <Button
+                  type="button"
+                  disabled={saveInvoice.isPending}
+                  variant="outline"
+                  className="flex-1 sm:flex-none h-11 border-slate-300 hover:bg-slate-50 transition-colors px-6"
+                  data-testid="button-save"
+                  onClick={async () => {
+                    console.log("Save button clicked");
+                    console.log("Form values:", form.getValues());
+                    console.log("Form errors:", form.formState.errors);
+
+                    // Trigger validation first
+                    const isValid = await form.trigger();
+                    console.log("Form is valid:", isValid);
+
+                    if (!isValid) {
+                      console.error("Form validation failed:", form.formState.errors);
+                      // Show toast with validation errors
+                      const errors = form.formState.errors;
+                      const errorMessages: string[] = [];
+
+                      if (errors.contactId) errorMessages.push("Customer is required");
+                      if (errors.reference) errorMessages.push("Invoice number is required");
+                      if (errors.date) errorMessages.push("Invoice date is required");
+                      if (errors.lineItems) {
+                        if (Array.isArray(errors.lineItems)) {
+                          errors.lineItems.forEach((itemError, index) => {
+                            if (itemError?.description) errorMessages.push(`Line ${index + 1}: Description is required`);
+                            if (itemError?.quantity) errorMessages.push(`Line ${index + 1}: Quantity must be greater than 0`);
+                            if (itemError?.unitPrice) errorMessages.push(`Line ${index + 1}: Invalid price`);
+                          });
+                        } else if (errors.lineItems.message) {
+                          errorMessages.push(errors.lineItems.message as string);
+                        }
+                      }
+
+                      toast({
+                        title: "Please fix the following errors",
+                        description: errorMessages.join(", ") || "Please check the form for errors",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    // If valid, submit the form
+                    form.handleSubmit(onSubmit)();
+                  }}
+                >
+                  {saveInvoice.isPending ? 'Saving...' : 'Save'}
+                </Button>
+
+                {/* Save & Send Button */}
+                <Button
+                  type="button"
+                  disabled={saveInvoice.isPending}
+                  className="flex-1 sm:flex-none h-11 bg-blue-600 hover:bg-blue-700 transition-colors shadow-sm px-6"
+                  onClick={async () => {
+                    console.log("Save & Send button clicked");
+
+                    // Trigger validation first
+                    const isValid = await form.trigger();
+                    console.log("Form is valid:", isValid);
+
+                    if (!isValid) {
+                      console.error("Form validation failed:", form.formState.errors);
+                      const errors = form.formState.errors;
+                      const errorMessages: string[] = [];
+
+                      if (errors.contactId) errorMessages.push("Customer is required");
+                      if (errors.reference) errorMessages.push("Invoice number is required");
+                      if (errors.date) errorMessages.push("Invoice date is required");
+                      if (errors.lineItems) {
+                        if (Array.isArray(errors.lineItems)) {
+                          errors.lineItems.forEach((itemError, index) => {
+                            if (itemError?.description) errorMessages.push(`Line ${index + 1}: Description is required`);
+                            if (itemError?.quantity) errorMessages.push(`Line ${index + 1}: Quantity must be greater than 0`);
+                            if (itemError?.unitPrice) errorMessages.push(`Line ${index + 1}: Invalid price`);
+                          });
+                        } else if (errors.lineItems.message) {
+                          errorMessages.push(errors.lineItems.message as string);
+                        }
+                      }
+
+                      toast({
+                        title: "Please fix the following errors",
+                        description: errorMessages.join(", ") || "Please check the form for errors",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    isSaveAndSendRef.current = true;
+                    form.handleSubmit(onSubmit)();
+                  }}
+                  data-testid="button-save-send"
+                >
+                  {saveInvoice.isPending ? 'Saving...' : 'Save & Send'}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </form>
