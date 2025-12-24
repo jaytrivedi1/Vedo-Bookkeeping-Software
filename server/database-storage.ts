@@ -2556,7 +2556,7 @@ export class DatabaseStorage implements IStorage {
   async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
     // Check if preferences already exist
     const existing = await this.getPreferences();
-    
+
     if (existing) {
       // Update existing preferences
       const [updated] = await db.update(preferencesSchema)
@@ -2572,6 +2572,32 @@ export class DatabaseStorage implements IStorage {
       const [newPreferences] = await db.insert(preferencesSchema)
         .values({
           ...preferences,
+          updatedAt: new Date()
+        })
+        .returning();
+      return newPreferences;
+    }
+  }
+
+  async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
+    // Check if preferences already exist
+    const existing = await this.getPreferences();
+
+    if (existing) {
+      // Update existing preferences with only the provided fields
+      const [updated] = await db.update(preferencesSchema)
+        .set({
+          ...updates,
+          updatedAt: new Date()
+        })
+        .where(eq(preferencesSchema.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new preferences with defaults + updates
+      const [newPreferences] = await db.insert(preferencesSchema)
+        .values({
+          ...updates,
           updatedAt: new Date()
         })
         .returning();
