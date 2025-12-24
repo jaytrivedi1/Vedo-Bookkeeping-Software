@@ -67,6 +67,10 @@ export default function InvoiceView() {
   const [personalMessage, setPersonalMessage] = useState("");
   const [includePdfAttachment, setIncludePdfAttachment] = useState(true);
 
+  // PDF preview state for optimistic loading
+  const [pdfStatus, setPdfStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [pdfKey, setPdfKey] = useState(0); // Used to force iframe reload on retry
+
   // Extract the invoice ID from the URL
   useEffect(() => {
     const path = window.location.pathname;
@@ -355,7 +359,20 @@ ${companyName}`;
       }
     }
   }, [sendDialogOpen, customer, invoice, defaultCompany]);
-  
+
+  // Reset PDF status when dialog opens
+  useEffect(() => {
+    if (sendDialogOpen) {
+      setPdfStatus('loading');
+    }
+  }, [sendDialogOpen]);
+
+  // Helper function to retry PDF loading
+  const handleRetryPdf = () => {
+    setPdfStatus('loading');
+    setPdfKey(prev => prev + 1);
+  };
+
   // Helper function to get activity icon
   const getActivityIcon = (activityType: string) => {
     switch (activityType) {
@@ -651,11 +668,52 @@ ${companyName}`;
                 <div className="px-4 py-3 border-b bg-slate-50">
                   <p className="text-sm font-medium text-slate-600">Invoice Preview</p>
                 </div>
-                <div className="flex-1 p-4">
+                <div className="flex-1 p-4 relative">
+                  {/* Loading skeleton */}
+                  {pdfStatus === 'loading' && (
+                    <div className="absolute inset-4 rounded-lg border border-slate-200 bg-white flex flex-col items-center justify-center z-10">
+                      <div className="animate-pulse space-y-4 w-3/4">
+                        <div className="h-6 bg-slate-200 rounded w-1/3"></div>
+                        <div className="h-4 bg-slate-200 rounded w-2/3"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                        <div className="h-32 bg-slate-100 rounded mt-8"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/4 ml-auto"></div>
+                        <div className="h-4 bg-slate-200 rounded w-1/3 ml-auto"></div>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-6">Loading preview...</p>
+                    </div>
+                  )}
+
+                  {/* Error state */}
+                  {pdfStatus === 'error' && (
+                    <div className="absolute inset-4 rounded-lg border border-slate-200 bg-white flex flex-col items-center justify-center z-10">
+                      <AlertCircle className="h-12 w-12 text-slate-400 mb-4" />
+                      <p className="text-sm font-medium text-slate-700 mb-2">Unable to load preview</p>
+                      <p className="text-xs text-slate-500 mb-4 text-center px-4">
+                        The PDF preview couldn't be generated. You can still send the email.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryPdf}
+                        className="gap-2"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* PDF iframe */}
                   <iframe
+                    key={pdfKey}
                     src={`/api/invoices/${invoiceId}/pdf`}
-                    className="w-full h-full rounded-lg border border-slate-200 bg-white"
+                    className={`w-full h-full rounded-lg border border-slate-200 bg-white transition-opacity duration-300 ${
+                      pdfStatus === 'ready' ? 'opacity-100' : 'opacity-0'
+                    }`}
                     title="Invoice PDF Preview"
+                    onLoad={() => setPdfStatus('ready')}
+                    onError={() => setPdfStatus('error')}
                   />
                 </div>
               </div>

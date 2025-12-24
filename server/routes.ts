@@ -1142,11 +1142,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: new Date()
       });
-      
+
       res.json({ message: "View tracked successfully" });
     } catch (error) {
       console.error("Error tracking invoice view:", error);
       res.status(500).json({ message: "Failed to track view" });
+    }
+  });
+
+  // Generate invoice PDF for preview (uses selected template from preferences)
+  apiRouter.get("/invoices/:id/pdf", async (req: Request, res: Response) => {
+    try {
+      const invoiceId = parseInt(req.params.id);
+
+      // Get invoice data
+      const invoice = await storage.getTransaction(invoiceId);
+      if (!invoice || invoice.type !== 'invoice') {
+        return res.status(404).json({ message: "Invoice not found" });
+      }
+
+      // Get related data
+      const lineItems = await storage.getLineItemsByTransaction(invoiceId);
+      const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
+      const company = await storage.getDefaultCompany();
+
+      // Get preferences for template selection
+      const preferences = await storage.getPreferences();
+      const template = preferences?.invoiceTemplate || 'classic';
+
+      // Generate PDF with selected template
+      const { generateInvoicePDF } = await import('./invoice-pdf-generator');
+      const pdfBuffer = await generateInvoicePDF({
+        transaction: invoice,
+        lineItems,
+        customer,
+        company,
+        template
+      });
+
+      // Return PDF for inline display
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="invoice-${invoice.reference || invoice.id}.pdf"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error generating invoice PDF:", error);
+      res.status(500).json({ message: "Failed to generate PDF" });
     }
   });
 
