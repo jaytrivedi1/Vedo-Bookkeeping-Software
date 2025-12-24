@@ -47,7 +47,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { 
+import {
   Building2,
   RefreshCw,
   Trash2,
@@ -64,7 +64,11 @@ import {
   GripVertical,
   Search,
   Filter,
-  X
+  X,
+  Brain,
+  Hand,
+  Sparkles,
+  ArrowUpRight
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -173,23 +177,32 @@ function RulesManagementTab() {
   const { toast } = useToast();
   const [editingRule, setEditingRule] = useState<any | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [activeRuleType, setActiveRuleType] = useState<'manual' | 'ai'>('manual');
 
   // Fetch preferences for home currency
   const { data: preferences } = useQuery<Preferences>({
     queryKey: ['/api/settings/preferences'],
   });
-  
+
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
-  // Fetch rules
-  const { data: rules = [], isLoading: rulesLoading } = useQuery({
-    queryKey: ['/api/categorization-rules'],
+  // Fetch manual rules
+  const { data: manualRules = [], isLoading: manualLoading } = useQuery<any[]>({
+    queryKey: ['/api/categorization-rules/type/manual'],
+  });
+
+  // Fetch AI rules
+  const { data: aiRules = [], isLoading: aiLoading } = useQuery<any[]>({
+    queryKey: ['/api/categorization-rules/type/ai'],
   });
 
   // Fetch accounts for display
   const { data: accounts = [] } = useQuery<GLAccount[]>({
     queryKey: ['/api/accounts'],
   });
+
+  const rules = activeRuleType === 'manual' ? manualRules : aiRules;
+  const rulesLoading = activeRuleType === 'manual' ? manualLoading : aiLoading;
 
   // Apply rules mutation
   const applyRulesMutation = useMutation({
@@ -219,6 +232,8 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
       toast({
         title: "Success",
         description: "Rule updated",
@@ -240,6 +255,8 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
       toast({
         title: "Success",
         description: "Rule deleted",
@@ -261,11 +278,59 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to update priority",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Promote AI rule to manual
+  const promoteRuleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest(`/api/categorization-rules/${id}/promote`, 'POST');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "Success",
+        description: "AI rule promoted to manual rule",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to promote rule",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Promote all AI rules
+  const promoteAllMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/ai/promote-all', 'POST');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "Success",
+        description: `Promoted ${data.promotedCount} AI rules to manual rules`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to promote rules",
         variant: "destructive",
       });
     },
@@ -294,48 +359,37 @@ function RulesManagementTab() {
     return parts.join(' AND ');
   };
 
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
-          <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline"
-            onClick={() => applyRulesMutation.mutate()}
-            disabled={applyRulesMutation.isPending || rules.length === 0}
-            data-testid="button-apply-rules"
-          >
-            {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
-          </Button>
-          <Button 
-            onClick={() => {
-              setEditingRule(null);
-              setRuleDialogOpen(true);
-            }}
-            data-testid="button-create-rule"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Rule
-          </Button>
-        </div>
-      </div>
+  const formatConfidence = (confidence: string | number | null) => {
+    if (!confidence) return null;
+    const value = typeof confidence === 'string' ? parseFloat(confidence) : confidence;
+    return Math.round(value * 100);
+  };
 
-      <Card>
-        <CardContent className="pt-6">
-          {rulesLoading ? (
-            <div className="text-center py-12 text-gray-500">Loading rules...</div>
-          ) : rules.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+  const renderRulesTable = (rulesList: any[], isAiRules: boolean) => {
+    if (rulesLoading) {
+      return <div className="text-center py-12 text-gray-500">Loading rules...</div>;
+    }
+
+    if (rulesList.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500">
+          {isAiRules ? (
+            <>
+              <Brain className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No AI Rules Yet</h3>
+              <p className="text-sm mb-4">
+                AI rules are automatically created when you categorize the same merchant 3+ times consistently.
+              </p>
+            </>
+          ) : (
+            <>
               <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Rules Created Yet</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Manual Rules Created Yet</h3>
               <p className="text-sm mb-4">
                 Create rules to automatically categorize transactions based on description, amount, or other criteria.
               </p>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setEditingRule(null);
                   setRuleDialogOpen(true);
@@ -345,108 +399,234 @@ function RulesManagementTab() {
                 <Plus className="mr-2 h-4 w-4" />
                 Create Your First Rule
               </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>Rule Name</TableHead>
-                  <TableHead>Conditions</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="w-20">Enabled</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rules.map((rule: any, index: number) => (
-                  <TableRow key={rule.id}>
-                    <TableCell>
-                      <GripVertical className="h-4 w-4 text-gray-400" />
-                    </TableCell>
-                    <TableCell className="font-medium">{rule.name}</TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {formatConditions(rule.conditions)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {getAccountName(rule.actions?.accountId)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (index > 0) {
-                              updatePriorityMutation.mutate({
-                                id: rule.id,
-                                priority: rule.priority - 1
-                              });
-                            }
-                          }}
-                          disabled={index === 0}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <span className="text-sm">{rule.priority}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (index < rules.length - 1) {
-                              updatePriorityMutation.mutate({
-                                id: rule.id,
-                                priority: rule.priority + 1
-                              });
-                            }
-                          }}
-                          disabled={index === rules.length - 1}
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={rule.enabled}
-                        onCheckedChange={(checked) => {
-                          toggleRuleMutation.mutate({
-                            id: rule.id,
-                            enabled: !!checked
-                          });
-                        }}
-                        data-testid={`checkbox-rule-enabled-${rule.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditingRule(rule);
-                            setRuleDialogOpen(true);
-                          }}
-                          data-testid={`button-edit-rule-${rule.id}`}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteRuleMutation.mutate(rule.id)}
-                          data-testid={`button-delete-rule-${rule.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            </>
           )}
+        </div>
+      );
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12"></TableHead>
+            <TableHead>Rule Name</TableHead>
+            <TableHead>Conditions</TableHead>
+            <TableHead>Account</TableHead>
+            {isAiRules && <TableHead>Confidence</TableHead>}
+            {isAiRules && <TableHead>Uses</TableHead>}
+            <TableHead>Priority</TableHead>
+            <TableHead className="w-20">Enabled</TableHead>
+            <TableHead className="w-32">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rulesList.map((rule: any, index: number) => (
+            <TableRow key={rule.id}>
+              <TableCell>
+                <GripVertical className="h-4 w-4 text-gray-400" />
+              </TableCell>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  {isAiRules && <Brain className="h-4 w-4 text-purple-500" />}
+                  {rule.name}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm text-gray-600">
+                {formatConditions(rule.conditions)}
+              </TableCell>
+              <TableCell className="text-sm">
+                {getAccountName(rule.actions?.accountId)}
+              </TableCell>
+              {isAiRules && (
+                <TableCell>
+                  {rule.confidenceScore && (
+                    <Badge variant={formatConfidence(rule.confidenceScore)! >= 80 ? "default" : "secondary"}>
+                      {formatConfidence(rule.confidenceScore)}%
+                    </Badge>
+                  )}
+                </TableCell>
+              )}
+              {isAiRules && (
+                <TableCell className="text-sm text-gray-600">
+                  {rule.occurrenceCount || 0}
+                </TableCell>
+              )}
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (index > 0) {
+                        updatePriorityMutation.mutate({
+                          id: rule.id,
+                          priority: rule.priority - 1
+                        });
+                      }
+                    }}
+                    disabled={index === 0}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm">{rule.priority}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (index < rulesList.length - 1) {
+                        updatePriorityMutation.mutate({
+                          id: rule.id,
+                          priority: rule.priority + 1
+                        });
+                      }
+                    }}
+                    disabled={index === rulesList.length - 1}
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Checkbox
+                  checked={rule.enabled}
+                  onCheckedChange={(checked) => {
+                    toggleRuleMutation.mutate({
+                      id: rule.id,
+                      enabled: !!checked
+                    });
+                  }}
+                  data-testid={`checkbox-rule-enabled-${rule.id}`}
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  {isAiRules && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => promoteRuleMutation.mutate(rule.id)}
+                            disabled={promoteRuleMutation.isPending}
+                            data-testid={`button-promote-rule-${rule.id}`}
+                          >
+                            <ArrowUpRight className="h-4 w-4 text-green-600" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Promote to Manual Rule</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingRule(rule);
+                      setRuleDialogOpen(true);
+                    }}
+                    data-testid={`button-edit-rule-${rule.id}`}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteRuleMutation.mutate(rule.id)}
+                    data-testid={`button-delete-rule-${rule.id}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
+          <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => applyRulesMutation.mutate()}
+            disabled={applyRulesMutation.isPending || (manualRules.length === 0 && aiRules.length === 0)}
+            data-testid="button-apply-rules"
+          >
+            {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
+          </Button>
+          {activeRuleType === 'ai' && aiRules.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => promoteAllMutation.mutate()}
+              disabled={promoteAllMutation.isPending}
+              data-testid="button-promote-all"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              {promoteAllMutation.isPending ? 'Promoting...' : 'Accept All AI Rules'}
+            </Button>
+          )}
+          {activeRuleType === 'manual' && (
+            <Button
+              onClick={() => {
+                setEditingRule(null);
+                setRuleDialogOpen(true);
+              }}
+              data-testid="button-create-rule"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Rule
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs value={activeRuleType} onValueChange={(value) => setActiveRuleType(value as 'manual' | 'ai')}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="manual" className="flex items-center gap-2">
+                <Hand className="h-4 w-4" />
+                Manual Rules
+                {manualRules.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{manualRules.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="ai" className="flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                AI Rules
+                {aiRules.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{aiRules.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="manual">
+              {renderRulesTable(manualRules, false)}
+            </TabsContent>
+
+            <TabsContent value="ai">
+              <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                <p className="text-sm text-purple-800">
+                  <Brain className="h-4 w-4 inline mr-1" />
+                  AI rules are automatically learned from your categorization decisions.
+                  After categorizing a merchant 3+ times with 80%+ consistency, an AI rule is created.
+                  Promote rules to manual to give them higher priority.
+                </p>
+              </div>
+              {renderRulesTable(aiRules, true)}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

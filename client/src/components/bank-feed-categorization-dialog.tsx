@@ -38,8 +38,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ImportedTransaction, Account, Contact, SalesTax, Product } from "@shared/schema";
 import { format } from "date-fns";
-import { Loader2, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, TrendingDown, Brain, BookOpen, Wand2, HelpCircle } from "lucide-react";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface CategorizeTransactionDialogProps {
   open: boolean;
@@ -73,14 +79,21 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-interface AISuggestion {
-  transactionType: TransactionType;
-  accountId: number;
-  accountName: string;
+type SuggestionSource = 'pattern' | 'rule' | 'ai' | 'none';
+
+interface SmartSuggestion {
+  source: SuggestionSource;
+  confidence: number;
+  transactionType?: string;
+  accountId?: number;
+  accountName?: string;
+  contactId?: number;
   contactName?: string;
   salesTaxId?: number;
-  confidence: number;
-  reasoning: string;
+  reasoning?: string;
+  requiresApproval: boolean;
+  ruleId?: number;
+  patternId?: number;
 }
 
 export default function CategorizeTransactionDialog({
@@ -89,7 +102,7 @@ export default function CategorizeTransactionDialog({
   transaction,
 }: CategorizeTransactionDialogProps) {
   const { toast } = useToast();
-  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null);
+  const [smartSuggestion, setSmartSuggestion] = useState<SmartSuggestion | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [accountFieldContext, setAccountFieldContext] = useState<'account' | 'transfer'>('account');
@@ -171,7 +184,7 @@ export default function CategorizeTransactionDialog({
   // Watch the transaction type directly - no need for separate state
   const selectedType = form.watch("transactionType");
 
-  // Fetch AI suggestions when dialog opens with a transaction
+  // Fetch smart suggestions when dialog opens with a transaction
   useEffect(() => {
     if (open && transaction) {
       // Reset form with intelligent defaults based on transaction amount
@@ -184,39 +197,71 @@ export default function CategorizeTransactionDialog({
         productId: null,
         transferAccountId: null,
       });
-      
+
       setLoadingSuggestions(true);
-      apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+      // First try the new smart suggestion endpoint
+      apiRequest("/api/bank-feeds/smart-suggestion", "POST", {
         transactionId: transaction.id,
       })
         .then((data) => {
-          // Transform the nested API response to match the frontend interface
-          const suggestions = data?.suggestions;
-          if (suggestions) {
-            const transformed: AISuggestion = {
-              transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
-              accountId: suggestions.account?.id || 0,
-              accountName: suggestions.account?.name || "Unknown Account",
-              contactName: suggestions.contact?.name,
-              salesTaxId: suggestions.tax?.id,
-              confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
-              reasoning: suggestions.reasoning || "No reasoning provided",
-            };
-            console.log("Transformed AI suggestions:", transformed);
-            setAiSuggestions(transformed);
+          if (data && data.source !== 'none') {
+            setSmartSuggestion(data as SmartSuggestion);
           } else {
-            console.warn("No suggestions in API response:", data);
+            // Fallback to old endpoint if no smart suggestion
+            return apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+              transactionId: transaction.id,
+            }).then((fallbackData) => {
+              const suggestions = fallbackData?.suggestions;
+              if (suggestions) {
+                const transformed: SmartSuggestion = {
+                  source: 'ai',
+                  transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
+                  accountId: suggestions.account?.id || 0,
+                  accountName: suggestions.account?.name || "Unknown Account",
+                  contactName: suggestions.contact?.name,
+                  salesTaxId: suggestions.tax?.id,
+                  confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
+                  reasoning: suggestions.reasoning || "No reasoning provided",
+                  requiresApproval: true,
+                };
+                setSmartSuggestion(transformed);
+              }
+            });
           }
         })
         .catch((error) => {
-          console.error("Failed to fetch AI suggestions:", error);
+          console.error("Failed to fetch suggestions:", error);
+          // Try fallback on error
+          apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+            transactionId: transaction.id,
+          })
+            .then((fallbackData) => {
+              const suggestions = fallbackData?.suggestions;
+              if (suggestions) {
+                const transformed: SmartSuggestion = {
+                  source: 'ai',
+                  transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
+                  accountId: suggestions.account?.id || 0,
+                  accountName: suggestions.account?.name || "Unknown Account",
+                  contactName: suggestions.contact?.name,
+                  salesTaxId: suggestions.tax?.id,
+                  confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
+                  reasoning: suggestions.reasoning || "No reasoning provided",
+                  requiresApproval: true,
+                };
+                setSmartSuggestion(transformed);
+              }
+            })
+            .catch(() => {
+              // Silent fail - no suggestions available
+            });
         })
         .finally(() => {
           setLoadingSuggestions(false);
         });
     } else if (!open) {
       // Reset when dialog closes
-      setAiSuggestions(null);
+      setSmartSuggestion(null);
       form.reset();
     }
   }, [open, transaction]);
@@ -338,13 +383,13 @@ export default function CategorizeTransactionDialog({
           </CardContent>
         </Card>
 
-        {/* AI Suggestions */}
+        {/* Smart Suggestions */}
         {loadingSuggestions ? (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                AI Suggestions
+                Loading Suggestions...
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -353,38 +398,132 @@ export default function CategorizeTransactionDialog({
               <Skeleton className="h-4 w-full" />
             </CardContent>
           </Card>
-        ) : aiSuggestions ? (
-          <Card className="border-primary/50 bg-primary/5">
+        ) : smartSuggestion ? (
+          <Card className={`border-l-4 ${
+            smartSuggestion.source === 'pattern' ? 'border-l-green-500 bg-green-50' :
+            smartSuggestion.source === 'rule' ? 'border-l-blue-500 bg-blue-50' :
+            smartSuggestion.source === 'ai' ? 'border-l-purple-500 bg-purple-50' :
+            'border-l-gray-300 bg-gray-50'
+          }`}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Suggestions
+                  {smartSuggestion.source === 'pattern' && (
+                    <>
+                      <Brain className="h-4 w-4 text-green-600" />
+                      <span>Learned Pattern</span>
+                    </>
+                  )}
+                  {smartSuggestion.source === 'rule' && (
+                    <>
+                      <BookOpen className="h-4 w-4 text-blue-600" />
+                      <span>Matched Rule</span>
+                    </>
+                  )}
+                  {smartSuggestion.source === 'ai' && (
+                    <>
+                      <Wand2 className="h-4 w-4 text-purple-600" />
+                      <span>AI Suggestion</span>
+                    </>
+                  )}
+                  {smartSuggestion.source === 'none' && (
+                    <>
+                      <HelpCircle className="h-4 w-4 text-gray-500" />
+                      <span>No Suggestion</span>
+                    </>
+                  )}
                 </CardTitle>
-                <Badge variant="secondary">
-                  {Math.round(aiSuggestions.confidence * 100)}% confident
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge
+                          variant={smartSuggestion.confidence >= 0.8 ? "default" : "secondary"}
+                          className={
+                            smartSuggestion.confidence >= 0.9 ? 'bg-green-600' :
+                            smartSuggestion.confidence >= 0.8 ? 'bg-blue-600' :
+                            smartSuggestion.confidence >= 0.7 ? 'bg-yellow-600' :
+                            'bg-gray-500'
+                          }
+                        >
+                          {Math.round(smartSuggestion.confidence * 100)}%
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Confidence score based on {
+                          smartSuggestion.source === 'pattern' ? 'historical categorizations' :
+                          smartSuggestion.source === 'rule' ? 'matching rule' :
+                          'AI analysis'
+                        }</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  {smartSuggestion.requiresApproval && (
+                    <Badge variant="outline" className="text-xs">
+                      Needs Approval
+                    </Badge>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Suggested Type:</span>{" "}
-                <span className="font-medium">{getTypeLabel(aiSuggestions.transactionType)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Suggested Account:</span>{" "}
-                <span className="font-medium">{aiSuggestions.accountName}</span>
-              </div>
-              {aiSuggestions.contactName && (
+              {smartSuggestion.transactionType && (
                 <div>
-                  <span className="text-muted-foreground">Suggested Contact:</span>{" "}
-                  <span className="font-medium">{aiSuggestions.contactName}</span>
+                  <span className="text-muted-foreground">Suggested Type:</span>{" "}
+                  <span className="font-medium">{getTypeLabel(smartSuggestion.transactionType as TransactionType)}</span>
                 </div>
               )}
-              <div className="pt-2 border-t">
-                <span className="text-muted-foreground">Reasoning:</span>
-                <p className="mt-1 text-xs text-muted-foreground italic">{aiSuggestions.reasoning}</p>
-              </div>
+              {smartSuggestion.accountName && (
+                <div>
+                  <span className="text-muted-foreground">Suggested Account:</span>{" "}
+                  <span className="font-medium">{smartSuggestion.accountName}</span>
+                </div>
+              )}
+              {smartSuggestion.contactName && (
+                <div>
+                  <span className="text-muted-foreground">Suggested Contact:</span>{" "}
+                  <span className="font-medium">{smartSuggestion.contactName}</span>
+                </div>
+              )}
+              {smartSuggestion.reasoning && (
+                <div className="pt-2 border-t">
+                  <span className="text-muted-foreground">Reasoning:</span>
+                  <p className="mt-1 text-xs text-muted-foreground italic">{smartSuggestion.reasoning}</p>
+                </div>
+              )}
+              {/* Apply Suggestion Button */}
+              {smartSuggestion.accountId && (
+                <div className="pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      if (smartSuggestion.transactionType) {
+                        form.setValue("transactionType", smartSuggestion.transactionType as TransactionType);
+                      }
+                      if (smartSuggestion.accountId) {
+                        form.setValue("accountId", smartSuggestion.accountId);
+                      }
+                      if (smartSuggestion.contactName) {
+                        form.setValue("contactName", smartSuggestion.contactName);
+                      }
+                      if (smartSuggestion.salesTaxId) {
+                        form.setValue("salesTaxId", smartSuggestion.salesTaxId);
+                      }
+                      toast({
+                        title: "Suggestion Applied",
+                        description: "Review and confirm the suggested categorization",
+                      });
+                    }}
+                    data-testid="button-apply-suggestion"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Apply Suggestion
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ) : null}
