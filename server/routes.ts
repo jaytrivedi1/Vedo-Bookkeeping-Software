@@ -3633,7 +3633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const invoiceItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
       if (invoiceItems && invoiceItems.length > 0) {
         console.log(`Recalculating balances for ${invoiceItems.length} invoices...`);
-        
+
         for (const item of invoiceItems as any[]) {
           if (item.transactionId) {
             const updatedInvoice = await storage.recalculateInvoiceBalance(item.transactionId);
@@ -3641,8 +3641,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
-      
-      res.status(201).json(payment);
+
+      // SAFEGUARD: Recalculate payment balance based on actual payment_applications
+      // This ensures the payment balance is always correct, regardless of frontend calculations
+      const { paymentApplications } = await import('@shared/schema');
+      const actualApplications = await db
+        .select()
+        .from(paymentApplications)
+        .where(eq(paymentApplications.paymentId, payment.id));
+
+      const actualTotalApplied = actualApplications.reduce((sum, app) => sum + app.amountApplied, 0);
+      const actualUnapplied = Math.max(0, payment.amount - actualTotalApplied);
+      const finalStatus = actualUnapplied > 0 ? 'unapplied_credit' : 'completed';
+
+      // Only update if different from what was set
+      if (payment.balance !== actualUnapplied || payment.status !== finalStatus) {
+        console.log(`Correcting payment #${payment.id}: balance ${payment.balance} -> ${actualUnapplied}, status ${payment.status} -> ${finalStatus}`);
+        await storage.updateTransaction(payment.id, {
+          balance: actualUnapplied,
+          status: finalStatus as any
+        });
+      }
+
+      // Return the corrected payment data
+      const finalPayment = await storage.getTransaction(payment.id);
+      res.status(201).json(finalPayment);
     } catch (error: any) {
       console.error("Error processing payment:", error);
       res.status(500).json({ error: error.message });
