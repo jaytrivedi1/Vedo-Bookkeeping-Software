@@ -12,6 +12,29 @@ interface InvoicePDFData {
   template?: 'classic' | 'modern' | 'minimal';
 }
 
+// Safe formatting helpers to prevent null/undefined crashes
+function formatCurrency(value: number | null | undefined): string {
+  const num = value ?? 0;
+  return `$${num.toFixed(2)}`;
+}
+
+function formatNumber(value: number | null | undefined): string {
+  return (value ?? 0).toString();
+}
+
+function formatDate(date: string | Date | null | undefined, formatStr: string = 'MMM dd, yyyy'): string {
+  if (!date) return 'N/A';
+  try {
+    return format(new Date(date), formatStr);
+  } catch {
+    return 'N/A';
+  }
+}
+
+function safeString(value: string | null | undefined, fallback: string = ''): string {
+  return value ?? fallback;
+}
+
 // Color schemes for different templates
 const colorSchemes = {
   classic: {
@@ -168,9 +191,9 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
 
   // Invoice number in header (right)
   doc.setFontSize(12);
-  doc.text(`#${transaction.reference || 'N/A'}`, pageWidth - margin, 20, { align: 'right' });
+  doc.text(`#${safeString(transaction.reference, 'N/A')}`, pageWidth - margin, 20, { align: 'right' });
   doc.setFontSize(10);
-  doc.text(format(new Date(transaction.date), 'MMMM dd, yyyy'), pageWidth - margin, 32, { align: 'right' });
+  doc.text(formatDate(transaction.date, 'MMMM dd, yyyy'), pageWidth - margin, 32, { align: 'right' });
 
   let yPosition = 60;
 
@@ -234,7 +257,7 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
     doc.setFontSize(11);
     doc.setTextColor(...colors.primary);
     doc.setFont('helvetica', 'bold');
-    doc.text(format(new Date(transaction.dueDate), 'MMM dd, yyyy'), pageWidth - margin - 55, yPosition + 6);
+    doc.text(formatDate(transaction.dueDate), pageWidth - margin - 55, yPosition + 6);
     doc.setFont('helvetica', 'normal');
   }
 
@@ -242,10 +265,10 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
 
   // Line Items Table with modern styling
   const tableData = lineItems.map(item => [
-    item.description,
-    item.quantity.toString(),
-    `$${item.unitPrice.toFixed(2)}`,
-    `$${item.amount.toFixed(2)}`
+    safeString(item.description, 'Item'),
+    formatNumber(item.quantity),
+    formatCurrency(item.unitPrice),
+    formatCurrency(item.amount)
   ]);
 
   autoTable(doc, {
@@ -286,12 +309,12 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...colors.text);
   doc.text('Subtotal', totalsX, yPosition);
-  doc.text(`$${(transaction.subTotal || 0).toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+  doc.text(formatCurrency(transaction.subTotal), pageWidth - margin, yPosition, { align: 'right' });
   yPosition += 7;
 
   if (transaction.taxAmount && transaction.taxAmount > 0) {
     doc.text('Tax', totalsX, yPosition);
-    doc.text(`$${transaction.taxAmount.toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.taxAmount), pageWidth - margin, yPosition, { align: 'right' });
     yPosition += 7;
   }
 
@@ -302,7 +325,7 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.text('TOTAL', totalsX, yPosition + 7);
-  doc.text(`$${(transaction.amount || 0).toFixed(2)}`, pageWidth - margin - 2, yPosition + 7, { align: 'right' });
+  doc.text(formatCurrency(transaction.amount), pageWidth - margin - 2, yPosition + 7, { align: 'right' });
 
   yPosition += 25;
 
@@ -313,13 +336,13 @@ function generateModernTemplate(doc: jsPDF, params: TemplateParams) {
     doc.setFontSize(10);
     const amountPaid = (transaction.amount || 0) - (transaction.balance || 0);
     doc.text('Amount Paid', totalsX, yPosition);
-    doc.text(`$${amountPaid.toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(formatCurrency(amountPaid), pageWidth - margin, yPosition, { align: 'right' });
     yPosition += 7;
 
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...colors.primary);
     doc.text('Balance Due', totalsX, yPosition);
-    doc.text(`$${transaction.balance.toFixed(2)}`, pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.balance), pageWidth - margin, yPosition, { align: 'right' });
   }
 
   // Notes
@@ -376,10 +399,10 @@ function generateMinimalTemplate(doc: jsPDF, params: TemplateParams) {
   }
 
   doc.setTextColor(...colors.text);
-  doc.text(transaction.reference || '—', margin + 30, yPosition);
-  doc.text(format(new Date(transaction.date), 'dd/MM/yyyy'), margin + 30, yPosition + 10);
+  doc.text(safeString(transaction.reference, '—'), margin + 30, yPosition);
+  doc.text(formatDate(transaction.date, 'dd/MM/yyyy'), margin + 30, yPosition + 10);
   if (transaction.dueDate) {
-    doc.text(format(new Date(transaction.dueDate), 'dd/MM/yyyy'), margin + 30, yPosition + 20);
+    doc.text(formatDate(transaction.dueDate, 'dd/MM/yyyy'), margin + 30, yPosition + 20);
   }
 
   // Right: Bill To
@@ -407,10 +430,10 @@ function generateMinimalTemplate(doc: jsPDF, params: TemplateParams) {
 
   // Minimal table
   const tableData = lineItems.map(item => [
-    item.description,
-    item.quantity.toString(),
-    `$${item.unitPrice.toFixed(2)}`,
-    `$${item.amount.toFixed(2)}`
+    safeString(item.description, 'Item'),
+    formatNumber(item.quantity),
+    formatCurrency(item.unitPrice),
+    formatCurrency(item.amount)
   ]);
 
   autoTable(doc, {
@@ -456,14 +479,14 @@ function generateMinimalTemplate(doc: jsPDF, params: TemplateParams) {
   doc.setTextColor(...colors.muted);
   doc.text('Subtotal', labelX, yPosition);
   doc.setTextColor(...colors.text);
-  doc.text(`$${(transaction.subTotal || 0).toFixed(2)}`, valueX, yPosition, { align: 'right' });
+  doc.text(formatCurrency(transaction.subTotal), valueX, yPosition, { align: 'right' });
   yPosition += 6;
 
   if (transaction.taxAmount && transaction.taxAmount > 0) {
     doc.setTextColor(...colors.muted);
     doc.text('Tax', labelX, yPosition);
     doc.setTextColor(...colors.text);
-    doc.text(`$${transaction.taxAmount.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.taxAmount), valueX, yPosition, { align: 'right' });
     yPosition += 6;
   }
 
@@ -472,7 +495,7 @@ function generateMinimalTemplate(doc: jsPDF, params: TemplateParams) {
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...colors.text);
   doc.text('Total', labelX, yPosition);
-  doc.text(`$${(transaction.amount || 0).toFixed(2)}`, valueX, yPosition, { align: 'right' });
+  doc.text(formatCurrency(transaction.amount), valueX, yPosition, { align: 'right' });
 
   // Balance due
   if (transaction.balance !== undefined && transaction.balance > 0 && transaction.balance !== transaction.amount) {
@@ -483,14 +506,14 @@ function generateMinimalTemplate(doc: jsPDF, params: TemplateParams) {
     doc.setTextColor(...colors.muted);
     doc.text('Paid', labelX, yPosition);
     doc.setTextColor(...colors.text);
-    doc.text(`$${amountPaid.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(amountPaid), valueX, yPosition, { align: 'right' });
     yPosition += 8;
 
     doc.setFontSize(10);
     doc.setTextColor(...colors.text);
     doc.text('Due', labelX, yPosition);
     doc.setFont('helvetica', 'bold');
-    doc.text(`$${transaction.balance.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.balance), valueX, yPosition, { align: 'right' });
   }
 
   // Notes - simple
@@ -527,20 +550,20 @@ function renderInvoiceDetails(
   doc.setFont('helvetica', 'bold');
   doc.text('Invoice #:', pageWidth - 60, yPosition);
   doc.setFont('helvetica', 'normal');
-  doc.text(transaction.reference || 'N/A', pageWidth - margin, yPosition, { align: 'right' });
+  doc.text(safeString(transaction.reference, 'N/A'), pageWidth - margin, yPosition, { align: 'right' });
   yPosition += 6;
 
   doc.setFont('helvetica', 'bold');
   doc.text('Date:', pageWidth - 60, yPosition);
   doc.setFont('helvetica', 'normal');
-  doc.text(format(new Date(transaction.date), 'MMM dd, yyyy'), pageWidth - margin, yPosition, { align: 'right' });
+  doc.text(formatDate(transaction.date), pageWidth - margin, yPosition, { align: 'right' });
   yPosition += 6;
 
   if (transaction.dueDate) {
     doc.setFont('helvetica', 'bold');
     doc.text('Due Date:', pageWidth - 60, yPosition);
     doc.setFont('helvetica', 'normal');
-    doc.text(format(new Date(transaction.dueDate), 'MMM dd, yyyy'), pageWidth - margin, yPosition, { align: 'right' });
+    doc.text(formatDate(transaction.dueDate), pageWidth - margin, yPosition, { align: 'right' });
     yPosition += 6;
   }
 
@@ -616,10 +639,10 @@ function renderLineItemsTable(
   yPosition: number
 ): number {
   const tableData = lineItems.map(item => [
-    item.description,
-    item.quantity.toString(),
-    `$${item.unitPrice.toFixed(2)}`,
-    `$${item.amount.toFixed(2)}`
+    safeString(item.description, 'Item'),
+    formatNumber(item.quantity),
+    formatCurrency(item.unitPrice),
+    formatCurrency(item.amount)
   ]);
 
   autoTable(doc, {
@@ -666,12 +689,12 @@ function renderTotals(
   doc.setFontSize(10);
   doc.setTextColor(...colors.text);
   doc.text('Subtotal:', labelX, yPosition, { align: 'right' });
-  doc.text(`$${(transaction.subTotal || 0).toFixed(2)}`, valueX, yPosition, { align: 'right' });
+  doc.text(formatCurrency(transaction.subTotal), valueX, yPosition, { align: 'right' });
   yPosition += 6;
 
   if (transaction.taxAmount && transaction.taxAmount > 0) {
     doc.text('Tax:', labelX, yPosition, { align: 'right' });
-    doc.text(`$${transaction.taxAmount.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.taxAmount), valueX, yPosition, { align: 'right' });
     yPosition += 6;
   }
 
@@ -683,7 +706,7 @@ function renderTotals(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text('Total:', labelX, yPosition, { align: 'right' });
-  doc.text(`$${(transaction.amount || 0).toFixed(2)}`, valueX, yPosition, { align: 'right' });
+  doc.text(formatCurrency(transaction.amount), valueX, yPosition, { align: 'right' });
   yPosition += 8;
 
   if (transaction.balance !== undefined && transaction.balance !== transaction.amount) {
@@ -691,7 +714,7 @@ function renderTotals(
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.text('Amount Paid:', labelX, yPosition, { align: 'right' });
-    doc.text(`$${amountPaid.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(amountPaid), valueX, yPosition, { align: 'right' });
     yPosition += 6;
   }
 
@@ -700,7 +723,7 @@ function renderTotals(
     doc.setFontSize(12);
     doc.setTextColor(...colors.primary);
     doc.text('Balance Due:', labelX, yPosition, { align: 'right' });
-    doc.text(`$${transaction.balance.toFixed(2)}`, valueX, yPosition, { align: 'right' });
+    doc.text(formatCurrency(transaction.balance), valueX, yPosition, { align: 'right' });
     doc.setTextColor(...colors.text);
     yPosition += 8;
   }
