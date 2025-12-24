@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -2164,6 +2165,39 @@ export default function Banking() {
 
             {/* Imported Transactions */}
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
+              {/* Progress Stats Bar */}
+              {(() => {
+                const uncategorizedCount = allImportedTransactions.filter(tx => !tx.matchedTransactionId && !tx.deleted).length;
+                const categorizedCount = allImportedTransactions.filter(tx => tx.matchedTransactionId && !tx.deleted).length;
+                const totalActive = uncategorizedCount + categorizedCount;
+                const progressPercent = totalActive > 0 ? Math.round((categorizedCount / totalActive) * 100) : 0;
+
+                return totalActive > 0 ? (
+                  <div className="flex items-center gap-4 mb-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-lg border border-slate-200/60">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-medium text-slate-600">Categorization Progress</span>
+                        <span className="text-xs font-semibold text-slate-700">{progressPercent}%</span>
+                      </div>
+                      <Progress
+                        value={progressPercent}
+                        className="h-2 bg-slate-200"
+                      />
+                    </div>
+                    <div className="flex gap-3 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span className="text-slate-600"><span className="font-semibold text-slate-800">{uncategorizedCount}</span> pending</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span className="text-slate-600"><span className="font-semibold text-slate-800">{categorizedCount}</span> done</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
               <div className="flex items-center justify-between mb-2">
                 <TabsList>
                   <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
@@ -2414,7 +2448,7 @@ export default function Banking() {
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative pr-10">
-                              Payments
+                              <span className="text-rose-600 font-medium">Payments</span>
                               <div
                                 className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('payments', e)}
@@ -2423,7 +2457,7 @@ export default function Banking() {
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right relative pr-10">
-                              Deposits
+                              <span className="text-emerald-600 font-medium">Deposits</span>
                               <div
                                 className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('deposits', e)}
@@ -2489,9 +2523,17 @@ export default function Banking() {
                             <Table style={{ tableLayout: 'fixed', width: `${totalTableWidth}px` }}>
                               <TableBody>
                           {paginatedTransactions.map((tx) => (
-                            <TableRow 
-                              key={tx.id} 
-                              className={`h-12 ${activeTab === 'uncategorized' && !tx.matchedTransactionId ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                            <TableRow
+                              key={tx.id}
+                              className={`h-12 transition-all duration-150 ${
+                                selectedTransactions.has(tx.id)
+                                  ? 'bg-primary/5 border-l-2 border-l-primary'
+                                  : 'hover:bg-slate-50/80'
+                              } ${
+                                activeTab === 'uncategorized' && !tx.matchedTransactionId
+                                  ? 'cursor-pointer hover:shadow-sm'
+                                  : ''
+                              }`}
                               onClick={() => {
                                 if (activeTab === 'uncategorized' && !tx.matchedTransactionId) {
                                   setSelectedTransaction(tx);
@@ -2537,10 +2579,18 @@ export default function Banking() {
                                 )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount)), homeCurrency, homeCurrency) : '-'}
+                                {Number(tx.amount) < 0 ? (
+                                  <span className="text-rose-600 font-semibold">{formatCurrency(Math.abs(Number(tx.amount)), homeCurrency, homeCurrency)}</span>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount), homeCurrency, homeCurrency) : '-'}
+                                {Number(tx.amount) > 0 ? (
+                                  <span className="text-emerald-600 font-semibold">{formatCurrency(Number(tx.amount), homeCurrency, homeCurrency)}</span>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell 
                                 style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} 
@@ -2653,11 +2703,15 @@ export default function Banking() {
                                       
                                       return (
                                         <div className="flex flex-col gap-1.5">
-                                          <div className="flex items-center gap-1.5 bg-gray-100 rounded-md p-0.5">
+                                          <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
                                             <Button
                                               variant={mode === 'match' ? 'default' : 'ghost'}
                                               size="sm"
-                                              className="text-[11px] px-2 h-6 flex-1"
+                                              className={`text-[11px] px-2 h-6 flex-1 rounded-md transition-all ${
+                                                mode === 'match'
+                                                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
+                                                  : 'hover:bg-slate-200'
+                                              }`}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (mode !== 'match') handleModeToggle(tx.id);
@@ -2669,7 +2723,11 @@ export default function Banking() {
                                             <Button
                                               variant={mode === 'categorize' ? 'default' : 'ghost'}
                                               size="sm"
-                                              className="text-[11px] px-2 h-6 flex-1"
+                                              className={`text-[11px] px-2 h-6 flex-1 rounded-md transition-all ${
+                                                mode === 'categorize'
+                                                  ? 'bg-gradient-to-r from-violet-500 to-violet-600 text-white shadow-sm'
+                                                  : 'hover:bg-slate-200'
+                                              }`}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (mode !== 'categorize') handleModeToggle(tx.id);
@@ -2680,20 +2738,24 @@ export default function Banking() {
                                             </Button>
                                           </div>
                                           {mode === 'match' && hasHighConfidenceMatch && (
-                                            <div className="text-[10px] text-gray-600 space-y-0.5">
+                                            <div className="text-[10px] space-y-0.5 bg-blue-50 rounded-md p-1.5 border border-blue-100">
                                               <div className="flex items-center gap-1">
-                                                <span className="font-medium">
+                                                <span className="font-medium text-blue-900">
                                                   {(() => {
                                                     const contact = contacts.find((c: any) => c.id === topMatch.contactId);
                                                     const contactName = topMatch.contactName || 'Unknown';
                                                     return formatContactName(contactName, contact?.currency, homeCurrency);
                                                   })()}
                                                 </span>
-                                                <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                                                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${
+                                                  topMatch.confidence >= 90 ? 'bg-emerald-500' :
+                                                  topMatch.confidence >= 80 ? 'bg-blue-500' :
+                                                  'bg-amber-500'
+                                                }`}>
                                                   {topMatch.confidence}%
                                                 </Badge>
                                               </div>
-                                              <div className="text-gray-500">
+                                              <div className="text-blue-600">
                                                 {formatCurrency(topMatch.amount, homeCurrency, homeCurrency)} • {format(new Date(topMatch.date), 'PP')}
                                               </div>
                                             </div>
