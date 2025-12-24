@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -68,7 +70,8 @@ import {
   Brain,
   Hand,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  Zap
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -199,6 +202,37 @@ function RulesManagementTab() {
   // Fetch accounts for display
   const { data: accounts = [] } = useQuery<GLAccount[]>({
     queryKey: ['/api/accounts'],
+  });
+
+  // Fetch AI settings for auto-post toggle
+  const { data: aiSettings } = useQuery<{
+    aiCategorizationEnabled: boolean;
+    aiAutoPostEnabled: boolean;
+    aiAutoPostMinConfidence: string;
+    aiRuleGenerationEnabled: boolean;
+  }>({
+    queryKey: ['/api/settings/categorization'],
+  });
+
+  // Update AI auto-post setting
+  const updateAutoPost = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return await apiRequest('/api/settings/categorization', 'PATCH', { aiAutoPostEnabled: enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/categorization'] });
+      toast({
+        title: "Settings updated",
+        description: `Auto-post ${aiSettings?.aiAutoPostEnabled ? 'disabled' : 'enabled'}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update setting",
+        variant: "destructive",
+      });
+    },
   });
 
   const rules = activeRuleType === 'manual' ? manualRules : aiRules;
@@ -616,13 +650,31 @@ function RulesManagementTab() {
             </TabsContent>
 
             <TabsContent value="ai">
-              <div className="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-100">
+              <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-100 space-y-3">
                 <p className="text-sm text-purple-800">
                   <Brain className="h-4 w-4 inline mr-1" />
                   AI rules are automatically learned from your categorization decisions.
                   After categorizing a merchant 3+ times with 80%+ consistency, an AI rule is created.
                   Promote rules to manual to give them higher priority.
                 </p>
+                <div className="flex items-center justify-between pt-2 border-t border-purple-200">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <Label className="text-sm font-medium text-purple-900">
+                      Auto-Post High Confidence Matches
+                    </Label>
+                    {aiSettings?.aiAutoPostEnabled && (
+                      <Badge variant="secondary" className="text-xs">
+                        {Math.round(parseFloat(aiSettings?.aiAutoPostMinConfidence || "0.95") * 100)}% threshold
+                      </Badge>
+                    )}
+                  </div>
+                  <Switch
+                    checked={aiSettings?.aiAutoPostEnabled ?? false}
+                    onCheckedChange={(checked) => updateAutoPost.mutate(checked)}
+                    disabled={updateAutoPost.isPending}
+                  />
+                </div>
               </div>
               {renderRulesTable(aiRules, true)}
             </TabsContent>
