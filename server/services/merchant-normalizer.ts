@@ -15,6 +15,9 @@
  * - "UBER *TRIP HELP.UBER.COM" → "UBER TRIP"
  * - "SQ *COFFEE SHOP" → "SQ COFFEE SHOP"
  * - "PAYPAL *NETFLIX" → "PAYPAL NETFLIX"
+ * - "Tim Hortons 14385jha" → "TIM HORTONS"
+ * - "Tim Hortons Toronto 545jt" → "TIM HORTONS"
+ * - "*Tim Hortons Halton 4tfg3" → "TIM HORTONS"
  *
  * @param name - Original merchant name from bank feed
  * @returns Normalized merchant name for pattern matching
@@ -46,6 +49,15 @@ export function normalizeMerchantName(name: string | null | undefined): string {
     // Remove reference numbers
     .replace(/\bREF\s*#?\s*\d+\b/gi, '')
     .replace(/\bORDER\s*#?\s*\d+\b/gi, '')
+    // Remove alphanumeric location/transaction codes (e.g., "14385JHA", "545JT", "4TFG3", "5475YH")
+    // Pattern: digits followed by letters, or letters followed by digits (mixed alphanumeric)
+    .replace(/\b\d+[A-Z]+[A-Z0-9]*\b/g, '')  // Matches: 14385JHA, 545JT, 5475YH
+    .replace(/\b[A-Z]+\d+[A-Z0-9]*\b/g, '')  // Matches: 4TFG3, ABC123
+    // Remove trailing codes that have no vowels (likely random codes like "KKSLKT", "XJKFT")
+    // Real words have vowels: DEPOT, BUY, TIRE, STATION, etc.
+    .replace(/\s+[BCDFGHJKLMNPQRSTVWXYZ]{3,}$/g, '')  // Only consonants, 3+ chars at end
+    // Remove common Canadian city names that appear after merchant names
+    .replace(/\b(TORONTO|MISSISSAUGA|MILTON|HALTON|BRAMPTON|VAUGHAN|MARKHAM|SCARBOROUGH|ETOBICOKE|NORTH YORK|OTTAWA|VANCOUVER|CALGARY|EDMONTON|WINNIPEG|MONTREAL|QUEBEC|HALIFAX|VICTORIA)\b/gi, '')
     // Normalize whitespace
     .replace(/\s+/g, ' ')
     .trim();
