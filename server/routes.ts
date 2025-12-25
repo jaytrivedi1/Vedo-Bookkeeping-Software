@@ -11669,10 +11669,13 @@ Respond in JSON format:
   // Generate AI rules from existing patterns (retroactive)
   apiRouter.post("/categorization-rules/generate-from-patterns", async (req: Request, res: Response) => {
     try {
+      console.log("[GenerateFromPatterns] Starting rule generation from patterns...");
       const { generateAiRuleFromPattern } = await import('./services/pattern-learning-service');
 
       // Get all merchant patterns
+      console.log("[GenerateFromPatterns] Fetching merchant patterns...");
       const patterns = await storage.getMerchantPatterns();
+      console.log("[GenerateFromPatterns] Found", patterns.length, "patterns");
 
       // Filter patterns that meet the threshold (3+ occurrences, 80%+ confidence)
       const eligiblePatterns = patterns.filter(p => {
@@ -11721,9 +11724,13 @@ Respond in JSON format:
         rulesCreated,
         createdRules,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating AI rules from patterns:", error);
-      res.status(500).json({ message: "Failed to generate AI rules from patterns" });
+      console.error("Error stack:", error?.stack);
+      res.status(500).json({
+        message: "Failed to generate AI rules from patterns",
+        error: error?.message || String(error)
+      });
     }
   });
 
