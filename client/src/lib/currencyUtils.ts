@@ -38,20 +38,23 @@ export function getCurrencySymbol(currencyCode?: string | null): string {
 }
 
 export function formatCurrency(
-  amount: number,
+  amount: number | null | undefined,
   currencyCode?: string | null,
   homeCurrency: string = 'CAD'
 ): string {
+  // Handle undefined/null amounts
+  const safeAmount = amount ?? 0;
+
   if (!currencyCode || currencyCode === homeCurrency) {
     const symbol = getCurrencySymbol(homeCurrency);
-    return `${symbol}${amount.toLocaleString('en-US', {
+    return `${symbol}${safeAmount.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
   }
 
   const symbol = getCurrencySymbol(currencyCode);
-  const formattedAmount = amount.toLocaleString('en-US', {
+  const formattedAmount = safeAmount.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -64,24 +67,27 @@ export function formatCurrency(
   return `${symbol}${formattedAmount}`;
 }
 
-export function formatReportAmount(amount: number): string {
-  return amount.toLocaleString('en-US', {
+export function formatReportAmount(amount: number | null | undefined): string {
+  const safeAmount = amount ?? 0;
+  return safeAmount.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 }
 
-export function formatCurrencyCompact(amount: number, currencyCode?: string | null, homeCurrency: string = 'CAD'): string {
+export function formatCurrencyCompact(amount: number | null | undefined, currencyCode?: string | null, homeCurrency: string = 'CAD'): string {
+  const safeAmount = amount ?? 0;
+
   if (!currencyCode || currencyCode === homeCurrency) {
     const symbol = getCurrencySymbol(homeCurrency);
-    return `${symbol}${amount.toLocaleString('en-US', {
+    return `${symbol}${safeAmount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })}`;
   }
 
   const symbol = getCurrencySymbol(currencyCode);
-  const formattedAmount = amount.toLocaleString('en-US', {
+  const formattedAmount = safeAmount.toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
