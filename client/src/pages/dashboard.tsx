@@ -286,15 +286,15 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-700" data-testid="text-unpaid-label">Unpaid</span>
                       <span className="text-lg font-bold text-slate-900">
-                        ${metrics.invoices.unpaid.amount.toLocaleString()}
+                        ${(metrics.invoices.unpaid?.amount || 0).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex gap-2">
                       <div className="flex-1 text-center py-1.5 bg-amber-100 text-amber-700 text-xs font-medium rounded">
-                        {metrics.invoices.overdue.count} Overdue
+                        {metrics.invoices.overdue?.count || 0} Overdue
                       </div>
                       <div className="flex-1 text-center py-1.5 bg-slate-200 text-slate-600 text-xs font-medium rounded">
-                        {metrics.invoices.unpaid.count - metrics.invoices.overdue.count} Not due
+                        {(metrics.invoices.unpaid?.count || 0) - (metrics.invoices.overdue?.count || 0)} Not due
                       </div>
                     </div>
                   </div>
@@ -304,11 +304,11 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-emerald-700" data-testid="text-paid-label">Paid (30 days)</span>
                       <span className="text-lg font-bold text-emerald-700">
-                        ${metrics.invoices.paid.amount.toLocaleString()}
+                        ${(metrics.invoices.paid?.amount || 0).toLocaleString()}
                       </span>
                     </div>
                     <div className="text-xs text-emerald-600 mt-1">
-                      {metrics.invoices.paid.count} invoices paid
+                      {metrics.invoices.paid?.count || 0} invoices paid
                     </div>
                   </div>
 
@@ -317,7 +317,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-blue-700" data-testid="text-deposited-label">Deposited</span>
                       <span className="text-sm font-medium text-blue-600">
-                        {metrics.invoices.deposited.count} deposits
+                        {metrics.invoices.deposited?.count || 0} deposits
                       </span>
                     </div>
                   </div>
