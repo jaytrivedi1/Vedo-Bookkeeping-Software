@@ -236,6 +236,36 @@ function RulesManagementTab() {
     },
   });
 
+  // Generate AI rules from existing patterns (retroactive)
+  const generateRulesFromPatterns = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/generate-from-patterns', 'POST');
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      if (data.rulesCreated > 0) {
+        toast({
+          title: "AI Rules Generated",
+          description: `Created ${data.rulesCreated} rule(s) from learned patterns`,
+        });
+      } else {
+        toast({
+          title: "No New Rules",
+          description: data.eligiblePatterns === 0
+            ? "No patterns with enough data yet. Categorize more transactions to build patterns."
+            : "All eligible patterns already have rules created.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate rules from patterns",
+        variant: "destructive",
+      });
+    },
+  });
+
   const rules = activeRuleType === 'manual' ? manualRules : aiRules;
   const rulesLoading = activeRuleType === 'manual' ? manualLoading : aiLoading;
 
@@ -415,6 +445,20 @@ function RulesManagementTab() {
               <p className="text-sm mb-4">
                 AI rules are automatically created when you categorize the same merchant 3+ times consistently.
               </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateRulesFromPatterns.mutate()}
+                disabled={generateRulesFromPatterns.isPending}
+                className="mt-2"
+              >
+                {generateRulesFromPatterns.isPending ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                Generate from Learned Patterns
+              </Button>
             </>
           ) : (
             <>

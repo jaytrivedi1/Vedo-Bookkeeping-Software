@@ -11666,6 +11666,67 @@ Respond in JSON format:
     }
   });
 
+  // Generate AI rules from existing patterns (retroactive)
+  apiRouter.post("/categorization-rules/generate-from-patterns", async (req: Request, res: Response) => {
+    try {
+      const { generateAiRuleFromPattern } = await import('./services/pattern-learning-service');
+
+      // Get all merchant patterns
+      const patterns = await storage.getMerchantPatterns();
+
+      // Filter patterns that meet the threshold (3+ occurrences, 80%+ confidence)
+      const eligiblePatterns = patterns.filter(p => {
+        const occurrences = p.totalOccurrences || 0;
+        const confidence = parseFloat(p.confidenceScore?.toString() || '0');
+        return occurrences >= 3 && confidence >= 0.80;
+      });
+
+      const patternStorage = {
+        getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+        createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
+        updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
+        getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+        createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+        getAccount: (id: number) => storage.getAccount(id),
+        getContact: (id: number) => storage.getContact(id),
+      };
+
+      let rulesCreated = 0;
+      const createdRules: any[] = [];
+
+      for (const pattern of eligiblePatterns) {
+        // Check if rule already exists
+        const existingRule = await storage.getAiRuleByMerchant(pattern.merchantNameNormalized);
+        if (existingRule) {
+          continue; // Skip if rule already exists
+        }
+
+        // Generate the rule
+        const rule = await generateAiRuleFromPattern(patternStorage, pattern.merchantNameNormalized);
+        if (rule) {
+          rulesCreated++;
+          createdRules.push({
+            id: rule.id,
+            name: rule.name,
+            merchant: pattern.merchantNameNormalized,
+            occurrences: pattern.totalOccurrences,
+            confidence: pattern.confidenceScore,
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        eligiblePatterns: eligiblePatterns.length,
+        rulesCreated,
+        createdRules,
+      });
+    } catch (error) {
+      console.error("Error generating AI rules from patterns:", error);
+      res.status(500).json({ message: "Failed to generate AI rules from patterns" });
+    }
+  });
+
   // Promote all AI rules to manual
   apiRouter.post("/categorization-rules/ai/promote-all", async (req: Request, res: Response) => {
     try {

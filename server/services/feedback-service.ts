@@ -71,6 +71,13 @@ export async function recordCategorizationFeedback(
   const normalizedMerchant = normalizeMerchantName(params.merchantName);
   const wasSuggestionAccepted = params.suggestedAccountId === params.chosenAccountId;
 
+  console.log('[FeedbackService] Recording feedback:', {
+    merchantName: params.merchantName,
+    normalizedMerchant,
+    chosenAccountId: params.chosenAccountId,
+    chosenTransactionType: params.chosenTransactionType,
+  });
+
   // 1. Store feedback record
   const feedback = await storage.createCategorizationFeedback({
     importedTransactionId: params.importedTransactionId,
@@ -105,21 +112,36 @@ export async function recordCategorizationFeedback(
         previousSuggestedAccountId: params.suggestedAccountId,
       });
 
+      console.log('[FeedbackService] Pattern update result:', {
+        patternId: patternResult.pattern.id,
+        isNew: patternResult.isNew,
+        totalOccurrences: patternResult.pattern.totalOccurrences,
+        userConfirmations: patternResult.pattern.userConfirmations,
+        confidenceScore: patternResult.pattern.confidenceScore,
+        shouldGenerateRule: patternResult.shouldGenerateRule,
+      });
+
       patternUpdated = true;
 
       // 3. Check if we should generate an AI rule
       const prefs = await storage.getPreferences();
       // Default to true if aiRuleGenerationEnabled is null/undefined (for backwards compatibility)
       const aiRuleGenerationEnabled = prefs?.aiRuleGenerationEnabled ?? true;
+      console.log('[FeedbackService] AI rule generation check:', {
+        aiRuleGenerationEnabled,
+        shouldGenerateRule: patternResult.shouldGenerateRule,
+        willGenerate: aiRuleGenerationEnabled && patternResult.shouldGenerateRule,
+      });
       if (aiRuleGenerationEnabled && patternResult.shouldGenerateRule) {
         const rule = await generateAiRuleFromPattern(storage, normalizedMerchant);
+        console.log('[FeedbackService] AI rule generated:', rule ? { ruleId: rule.id, ruleName: rule.name } : null);
         if (rule) {
           ruleGenerated = true;
           generatedRule = rule;
         }
       }
     } catch (error) {
-      console.error('Error updating merchant pattern:', error);
+      console.error('[FeedbackService] Error updating merchant pattern:', error);
       // Continue even if pattern update fails - feedback is still recorded
     }
   }

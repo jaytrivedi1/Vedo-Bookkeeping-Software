@@ -148,16 +148,29 @@ async function shouldGenerateAiRule(
   const confidence = parseFloat(pattern.confidenceScore?.toString() || '0');
   const hasHighConfidence = confidence >= MIN_CONFIDENCE_FOR_RULE;
 
+  console.log('[PatternLearning] shouldGenerateAiRule check:', {
+    merchantNameNormalized,
+    totalOccurrences: pattern.totalOccurrences,
+    minOccurrences: MIN_OCCURRENCES_FOR_RULE,
+    hasEnoughOccurrences,
+    confidence,
+    minConfidence: MIN_CONFIDENCE_FOR_RULE,
+    hasHighConfidence,
+  });
+
   if (!hasEnoughOccurrences || !hasHighConfidence) {
+    console.log('[PatternLearning] Thresholds not met - no rule generation');
     return false;
   }
 
   // Check if AI rule already exists for this merchant
   const existingRule = await storage.getAiRuleByMerchant(merchantNameNormalized);
+  console.log('[PatternLearning] Existing rule check:', existingRule ? { ruleId: existingRule.id } : 'none');
   if (existingRule) {
     return false;
   }
 
+  console.log('[PatternLearning] All checks passed - will generate rule');
   return true;
 }
 
