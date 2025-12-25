@@ -11604,7 +11604,24 @@ Respond in JSON format:
         }
         updateData.attachmentPath = null;
       }
-      
+
+      // Promote AI rule to manual if conditions or actions are being modified
+      if (existingRule.ruleType === 'ai') {
+        const conditionsChanged = updateData.conditions && JSON.stringify(updateData.conditions) !== JSON.stringify(existingRule.conditions);
+        const actionsChanged = updateData.actions && JSON.stringify(updateData.actions) !== JSON.stringify(existingRule.actions);
+        const nameChanged = updateData.name && updateData.name !== existingRule.name;
+
+        if (conditionsChanged || actionsChanged || nameChanged) {
+          console.log('[RuleUpdate] Promoting AI rule to manual:', { ruleId, conditionsChanged, actionsChanged, nameChanged });
+          updateData.ruleType = 'manual';
+          updateData.promotedToManualAt = new Date();
+          // Give manual rules higher priority (lower number)
+          if (existingRule.priority >= 500) {
+            updateData.priority = Math.min(existingRule.priority, 499);
+          }
+        }
+      }
+
       const updatedRule = await storage.updateCategorizationRule(ruleId, updateData);
       
       if (!updatedRule) {
@@ -11692,11 +11709,27 @@ Respond in JSON format:
   // Apply categorization rules to uncategorized transactions
   apiRouter.post("/categorization-rules/apply", async (req: Request, res: Response) => {
     try {
+      console.log('[ApplyRulesEndpoint] Starting rule application...');
+
+      // Get all rules first to check what's available
+      const allRules = await storage.getCategorizationRules();
+      const enabledRules = allRules.filter(r => r.isEnabled);
+      console.log('[ApplyRulesEndpoint] Rules:', { total: allRules.length, enabled: enabledRules.length });
+      enabledRules.forEach(r => {
+        console.log('[ApplyRulesEndpoint] Enabled rule:', { id: r.id, name: r.name, conditions: r.conditions });
+      });
+
       // Get all unmatched/uncategorized transactions (including those with existing suggestions)
       const allTransactions = await storage.getImportedTransactions();
+      console.log('[ApplyRulesEndpoint] Total imported transactions:', allTransactions.length);
+
       const uncategorizedTransactions = allTransactions.filter(tx =>
         tx.status === 'unmatched' && !tx.matchedTransactionId
       );
+      console.log('[ApplyRulesEndpoint] Uncategorized transactions:', uncategorizedTransactions.length);
+      uncategorizedTransactions.forEach(tx => {
+        console.log('[ApplyRulesEndpoint] Transaction:', { id: tx.id, name: tx.name, merchantName: tx.merchantName, status: tx.status });
+      });
 
       let categorizedCount = 0;
       let updatedCount = 0;
@@ -11704,6 +11737,7 @@ Respond in JSON format:
       // Apply rules to each uncategorized transaction
       for (const tx of uncategorizedTransactions) {
         const ruleMatch = await applyRulesToTransaction(tx);
+        console.log('[ApplyRulesEndpoint] Rule match for tx', tx.id, ':', ruleMatch);
         if (ruleMatch && ruleMatch.accountId) {
           try {
             // Update the transaction with the rule match
@@ -11723,6 +11757,8 @@ Respond in JSON format:
           }
         }
       }
+
+      console.log('[ApplyRulesEndpoint] Done. Categorized:', categorizedCount, 'Updated:', updatedCount);
 
       res.json({
         success: true,

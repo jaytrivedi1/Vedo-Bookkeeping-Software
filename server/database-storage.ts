@@ -3228,12 +3228,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule> {
+    // Force isEnabled to true for AI rules (workaround for DB default issue)
+    const ruleData = {
+      ...rule,
+      isEnabled: rule.isEnabled ?? true, // Default to true if not specified
+      updatedAt: new Date()
+    };
+
+    console.log('[DatabaseStorage] Creating rule with data:', { name: ruleData.name, ruleType: ruleData.ruleType, isEnabled: ruleData.isEnabled });
+
     const [newRule] = await db.insert(categorizationRulesSchema)
-      .values({
-        ...rule,
-        updatedAt: new Date()
-      })
+      .values(ruleData)
       .returning();
+
+    console.log('[DatabaseStorage] Created rule:', { id: newRule.id, name: newRule.name, isEnabled: newRule.isEnabled });
+
+    // If rule was created as disabled despite our efforts, update it
+    if (!newRule.isEnabled && rule.ruleType === 'ai') {
+      console.log('[DatabaseStorage] Rule was created disabled, forcing enable...');
+      const [updatedRule] = await db.update(categorizationRulesSchema)
+        .set({ isEnabled: true, updatedAt: new Date() })
+        .where(eq(categorizationRulesSchema.id, newRule.id))
+        .returning();
+      return updatedRule;
+    }
+
     return newRule;
   }
 
