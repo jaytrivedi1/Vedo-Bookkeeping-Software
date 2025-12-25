@@ -9403,6 +9403,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             chosenTransactionType: 'expense',
           });
           console.log('[Categorization-Expense] Feedback recorded:', feedbackResult);
+
+          // If an AI rule was generated, apply it to remaining uncategorized transactions
+          if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
+            console.log('[Categorization-Expense] AI rule generated, applying to existing transactions...');
+            const rule = feedbackResult.generatedRule;
+            const applyResult = await applyRuleToExistingTransactions({
+              id: rule.id,
+              name: rule.name,
+              conditions: rule.conditions,
+              actions: rule.actions,
+              salesTaxId: rule.salesTaxId,
+            }, storage);
+            console.log('[Categorization-Expense] Auto-apply result:', applyResult);
+          }
         } catch (feedbackError) {
           console.error('[Categorization-Expense] Error recording feedback:', feedbackError);
         }
@@ -9533,6 +9547,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             chosenTransactionType: 'deposit',
           });
           console.log('[Categorization-Deposit] Feedback recorded:', feedbackResult);
+
+          // If an AI rule was generated, apply it to remaining uncategorized transactions
+          if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
+            console.log('[Categorization-Deposit] AI rule generated, applying to existing transactions...');
+            const rule = feedbackResult.generatedRule;
+            const applyResult = await applyRuleToExistingTransactions({
+              id: rule.id,
+              name: rule.name,
+              conditions: rule.conditions,
+              actions: rule.actions,
+              salesTaxId: rule.salesTaxId,
+            }, storage);
+            console.log('[Categorization-Deposit] Auto-apply result:', applyResult);
+          }
         } catch (feedbackError) {
           console.error('[Categorization-Deposit] Error recording feedback:', feedbackError);
         }
@@ -10497,6 +10525,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           chosenTransactionType: transactionType,
         });
         console.log('[Categorization] Feedback recorded:', feedbackResult);
+
+        // If an AI rule was generated, apply it to remaining uncategorized transactions
+        if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
+          console.log('[Categorization] AI rule generated, applying to existing transactions...');
+          const rule = feedbackResult.generatedRule;
+          const applyResult = await applyRuleToExistingTransactions({
+            id: rule.id,
+            name: rule.name,
+            conditions: rule.conditions,
+            actions: rule.actions,
+            salesTaxId: rule.salesTaxId,
+          }, storage);
+          console.log('[Categorization] Auto-apply result:', applyResult);
+        }
       } catch (feedbackError) {
         // Log but don't fail the request if feedback recording fails
         console.error('[Categorization] Error recording categorization feedback:', feedbackError);

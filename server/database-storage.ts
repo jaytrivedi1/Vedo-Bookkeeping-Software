@@ -3237,14 +3237,15 @@ export class DatabaseStorage implements IStorage {
       isEnabled: isEnabled
     });
 
-    // Insert with explicit is_enabled = true using raw SQL to bypass Drizzle issues
+    // Insert with explicit is_enabled = true and auto_apply = true using raw SQL to bypass Drizzle issues
     const result = await db.execute(sql`
       INSERT INTO categorization_rules (
-        name, is_enabled, priority, conditions, actions, sales_tax_id,
+        name, is_enabled, auto_apply, priority, conditions, actions, sales_tax_id,
         attachment_path, rule_type, source_merchant_pattern, auto_generated_at,
         occurrence_count, confidence_score, created_at, updated_at
       ) VALUES (
         ${rule.name},
+        true,
         true,
         ${rule.priority ?? 0},
         ${JSON.stringify(rule.conditions)}::json,
@@ -3268,6 +3269,7 @@ export class DatabaseStorage implements IStorage {
       id: newRule.id,
       name: newRule.name,
       isEnabled: newRule.is_enabled,
+      autoApply: newRule.auto_apply,
       priority: newRule.priority,
       conditions: newRule.conditions,
       actions: newRule.actions,
