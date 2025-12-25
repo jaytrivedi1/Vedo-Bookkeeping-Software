@@ -31,6 +31,7 @@ import { addMultiCurrencySupport } from "../server/migrations/add-multi-currency
 import { migrateInvoiceActivities } from "../server/migrations/add-invoice-activities";
 import { addUserCompaniesTable } from "../server/migrations/add-user-companies";
 import { addCompanyCodeMigration } from "../server/migrations/add-company-code";
+import { addAiCategorizationTables } from "../server/migrations/add-ai-categorization";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -141,6 +142,10 @@ async function runMigrations() {
     // Add invoice activities
     log("Running invoice activities migration...");
     await migrateInvoiceActivities();
+
+    // Add AI categorization tables
+    log("Running AI categorization migration...");
+    await addAiCategorizationTables();
 
     log("All migrations completed successfully!");
     process.exit(0);

@@ -38,9 +38,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock, Users, Calendar as CalendarIcon, X } from "lucide-react";
+import { Settings, Info, Languages, Moon, Sun, DollarSign, FileText, Sparkles, Minimize2, LayoutTemplate, Check, User, Lock, Users, Calendar as CalendarIcon, X, Brain, Zap } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
@@ -102,6 +104,14 @@ interface SettingsState {
   multiCurrencyEnabledAt: Date | null;
   invoiceTemplate?: string;
   transactionLockDate?: Date | null;
+}
+
+// Define AI categorization settings
+interface AiCategorizationSettings {
+  aiCategorizationEnabled: boolean;
+  aiAutoPostEnabled: boolean;
+  aiAutoPostMinConfidence: string;
+  aiRuleGenerationEnabled: boolean;
 }
 
 const templates = [
@@ -170,6 +180,54 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
     queryKey: ['/api/currencies'],
     enabled: open
   });
+
+  // Query AI categorization settings
+  const aiSettingsQuery = useQuery<AiCategorizationSettings>({
+    queryKey: ['/api/settings/categorization'],
+    enabled: open
+  });
+
+  // Local state for AI settings
+  const [aiSettings, setAiSettings] = useState<AiCategorizationSettings>({
+    aiCategorizationEnabled: true,
+    aiAutoPostEnabled: false,
+    aiAutoPostMinConfidence: "0.95",
+    aiRuleGenerationEnabled: true,
+  });
+
+  // Update local AI state when data loads
+  useEffect(() => {
+    if (aiSettingsQuery.data) {
+      setAiSettings(aiSettingsQuery.data);
+    }
+  }, [aiSettingsQuery.data]);
+
+  // Update AI settings mutation
+  const updateAiSettings = useMutation({
+    mutationFn: async (updates: Partial<AiCategorizationSettings>) => {
+      return apiRequest("/api/settings/categorization", "PATCH", updates);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Settings saved",
+        description: "AI categorization settings updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/categorization"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save AI settings",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAiSettingChange = (key: keyof AiCategorizationSettings, value: boolean | string) => {
+    const newSettings = { ...aiSettings, [key]: value };
+    setAiSettings(newSettings);
+    updateAiSettings.mutate({ [key]: value });
+  };
   
   // Query current user
   const userQuery = useQuery({
@@ -1040,9 +1098,123 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
                   </div>
                 </CardContent>
               </Card>
-              
-              <Button 
-                onClick={savePreferencesHandler} 
+
+              {/* AI Categorization Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    AI Categorization
+                  </CardTitle>
+                  <CardDescription>
+                    Configure how AI assists with bank transaction categorization
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {aiSettingsQuery.isLoading ? (
+                    <div className="flex items-center justify-center h-32">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* AI Suggestions Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-purple-500" />
+                            AI Categorization Suggestions
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Get AI-powered suggestions for new merchants (only merchant name is shared)
+                          </p>
+                        </div>
+                        <Switch
+                          checked={aiSettings.aiCategorizationEnabled}
+                          onCheckedChange={(checked) =>
+                            handleAiSettingChange("aiCategorizationEnabled", checked)
+                          }
+                          disabled={updateAiSettings.isPending}
+                        />
+                      </div>
+
+                      <Separator />
+
+                      {/* Auto-Post Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="flex items-center gap-2">
+                            <Zap className="h-4 w-4 text-amber-500" />
+                            Auto-Post High Confidence Matches
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically categorize transactions when confidence is above threshold
+                          </p>
+                          <p className="text-xs text-amber-600">
+                            Only applies to learned patterns, never to new AI suggestions
+                          </p>
+                        </div>
+                        <Switch
+                          checked={aiSettings.aiAutoPostEnabled}
+                          onCheckedChange={(checked) =>
+                            handleAiSettingChange("aiAutoPostEnabled", checked)
+                          }
+                          disabled={updateAiSettings.isPending}
+                        />
+                      </div>
+
+                      {/* Confidence Threshold Slider */}
+                      {aiSettings.aiAutoPostEnabled && (
+                        <div className="ml-6 p-4 bg-muted rounded-lg space-y-3">
+                          <Label>Minimum Confidence for Auto-Post</Label>
+                          <div className="flex items-center gap-4">
+                            <Slider
+                              value={[parseFloat(aiSettings.aiAutoPostMinConfidence) * 100]}
+                              min={80}
+                              max={99}
+                              step={1}
+                              onValueCommit={([value]) =>
+                                handleAiSettingChange("aiAutoPostMinConfidence", (value / 100).toFixed(2))
+                              }
+                              className="flex-1"
+                            />
+                            <span className="text-sm font-medium w-12 text-right">
+                              {Math.round(parseFloat(aiSettings.aiAutoPostMinConfidence) * 100)}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Higher values require more consistent categorization history before auto-posting
+                          </p>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* AI Rule Generation Toggle */}
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="flex items-center gap-2">
+                            <Brain className="h-4 w-4 text-green-500" />
+                            AI Rule Generation
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically create rules when merchants are categorized consistently 3+ times
+                          </p>
+                        </div>
+                        <Switch
+                          checked={aiSettings.aiRuleGenerationEnabled}
+                          onCheckedChange={(checked) =>
+                            handleAiSettingChange("aiRuleGenerationEnabled", checked)
+                          }
+                          disabled={updateAiSettings.isPending}
+                        />
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Button
+                onClick={savePreferencesHandler}
                 disabled={savePreferences.isPending}
                 className="w-full"
               >
@@ -1050,7 +1222,7 @@ export default function SettingsDialog({ open, onOpenChange }: SettingsDialogPro
               </Button>
             </div>
           </TabsContent>
-          
+
           {/* Invoices Tab */}
           <TabsContent value="invoices">
             <div className="space-y-4">

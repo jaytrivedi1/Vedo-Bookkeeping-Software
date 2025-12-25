@@ -24,6 +24,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -47,7 +50,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { 
+import {
   Building2,
   RefreshCw,
   Trash2,
@@ -64,7 +67,12 @@ import {
   GripVertical,
   Search,
   Filter,
-  X
+  X,
+  Brain,
+  Hand,
+  Sparkles,
+  ArrowUpRight,
+  Zap
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -173,23 +181,93 @@ function RulesManagementTab() {
   const { toast } = useToast();
   const [editingRule, setEditingRule] = useState<any | null>(null);
   const [ruleDialogOpen, setRuleDialogOpen] = useState(false);
+  const [activeRuleType, setActiveRuleType] = useState<'manual' | 'ai'>('manual');
 
   // Fetch preferences for home currency
   const { data: preferences } = useQuery<Preferences>({
     queryKey: ['/api/settings/preferences'],
   });
-  
+
   const homeCurrency = preferences?.homeCurrency || 'CAD';
 
-  // Fetch rules
-  const { data: rules = [], isLoading: rulesLoading } = useQuery({
-    queryKey: ['/api/categorization-rules'],
+  // Fetch manual rules
+  const { data: manualRules = [], isLoading: manualLoading } = useQuery<any[]>({
+    queryKey: ['/api/categorization-rules/type/manual'],
+  });
+
+  // Fetch AI rules
+  const { data: aiRules = [], isLoading: aiLoading } = useQuery<any[]>({
+    queryKey: ['/api/categorization-rules/type/ai'],
   });
 
   // Fetch accounts for display
   const { data: accounts = [] } = useQuery<GLAccount[]>({
     queryKey: ['/api/accounts'],
   });
+
+  // Fetch AI settings for auto-post toggle
+  const { data: aiSettings } = useQuery<{
+    aiCategorizationEnabled: boolean;
+    aiAutoPostEnabled: boolean;
+    aiAutoPostMinConfidence: string;
+    aiRuleGenerationEnabled: boolean;
+  }>({
+    queryKey: ['/api/settings/categorization'],
+  });
+
+  // Update AI auto-post setting
+  const updateAutoPost = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      return await apiRequest('/api/settings/categorization', 'PATCH', { aiAutoPostEnabled: enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/settings/categorization'] });
+      toast({
+        title: "Settings updated",
+        description: `Auto-post ${aiSettings?.aiAutoPostEnabled ? 'disabled' : 'enabled'}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update setting",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Generate AI rules from existing patterns (retroactive)
+  const generateRulesFromPatterns = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/generate-from-patterns', 'POST');
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      if (data.rulesCreated > 0) {
+        toast({
+          title: "AI Rules Generated",
+          description: `Created ${data.rulesCreated} rule(s) from learned patterns`,
+        });
+      } else {
+        toast({
+          title: "No New Rules",
+          description: data.eligiblePatterns === 0
+            ? "No patterns with enough data yet. Categorize more transactions to build patterns."
+            : "All eligible patterns already have rules created.",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate rules from patterns",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const rules = activeRuleType === 'manual' ? manualRules : aiRules;
+  const rulesLoading = activeRuleType === 'manual' ? manualLoading : aiLoading;
 
   // Apply rules mutation
   const applyRulesMutation = useMutation({
@@ -219,6 +297,8 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
       toast({
         title: "Success",
         description: "Rule updated",
@@ -240,6 +320,8 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
       toast({
         title: "Success",
         description: "Rule deleted",
@@ -261,11 +343,59 @@ function RulesManagementTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
         description: error.message || "Failed to update priority",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Promote AI rule to manual
+  const promoteRuleMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return await apiRequest(`/api/categorization-rules/${id}/promote`, 'POST');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "Success",
+        description: "AI rule promoted to manual rule",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to promote rule",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Promote all AI rules
+  const promoteAllMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/ai/promote-all', 'POST');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "Success",
+        description: `Promoted ${data.promotedCount} AI rules to manual rules`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to promote rules",
         variant: "destructive",
       });
     },
@@ -294,48 +424,51 @@ function RulesManagementTab() {
     return parts.join(' AND ');
   };
 
-  return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
-          <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
-        </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline"
-            onClick={() => applyRulesMutation.mutate()}
-            disabled={applyRulesMutation.isPending || rules.length === 0}
-            data-testid="button-apply-rules"
-          >
-            {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
-          </Button>
-          <Button 
-            onClick={() => {
-              setEditingRule(null);
-              setRuleDialogOpen(true);
-            }}
-            data-testid="button-create-rule"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Rule
-          </Button>
-        </div>
-      </div>
+  const formatConfidence = (confidence: string | number | null) => {
+    if (!confidence) return null;
+    const value = typeof confidence === 'string' ? parseFloat(confidence) : confidence;
+    return Math.round(value * 100);
+  };
 
-      <Card>
-        <CardContent className="pt-6">
-          {rulesLoading ? (
-            <div className="text-center py-12 text-gray-500">Loading rules...</div>
-          ) : rules.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+  const renderRulesTable = (rulesList: any[], isAiRules: boolean) => {
+    if (rulesLoading) {
+      return <div className="text-center py-12 text-gray-500">Loading rules...</div>;
+    }
+
+    if (rulesList.length === 0) {
+      return (
+        <div className="text-center py-12 text-gray-500">
+          {isAiRules ? (
+            <>
+              <Brain className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No AI Rules Yet</h3>
+              <p className="text-sm mb-4">
+                AI rules are automatically created when you categorize the same merchant 3+ times consistently.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => generateRulesFromPatterns.mutate()}
+                disabled={generateRulesFromPatterns.isPending}
+                className="mt-2"
+              >
+                {generateRulesFromPatterns.isPending ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-2" />
+                )}
+                Generate from Learned Patterns
+              </Button>
+            </>
+          ) : (
+            <>
               <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Rules Created Yet</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Manual Rules Created Yet</h3>
               <p className="text-sm mb-4">
                 Create rules to automatically categorize transactions based on description, amount, or other criteria.
               </p>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setEditingRule(null);
                   setRuleDialogOpen(true);
@@ -345,108 +478,252 @@ function RulesManagementTab() {
                 <Plus className="mr-2 h-4 w-4" />
                 Create Your First Rule
               </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>Rule Name</TableHead>
-                  <TableHead>Conditions</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead className="w-20">Enabled</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rules.map((rule: any, index: number) => (
-                  <TableRow key={rule.id}>
-                    <TableCell>
-                      <GripVertical className="h-4 w-4 text-gray-400" />
-                    </TableCell>
-                    <TableCell className="font-medium">{rule.name}</TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {formatConditions(rule.conditions)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {getAccountName(rule.actions?.accountId)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (index > 0) {
-                              updatePriorityMutation.mutate({
-                                id: rule.id,
-                                priority: rule.priority - 1
-                              });
-                            }
-                          }}
-                          disabled={index === 0}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <span className="text-sm">{rule.priority}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (index < rules.length - 1) {
-                              updatePriorityMutation.mutate({
-                                id: rule.id,
-                                priority: rule.priority + 1
-                              });
-                            }
-                          }}
-                          disabled={index === rules.length - 1}
-                        >
-                          <ArrowDown className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Checkbox
-                        checked={rule.enabled}
-                        onCheckedChange={(checked) => {
-                          toggleRuleMutation.mutate({
-                            id: rule.id,
-                            enabled: !!checked
-                          });
-                        }}
-                        data-testid={`checkbox-rule-enabled-${rule.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditingRule(rule);
-                            setRuleDialogOpen(true);
-                          }}
-                          data-testid={`button-edit-rule-${rule.id}`}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteRuleMutation.mutate(rule.id)}
-                          data-testid={`button-delete-rule-${rule.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            </>
           )}
+        </div>
+      );
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12"></TableHead>
+            <TableHead>Rule Name</TableHead>
+            <TableHead>Conditions</TableHead>
+            <TableHead>Account</TableHead>
+            {isAiRules && <TableHead>Confidence</TableHead>}
+            {isAiRules && <TableHead>Uses</TableHead>}
+            <TableHead>Priority</TableHead>
+            <TableHead className="w-20">Enabled</TableHead>
+            <TableHead className="w-32">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rulesList.map((rule: any, index: number) => (
+            <TableRow key={rule.id}>
+              <TableCell>
+                <GripVertical className="h-4 w-4 text-gray-400" />
+              </TableCell>
+              <TableCell className="font-medium">
+                <div className="flex items-center gap-2">
+                  {isAiRules && <Brain className="h-4 w-4 text-purple-500" />}
+                  {rule.name}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm text-gray-600">
+                {formatConditions(rule.conditions)}
+              </TableCell>
+              <TableCell className="text-sm">
+                {getAccountName(rule.actions?.accountId)}
+              </TableCell>
+              {isAiRules && (
+                <TableCell>
+                  {rule.confidenceScore && (
+                    <Badge variant={formatConfidence(rule.confidenceScore)! >= 80 ? "default" : "secondary"}>
+                      {formatConfidence(rule.confidenceScore)}%
+                    </Badge>
+                  )}
+                </TableCell>
+              )}
+              {isAiRules && (
+                <TableCell className="text-sm text-gray-600">
+                  {rule.occurrenceCount || 0}
+                </TableCell>
+              )}
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (index > 0) {
+                        updatePriorityMutation.mutate({
+                          id: rule.id,
+                          priority: rule.priority - 1
+                        });
+                      }
+                    }}
+                    disabled={index === 0}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm">{rule.priority}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (index < rulesList.length - 1) {
+                        updatePriorityMutation.mutate({
+                          id: rule.id,
+                          priority: rule.priority + 1
+                        });
+                      }
+                    }}
+                    disabled={index === rulesList.length - 1}
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Checkbox
+                  checked={rule.enabled}
+                  onCheckedChange={(checked) => {
+                    toggleRuleMutation.mutate({
+                      id: rule.id,
+                      enabled: !!checked
+                    });
+                  }}
+                  data-testid={`checkbox-rule-enabled-${rule.id}`}
+                />
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-1">
+                  {isAiRules && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => promoteRuleMutation.mutate(rule.id)}
+                            disabled={promoteRuleMutation.isPending}
+                            data-testid={`button-promote-rule-${rule.id}`}
+                          >
+                            <ArrowUpRight className="h-4 w-4 text-green-600" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Promote to Manual Rule</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingRule(rule);
+                      setRuleDialogOpen(true);
+                    }}
+                    data-testid={`button-edit-rule-${rule.id}`}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteRuleMutation.mutate(rule.id)}
+                    data-testid={`button-delete-rule-${rule.id}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-lg font-medium text-gray-900">Categorization Rules</h2>
+          <p className="text-sm text-gray-500">Automatically categorize imported transactions based on conditions</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => applyRulesMutation.mutate()}
+            disabled={applyRulesMutation.isPending || (manualRules.length === 0 && aiRules.length === 0)}
+            data-testid="button-apply-rules"
+          >
+            {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
+          </Button>
+          {activeRuleType === 'ai' && aiRules.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => promoteAllMutation.mutate()}
+              disabled={promoteAllMutation.isPending}
+              data-testid="button-promote-all"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              {promoteAllMutation.isPending ? 'Promoting...' : 'Accept All AI Rules'}
+            </Button>
+          )}
+          {activeRuleType === 'manual' && (
+            <Button
+              onClick={() => {
+                setEditingRule(null);
+                setRuleDialogOpen(true);
+              }}
+              data-testid="button-create-rule"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Rule
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs value={activeRuleType} onValueChange={(value) => setActiveRuleType(value as 'manual' | 'ai')}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="manual" className="flex items-center gap-2">
+                <Hand className="h-4 w-4" />
+                Manual Rules
+                {manualRules.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{manualRules.length}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="ai" className="flex items-center gap-2">
+                <Brain className="h-4 w-4" />
+                AI Rules
+                {aiRules.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">{aiRules.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="manual">
+              {renderRulesTable(manualRules, false)}
+            </TabsContent>
+
+            <TabsContent value="ai">
+              <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-100 space-y-3">
+                <p className="text-sm text-purple-800">
+                  <Brain className="h-4 w-4 inline mr-1" />
+                  AI rules are automatically learned from your categorization decisions.
+                  After categorizing a merchant 3+ times with 80%+ consistency, an AI rule is created.
+                  Promote rules to manual to give them higher priority.
+                </p>
+                <div className="flex items-center justify-between pt-2 border-t border-purple-200">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    <Label className="text-sm font-medium text-purple-900">
+                      Auto-Post High Confidence Matches
+                    </Label>
+                    {aiSettings?.aiAutoPostEnabled && (
+                      <Badge variant="secondary" className="text-xs">
+                        {Math.round(parseFloat(aiSettings?.aiAutoPostMinConfidence || "0.95") * 100)}% threshold
+                      </Badge>
+                    )}
+                  </div>
+                  <Switch
+                    checked={aiSettings?.aiAutoPostEnabled ?? false}
+                    onCheckedChange={(checked) => updateAutoPost.mutate(checked)}
+                    disabled={updateAutoPost.isPending}
+                  />
+                </div>
+              </div>
+              {renderRulesTable(aiRules, true)}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -1773,225 +2050,246 @@ export default function Banking() {
 
   return (
     <TooltipProvider>
-    <div className="py-6">
+    <div className="py-4">
       <div className="px-4">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Banking</h1>
-          <p className="mt-1 text-sm text-gray-500">
+        <div className="mb-3">
+          <h1 className="text-xl font-semibold text-gray-900">Banking</h1>
+          <p className="text-xs text-gray-500">
             Manage bank feeds and reconcile accounts
           </p>
         </div>
         
         <Tabs defaultValue="bank-feeds" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="bank-feeds" data-testid="tab-bank-feeds">Bank Feeds</TabsTrigger>
-            <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
-            <TabsTrigger value="rules" data-testid="tab-rules">Rules</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="bank-feeds">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-medium text-gray-900">Bank Feeds</h2>
-              <Button
-                onClick={() => setShowBankFeedSetup(true)}
-                data-testid="button-setup-bank-feed"
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Set Up Bank Feed
-              </Button>
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <TabsList>
+              <TabsTrigger value="bank-feeds" data-testid="tab-bank-feeds">Bank Feeds</TabsTrigger>
+              <TabsTrigger value="reconciliation" data-testid="tab-reconciliation">Reconciliation</TabsTrigger>
+              <TabsTrigger value="rules" data-testid="tab-rules">Rules</TabsTrigger>
+            </TabsList>
+            <Button
+              onClick={() => setShowBankFeedSetup(true)}
+              data-testid="button-setup-bank-feed"
+              size="sm"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Set Up Bank Feed
+            </Button>
+          </div>
 
-            {/* Bank Accounts with Feed Status */}
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Accounts with Bank Feeds</CardTitle>
-                <CardDescription>
-                  Connect bank feeds to automatically import transactions for Cash, Bank, Investment, Credit Card, Line of Credit, and Loan accounts
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {glAccountsLoading || bankAccountsLoading ? (
-                  <div className="text-center py-8 text-gray-500">Loading...</div>
-                ) : accountsWithFeedStatus.length === 0 ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>No bank feeds connected yet</AlertTitle>
-                    <AlertDescription>
-                      Click "Set Up Bank Feed" above to connect Plaid or upload CSV statements for your Cash, Bank, Investment, Credit Card, Line of Credit, or Loan accounts.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <div className="relative">
-                    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                      {accountsWithFeedStatus.map((account) => (
-                        <div
-                          key={account.id}
-                          onClick={() => handleAccountSelect(account.id)}
-                          className={`flex-shrink-0 w-64 border rounded-lg p-4 cursor-pointer transition-all ${
-                            selectedAccountId === account.id 
-                              ? 'border-primary bg-primary/5 shadow-md' 
-                              : 'border-gray-200 hover:border-primary/50 hover:shadow-sm'
-                          }`}
-                          data-testid={`tile-account-${account.id}`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <Building2 className={`h-5 w-5 flex-shrink-0 ${selectedAccountId === account.id ? 'text-primary' : 'text-gray-400'}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-sm truncate">{account.name}</h3>
-                              </div>
-                              <p className="text-xs text-gray-500 mt-0.5">({account.code})</p>
-                              
-                              {/* Balance Display */}
-                              <div className="mt-2 space-y-1">
-                                {account.bankAccount && (
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-xs text-gray-500">Bank:</span>
-                                    <span className="text-sm font-medium">
-                                      {formatCurrency(account.bankAccount.currentBalance || 0, homeCurrency, homeCurrency)}
-                                    </span>
-                                  </div>
-                                )}
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-gray-500">Books:</span>
-                                  <span className="text-sm font-medium">
-                                    {formatCurrency(account.balance, homeCurrency, homeCurrency)}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              {account.feedType && (
-                                <div className="mt-2">
-                                  <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'}>
-                                    {account.feedType === 'plaid' ? (
-                                      <>
-                                        <LinkIcon className="h-3 w-3 mr-1" />
-                                        Plaid
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Upload className="h-3 w-3 mr-1" />
-                                        CSV
-                                      </>
-                                    )}
-                                  </Badge>
-                                  {account.bankAccount?.lastSyncedAt && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                      Last refreshed {formatDistanceToNow(new Date(account.bankAccount.lastSyncedAt), { addSuffix: true })}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+          <TabsContent value="bank-feeds" className="mt-0">
+            {/* Compact Bank Account Tiles */}
+            <div className="bg-slate-50/70 rounded-lg px-3 py-2 mb-3">
+              {glAccountsLoading || bankAccountsLoading ? (
+                <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
+              ) : accountsWithFeedStatus.length === 0 ? (
+                <div className="flex items-center gap-2 py-2 text-sm text-gray-600">
+                  <AlertCircle className="h-4 w-4 text-gray-400" />
+                  <span>No bank feeds connected yet. Click "Set Up Bank Feed" to connect.</span>
+                </div>
+              ) : (
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                  {accountsWithFeedStatus.map((account) => (
+                    <div
+                      key={account.id}
+                      onClick={() => handleAccountSelect(account.id)}
+                      className={`group relative flex-shrink-0 flex items-center gap-3 border rounded-md px-3 py-2 cursor-pointer transition-all min-w-[280px] max-w-[320px] ${
+                        selectedAccountId === account.id
+                          ? 'border-primary bg-white shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-primary/50'
+                      }`}
+                      data-testid={`tile-account-${account.id}`}
+                    >
+                      {/* Left: Icon + Name */}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Building2 className={`h-4 w-4 flex-shrink-0 ${selectedAccountId === account.id ? 'text-primary' : 'text-gray-400'}`} />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-sm truncate">{account.name}</span>
+                            {account.feedType && (
+                              <Badge variant={account.feedType === 'plaid' ? 'default' : 'secondary'} className="h-4 text-[10px] px-1">
+                                {account.feedType === 'plaid' ? 'Plaid' : 'CSV'}
+                              </Badge>
+                            )}
                           </div>
+                          <span className="text-[10px] text-gray-400">({account.code})</span>
+                        </div>
+                      </div>
 
-                          <div className="mt-3 pt-3 border-t">
-                            {account.bankAccount ? (
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    syncTransactionsMutation.mutate(account.bankAccount!.id);
-                                  }}
-                                  disabled={syncTransactionsMutation.isPending}
-                                  className="flex-1"
-                                  data-testid={`button-sync-${account.id}`}
-                                >
-                                  <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    deleteBankAccountMutation.mutate(account.bankAccount!.id);
-                                  }}
-                                  disabled={deleteBankAccountMutation.isPending}
-                                  className="flex-1"
-                                  data-testid={`button-disconnect-${account.id}`}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowBankFeedSetup(true);
-                                  }}
-                                  className="flex-1"
-                                  data-testid={`button-upload-csv-${account.id}`}
-                                >
-                                  <Upload className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ) : (
+                      {/* Right: Balances */}
+                      <div className="flex-shrink-0 text-right text-xs">
+                        {account.bankAccount && (
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-gray-400">Bank:</span>
+                            <span className="font-medium w-20 text-right">{formatCurrency(account.bankAccount.currentBalance || 0, homeCurrency, homeCurrency)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-gray-400">Books:</span>
+                          <span className="font-medium w-20 text-right">{formatCurrency(account.balance, homeCurrency, homeCurrency)}</span>
+                        </div>
+                      </div>
+
+                      {/* Hover Actions - appears on hover */}
+                      {account.bankAccount ? (
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 rounded px-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  syncTransactionsMutation.mutate(account.bankAccount!.id);
+                                }}
+                                disabled={syncTransactionsMutation.isPending}
+                                data-testid={`button-sync-${account.id}`}
+                              >
+                                <RefreshCw className={`h-3 w-3 ${syncTransactionsMutation.isPending ? 'animate-spin' : ''}`} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Refresh</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setShowBankFeedSetup(true);
                                 }}
-                                className="w-full"
-                                data-testid={`button-connect-${account.id}`}
+                                data-testid={`button-upload-csv-${account.id}`}
                               >
-                                <Plus className="h-3 w-3 mr-1" />
-                                {account.hasCSVImports ? 'Add' : 'Connect'}
+                                <Upload className="h-3 w-3" />
                               </Button>
-                            )}
-                          </div>
+                            </TooltipTrigger>
+                            <TooltipContent>Upload CSV</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteBankAccountMutation.mutate(account.bankAccount!.id);
+                                }}
+                                disabled={deleteBankAccountMutation.isPending}
+                                data-testid={`button-disconnect-${account.id}`}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Disconnect</TooltipContent>
+                          </Tooltip>
                         </div>
-                      ))}
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowBankFeedSetup(true);
+                          }}
+                          data-testid={`button-connect-${account.id}`}
+                        >
+                          <Plus className="h-3 w-3 mr-0.5" />
+                          Connect
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Imported Transactions */}
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'uncategorized' | 'categorized' | 'deleted')}>
-              <TabsList className="mb-4">
-                <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
-                <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
-                <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value={activeTab}>
-                <Card>
-                  <CardHeader>
-                    <div className="flex justify-between items-center mb-4">
+              {/* Progress Stats Bar */}
+              {(() => {
+                // Only count transactions from accounts with active bank feeds
+                const activeFeedAccountIds = new Set(accountsWithFeedStatus.map(a => a.id));
+                const relevantTransactions = allImportedTransactions.filter(tx =>
+                  tx.accountId && activeFeedAccountIds.has(tx.accountId)
+                );
+
+                // Use the same status field that the server uses for filtering
+                const uncategorizedCount = relevantTransactions.filter(tx => tx.status === 'unmatched').length;
+                const categorizedCount = relevantTransactions.filter(tx => tx.status === 'matched').length;
+                const totalActive = uncategorizedCount + categorizedCount;
+                const progressPercent = totalActive > 0 ? Math.round((categorizedCount / totalActive) * 100) : 0;
+
+                return totalActive > 0 ? (
+                  <div className="flex items-center gap-4 mb-3 p-3 bg-gradient-to-r from-slate-50 to-slate-100/50 rounded-lg border border-slate-200/60">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-medium text-slate-600">Categorization Progress</span>
+                        <span className="text-xs font-semibold text-slate-700">{progressPercent}%</span>
+                      </div>
+                      <Progress
+                        value={progressPercent}
+                        className="h-2 bg-slate-200"
+                      />
+                    </div>
+                    <div className="flex gap-3 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                        <span className="text-slate-600"><span className="font-semibold text-slate-800">{uncategorizedCount}</span> pending</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                        <span className="text-slate-600"><span className="font-semibold text-slate-800">{categorizedCount}</span> done</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
+
+              <div className="flex items-center justify-between mb-2">
+                <TabsList>
+                  <TabsTrigger value="uncategorized" data-testid="tab-uncategorized">Uncategorized</TabsTrigger>
+                  <TabsTrigger value="categorized" data-testid="tab-categorized">Categorized</TabsTrigger>
+                  <TabsTrigger value="deleted" data-testid="tab-deleted">Deleted</TabsTrigger>
+                </TabsList>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Show:</span>
+                  <SearchableSelect
+                    items={pageSizeItems}
+                    value={pageSize.toString()}
+                    onValueChange={(value) => handlePageSizeChange(Number(value))}
+                    placeholder="Select page size"
+                    searchPlaceholder="Search..."
+                    emptyText="No options found"
+                    data-testid="select-page-size"
+                  />
+                </div>
+              </div>
+
+              <TabsContent value={activeTab} className="mt-0">
+                <Card className="border-0 shadow-none">
+                  <CardHeader className="px-0 py-2">
+                    <div className="flex justify-between items-center">
                       <div>
-                        <CardTitle>
+                        <CardTitle className="text-base">
                           {activeTab === 'uncategorized' && 'Uncategorized Transactions'}
                           {activeTab === 'categorized' && 'Categorized Transactions'}
                           {activeTab === 'deleted' && 'Deleted Transactions'}
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="text-xs">
                           {activeTab === 'uncategorized' && `${filteredTransactions.length} transactions waiting to be categorized`}
                           {activeTab === 'categorized' && `${filteredTransactions.length} transactions have been categorized`}
                           {activeTab === 'deleted' && `${filteredTransactions.length} deleted transactions`}
                           {selectedAccountId && ` for ${accountsWithFeedStatus.find(a => a.id === selectedAccountId)?.name}`}
                         </CardDescription>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Show:</span>
-                        <SearchableSelect
-                          items={pageSizeItems}
-                          value={pageSize.toString()}
-                          onValueChange={(value) => handlePageSizeChange(Number(value))}
-                          placeholder="Select page size"
-                          searchPlaceholder="Search..."
-                          emptyText="No options found"
-                          data-testid="select-page-size"
-                        />
-                      </div>
                     </div>
-                
-                {/* Search and Filter Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mt-4">
+
+                    {/* Search and Filter Controls - Compact */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 mt-2">
                   <div className="lg:col-span-2 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
@@ -2201,7 +2499,7 @@ export default function Banking() {
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right relative pr-10">
-                              Payments
+                              <span className="text-rose-600 font-medium">Payments</span>
                               <div
                                 className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('payments', e)}
@@ -2210,7 +2508,7 @@ export default function Banking() {
                               </div>
                             </TableHead>
                             <TableHead style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right relative pr-10">
-                              Deposits
+                              <span className="text-emerald-600 font-medium">Deposits</span>
                               <div
                                 className="absolute top-0 right-0 w-8 h-full cursor-col-resize hover:bg-primary/20 transition-colors group z-20"
                                 onMouseDown={(e) => handleResizeStart('deposits', e)}
@@ -2276,9 +2574,17 @@ export default function Banking() {
                             <Table style={{ tableLayout: 'fixed', width: `${totalTableWidth}px` }}>
                               <TableBody>
                           {paginatedTransactions.map((tx) => (
-                            <TableRow 
-                              key={tx.id} 
-                              className={`h-12 ${activeTab === 'uncategorized' && !tx.matchedTransactionId ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                            <TableRow
+                              key={tx.id}
+                              className={`h-12 transition-all duration-150 ${
+                                selectedTransactions.has(tx.id)
+                                  ? 'bg-primary/5 border-l-2 border-l-primary'
+                                  : 'hover:bg-slate-50/80'
+                              } ${
+                                activeTab === 'uncategorized' && !tx.matchedTransactionId
+                                  ? 'cursor-pointer hover:shadow-sm'
+                                  : ''
+                              }`}
                               onClick={() => {
                                 if (activeTab === 'uncategorized' && !tx.matchedTransactionId) {
                                   setSelectedTransaction(tx);
@@ -2324,10 +2630,18 @@ export default function Banking() {
                                 )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.payments}px`, minWidth: `${columnWidths.payments}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) < 0 ? formatCurrency(Math.abs(Number(tx.amount)), homeCurrency, homeCurrency) : '-'}
+                                {Number(tx.amount) < 0 ? (
+                                  <span className="text-rose-600 font-semibold">{formatCurrency(Math.abs(Number(tx.amount)), homeCurrency, homeCurrency)}</span>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell style={{ width: `${columnWidths.deposits}px`, minWidth: `${columnWidths.deposits}px` }} className="text-right font-medium py-2 overflow-hidden truncate">
-                                {Number(tx.amount) > 0 ? formatCurrency(Number(tx.amount), homeCurrency, homeCurrency) : '-'}
+                                {Number(tx.amount) > 0 ? (
+                                  <span className="text-emerald-600 font-semibold">{formatCurrency(Number(tx.amount), homeCurrency, homeCurrency)}</span>
+                                ) : (
+                                  <span className="text-gray-300">-</span>
+                                )}
                               </TableCell>
                               <TableCell 
                                 style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} 
@@ -2440,11 +2754,15 @@ export default function Banking() {
                                       
                                       return (
                                         <div className="flex flex-col gap-1.5">
-                                          <div className="flex items-center gap-1.5 bg-gray-100 rounded-md p-0.5">
+                                          <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5">
                                             <Button
                                               variant={mode === 'match' ? 'default' : 'ghost'}
                                               size="sm"
-                                              className="text-[11px] px-2 h-6 flex-1"
+                                              className={`text-[11px] px-2 h-6 flex-1 rounded-md transition-all ${
+                                                mode === 'match'
+                                                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-sm'
+                                                  : 'hover:bg-slate-200'
+                                              }`}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (mode !== 'match') handleModeToggle(tx.id);
@@ -2456,7 +2774,11 @@ export default function Banking() {
                                             <Button
                                               variant={mode === 'categorize' ? 'default' : 'ghost'}
                                               size="sm"
-                                              className="text-[11px] px-2 h-6 flex-1"
+                                              className={`text-[11px] px-2 h-6 flex-1 rounded-md transition-all ${
+                                                mode === 'categorize'
+                                                  ? 'bg-gradient-to-r from-violet-500 to-violet-600 text-white shadow-sm'
+                                                  : 'hover:bg-slate-200'
+                                              }`}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (mode !== 'categorize') handleModeToggle(tx.id);
@@ -2467,20 +2789,24 @@ export default function Banking() {
                                             </Button>
                                           </div>
                                           {mode === 'match' && hasHighConfidenceMatch && (
-                                            <div className="text-[10px] text-gray-600 space-y-0.5">
+                                            <div className="text-[10px] space-y-0.5 bg-blue-50 rounded-md p-1.5 border border-blue-100">
                                               <div className="flex items-center gap-1">
-                                                <span className="font-medium">
+                                                <span className="font-medium text-blue-900">
                                                   {(() => {
                                                     const contact = contacts.find((c: any) => c.id === topMatch.contactId);
                                                     const contactName = topMatch.contactName || 'Unknown';
                                                     return formatContactName(contactName, contact?.currency, homeCurrency);
                                                   })()}
                                                 </span>
-                                                <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
+                                                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${
+                                                  topMatch.confidence >= 90 ? 'bg-emerald-500' :
+                                                  topMatch.confidence >= 80 ? 'bg-blue-500' :
+                                                  'bg-amber-500'
+                                                }`}>
                                                   {topMatch.confidence}%
                                                 </Badge>
                                               </div>
-                                              <div className="text-gray-500">
+                                              <div className="text-blue-600">
                                                 {formatCurrency(topMatch.amount, homeCurrency, homeCurrency)} • {format(new Date(topMatch.date), 'PP')}
                                               </div>
                                             </div>

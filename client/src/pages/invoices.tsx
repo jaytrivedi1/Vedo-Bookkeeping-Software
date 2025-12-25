@@ -218,7 +218,7 @@ export default function Invoices() {
           if (statusFilter === "all") return true;
           if (statusFilter === "paid") return invoice.status === "paid" || invoice.status === "completed";
           if (statusFilter === "open") return invoice.status === "open";
-          if (statusFilter === "overdue") return invoice.status === "overdue";
+          if (statusFilter === "overdue") return isOverdue(invoice);
           if (statusFilter === "partial") return invoice.status === "partial";
           return true;
         })

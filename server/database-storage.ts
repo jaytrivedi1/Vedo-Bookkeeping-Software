@@ -7,6 +7,7 @@ import {
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
   AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
   RecurringTemplate, RecurringLine, RecurringHistory,
+  MerchantPattern, CategorizationFeedback,
   InsertAccount, InsertContact, InsertContactNote, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
@@ -14,13 +15,15 @@ import {
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
   InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
   InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
+  InsertMerchantPattern, InsertCategorizationFeedback,
   accounts, contacts, contactNotesSchema, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema,
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
   accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema,
-  recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema
+  recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema,
+  merchantPatternsSchema, categorizationFeedbackSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -1994,8 +1997,9 @@ export class DatabaseStorage implements IStorage {
         invoiceStats.deposited.amount += Math.abs(balance);
       } else {
         const isOverdue = invoice.dueDate && new Date(invoice.dueDate) < today;
-        
-        if (isOverdue && invoice.status === 'open' || invoice.status === 'overdue') {
+
+        // Fixed operator precedence: invoice is overdue if due date is past AND status is open/partial/overdue
+        if (isOverdue && (invoice.status === 'open' || invoice.status === 'partial' || invoice.status === 'overdue')) {
           invoiceStats.overdue.count++;
           invoiceStats.overdue.amount += balance;
         }
@@ -2552,7 +2556,7 @@ export class DatabaseStorage implements IStorage {
   async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
     // Check if preferences already exist
     const existing = await this.getPreferences();
-    
+
     if (existing) {
       // Update existing preferences
       const [updated] = await db.update(preferencesSchema)
@@ -2568,6 +2572,63 @@ export class DatabaseStorage implements IStorage {
       const [newPreferences] = await db.insert(preferencesSchema)
         .values({
           ...preferences,
+          updatedAt: new Date()
+        })
+        .returning();
+      return newPreferences;
+    }
+  }
+
+  async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
+    // Ensure AI settings columns exist (inline migration for immediate availability)
+    const hasAiFields = 'aiCategorizationEnabled' in updates ||
+                        'aiAutoPostEnabled' in updates ||
+                        'aiAutoPostMinConfidence' in updates ||
+                        'aiRuleGenerationEnabled' in updates;
+
+    if (hasAiFields) {
+      try {
+        // Add AI columns if they don't exist
+        await db.execute(sql`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_categorization_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_categorization_enabled BOOLEAN NOT NULL DEFAULT true;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_auto_post_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_auto_post_enabled BOOLEAN NOT NULL DEFAULT false;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_auto_post_min_confidence') THEN
+              ALTER TABLE preferences ADD COLUMN ai_auto_post_min_confidence DECIMAL(3, 2) NOT NULL DEFAULT 0.95;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'preferences' AND column_name = 'ai_rule_generation_enabled') THEN
+              ALTER TABLE preferences ADD COLUMN ai_rule_generation_enabled BOOLEAN NOT NULL DEFAULT true;
+            END IF;
+          END $$;
+        `);
+      } catch (migrationError) {
+        console.error('Warning: Could not ensure AI columns exist:', migrationError);
+      }
+    }
+
+    // Check if preferences already exist
+    const existing = await this.getPreferences();
+
+    if (existing) {
+      // Update existing preferences with only the provided fields
+      const [updated] = await db.update(preferencesSchema)
+        .set({
+          ...updates,
+          updatedAt: new Date()
+        })
+        .where(eq(preferencesSchema.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new preferences with defaults + updates
+      const [newPreferences] = await db.insert(preferencesSchema)
+        .values({
+          ...updates,
           updatedAt: new Date()
         })
         .returning();
@@ -3863,5 +3924,178 @@ export class DatabaseStorage implements IStorage {
           lte(recurringTemplatesSchema.nextRunAt, now)
         )
       );
+  }
+
+  // ============================================
+  // Merchant Patterns (AI Learning)
+  // ============================================
+
+  async getMerchantPatterns(): Promise<MerchantPattern[]> {
+    return await db.select()
+      .from(merchantPatternsSchema)
+      .orderBy(desc(merchantPatternsSchema.totalOccurrences));
+  }
+
+  async getMerchantPattern(id: number): Promise<MerchantPattern | undefined> {
+    const [pattern] = await db.select()
+      .from(merchantPatternsSchema)
+      .where(eq(merchantPatternsSchema.id, id))
+      .limit(1);
+    return pattern;
+  }
+
+  async getMerchantPatternByName(merchantNameNormalized: string): Promise<MerchantPattern | undefined> {
+    const [pattern] = await db.select()
+      .from(merchantPatternsSchema)
+      .where(eq(merchantPatternsSchema.merchantNameNormalized, merchantNameNormalized))
+      .limit(1);
+    return pattern;
+  }
+
+  async createMerchantPattern(pattern: InsertMerchantPattern): Promise<MerchantPattern> {
+    const [newPattern] = await db.insert(merchantPatternsSchema)
+      .values({
+        ...pattern,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+    return newPattern;
+  }
+
+  async updateMerchantPattern(id: number, patternUpdate: Partial<MerchantPattern>): Promise<MerchantPattern> {
+    const [updatedPattern] = await db.update(merchantPatternsSchema)
+      .set({
+        ...patternUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(merchantPatternsSchema.id, id))
+      .returning();
+    return updatedPattern;
+  }
+
+  async deleteMerchantPattern(id: number): Promise<boolean> {
+    const result = await db.delete(merchantPatternsSchema)
+      .where(eq(merchantPatternsSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getMerchantPatternCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(merchantPatternsSchema);
+    return Number(result[0]?.count || 0);
+  }
+
+  async getTopMerchantPatterns(limit: number): Promise<MerchantPattern[]> {
+    return await db.select()
+      .from(merchantPatternsSchema)
+      .orderBy(desc(merchantPatternsSchema.totalOccurrences))
+      .limit(limit);
+  }
+
+  // ============================================
+  // Categorization Feedback (Learning)
+  // ============================================
+
+  async createCategorizationFeedback(feedback: InsertCategorizationFeedback): Promise<CategorizationFeedback> {
+    const [newFeedback] = await db.insert(categorizationFeedbackSchema)
+      .values({
+        ...feedback,
+        createdAt: new Date(),
+      })
+      .returning();
+    return newFeedback;
+  }
+
+  async getCategorizationFeedbackCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(categorizationFeedbackSchema);
+    return Number(result[0]?.count || 0);
+  }
+
+  async getAcceptedFeedbackCount(): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(categorizationFeedbackSchema)
+      .where(eq(categorizationFeedbackSchema.wasSuggestionAccepted, true));
+    return Number(result[0]?.count || 0);
+  }
+
+  // ============================================
+  // Extended Categorization Rules (AI Rules)
+  // ============================================
+
+  async getEnabledCategorizationRules(): Promise<CategorizationRule[]> {
+    return await db.select()
+      .from(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.isEnabled, true))
+      .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
+  }
+
+  async getCategorizationRulesByType(ruleType: 'manual' | 'ai'): Promise<CategorizationRule[]> {
+    return await db.select()
+      .from(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.ruleType, ruleType))
+      .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
+  }
+
+  async getAiRuleByMerchant(merchantNameNormalized: string): Promise<CategorizationRule | undefined> {
+    const [rule] = await db.select()
+      .from(categorizationRulesSchema)
+      .where(
+        and(
+          eq(categorizationRulesSchema.ruleType, 'ai'),
+          eq(categorizationRulesSchema.sourceMerchantPattern, merchantNameNormalized)
+        )
+      )
+      .limit(1);
+    return rule;
+  }
+
+  async getRuleCountByType(ruleType: 'manual' | 'ai'): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.ruleType, ruleType));
+    return Number(result[0]?.count || 0);
+  }
+
+  async deleteAiRules(): Promise<number> {
+    const result = await db.delete(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.ruleType, 'ai'));
+    return result.rowCount || 0;
+  }
+
+  async promoteAiRule(id: number): Promise<CategorizationRule | undefined> {
+    const [rule] = await db.select()
+      .from(categorizationRulesSchema)
+      .where(eq(categorizationRulesSchema.id, id))
+      .limit(1);
+
+    if (!rule || rule.ruleType !== 'ai') {
+      return undefined;
+    }
+
+    const [updatedRule] = await db.update(categorizationRulesSchema)
+      .set({
+        ruleType: 'manual',
+        priority: Math.min(rule.priority, 499), // Move to manual priority range
+        promotedToManualAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(categorizationRulesSchema.id, id))
+      .returning();
+
+    return updatedRule;
+  }
+
+  async promoteAllAiRules(): Promise<number> {
+    const result = await db.update(categorizationRulesSchema)
+      .set({
+        ruleType: 'manual',
+        promotedToManualAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(categorizationRulesSchema.ruleType, 'ai'));
+
+    return result.rowCount || 0;
   }
 }

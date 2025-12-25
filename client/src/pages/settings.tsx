@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Check, FileText, Sparkles, LayoutTemplate, Minimize2, X } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Separator } from "@/components/ui/separator";
+import { Check, FileText, Sparkles, LayoutTemplate, Minimize2, X, Brain, Zap, BookOpen } from "lucide-react";
 
 interface Preferences {
   id?: number;
@@ -20,6 +23,13 @@ interface Preferences {
   multiCurrencyEnabled?: boolean;
   homeCurrency?: string;
   transactionLockDate?: string | Date | null;
+}
+
+interface AiCategorizationSettings {
+  aiCategorizationEnabled: boolean;
+  aiAutoPostEnabled: boolean;
+  aiAutoPostMinConfidence: string;
+  aiRuleGenerationEnabled: boolean;
 }
 
 const templates = [
@@ -58,6 +68,55 @@ export default function Settings() {
   const { data: preferences, isLoading } = useQuery<Preferences>({
     queryKey: ["/api/settings/preferences"],
   });
+
+  // Fetch AI categorization settings
+  const { data: aiSettings, isLoading: isLoadingAi } = useQuery<AiCategorizationSettings>({
+    queryKey: ["/api/settings/categorization"],
+  });
+
+  // Local state for AI settings
+  const [localAiSettings, setLocalAiSettings] = useState<AiCategorizationSettings>({
+    aiCategorizationEnabled: true,
+    aiAutoPostEnabled: false,
+    aiAutoPostMinConfidence: "0.95",
+    aiRuleGenerationEnabled: true,
+  });
+
+  // Update local state when AI settings load
+  useEffect(() => {
+    if (aiSettings) {
+      setLocalAiSettings(aiSettings);
+    }
+  }, [aiSettings]);
+
+  // Update AI settings mutation
+  const updateAiSettings = useMutation({
+    mutationFn: async (updates: Partial<AiCategorizationSettings>) => {
+      return apiRequest("/api/settings/categorization", "PATCH", updates);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Settings saved",
+        description: "AI categorization settings updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/categorization"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to save settings: ${error}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleAiSettingChange = <K extends keyof AiCategorizationSettings>(
+    key: K,
+    value: AiCategorizationSettings[K]
+  ) => {
+    setLocalAiSettings(prev => ({ ...prev, [key]: value }));
+    updateAiSettings.mutate({ [key]: value });
+  };
 
   // Update selected template and lock date when preferences load
   useEffect(() => {
@@ -264,6 +323,127 @@ export default function Settings() {
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
               Saving...
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            AI Categorization
+          </CardTitle>
+          <CardDescription>
+            Configure how AI assists with bank transaction categorization
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isLoadingAi ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <>
+              {/* AI Suggestions Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-purple-500" />
+                    AI Categorization Suggestions
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Get AI-powered suggestions for new merchants (only merchant name is shared)
+                  </p>
+                </div>
+                <Switch
+                  checked={localAiSettings.aiCategorizationEnabled}
+                  onCheckedChange={(checked) =>
+                    handleAiSettingChange("aiCategorizationEnabled", checked)
+                  }
+                  disabled={updateAiSettings.isPending}
+                />
+              </div>
+
+              <Separator />
+
+              {/* Auto-Post Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-amber-500" />
+                    Auto-Post High Confidence Matches
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically categorize transactions when confidence is above threshold
+                  </p>
+                  <p className="text-xs text-amber-600">
+                    Only applies to learned patterns, never to new AI suggestions
+                  </p>
+                </div>
+                <Switch
+                  checked={localAiSettings.aiAutoPostEnabled}
+                  onCheckedChange={(checked) =>
+                    handleAiSettingChange("aiAutoPostEnabled", checked)
+                  }
+                  disabled={updateAiSettings.isPending}
+                />
+              </div>
+
+              {/* Confidence Threshold Slider */}
+              {localAiSettings.aiAutoPostEnabled && (
+                <div className="ml-6 p-4 bg-muted rounded-lg space-y-3">
+                  <Label>Minimum Confidence for Auto-Post</Label>
+                  <div className="flex items-center gap-4">
+                    <Slider
+                      value={[parseFloat(localAiSettings.aiAutoPostMinConfidence) * 100]}
+                      min={80}
+                      max={99}
+                      step={1}
+                      onValueCommit={([value]) =>
+                        handleAiSettingChange("aiAutoPostMinConfidence", (value / 100).toFixed(2))
+                      }
+                      className="flex-1"
+                      disabled={updateAiSettings.isPending}
+                    />
+                    <span className="font-mono w-12 text-right">
+                      {Math.round(parseFloat(localAiSettings.aiAutoPostMinConfidence) * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Higher threshold = fewer auto-posts but more accuracy
+                  </p>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* AI Rule Generation Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-blue-500" />
+                    Auto-Generate AI Rules
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically create rules when patterns are detected (3+ similar transactions)
+                  </p>
+                </div>
+                <Switch
+                  checked={localAiSettings.aiRuleGenerationEnabled}
+                  onCheckedChange={(checked) =>
+                    handleAiSettingChange("aiRuleGenerationEnabled", checked)
+                  }
+                  disabled={updateAiSettings.isPending}
+                />
+              </div>
+
+              {updateAiSettings.isPending && (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                  Saving...
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

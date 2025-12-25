@@ -38,8 +38,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ImportedTransaction, Account, Contact, SalesTax, Product } from "@shared/schema";
 import { format } from "date-fns";
-import { Loader2, Sparkles, TrendingUp, TrendingDown } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, TrendingDown, Brain, BookOpen, Wand2, HelpCircle } from "lucide-react";
 import { AddAccountDialog } from "@/components/dialogs/AddAccountDialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface CategorizeTransactionDialogProps {
   open: boolean;
@@ -73,14 +79,21 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-interface AISuggestion {
-  transactionType: TransactionType;
-  accountId: number;
-  accountName: string;
+type SuggestionSource = 'pattern' | 'rule' | 'ai' | 'none';
+
+interface SmartSuggestion {
+  source: SuggestionSource;
+  confidence: number;
+  transactionType?: string;
+  accountId?: number;
+  accountName?: string;
+  contactId?: number;
   contactName?: string;
   salesTaxId?: number;
-  confidence: number;
-  reasoning: string;
+  reasoning?: string;
+  requiresApproval: boolean;
+  ruleId?: number;
+  patternId?: number;
 }
 
 export default function CategorizeTransactionDialog({
@@ -89,7 +102,7 @@ export default function CategorizeTransactionDialog({
   transaction,
 }: CategorizeTransactionDialogProps) {
   const { toast } = useToast();
-  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion | null>(null);
+  const [smartSuggestion, setSmartSuggestion] = useState<SmartSuggestion | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [addAccountOpen, setAddAccountOpen] = useState(false);
   const [accountFieldContext, setAccountFieldContext] = useState<'account' | 'transfer'>('account');
@@ -171,7 +184,7 @@ export default function CategorizeTransactionDialog({
   // Watch the transaction type directly - no need for separate state
   const selectedType = form.watch("transactionType");
 
-  // Fetch AI suggestions when dialog opens with a transaction
+  // Fetch smart suggestions when dialog opens with a transaction
   useEffect(() => {
     if (open && transaction) {
       // Reset form with intelligent defaults based on transaction amount
@@ -184,39 +197,71 @@ export default function CategorizeTransactionDialog({
         productId: null,
         transferAccountId: null,
       });
-      
+
       setLoadingSuggestions(true);
-      apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+      // First try the new smart suggestion endpoint
+      apiRequest("/api/bank-feeds/smart-suggestion", "POST", {
         transactionId: transaction.id,
       })
         .then((data) => {
-          // Transform the nested API response to match the frontend interface
-          const suggestions = data?.suggestions;
-          if (suggestions) {
-            const transformed: AISuggestion = {
-              transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
-              accountId: suggestions.account?.id || 0,
-              accountName: suggestions.account?.name || "Unknown Account",
-              contactName: suggestions.contact?.name,
-              salesTaxId: suggestions.tax?.id,
-              confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
-              reasoning: suggestions.reasoning || "No reasoning provided",
-            };
-            console.log("Transformed AI suggestions:", transformed);
-            setAiSuggestions(transformed);
+          if (data && data.source !== 'none') {
+            setSmartSuggestion(data as SmartSuggestion);
           } else {
-            console.warn("No suggestions in API response:", data);
+            // Fallback to old endpoint if no smart suggestion
+            return apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+              transactionId: transaction.id,
+            }).then((fallbackData) => {
+              const suggestions = fallbackData?.suggestions;
+              if (suggestions) {
+                const transformed: SmartSuggestion = {
+                  source: 'ai',
+                  transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
+                  accountId: suggestions.account?.id || 0,
+                  accountName: suggestions.account?.name || "Unknown Account",
+                  contactName: suggestions.contact?.name,
+                  salesTaxId: suggestions.tax?.id,
+                  confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
+                  reasoning: suggestions.reasoning || "No reasoning provided",
+                  requiresApproval: true,
+                };
+                setSmartSuggestion(transformed);
+              }
+            });
           }
         })
         .catch((error) => {
-          console.error("Failed to fetch AI suggestions:", error);
+          console.error("Failed to fetch suggestions:", error);
+          // Try fallback on error
+          apiRequest("/api/bank-feeds/categorization-suggestions", "POST", {
+            transactionId: transaction.id,
+          })
+            .then((fallbackData) => {
+              const suggestions = fallbackData?.suggestions;
+              if (suggestions) {
+                const transformed: SmartSuggestion = {
+                  source: 'ai',
+                  transactionType: suggestions.transactionType || (transaction.amount < 0 ? "expense" : "deposit"),
+                  accountId: suggestions.account?.id || 0,
+                  accountName: suggestions.account?.name || "Unknown Account",
+                  contactName: suggestions.contact?.name,
+                  salesTaxId: suggestions.tax?.id,
+                  confidence: suggestions.confidence === 'High' ? 0.9 : suggestions.confidence === 'Medium' ? 0.7 : 0.5,
+                  reasoning: suggestions.reasoning || "No reasoning provided",
+                  requiresApproval: true,
+                };
+                setSmartSuggestion(transformed);
+              }
+            })
+            .catch(() => {
+              // Silent fail - no suggestions available
+            });
         })
         .finally(() => {
           setLoadingSuggestions(false);
         });
     } else if (!open) {
       // Reset when dialog closes
-      setAiSuggestions(null);
+      setSmartSuggestion(null);
       form.reset();
     }
   }, [open, transaction]);
@@ -294,99 +339,174 @@ export default function CategorizeTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="dialog-categorize-transaction">
-        <DialogHeader>
-          <DialogTitle>Categorize Transaction</DialogTitle>
-          <DialogDescription>
-            Review AI suggestions and categorize this transaction
-          </DialogDescription>
-        </DialogHeader>
-
-        {/* Transaction Details */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Transaction Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Date:</span>
-              <span className="font-medium">{format(new Date(transaction.date), "MMM d, yyyy")}</span>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0" data-testid="dialog-categorize-transaction">
+        {/* Modern Header with Transaction Summary */}
+        <div className={`px-6 py-4 border-b ${isDebit ? 'bg-gradient-to-r from-rose-50 to-white' : 'bg-gradient-to-r from-emerald-50 to-white'}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <DialogTitle className="text-lg font-semibold text-gray-900">
+                Categorize Transaction
+              </DialogTitle>
+              <DialogDescription className="text-sm text-gray-500 mt-0.5">
+                {transaction.name}
+              </DialogDescription>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Description:</span>
-              <span className="font-medium">{transaction.name}</span>
-            </div>
-            {transaction.merchantName && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Merchant:</span>
-                <span className="font-medium">{transaction.merchantName}</span>
-              </div>
-            )}
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Amount:</span>
-              <div className="flex items-center gap-2">
+            <div className={`text-right ${isDebit ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <div className="flex items-center gap-2 justify-end">
                 {isDebit ? (
-                  <TrendingDown className="h-4 w-4 text-red-500" />
+                  <TrendingDown className="h-5 w-5" />
                 ) : (
-                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  <TrendingUp className="h-5 w-5" />
                 )}
-                <span className={`font-semibold ${isDebit ? 'text-red-600' : 'text-green-600'}`}>
+                <span className="text-2xl font-bold">
                   ${displayAmount.toFixed(2)}
                 </span>
               </div>
+              <span className="text-xs text-gray-500">
+                {format(new Date(transaction.date), "MMM d, yyyy")}
+                {transaction.merchantName && ` • ${transaction.merchantName}`}
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* AI Suggestions */}
+        <div className="px-6 py-4 space-y-4">
+
+        {/* Smart Suggestions */}
         {loadingSuggestions ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                AI Suggestions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-8 w-8 rounded-lg bg-slate-200 animate-pulse"></div>
+              <Skeleton className="h-5 w-32" />
+            </div>
+            <div className="space-y-2">
               <Skeleton className="h-4 w-full" />
               <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-full" />
-            </CardContent>
-          </Card>
-        ) : aiSuggestions ? (
-          <Card className="border-primary/50 bg-primary/5">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Suggestions
-                </CardTitle>
-                <Badge variant="secondary">
-                  {Math.round(aiSuggestions.confidence * 100)}% confident
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Suggested Type:</span>{" "}
-                <span className="font-medium">{getTypeLabel(aiSuggestions.transactionType)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Suggested Account:</span>{" "}
-                <span className="font-medium">{aiSuggestions.accountName}</span>
-              </div>
-              {aiSuggestions.contactName && (
-                <div>
-                  <span className="text-muted-foreground">Suggested Contact:</span>{" "}
-                  <span className="font-medium">{aiSuggestions.contactName}</span>
+            </div>
+          </div>
+        ) : smartSuggestion ? (
+          <div className={`rounded-xl border-2 overflow-hidden transition-all ${
+            smartSuggestion.source === 'pattern' ? 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white' :
+            smartSuggestion.source === 'rule' ? 'border-blue-200 bg-gradient-to-br from-blue-50 to-white' :
+            smartSuggestion.source === 'ai' ? 'border-violet-200 bg-gradient-to-br from-violet-50 to-white' :
+            'border-slate-200 bg-gradient-to-br from-slate-50 to-white'
+          }`}>
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                    smartSuggestion.source === 'pattern' ? 'bg-emerald-100' :
+                    smartSuggestion.source === 'rule' ? 'bg-blue-100' :
+                    smartSuggestion.source === 'ai' ? 'bg-violet-100' :
+                    'bg-slate-100'
+                  }`}>
+                    {smartSuggestion.source === 'pattern' && <Brain className="h-5 w-5 text-emerald-600" />}
+                    {smartSuggestion.source === 'rule' && <BookOpen className="h-5 w-5 text-blue-600" />}
+                    {smartSuggestion.source === 'ai' && <Wand2 className="h-5 w-5 text-violet-600" />}
+                    {smartSuggestion.source === 'none' && <HelpCircle className="h-5 w-5 text-slate-500" />}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {smartSuggestion.source === 'pattern' && 'Learned Pattern'}
+                      {smartSuggestion.source === 'rule' && 'Matched Rule'}
+                      {smartSuggestion.source === 'ai' && 'AI Suggestion'}
+                      {smartSuggestion.source === 'none' && 'No Suggestion'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {smartSuggestion.source === 'pattern' && 'Based on your previous categorizations'}
+                      {smartSuggestion.source === 'rule' && 'Matched an existing rule'}
+                      {smartSuggestion.source === 'ai' && 'Intelligent recommendation'}
+                    </p>
+                  </div>
                 </div>
-              )}
-              <div className="pt-2 border-t">
-                <span className="text-muted-foreground">Reasoning:</span>
-                <p className="mt-1 text-xs text-muted-foreground italic">{aiSuggestions.reasoning}</p>
+                <div className="flex items-center gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Badge className={`font-semibold ${
+                          smartSuggestion.confidence >= 0.9 ? 'bg-emerald-500 hover:bg-emerald-600' :
+                          smartSuggestion.confidence >= 0.8 ? 'bg-blue-500 hover:bg-blue-600' :
+                          smartSuggestion.confidence >= 0.7 ? 'bg-amber-500 hover:bg-amber-600' :
+                          'bg-slate-500 hover:bg-slate-600'
+                        }`}>
+                          {Math.round(smartSuggestion.confidence * 100)}% match
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Confidence based on {
+                          smartSuggestion.source === 'pattern' ? 'historical categorizations' :
+                          smartSuggestion.source === 'rule' ? 'rule matching' :
+                          'AI analysis'
+                        }</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+
+              {/* Suggestion Details */}
+              <div className="grid grid-cols-3 gap-3 text-sm mb-3">
+                {smartSuggestion.transactionType && (
+                  <div className="bg-white/60 rounded-lg p-2 border border-slate-100">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Type</p>
+                    <p className="font-semibold text-gray-800">{getTypeLabel(smartSuggestion.transactionType as TransactionType)}</p>
+                  </div>
+                )}
+                {smartSuggestion.accountName && (
+                  <div className="bg-white/60 rounded-lg p-2 border border-slate-100">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Account</p>
+                    <p className="font-semibold text-gray-800 truncate">{smartSuggestion.accountName}</p>
+                  </div>
+                )}
+                {smartSuggestion.contactName && (
+                  <div className="bg-white/60 rounded-lg p-2 border border-slate-100">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Contact</p>
+                    <p className="font-semibold text-gray-800 truncate">{smartSuggestion.contactName}</p>
+                  </div>
+                )}
+              </div>
+
+              {smartSuggestion.reasoning && (
+                <p className="text-xs text-gray-500 italic border-t border-slate-100 pt-2 mb-3">
+                  💡 {smartSuggestion.reasoning}
+                </p>
+              )}
+
+              {/* Apply Suggestion Button */}
+              {smartSuggestion.accountId && (
+                <Button
+                  type="button"
+                  className={`w-full transition-all ${
+                    smartSuggestion.source === 'pattern' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700' :
+                    smartSuggestion.source === 'rule' ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700' :
+                    'bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700'
+                  }`}
+                  onClick={() => {
+                    if (smartSuggestion.transactionType) {
+                      form.setValue("transactionType", smartSuggestion.transactionType as TransactionType);
+                    }
+                    if (smartSuggestion.accountId) {
+                      form.setValue("accountId", smartSuggestion.accountId);
+                    }
+                    if (smartSuggestion.contactName) {
+                      form.setValue("contactName", smartSuggestion.contactName);
+                    }
+                    if (smartSuggestion.salesTaxId) {
+                      form.setValue("salesTaxId", smartSuggestion.salesTaxId);
+                    }
+                    toast({
+                      title: "Suggestion Applied",
+                      description: "Review and confirm the categorization below",
+                    });
+                  }}
+                  data-testid="button-apply-suggestion"
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Apply This Suggestion
+                </Button>
+              )}
+            </div>
+          </div>
         ) : null}
 
         {/* Categorization Form */}
@@ -652,12 +772,13 @@ export default function CategorizeTransactionDialog({
             />
 
             {/* Actions */}
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={categorizeMutation.isPending}
+                className="px-6"
                 data-testid="button-cancel"
               >
                 Cancel
@@ -665,16 +786,18 @@ export default function CategorizeTransactionDialog({
               <Button
                 type="submit"
                 disabled={categorizeMutation.isPending}
+                className="px-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-sm"
                 data-testid="button-categorize"
               >
                 {categorizeMutation.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Categorize
+                Categorize Transaction
               </Button>
             </div>
           </form>
         </Form>
+        </div>
       </DialogContent>
       
       <AddAccountDialog
