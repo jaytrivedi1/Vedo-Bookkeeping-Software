@@ -13833,6 +13833,23 @@ Respond in JSON format:
     }
   });
 
+  // Run AI migration manually (for serverless environments like Vercel)
+  apiRouter.post("/admin/run-ai-migration", async (req: Request, res: Response) => {
+    try {
+      console.log("[Admin] Running AI categorization migration manually...");
+      const { addAiCategorizationTables } = await import('./migrations/add-ai-categorization');
+      await addAiCategorizationTables();
+      res.json({ success: true, message: "AI categorization migration completed successfully!" });
+    } catch (error: any) {
+      console.error("[Admin] Migration failed:", error);
+      res.status(500).json({
+        success: false,
+        message: "Migration failed",
+        error: error?.message || String(error)
+      });
+    }
+  });
+
   app.use("/api", apiRouter);
 
   const httpServer = createServer(app);
