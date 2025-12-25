@@ -10097,6 +10097,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { recordCategorizationFeedback } = await import('./services/feedback-service');
         const { normalizeMerchantName } = await import('./services/merchant-normalizer');
 
+        const merchantName = importedTx.merchantName || importedTx.name;
+        console.log('[Categorization] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
+
         // Create storage adapter for feedback service
         const feedbackStorage = {
           getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
@@ -10116,9 +10119,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           suggestionSource = 'rule'; // Rule-based suggestion was available
         }
 
-        await recordCategorizationFeedback(feedbackStorage, {
+        const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
           importedTransactionId: transactionId,
-          merchantName: importedTx.merchantName || importedTx.name,
+          merchantName: merchantName,
           transactionAmount: importedTx.amount,
           transactionDate: new Date(importedTx.date),
           suggestionSource,
@@ -10131,9 +10134,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           chosenTaxId: salesTaxId,
           chosenTransactionType: transactionType,
         });
+        console.log('[Categorization] Feedback recorded:', feedbackResult);
       } catch (feedbackError) {
         // Log but don't fail the request if feedback recording fails
-        console.error('Error recording categorization feedback:', feedbackError);
+        console.error('[Categorization] Error recording categorization feedback:', feedbackError);
       }
 
       res.json({
