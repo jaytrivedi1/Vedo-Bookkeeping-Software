@@ -12,11 +12,12 @@ import { deleteDepositAndReverseApplications } from "./deposit-delete-handler";
 import { format } from "date-fns";
 import { roundTo2Decimals } from "@shared/utils";
 import { createExchangeRateService } from "./exchange-rate-service";
-import { 
-  insertAccountSchema, 
-  insertContactSchema, 
-  insertTransactionSchema, 
-  insertLineItemSchema, 
+import * as RulesEngine from "./rules-engine";
+import {
+  insertAccountSchema,
+  insertContactSchema,
+  insertTransactionSchema,
+  insertLineItemSchema,
   insertLedgerEntrySchema,
   insertSalesTaxSchema,
   insertProductSchema,
@@ -67,98 +68,29 @@ import path from 'path';
 import fs from 'fs';
 
 // Helper function to apply categorization rules to an imported transaction
+// Uses the new RulesEngine for reliable rule matching
 async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string } | null> {
   try {
-    // Get all rules ordered by priority
-    const rules = await storage.getCategorizationRules();
-
-    // Debug: Log raw isEnabled values to identify the issue
-    console.log('[ApplyRules] Raw rules from DB:', rules.map(r => ({
-      id: r.id,
-      name: r.name,
-      isEnabled: r.isEnabled,
-      isEnabledType: typeof r.isEnabled,
-      isEnabledRaw: JSON.stringify(r.isEnabled)
-    })));
-
-    // Filter enabled rules - handle string/boolean conversion explicitly
-    const enabledRules = rules
-      .filter(rule => {
-        // Handle various representations of "enabled" state
-        const isEnabled = rule.isEnabled === true ||
-                          rule.isEnabled === 'true' ||
-                          rule.isEnabled === 1 ||
-                          (rule.isEnabled as any) === 't';
-        console.log(`[ApplyRules] Rule ${rule.id} (${rule.name}): isEnabled=${rule.isEnabled}, evaluated=${isEnabled}`);
-        return isEnabled;
-      })
-      .sort((a, b) => a.priority - b.priority);
-
-    console.log('[ApplyRules] Testing transaction:', {
+    const rules = await RulesEngine.getEnabledRules();
+    const match = RulesEngine.matchTransaction({
       id: importedTx.id,
-      name: importedTx.name,
+      name: importedTx.name || '',
       merchantName: importedTx.merchantName,
       amount: importedTx.amount,
-    });
-    console.log('[ApplyRules] Found', enabledRules.length, 'enabled rules out of', rules.length, 'total');
+    }, rules);
 
-    // Test each rule against the transaction
-    for (const rule of enabledRules) {
-      let matches = true;
-      const conditions = rule.conditions as any;
-
-      // Check description condition
-      if (conditions.descriptionContains) {
-        const searchTerm = conditions.descriptionContains.toLowerCase().trim();
-        const description = (importedTx.name || '').toLowerCase();
-        const merchantName = (importedTx.merchantName || '').toLowerCase();
-
-        const descMatches = description.includes(searchTerm);
-        const merchMatches = merchantName.includes(searchTerm);
-
-        console.log('[ApplyRules] Rule:', rule.name, '| searchTerm:', searchTerm, '| description:', description, '| merchantName:', merchantName, '| descMatches:', descMatches, '| merchMatches:', merchMatches);
-
-        if (!descMatches && !merchMatches) {
-          matches = false;
-        }
-      }
-
-      // Check amount range conditions (only if they are meaningful values > 0)
-      const txAmount = Math.abs(importedTx.amount);
-      const amountMin = Number(conditions.amountMin);
-      const amountMax = Number(conditions.amountMax);
-
-      if (!isNaN(amountMin) && amountMin > 0) {
-        if (txAmount < amountMin) {
-          console.log('[ApplyRules] Amount too low:', txAmount, '<', amountMin);
-          matches = false;
-        }
-      }
-      if (!isNaN(amountMax) && amountMax > 0) {
-        if (txAmount > amountMax) {
-          console.log('[ApplyRules] Amount too high:', txAmount, '>', amountMax);
-          matches = false;
-        }
-      }
-
-      // If all conditions match, return the actions
-      if (matches) {
-        console.log('[ApplyRules] MATCH! Rule:', rule.name, 'matched transaction:', importedTx.id);
-        const actions = rule.actions as any;
-        return {
-          accountId: actions.accountId || undefined,
-          contactName: actions.contactName || undefined,
-          memo: actions.memo || undefined,
-          salesTaxId: rule.salesTaxId || undefined,
-          matchedRule: rule.name,
-        };
-      }
+    if (match) {
+      return {
+        accountId: match.accountId,
+        contactName: match.contactName,
+        memo: match.memo,
+        salesTaxId: match.salesTaxId ?? undefined,
+        matchedRule: match.ruleName,
+      };
     }
-
-    console.log('[ApplyRules] No matching rules for transaction:', importedTx.id);
-    return null; // No matching rules
+    return null;
   } catch (error) {
-    console.error('Error applying rules:', error);
+    console.error('[applyRulesToTransaction] Error:', error);
     return null;
   }
 }
@@ -11498,10 +11430,11 @@ Respond in JSON format:
     }
   });
 
-  // Categorization Rules routes
+  // Categorization Rules routes - Using new RulesEngine
   apiRouter.get("/categorization-rules", async (req: Request, res: Response) => {
     try {
-      const rules = await storage.getCategorizationRules();
+      const rules = await RulesEngine.getAllRules();
+      console.log('[Routes] GET /categorization-rules - Found', rules.length, 'rules');
       res.json(rules);
     } catch (error) {
       console.error("Error fetching categorization rules:", error);
@@ -11511,12 +11444,12 @@ Respond in JSON format:
 
   apiRouter.get("/categorization-rules/:id", async (req: Request, res: Response) => {
     try {
-      const rule = await storage.getCategorizationRule(Number(req.params.id));
-      
+      const rule = await RulesEngine.getRule(Number(req.params.id));
+
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
       }
-      
+
       res.json(rule);
     } catch (error) {
       console.error("Error fetching categorization rule:", error);
@@ -11526,8 +11459,9 @@ Respond in JSON format:
 
   apiRouter.post("/categorization-rules", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
-      let name, conditions, actions, salesTaxId, isEnabled, priority;
-      
+      let name, conditions, actions, salesTaxId, isEnabled, priority, ruleType;
+
+      // Parse request body (handles both JSON string and regular form data)
       if (req.body.name && typeof req.body.name === 'string' && req.body.name.startsWith('{')) {
         const parsedBody = JSON.parse(req.body.name);
         name = parsedBody.name;
@@ -11536,46 +11470,47 @@ Respond in JSON format:
         salesTaxId = parsedBody.salesTaxId;
         isEnabled = parsedBody.isEnabled;
         priority = parsedBody.priority;
+        ruleType = parsedBody.ruleType;
       } else {
         name = req.body.name;
         conditions = typeof req.body.conditions === 'string' ? JSON.parse(req.body.conditions) : req.body.conditions;
         actions = typeof req.body.actions === 'string' ? JSON.parse(req.body.actions) : req.body.actions;
         salesTaxId = req.body.salesTaxId;
-        // Parse boolean from string for isEnabled
-        isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true;
+        isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true || req.body.isEnabled === undefined;
         priority = req.body.priority;
+        ruleType = req.body.ruleType;
       }
-      
+
       if (!name || !conditions || !actions) {
         if (req.file && fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
         }
         return res.status(400).json({ message: "Name, conditions, and actions are required" });
       }
-      
-      const ruleData: any = {
+
+      console.log('[Routes] POST /categorization-rules - Creating rule:', { name, conditions, actions, isEnabled });
+
+      // Use the new RulesEngine to create the rule
+      const rule = await RulesEngine.createRule({
         name,
         conditions,
         actions,
-        salesTaxId: salesTaxId || null,
-        isEnabled: isEnabled !== undefined ? isEnabled : true,
-        priority: priority || 0
-      };
-      
-      if (req.file) {
-        ruleData.attachmentPath = req.file.path;
-      }
-      
-      const rule = await storage.createCategorizationRule(ruleData);
-      
+        salesTaxId: salesTaxId ? Number(salesTaxId) : null,
+        isEnabled: isEnabled !== false, // Default to true
+        priority: priority ? Number(priority) : 0,
+        ruleType: ruleType || 'manual',
+      });
+
+      console.log('[Routes] Rule created successfully:', { id: rule.id, name: rule.name, isEnabled: rule.isEnabled });
+
       res.json(rule);
     } catch (error: any) {
       console.error("Error creating categorization rule:", error);
-      
+
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      
+
       res.status(500).json({ message: error.message || "Failed to create categorization rule" });
     }
   });
@@ -11583,17 +11518,17 @@ Respond in JSON format:
   apiRouter.patch("/categorization-rules/:id", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
-      
-      const existingRule = await storage.getCategorizationRule(ruleId);
+
+      const existingRule = await RulesEngine.getRule(ruleId);
       if (!existingRule) {
         if (req.file && fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
         }
         return res.status(404).json({ message: "Rule not found" });
       }
-      
+
       let updateData: any = {};
-      
+
       if (req.body.name && typeof req.body.name === 'string' && req.body.name.startsWith('{')) {
         updateData = JSON.parse(req.body.name);
       } else {
@@ -11604,63 +11539,30 @@ Respond in JSON format:
         if (req.body.actions && typeof req.body.actions === 'string') {
           updateData.actions = JSON.parse(req.body.actions);
         }
-        // Parse boolean from string for isEnabled
         if (req.body.isEnabled !== undefined) {
           updateData.isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true;
         }
       }
-      
-      if (req.file) {
-        if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
-          try {
-            fs.unlinkSync(existingRule.attachmentPath);
-          } catch (err) {
-            console.error('Error deleting old attachment:', err);
-          }
-        }
-        updateData.attachmentPath = req.file.path;
-      } else if (updateData.attachmentPath === null || updateData.attachmentPath === '') {
-        if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
-          try {
-            fs.unlinkSync(existingRule.attachmentPath);
-          } catch (err) {
-            console.error('Error deleting attachment:', err);
-          }
-        }
-        updateData.attachmentPath = null;
-      }
 
-      // Promote AI rule to manual if conditions or actions are being modified
-      if (existingRule.ruleType === 'ai') {
-        const conditionsChanged = updateData.conditions && JSON.stringify(updateData.conditions) !== JSON.stringify(existingRule.conditions);
-        const actionsChanged = updateData.actions && JSON.stringify(updateData.actions) !== JSON.stringify(existingRule.actions);
-        const nameChanged = updateData.name && updateData.name !== existingRule.name;
+      console.log('[Routes] PATCH /categorization-rules/:id - Updating rule:', { ruleId, updateData });
 
-        if (conditionsChanged || actionsChanged || nameChanged) {
-          console.log('[RuleUpdate] Promoting AI rule to manual:', { ruleId, conditionsChanged, actionsChanged, nameChanged });
-          updateData.ruleType = 'manual';
-          updateData.promotedToManualAt = new Date();
-          // Give manual rules higher priority (lower number)
-          if (existingRule.priority >= 500) {
-            updateData.priority = Math.min(existingRule.priority, 499);
-          }
-        }
-      }
+      // Use the new RulesEngine to update
+      const updatedRule = await RulesEngine.updateRule(ruleId, updateData);
 
-      const updatedRule = await storage.updateCategorizationRule(ruleId, updateData);
-      
       if (!updatedRule) {
         return res.status(404).json({ message: "Rule not found" });
       }
-      
+
+      console.log('[Routes] Rule updated successfully:', { id: updatedRule.id, name: updatedRule.name, isEnabled: updatedRule.isEnabled });
+
       res.json(updatedRule);
     } catch (error: any) {
       console.error("Error updating categorization rule:", error);
-      
+
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      
+
       res.status(500).json({ message: error.message || "Failed to update categorization rule" });
     }
   });
@@ -11668,26 +11570,12 @@ Respond in JSON format:
   apiRouter.delete("/categorization-rules/:id", async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
-      
-      const existingRule = await storage.getCategorizationRule(ruleId);
-      if (!existingRule) {
-        return res.status(404).json({ message: "Rule not found" });
-      }
-      
-      if (existingRule.attachmentPath && fs.existsSync(existingRule.attachmentPath)) {
-        try {
-          fs.unlinkSync(existingRule.attachmentPath);
-        } catch (err) {
-          console.error('Error deleting attachment file:', err);
-        }
-      }
-      
-      const deleted = await storage.deleteCategorizationRule(ruleId);
-      
+
+      const deleted = await RulesEngine.deleteRule(ruleId);
       if (!deleted) {
         return res.status(404).json({ message: "Rule not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting categorization rule:", error);
@@ -11698,8 +11586,8 @@ Respond in JSON format:
   apiRouter.get("/categorization-rules/:id/attachment", async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
-      
-      const rule = await storage.getCategorizationRule(ruleId);
+
+      const rule = await RulesEngine.getRule(ruleId);
       
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -11806,7 +11694,8 @@ Respond in JSON format:
       if (ruleType !== 'manual' && ruleType !== 'ai') {
         return res.status(400).json({ message: "Invalid rule type. Must be 'manual' or 'ai'" });
       }
-      const rules = await storage.getCategorizationRulesByType(ruleType);
+      const rules = await RulesEngine.getRulesByType(ruleType);
+      console.log('[Routes] GET /categorization-rules/type/' + ruleType + ' - Found', rules.length, 'rules');
       res.json(rules);
     } catch (error) {
       console.error("Error fetching categorization rules by type:", error);
@@ -11818,7 +11707,7 @@ Respond in JSON format:
   apiRouter.post("/categorization-rules/:id/promote", async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
-      const rule = await storage.getCategorizationRule(ruleId);
+      const rule = await RulesEngine.getRule(ruleId);
 
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -11828,7 +11717,11 @@ Respond in JSON format:
         return res.status(400).json({ message: "Only AI rules can be promoted to manual" });
       }
 
-      const promotedRule = await storage.promoteAiRule(ruleId);
+      // Promote by updating ruleType to 'manual'
+      const promotedRule = await RulesEngine.updateRule(ruleId, {
+        ruleType: 'manual' as any,
+        priority: Math.min(rule.priority, 499), // Give higher priority
+      });
       res.json({ success: true, rule: promotedRule });
     } catch (error) {
       console.error("Error promoting AI rule:", error);
@@ -11930,23 +11823,15 @@ Respond in JSON format:
   // Enable all disabled AI rules
   apiRouter.post("/categorization-rules/ai/enable-all", async (req: Request, res: Response) => {
     try {
-      const aiRules = await storage.getCategorizationRulesByType('ai');
+      const enabledCount = await RulesEngine.enableAllRulesByType('ai');
+      const aiRules = await RulesEngine.getRulesByType('ai');
 
-      // Use raw SQL to force enable all AI rules to bypass any ORM issues
-      const result = await db.execute(sql`
-        UPDATE categorization_rules
-        SET is_enabled = true, updated_at = NOW()
-        WHERE rule_type = 'ai'
-        RETURNING id, name, is_enabled
-      `);
-
-      console.log('[EnableAll] Force enabled AI rules:', result.rows);
+      console.log('[EnableAll] Enabled', enabledCount, 'AI rules');
 
       res.json({
         success: true,
-        enabledCount: result.rows.length,
+        enabledCount,
         totalAiRules: aiRules.length,
-        updatedRules: result.rows
       });
     } catch (error) {
       console.error("Error enabling AI rules:", error);
@@ -11954,20 +11839,15 @@ Respond in JSON format:
     }
   });
 
-  // Debug endpoint to test rule matching without applying
+  // Debug endpoint to test rule matching
   apiRouter.post("/categorization-rules/debug-test", async (req: Request, res: Response) => {
     try {
       const { transactionId } = req.body;
 
-      // Get all rules with raw SQL to see exactly what's in the database
-      const rulesResult = await db.execute(sql`
-        SELECT id, name, is_enabled, priority, conditions, actions, rule_type
-        FROM categorization_rules
-        ORDER BY priority, id
-      `);
-
-      const rules = rulesResult.rows;
-      console.log('[DebugTest] Raw rules from database:', rules);
+      // Get raw database state using RulesEngine
+      const rawRules = await RulesEngine.debugGetRawRules();
+      const allRules = await RulesEngine.getAllRules();
+      const enabledRules = await RulesEngine.getEnabledRules();
 
       // If transactionId provided, test against that transaction
       let testResult = null;
@@ -11979,19 +11859,15 @@ Respond in JSON format:
       }
 
       res.json({
-        rules: rules.map((r: any) => ({
-          id: r.id,
-          name: r.name,
-          isEnabled: r.is_enabled,
-          isEnabledType: typeof r.is_enabled,
-          priority: r.priority,
-          conditions: r.conditions,
-          actions: r.actions,
-          ruleType: r.rule_type
-        })),
+        rawRules,
+        rules: allRules,
+        enabledRules,
         testResult,
-        enabledCount: rules.filter((r: any) => r.is_enabled === true).length,
-        totalCount: rules.length
+        summary: {
+          totalCount: allRules.length,
+          enabledCount: enabledRules.length,
+          disabledCount: allRules.length - enabledRules.length,
+        }
       });
     } catch (error) {
       console.error("Error in debug test:", error);
