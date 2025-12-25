@@ -67,12 +67,31 @@ import path from 'path';
 import fs from 'fs';
 
 // Helper function to apply categorization rules to an imported transaction
-async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number } | null> {
+async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string } | null> {
   try {
-    // Get all enabled rules ordered by priority
+    // Get all rules ordered by priority
     const rules = await storage.getCategorizationRules();
+
+    // Debug: Log raw isEnabled values to identify the issue
+    console.log('[ApplyRules] Raw rules from DB:', rules.map(r => ({
+      id: r.id,
+      name: r.name,
+      isEnabled: r.isEnabled,
+      isEnabledType: typeof r.isEnabled,
+      isEnabledRaw: JSON.stringify(r.isEnabled)
+    })));
+
+    // Filter enabled rules - handle string/boolean conversion explicitly
     const enabledRules = rules
-      .filter(rule => rule.isEnabled)
+      .filter(rule => {
+        // Handle various representations of "enabled" state
+        const isEnabled = rule.isEnabled === true ||
+                          rule.isEnabled === 'true' ||
+                          rule.isEnabled === 1 ||
+                          (rule.isEnabled as any) === 't';
+        console.log(`[ApplyRules] Rule ${rule.id} (${rule.name}): isEnabled=${rule.isEnabled}, evaluated=${isEnabled}`);
+        return isEnabled;
+      })
       .sort((a, b) => a.priority - b.priority);
 
     console.log('[ApplyRules] Testing transaction:', {
@@ -90,7 +109,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
 
       // Check description condition
       if (conditions.descriptionContains) {
-        const searchTerm = conditions.descriptionContains.toLowerCase();
+        const searchTerm = conditions.descriptionContains.toLowerCase().trim();
         const description = (importedTx.name || '').toLowerCase();
         const merchantName = (importedTx.merchantName || '').toLowerCase();
 
@@ -106,13 +125,18 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
 
       // Check amount range conditions (only if they are meaningful values > 0)
       const txAmount = Math.abs(importedTx.amount);
-      if (conditions.amountMin != null && conditions.amountMin > 0) {
-        if (txAmount < conditions.amountMin) {
+      const amountMin = Number(conditions.amountMin);
+      const amountMax = Number(conditions.amountMax);
+
+      if (!isNaN(amountMin) && amountMin > 0) {
+        if (txAmount < amountMin) {
+          console.log('[ApplyRules] Amount too low:', txAmount, '<', amountMin);
           matches = false;
         }
       }
-      if (conditions.amountMax != null && conditions.amountMax > 0) {
-        if (txAmount > conditions.amountMax) {
+      if (!isNaN(amountMax) && amountMax > 0) {
+        if (txAmount > amountMax) {
+          console.log('[ApplyRules] Amount too high:', txAmount, '>', amountMax);
           matches = false;
         }
       }
@@ -126,6 +150,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
           contactName: actions.contactName || undefined,
           memo: actions.memo || undefined,
           salesTaxId: rule.salesTaxId || undefined,
+          matchedRule: rule.name,
         };
       }
     }
@@ -11906,18 +11931,71 @@ Respond in JSON format:
   apiRouter.post("/categorization-rules/ai/enable-all", async (req: Request, res: Response) => {
     try {
       const aiRules = await storage.getCategorizationRulesByType('ai');
-      const disabledRules = aiRules.filter(r => !r.isEnabled);
 
-      let enabledCount = 0;
-      for (const rule of disabledRules) {
-        await storage.updateCategorizationRule(rule.id, { isEnabled: true });
-        enabledCount++;
-      }
+      // Use raw SQL to force enable all AI rules to bypass any ORM issues
+      const result = await db.execute(sql`
+        UPDATE categorization_rules
+        SET is_enabled = true, updated_at = NOW()
+        WHERE rule_type = 'ai'
+        RETURNING id, name, is_enabled
+      `);
 
-      res.json({ success: true, enabledCount, totalAiRules: aiRules.length });
+      console.log('[EnableAll] Force enabled AI rules:', result.rows);
+
+      res.json({
+        success: true,
+        enabledCount: result.rows.length,
+        totalAiRules: aiRules.length,
+        updatedRules: result.rows
+      });
     } catch (error) {
       console.error("Error enabling AI rules:", error);
       res.status(500).json({ message: "Failed to enable AI rules" });
+    }
+  });
+
+  // Debug endpoint to test rule matching without applying
+  apiRouter.post("/categorization-rules/debug-test", async (req: Request, res: Response) => {
+    try {
+      const { transactionId } = req.body;
+
+      // Get all rules with raw SQL to see exactly what's in the database
+      const rulesResult = await db.execute(sql`
+        SELECT id, name, is_enabled, priority, conditions, actions, rule_type
+        FROM categorization_rules
+        ORDER BY priority, id
+      `);
+
+      const rules = rulesResult.rows;
+      console.log('[DebugTest] Raw rules from database:', rules);
+
+      // If transactionId provided, test against that transaction
+      let testResult = null;
+      if (transactionId) {
+        const tx = await storage.getImportedTransaction(transactionId);
+        if (tx) {
+          testResult = await applyRulesToTransaction(tx);
+        }
+      }
+
+      res.json({
+        rules: rules.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          isEnabled: r.is_enabled,
+          isEnabledType: typeof r.is_enabled,
+          priority: r.priority,
+          conditions: r.conditions,
+          actions: r.actions,
+          ruleType: r.rule_type
+        })),
+        testResult,
+        enabledCount: rules.filter((r: any) => r.is_enabled === true).length,
+        totalCount: rules.length
+      });
+    } catch (error) {
+      console.error("Error in debug test:", error);
+      res.status(500).json({ message: "Debug test failed", error: String(error) });
     }
   });
 
