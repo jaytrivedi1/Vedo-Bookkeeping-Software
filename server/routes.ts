@@ -11619,65 +11619,212 @@ Respond in JSON format:
     }
   });
 
-  // Apply categorization rules to uncategorized transactions
+  // Apply categorization rules to uncategorized transactions (actually creates expenses/deposits)
   apiRouter.post("/categorization-rules/apply", async (req: Request, res: Response) => {
     try {
       console.log('[ApplyRulesEndpoint] Starting rule application...');
 
-      // Get all rules first to check what's available
-      const allRules = await storage.getCategorizationRules();
-      const enabledRules = allRules.filter(r => r.isEnabled);
-      console.log('[ApplyRulesEndpoint] Rules:', { total: allRules.length, enabled: enabledRules.length });
-      enabledRules.forEach(r => {
-        console.log('[ApplyRulesEndpoint] Enabled rule:', { id: r.id, name: r.name, conditions: r.conditions });
-      });
+      // Get all enabled rules
+      const enabledRules = await RulesEngine.getEnabledRules();
+      console.log('[ApplyRulesEndpoint] Found', enabledRules.length, 'enabled rules');
 
-      // Get all unmatched/uncategorized transactions (including those with existing suggestions)
+      if (enabledRules.length === 0) {
+        return res.json({
+          success: true,
+          categorizedCount: 0,
+          skippedCount: 0,
+          errorCount: 0,
+          totalUncategorized: 0,
+          message: 'No enabled rules found'
+        });
+      }
+
+      // Get all unmatched/uncategorized transactions
       const allTransactions = await storage.getImportedTransactions();
-      console.log('[ApplyRulesEndpoint] Total imported transactions:', allTransactions.length);
-
       const uncategorizedTransactions = allTransactions.filter(tx =>
         tx.status === 'unmatched' && !tx.matchedTransactionId
       );
-      console.log('[ApplyRulesEndpoint] Uncategorized transactions:', uncategorizedTransactions.length);
-      uncategorizedTransactions.forEach(tx => {
-        console.log('[ApplyRulesEndpoint] Transaction:', { id: tx.id, name: tx.name, merchantName: tx.merchantName, status: tx.status });
-      });
+      console.log('[ApplyRulesEndpoint] Found', uncategorizedTransactions.length, 'uncategorized transactions');
 
       let categorizedCount = 0;
-      let updatedCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      const results: any[] = [];
 
       // Apply rules to each uncategorized transaction
-      for (const tx of uncategorizedTransactions) {
-        const ruleMatch = await applyRulesToTransaction(tx);
-        console.log('[ApplyRulesEndpoint] Rule match for tx', tx.id, ':', ruleMatch);
-        if (ruleMatch && ruleMatch.accountId) {
-          try {
-            // Update the transaction with the rule match
-            await storage.updateImportedTransaction(tx.id!, {
-              suggestedAccountId: ruleMatch.accountId,
-              suggestedSalesTaxId: ruleMatch.salesTaxId || null,
-              suggestedContactName: ruleMatch.contactName || null,
-              suggestedMemo: ruleMatch.memo || null,
-            });
-            if (tx.suggestedAccountId) {
-              updatedCount++;
-            } else {
-              categorizedCount++;
+      for (const importedTx of uncategorizedTransactions) {
+        const ruleMatch = await applyRulesToTransaction(importedTx);
+
+        if (!ruleMatch || !ruleMatch.accountId) {
+          skippedCount++;
+          continue;
+        }
+
+        try {
+          console.log('[ApplyRulesEndpoint] Categorizing tx', importedTx.id, 'with rule:', ruleMatch.matchedRule);
+
+          // Determine transaction type based on amount
+          const isExpense = importedTx.amount < 0;
+          const absoluteAmount = Math.abs(importedTx.amount);
+
+          // Find the bank/cash GL account
+          let glAccountId: number;
+          if (importedTx.source === 'csv') {
+            glAccountId = importedTx.accountId!;
+          } else {
+            const bankAccount = await storage.getBankAccount(importedTx.bankAccountId!);
+            if (!bankAccount || !bankAccount.linkedAccountId) {
+              console.log('[ApplyRulesEndpoint] Skipping tx', importedTx.id, '- no linked GL account');
+              skippedCount++;
+              continue;
             }
-          } catch (error) {
-            console.error(`Error categorizing transaction ${tx.id}:`, error);
+            glAccountId = bankAccount.linkedAccountId;
           }
+
+          // Find or create contact if contactName is provided
+          let contactId: number | null = null;
+          if (ruleMatch.contactName && ruleMatch.contactName.trim()) {
+            const contacts = await storage.getContacts();
+            let contact = contacts.find(c => c.name.toLowerCase() === ruleMatch.contactName!.toLowerCase());
+            if (!contact) {
+              contact = await storage.createContact({
+                name: ruleMatch.contactName,
+                type: isExpense ? 'vendor' : 'customer',
+              });
+            }
+            contactId = contact.id;
+          }
+
+          // Calculate tax if applicable
+          let baseAmount = absoluteAmount;
+          let taxAmount = 0;
+          const salesTaxId = ruleMatch.salesTaxId;
+
+          if (salesTaxId) {
+            const allTaxes = await storage.getSalesTaxes();
+            const tax = allTaxes.find(t => t.id === salesTaxId);
+            if (tax) {
+              baseAmount = absoluteAmount / (1 + tax.rate / 100);
+              taxAmount = absoluteAmount - baseAmount;
+            }
+          }
+
+          const description = ruleMatch.memo || importedTx.name;
+
+          // Create line items
+          const lineItems: any[] = [{
+            accountId: ruleMatch.accountId,
+            description: description,
+            quantity: 1,
+            unitPrice: baseAmount,
+            amount: baseAmount,
+            salesTaxId: salesTaxId || null,
+            transactionId: 0,
+          }];
+
+          // Create ledger entries
+          const ledgerEntries: any[] = isExpense ? [
+            {
+              transactionId: 0,
+              accountId: ruleMatch.accountId, // Debit expense account
+              description: description,
+              debit: baseAmount,
+              credit: 0,
+              date: importedTx.date,
+            },
+            {
+              transactionId: 0,
+              accountId: glAccountId, // Credit bank account
+              description: description,
+              debit: 0,
+              credit: absoluteAmount,
+              date: importedTx.date,
+            },
+          ] : [
+            {
+              transactionId: 0,
+              accountId: glAccountId, // Debit bank account
+              description: description,
+              debit: absoluteAmount,
+              credit: 0,
+              date: importedTx.date,
+            },
+            {
+              transactionId: 0,
+              accountId: ruleMatch.accountId, // Credit income account
+              description: description,
+              debit: 0,
+              credit: baseAmount,
+              date: importedTx.date,
+            },
+          ];
+
+          // Add tax entry if applicable
+          if (salesTaxId && taxAmount > 0) {
+            const allTaxes = await storage.getSalesTaxes();
+            const tax = allTaxes.find(t => t.id === salesTaxId);
+            if (tax && tax.accountId) {
+              ledgerEntries.push({
+                transactionId: 0,
+                accountId: tax.accountId,
+                description: `${tax.name} on ${description}`,
+                debit: isExpense ? taxAmount : 0,
+                credit: isExpense ? 0 : taxAmount,
+                date: importedTx.date,
+              });
+            }
+          }
+
+          // Create the transaction
+          const transaction = await storage.createTransaction(
+            {
+              type: isExpense ? 'expense' : 'deposit',
+              reference: null,
+              date: importedTx.date,
+              description: description,
+              amount: absoluteAmount,
+              contactId,
+              status: 'completed',
+              paymentAccountId: glAccountId,
+              paymentMethod: 'bank_transfer',
+              paymentDate: importedTx.date,
+            },
+            lineItems,
+            ledgerEntries
+          );
+
+          // Update imported transaction status to matched
+          await storage.updateImportedTransaction(importedTx.id!, {
+            matchedTransactionId: transaction.id,
+            status: 'matched',
+            name: ruleMatch.contactName || importedTx.name,
+          });
+
+          categorizedCount++;
+          results.push({
+            importedTxId: importedTx.id,
+            transactionId: transaction.id,
+            type: isExpense ? 'expense' : 'deposit',
+            rule: ruleMatch.matchedRule,
+          });
+
+          console.log('[ApplyRulesEndpoint] Successfully categorized tx', importedTx.id, 'as', isExpense ? 'expense' : 'deposit');
+
+        } catch (error) {
+          console.error(`[ApplyRulesEndpoint] Error categorizing transaction ${importedTx.id}:`, error);
+          errorCount++;
         }
       }
 
-      console.log('[ApplyRulesEndpoint] Done. Categorized:', categorizedCount, 'Updated:', updatedCount);
+      console.log('[ApplyRulesEndpoint] Done. Categorized:', categorizedCount, 'Skipped:', skippedCount, 'Errors:', errorCount);
 
       res.json({
         success: true,
         categorizedCount,
-        updatedCount,
-        totalUncategorized: uncategorizedTransactions.length
+        skippedCount,
+        errorCount,
+        totalUncategorized: uncategorizedTransactions.length,
+        results,
       });
     } catch (error) {
       console.error("Error applying categorization rules:", error);
