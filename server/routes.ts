@@ -251,6 +251,87 @@ async function autoCategorizeTransaction(
   }
 }
 
+// Helper function to apply a specific rule to all existing uncategorized transactions
+// This is called when a rule is created with autoApply=true or when autoApply is toggled on
+async function applyRuleToExistingTransactions(
+  rule: { id: number; name: string; conditions: any; actions: any; salesTaxId?: number | null },
+  storage: any
+): Promise<{ categorizedCount: number; skippedCount: number; errorCount: number }> {
+  console.log('[ApplyRuleToExisting] Starting for rule:', rule.name);
+
+  // Get all uncategorized transactions
+  const allTransactions = await storage.getImportedTransactions();
+  const uncategorizedTransactions = allTransactions.filter(
+    (tx: any) => tx.status === 'unmatched'
+  );
+
+  console.log('[ApplyRuleToExisting] Found', uncategorizedTransactions.length, 'uncategorized transactions');
+
+  let categorizedCount = 0;
+  let skippedCount = 0;
+  let errorCount = 0;
+
+  for (const importedTx of uncategorizedTransactions) {
+    // Check if this transaction matches the rule's conditions
+    const txName = (importedTx.name || '').toLowerCase();
+    const txMerchant = (importedTx.merchantName || '').toLowerCase();
+    const txAmount = Math.abs(importedTx.amount);
+
+    let matches = true;
+
+    // Check description condition
+    if (rule.conditions.descriptionContains) {
+      const searchTerm = rule.conditions.descriptionContains.toLowerCase();
+      if (!txName.includes(searchTerm) && !txMerchant.includes(searchTerm)) {
+        matches = false;
+      }
+    }
+
+    // Check amount min condition
+    if (matches && rule.conditions.amountMin && rule.conditions.amountMin > 0) {
+      if (txAmount < rule.conditions.amountMin) {
+        matches = false;
+      }
+    }
+
+    // Check amount max condition
+    if (matches && rule.conditions.amountMax && rule.conditions.amountMax > 0) {
+      if (txAmount > rule.conditions.amountMax) {
+        matches = false;
+      }
+    }
+
+    if (!matches) {
+      skippedCount++;
+      continue;
+    }
+
+    // Transaction matches - categorize it
+    try {
+      const ruleMatch = {
+        accountId: rule.actions.accountId,
+        contactName: rule.actions.contactName,
+        memo: rule.actions.memo,
+        salesTaxId: rule.salesTaxId ?? undefined,
+        matchedRule: rule.name,
+      };
+
+      const result = await autoCategorizeTransaction(importedTx, ruleMatch, storage);
+      if (result) {
+        categorizedCount++;
+      } else {
+        skippedCount++;
+      }
+    } catch (error) {
+      console.error('[ApplyRuleToExisting] Error categorizing tx', importedTx.id, ':', error);
+      errorCount++;
+    }
+  }
+
+  console.log('[ApplyRuleToExisting] Done. Categorized:', categorizedCount, 'Skipped:', skippedCount, 'Errors:', errorCount);
+  return { categorizedCount, skippedCount, errorCount };
+}
+
 // Helper function to check if a transaction date is locked
 async function checkTransactionLocked(transactionDate: Date): Promise<{ isLocked: boolean; lockDate?: Date }> {
   try {
@@ -11625,7 +11706,7 @@ Respond in JSON format:
 
   apiRouter.post("/categorization-rules", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
-      let name, conditions, actions, salesTaxId, isEnabled, priority, ruleType;
+      let name, conditions, actions, salesTaxId, isEnabled, autoApply, priority, ruleType;
 
       // Parse request body (handles both JSON string and regular form data)
       if (req.body.name && typeof req.body.name === 'string' && req.body.name.startsWith('{')) {
@@ -11635,6 +11716,7 @@ Respond in JSON format:
         actions = parsedBody.actions;
         salesTaxId = parsedBody.salesTaxId;
         isEnabled = parsedBody.isEnabled;
+        autoApply = parsedBody.autoApply;
         priority = parsedBody.priority;
         ruleType = parsedBody.ruleType;
       } else {
@@ -11643,6 +11725,7 @@ Respond in JSON format:
         actions = typeof req.body.actions === 'string' ? JSON.parse(req.body.actions) : req.body.actions;
         salesTaxId = req.body.salesTaxId;
         isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true || req.body.isEnabled === undefined;
+        autoApply = req.body.autoApply === 'true' || req.body.autoApply === true || req.body.autoApply === undefined;
         priority = req.body.priority;
         ruleType = req.body.ruleType;
       }
@@ -11654,7 +11737,7 @@ Respond in JSON format:
         return res.status(400).json({ message: "Name, conditions, and actions are required" });
       }
 
-      console.log('[Routes] POST /categorization-rules - Creating rule:', { name, conditions, actions, isEnabled });
+      console.log('[Routes] POST /categorization-rules - Creating rule:', { name, conditions, actions, isEnabled, autoApply });
 
       // Use the new RulesEngine to create the rule
       const rule = await RulesEngine.createRule({
@@ -11663,13 +11746,25 @@ Respond in JSON format:
         actions,
         salesTaxId: salesTaxId ? Number(salesTaxId) : null,
         isEnabled: isEnabled !== false, // Default to true
+        autoApply: autoApply !== false, // Default to true
         priority: priority ? Number(priority) : 0,
         ruleType: ruleType || 'manual',
       });
 
-      console.log('[Routes] Rule created successfully:', { id: rule.id, name: rule.name, isEnabled: rule.isEnabled });
+      console.log('[Routes] Rule created successfully:', { id: rule.id, name: rule.name, isEnabled: rule.isEnabled, autoApply: rule.autoApply });
 
-      res.json(rule);
+      // If autoApply is true and rule is enabled, apply to existing uncategorized transactions
+      let autoApplyResult = null;
+      if (rule.autoApply && rule.isEnabled) {
+        console.log('[Routes] Auto-applying new rule to existing uncategorized transactions...');
+        autoApplyResult = await applyRuleToExistingTransactions(rule, storage);
+        console.log('[Routes] Auto-apply result:', autoApplyResult);
+      }
+
+      res.json({
+        ...rule,
+        autoApplyResult: autoApplyResult,
+      });
     } catch (error: any) {
       console.error("Error creating categorization rule:", error);
 
@@ -11715,6 +11810,11 @@ Respond in JSON format:
 
       console.log('[Routes] PATCH /categorization-rules/:id - Updating rule:', { ruleId, updateData });
 
+      // Check if autoApply is being turned ON (was false, now true)
+      const autoApplyBeingEnabled =
+        existingRule.autoApply === false &&
+        updateData.autoApply === true;
+
       // Use the new RulesEngine to update
       const updatedRule = await RulesEngine.updateRule(ruleId, updateData);
 
@@ -11722,9 +11822,20 @@ Respond in JSON format:
         return res.status(404).json({ message: "Rule not found" });
       }
 
-      console.log('[Routes] Rule updated successfully:', { id: updatedRule.id, name: updatedRule.name, isEnabled: updatedRule.isEnabled });
+      console.log('[Routes] Rule updated successfully:', { id: updatedRule.id, name: updatedRule.name, isEnabled: updatedRule.isEnabled, autoApply: updatedRule.autoApply });
 
-      res.json(updatedRule);
+      // If autoApply was just enabled (changed from false to true), apply to existing uncategorized transactions
+      let autoApplyResult = null;
+      if (autoApplyBeingEnabled && updatedRule.isEnabled) {
+        console.log('[Routes] AutoApply was enabled - applying rule to existing uncategorized transactions...');
+        autoApplyResult = await applyRuleToExistingTransactions(updatedRule, storage);
+        console.log('[Routes] Auto-apply result:', autoApplyResult);
+      }
+
+      res.json({
+        ...updatedRule,
+        autoApplyResult: autoApplyResult,
+      });
     } catch (error: any) {
       console.error("Error updating categorization rule:", error);
 
