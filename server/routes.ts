@@ -9661,6 +9661,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
 
+      // Decrease merchant pattern count when undoing categorization
+      try {
+        const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+        const merchantName = importedTx.merchantName || importedTx.name;
+        const normalizedMerchant = normalizeMerchantName(merchantName);
+
+        if (normalizedMerchant) {
+          const pattern = await storage.getMerchantPatternByName(normalizedMerchant);
+          if (pattern && pattern.totalOccurrences > 0) {
+            const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
+            const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
+            const totalActions = newConfirmations + pattern.userCorrections;
+            const newConfidence = totalActions > 0
+              ? Math.min(0.99, newConfirmations / totalActions)
+              : 0.5;
+
+            await storage.updateMerchantPattern(pattern.id, {
+              totalOccurrences: newOccurrences,
+              userConfirmations: newConfirmations,
+              confidenceScore: newConfidence.toFixed(4),
+              updatedAt: new Date(),
+            });
+            console.log('[Undo] Decreased pattern count for', normalizedMerchant, ':', {
+              oldOccurrences: pattern.totalOccurrences,
+              newOccurrences,
+              oldConfirmations: pattern.userConfirmations,
+              newConfirmations,
+              newConfidence,
+            });
+
+            // Check if AI rule should be removed (pattern no longer meets thresholds)
+            const MIN_OCCURRENCES_FOR_RULE = 3;
+            const MIN_CONFIDENCE_FOR_RULE = 0.80;
+            if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
+              // Find and delete the AI rule for this merchant
+              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant);
+              if (aiRule) {
+                await RulesEngine.deleteRule(aiRule.id);
+                console.log('[Undo] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, '- pattern no longer meets thresholds');
+              }
+            }
+          }
+        }
+      } catch (patternError) {
+        console.error('[Undo] Error updating merchant pattern:', patternError);
+        // Continue with undo even if pattern update fails
+      }
+
       // Save the matched transaction ID for deletion
       const matchedTransactionId = importedTx.matchedTransactionId;
 
@@ -11040,6 +11088,50 @@ Respond in JSON format:
 
       if (importedTx.status !== 'matched') {
         return res.status(400).json({ error: 'Transaction is not matched' });
+      }
+
+      // Decrease merchant pattern count when unmatching
+      try {
+        const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+        const merchantName = importedTx.merchantName || importedTx.name;
+        const normalizedMerchant = normalizeMerchantName(merchantName);
+
+        if (normalizedMerchant) {
+          const pattern = await storage.getMerchantPatternByName(normalizedMerchant);
+          if (pattern && pattern.totalOccurrences > 0) {
+            const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
+            const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
+            const totalActions = newConfirmations + pattern.userCorrections;
+            const newConfidence = totalActions > 0
+              ? Math.min(0.99, newConfirmations / totalActions)
+              : 0.5;
+
+            await storage.updateMerchantPattern(pattern.id, {
+              totalOccurrences: newOccurrences,
+              userConfirmations: newConfirmations,
+              confidenceScore: newConfidence.toFixed(4),
+              updatedAt: new Date(),
+            });
+            console.log('[Unmatch] Decreased pattern count for', normalizedMerchant, ':', {
+              oldOccurrences: pattern.totalOccurrences,
+              newOccurrences,
+              newConfidence,
+            });
+
+            // Check if AI rule should be removed
+            const MIN_OCCURRENCES_FOR_RULE = 3;
+            const MIN_CONFIDENCE_FOR_RULE = 0.80;
+            if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
+              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant);
+              if (aiRule) {
+                await RulesEngine.deleteRule(aiRule.id);
+                console.log('[Unmatch] Deleted AI rule', aiRule.id, 'for', normalizedMerchant);
+              }
+            }
+          }
+        }
+      } catch (patternError) {
+        console.error('[Unmatch] Error updating merchant pattern:', patternError);
       }
 
       // If it's a manual match, just unlink (don't delete the transaction)
