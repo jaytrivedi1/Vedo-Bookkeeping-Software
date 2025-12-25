@@ -237,7 +237,7 @@ export default function Login() {
                       onChange={(e) => setLoginEmail(e.target.value)}
                       placeholder="you@example.com"
                       required
-                      className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20 placeholder:text-slate-400"
+                      className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 placeholder:text-slate-400 transition-all duration-150"
                       data-testid="input-login-email"
                     />
                   </div>
@@ -246,14 +246,14 @@ export default function Login() {
                     <Label htmlFor="login-password" className="text-sm font-medium text-slate-700">
                       Password
                     </Label>
-                    <div className="relative">
+                    <div className="relative group">
                       <Input
                         id="login-password"
                         type={showLoginPassword ? 'text' : 'password'}
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         required
-                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20 pr-11"
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 pr-11 transition-all duration-150"
                         data-testid="input-login-password"
                       />
                       <button
@@ -377,7 +377,7 @@ export default function Login() {
                       onChange={(e) => setRegisterEmail(e.target.value)}
                       placeholder="you@example.com"
                       required
-                      className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20 placeholder:text-slate-400"
+                      className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 placeholder:text-slate-400 transition-all duration-150"
                       data-testid="input-register-email"
                     />
                   </div>
@@ -393,7 +393,7 @@ export default function Login() {
                         value={registerFirstName}
                         onChange={(e) => setRegisterFirstName(e.target.value)}
                         required
-                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20"
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition-all duration-150"
                         data-testid="input-register-firstname"
                       />
                     </div>
@@ -407,7 +407,7 @@ export default function Login() {
                         value={registerLastName}
                         onChange={(e) => setRegisterLastName(e.target.value)}
                         required
-                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20"
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition-all duration-150"
                         data-testid="input-register-lastname"
                       />
                     </div>
@@ -417,7 +417,7 @@ export default function Login() {
                     <Label htmlFor="register-password" className="text-sm font-medium text-slate-700">
                       Password
                     </Label>
-                    <div className="relative">
+                    <div className="relative group">
                       <Input
                         id="register-password"
                         type={showRegisterPassword ? 'text' : 'password'}
@@ -425,7 +425,7 @@ export default function Login() {
                         onChange={(e) => setRegisterPassword(e.target.value)}
                         placeholder="At least 6 characters"
                         required
-                        className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20 pr-11 placeholder:text-slate-400"
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 pr-11 placeholder:text-slate-400 transition-all duration-150"
                         data-testid="input-register-password"
                       />
                       <button
@@ -448,7 +448,7 @@ export default function Login() {
                       value={registerConfirmPassword}
                       onChange={(e) => setRegisterConfirmPassword(e.target.value)}
                       required
-                      className="h-12 bg-slate-50/50 border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:ring-sky-500/20"
+                      className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition-all duration-150"
                       data-testid="input-register-confirm-password"
                     />
                   </div>

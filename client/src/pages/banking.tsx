@@ -2363,76 +2363,102 @@ export default function Banking() {
                       </div>
                     </div>
 
-                    {/* Search and Filter Controls - Compact */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-2 mt-2">
-                  <div className="lg:col-span-2 relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search description or name..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                      data-testid="input-search"
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      type="date"
-                      placeholder="From date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      data-testid="input-date-from"
-                    />
-                  </div>
-                  <div>
-                    <Input
-                      type="date"
-                      placeholder="To date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      data-testid="input-date-to"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      type="number"
-                      placeholder="Min $"
-                      value={amountMin}
-                      onChange={(e) => setAmountMin(e.target.value)}
-                      className="w-1/2"
-                      data-testid="input-amount-min"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Max $"
-                      value={amountMax}
-                      onChange={(e) => setAmountMax(e.target.value)}
-                      className="w-1/2"
-                      data-testid="input-amount-max"
-                    />
-                  </div>
-                </div>
-                
-                {/* Clear Filters Button */}
-                {(searchQuery || dateFrom || dateTo || amountMin || amountMax) && (
-                  <div className="mt-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setDateFrom('');
-                        setDateTo('');
-                        setAmountMin('');
-                        setAmountMax('');
-                      }}
-                      data-testid="button-clear-filters"
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Clear Filters
-                    </Button>
-                  </div>
-                )}
+                    {/* Search and Filter Controls - Modern */}
+                    <div className="flex flex-wrap items-center gap-3 mt-3">
+                      {/* Borderless Search */}
+                      <div className="flex-1 min-w-[280px] relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <input
+                          placeholder="Search description or name..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="search-borderless w-full pl-10"
+                          data-testid="input-search"
+                        />
+                      </div>
+
+                      {/* Filter Pills */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Date Filter Pill */}
+                        <div className={`filter-pill ${dateFrom || dateTo ? 'filter-pill-active' : ''}`}>
+                          <Filter className="h-3 w-3" />
+                          <span>Date</span>
+                          <input
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                            className="w-[100px] bg-transparent border-0 text-xs focus:outline-none cursor-pointer"
+                            data-testid="input-date-from"
+                          />
+                          <span className="text-slate-400">→</span>
+                          <input
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                            className="w-[100px] bg-transparent border-0 text-xs focus:outline-none cursor-pointer"
+                            data-testid="input-date-to"
+                          />
+                          {(dateFrom || dateTo) && (
+                            <button
+                              onClick={() => { setDateFrom(''); setDateTo(''); }}
+                              className="ml-1 hover:text-slate-900"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Amount Filter Pill */}
+                        <div className={`filter-pill ${amountMin || amountMax ? 'filter-pill-active' : ''}`}>
+                          <span>$</span>
+                          <input
+                            type="number"
+                            placeholder="Min"
+                            value={amountMin}
+                            onChange={(e) => setAmountMin(e.target.value)}
+                            className="w-[60px] bg-transparent border-0 text-xs focus:outline-none text-center tabular-nums"
+                            data-testid="input-amount-min"
+                          />
+                          <span className="text-slate-400">-</span>
+                          <input
+                            type="number"
+                            placeholder="Max"
+                            value={amountMax}
+                            onChange={(e) => setAmountMax(e.target.value)}
+                            className="w-[60px] bg-transparent border-0 text-xs focus:outline-none text-center tabular-nums"
+                            data-testid="input-amount-max"
+                          />
+                          {(amountMin || amountMax) && (
+                            <button
+                              onClick={() => { setAmountMin(''); setAmountMax(''); }}
+                              className="ml-1 hover:text-slate-900"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Clear All Filters */}
+                        {(searchQuery || dateFrom || dateTo || amountMin || amountMax) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700"
+                            onClick={() => {
+                              setSearchQuery('');
+                              setDateFrom('');
+                              setDateTo('');
+                              setAmountMin('');
+                              setAmountMax('');
+                            }}
+                            data-testid="button-clear-filters"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Clear all
+                          </Button>
+                        )}
+                      </div>
+                    </div>
               </CardHeader>
               <CardContent>
                 {filteredTransactions.length === 0 ? (
@@ -2651,7 +2677,7 @@ export default function Banking() {
                           {paginatedTransactions.map((tx) => (
                             <TableRow
                               key={tx.id}
-                              className={`h-12 transition-all duration-150 ${
+                              className={`group h-12 transition-all duration-150 ${
                                 selectedTransactions.has(tx.id)
                                   ? 'bg-primary/5 border-l-2 border-l-primary'
                                   : 'hover:bg-slate-50/80'
@@ -2718,8 +2744,8 @@ export default function Banking() {
                                   <span className="text-gray-300">-</span>
                                 )}
                               </TableCell>
-                              <TableCell 
-                                style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }} 
+                              <TableCell
+                                style={{ width: `${columnWidths.name}px`, minWidth: `${columnWidths.name}px` }}
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -2728,9 +2754,10 @@ export default function Banking() {
                                     items={contactItems}
                                     value={transactionNames.get(tx.id) || ''}
                                     onValueChange={(value) => handleNameChange(tx.id, value)}
-                                    placeholder="Select vendor/customer"
+                                    placeholder="Vendor/Customer"
                                     searchPlaceholder="Search contacts..."
                                     emptyText="No contacts found."
+                                    ghost
                                     data-testid={`select-name-${tx.id}`}
                                   />
                                 ) : activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'match' ? (
@@ -2746,8 +2773,8 @@ export default function Banking() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell 
-                                style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }} 
+                              <TableCell
+                                style={{ width: `${columnWidths.account}px`, minWidth: `${columnWidths.account}px` }}
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -2756,9 +2783,10 @@ export default function Banking() {
                                     items={accountItems}
                                     value={transactionAccounts.get(tx.id)?.toString() || ''}
                                     onValueChange={(value) => handleAccountChange(tx.id, value ? Number(value) : null)}
-                                    placeholder="Select account"
+                                    placeholder="Account"
                                     searchPlaceholder="Search accounts..."
                                     emptyText="No accounts found."
+                                    ghost
                                     data-testid={`select-account-${tx.id}`}
                                     onAddNew={() => {
                                       setCurrentTransactionId(tx.id);
@@ -2780,8 +2808,8 @@ export default function Banking() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell 
-                                style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }} 
+                              <TableCell
+                                style={{ width: `${columnWidths.tax}px`, minWidth: `${columnWidths.tax}px` }}
                                 className="py-2 overflow-hidden"
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -2790,9 +2818,10 @@ export default function Banking() {
                                     items={taxItems}
                                     value={transactionTaxes.get(tx.id)?.toString() || ''}
                                     onValueChange={(value) => handleTaxChange(tx.id, value ? Number(value) : null)}
-                                    placeholder="Select Tax"
+                                    placeholder="Tax"
                                     searchPlaceholder="Search taxes..."
                                     emptyText="No taxes found."
+                                    ghost
                                     data-testid={`select-tax-${tx.id}`}
                                   />
                                 ) : activeTab === 'uncategorized' && transactionMode.get(tx.id) === 'match' ? (
@@ -2890,21 +2919,22 @@ export default function Banking() {
                                       );
                                     })()}
                                   </TableCell>
-                                  <TableCell 
-                                    style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }} 
+                                  <TableCell
+                                    style={{ width: `${columnWidths.docs}px`, minWidth: `${columnWidths.docs}px` }}
                                     className="py-2 overflow-hidden"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <Button 
-                                      variant="ghost" 
+                                    <Button
+                                      variant="ghost"
                                       size="sm"
+                                      className="row-action-icon"
                                       onClick={() => {
                                         setSelectedAttachmentTransactionId(tx.id);
                                         setAttachmentDialogOpen(true);
                                       }}
                                       data-testid={`button-attach-${tx.id}`}
                                     >
-                                      <Paperclip className="h-4 w-4" />
+                                      <Paperclip className="h-4 w-4 text-slate-400" />
                                     </Button>
                                   </TableCell>
                                 </>
@@ -2996,9 +3026,10 @@ export default function Banking() {
                                       ) : (
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <Button 
-                                              variant="outline" 
+                                            <Button
+                                              variant="outline"
                                               size="sm"
+                                              className="row-action-icon border-sky-200 text-sky-600 hover:bg-sky-50"
                                               onClick={() => handlePostTransaction(tx)}
                                               disabled={categorizeTransactionMutation.isPending}
                                               data-testid={`button-post-${tx.id}`}
@@ -3011,15 +3042,23 @@ export default function Banking() {
                                           </TooltipContent>
                                         </Tooltip>
                                       )}
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm"
-                                        onClick={() => deleteTransactionMutation.mutate(tx.id)}
-                                        disabled={deleteTransactionMutation.isPending}
-                                        data-testid={`button-delete-${tx.id}`}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="row-action-icon text-slate-400 hover:text-red-500"
+                                            onClick={() => deleteTransactionMutation.mutate(tx.id)}
+                                            disabled={deleteTransactionMutation.isPending}
+                                            data-testid={`button-delete-${tx.id}`}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>Delete</p>
+                                        </TooltipContent>
+                                      </Tooltip>
                                     </>
                                   )}
                                   {activeTab === 'categorized' && (

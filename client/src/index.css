@@ -269,6 +269,80 @@
     @apply opacity-100;
   }
 
+  /* ===== GHOST TABLE CELLS ===== */
+  /* Inline table dropdowns/inputs that look like plain text until interacted with */
+  .ghost-table-cell {
+    @apply bg-transparent border-transparent text-sm text-slate-700;
+    @apply transition-all duration-150;
+  }
+
+  .ghost-table-cell:hover,
+  .ghost-table-cell:focus-within {
+    @apply bg-white border border-slate-200 rounded-lg shadow-sm;
+  }
+
+  .ghost-table-cell [data-radix-popper-content-wrapper] {
+    z-index: 50;
+  }
+
+  /* Hide chevron/icon in ghost cells until hover */
+  .ghost-table-cell .ghost-icon {
+    @apply opacity-0 transition-opacity duration-150;
+  }
+
+  .ghost-table-cell:hover .ghost-icon,
+  .ghost-table-cell:focus-within .ghost-icon {
+    @apply opacity-50;
+  }
+
+  /* Row action icons - hidden until row hover */
+  .row-action-icon {
+    @apply opacity-0 transition-opacity duration-150;
+  }
+
+  tr:hover .row-action-icon,
+  .group:hover .row-action-icon {
+    @apply opacity-100;
+  }
+
+  /* ===== FILTER PILLS ===== */
+  .filter-pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium;
+    @apply bg-slate-100 text-slate-600 rounded-full;
+    @apply hover:bg-slate-200 transition-colors duration-150 cursor-pointer;
+  }
+
+  .filter-pill-active {
+    @apply bg-sky-100 text-sky-700;
+  }
+
+  .filter-pill-active:hover {
+    @apply bg-sky-200;
+  }
+
+  /* Expandable filter pill */
+  .filter-pill-expandable {
+    @apply filter-pill relative;
+  }
+
+  .filter-pill-expandable .filter-pill-content {
+    @apply hidden;
+  }
+
+  .filter-pill-expandable:focus-within .filter-pill-content,
+  .filter-pill-expandable.expanded .filter-pill-content {
+    @apply block absolute top-full left-0 mt-1 p-2 bg-white rounded-lg shadow-lg border border-slate-200 z-50;
+    min-width: 200px;
+  }
+
+  /* ===== BORDERLESS SEARCH ===== */
+  .search-borderless {
+    @apply bg-slate-50/80 border-0 rounded-xl px-4 py-2.5 text-sm;
+    @apply placeholder:text-slate-400 text-slate-700;
+    @apply focus:bg-white focus:ring-2 focus:ring-sky-500/20 focus:outline-none;
+    @apply transition-all duration-150;
+  }
+
   /* ===== STICKY ELEMENTS ===== */
   .sticky-header {
     @apply sticky top-0 z-20 bg-background/95 backdrop-blur-sm;

@@ -35,6 +35,7 @@ interface SearchableSelectProps {
   'data-testid'?: string;
   onAddNew?: () => void; // Optional callback for adding new items
   addNewText?: string; // Optional custom text for the add new button
+  ghost?: boolean; // Ghost mode - no borders/background until hover/focus
 }
 
 export function SearchableSelect({
@@ -49,6 +50,7 @@ export function SearchableSelect({
   'data-testid': testId,
   onAddNew,
   addNewText = "Add New...",
+  ghost = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,12 +69,19 @@ export function SearchableSelect({
     >
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant={ghost ? "ghost" : "outline"}
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between overflow-hidden",
+            "w-full justify-between overflow-hidden h-auto min-h-[2.25rem] py-1.5",
             !value && "text-muted-foreground",
+            // Ghost mode - looks like plain text until hover
+            ghost && [
+              "bg-transparent border-transparent font-normal",
+              "hover:bg-slate-50 hover:border-slate-200",
+              "focus:bg-white focus:border-slate-200 focus:ring-2 focus:ring-sky-500/20",
+              "data-[state=open]:bg-white data-[state=open]:border-slate-200",
+            ],
             className
           )}
           disabled={disabled}
@@ -87,10 +96,13 @@ export function SearchableSelect({
                 )}
               </>
             ) : (
-              placeholder
+              <span className={ghost ? "text-slate-400" : ""}>{placeholder}</span>
             )}
           </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className={cn(
+            "ml-2 h-4 w-4 shrink-0 transition-opacity duration-150",
+            ghost ? "opacity-0 group-hover:opacity-50" : "opacity-50"
+          )} />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
