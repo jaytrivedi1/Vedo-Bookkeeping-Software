@@ -75,6 +75,14 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
       .filter(rule => rule.isEnabled)
       .sort((a, b) => a.priority - b.priority);
 
+    console.log('[ApplyRules] Testing transaction:', {
+      id: importedTx.id,
+      name: importedTx.name,
+      merchantName: importedTx.merchantName,
+      amount: importedTx.amount,
+    });
+    console.log('[ApplyRules] Found', enabledRules.length, 'enabled rules out of', rules.length, 'total');
+
     // Test each rule against the transaction
     for (const rule of enabledRules) {
       let matches = true;
@@ -85,8 +93,13 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
         const searchTerm = conditions.descriptionContains.toLowerCase();
         const description = (importedTx.name || '').toLowerCase();
         const merchantName = (importedTx.merchantName || '').toLowerCase();
-        
-        if (!description.includes(searchTerm) && !merchantName.includes(searchTerm)) {
+
+        const descMatches = description.includes(searchTerm);
+        const merchMatches = merchantName.includes(searchTerm);
+
+        console.log('[ApplyRules] Rule:', rule.name, '| searchTerm:', searchTerm, '| description:', description, '| merchantName:', merchantName, '| descMatches:', descMatches, '| merchMatches:', merchMatches);
+
+        if (!descMatches && !merchMatches) {
           matches = false;
         }
       }
@@ -106,6 +119,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
 
       // If all conditions match, return the actions
       if (matches) {
+        console.log('[ApplyRules] MATCH! Rule:', rule.name, 'matched transaction:', importedTx.id);
         const actions = rule.actions as any;
         return {
           accountId: actions.accountId || undefined,
@@ -116,6 +130,7 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
       }
     }
 
+    console.log('[ApplyRules] No matching rules for transaction:', importedTx.id);
     return null; // No matching rules
   } catch (error) {
     console.error('Error applying rules:', error);
@@ -9113,6 +9128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
             getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
             createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+            updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
             getAccount: (id: number) => storage.getAccount(id),
             getContact: (id: number) => storage.getContact(id),
             createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
@@ -9242,6 +9258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
             getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
             createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+            updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
             getAccount: (id: number) => storage.getAccount(id),
             getContact: (id: number) => storage.getContact(id),
             createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
@@ -10187,6 +10204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
           getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
           createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+          updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
           getAccount: (id: number) => storage.getAccount(id),
           getContact: (id: number) => storage.getContact(id),
           createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
@@ -11781,6 +11799,7 @@ Respond in JSON format:
         updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
         getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
         createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+        updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
         getAccount: (id: number) => storage.getAccount(id),
         getContact: (id: number) => storage.getContact(id),
       };
