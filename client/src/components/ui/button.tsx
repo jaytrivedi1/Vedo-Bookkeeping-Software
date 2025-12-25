@@ -5,24 +5,24 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background smooth-transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 shadow-sm hover:shadow-md active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/30 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-gradient-to-r from-primary to-primary hover:from-primary/90 hover:to-primary/90 text-primary-foreground glow-hover",
+        default: "bg-sky-500 text-white hover:bg-sky-600 shadow-sm shadow-sky-500/20 active:scale-[0.98]",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          "bg-red-500 text-white hover:bg-red-600 shadow-sm active:scale-[0.98]",
         outline:
-          "border border-input bg-background hover:bg-accent/50 hover:text-accent-foreground hover:border-primary/30",
+          "border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-700",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/70",
-        ghost: "hover:bg-accent/50 hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline shadow-none hover:shadow-none",
+          "bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-[0.98]",
+        ghost: "hover:bg-slate-100 text-slate-600 hover:text-slate-900",
+        link: "text-sky-600 underline-offset-4 hover:underline hover:text-sky-700",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-lg px-3",
-        lg: "h-11 rounded-lg px-8",
+        sm: "h-9 rounded-lg px-3 text-xs",
+        lg: "h-11 rounded-xl px-6",
         icon: "h-10 w-10",
       },
     },
