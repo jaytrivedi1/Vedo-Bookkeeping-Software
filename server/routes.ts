@@ -91,14 +91,14 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
         }
       }
 
-      // Check amount range conditions
+      // Check amount range conditions (only if they are meaningful values > 0)
       const txAmount = Math.abs(importedTx.amount);
-      if (conditions.amountMin !== null && conditions.amountMin !== undefined) {
+      if (conditions.amountMin != null && conditions.amountMin > 0) {
         if (txAmount < conditions.amountMin) {
           matches = false;
         }
       }
-      if (conditions.amountMax !== null && conditions.amountMax !== undefined) {
+      if (conditions.amountMax != null && conditions.amountMax > 0) {
         if (txAmount > conditions.amountMax) {
           matches = false;
         }

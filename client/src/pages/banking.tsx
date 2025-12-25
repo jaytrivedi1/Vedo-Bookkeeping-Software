@@ -412,10 +412,13 @@ function RulesManagementTab() {
     if (conditions.descriptionContains) {
       parts.push(`Description contains "${conditions.descriptionContains}"`);
     }
-    if (conditions.amountMin !== null || conditions.amountMax !== null) {
-      if (conditions.amountMin !== null && conditions.amountMax !== null) {
+    // Only show amount conditions if they are actual numbers (not null, undefined, or 0)
+    const hasAmountMin = conditions.amountMin != null && conditions.amountMin !== 0;
+    const hasAmountMax = conditions.amountMax != null && conditions.amountMax !== 0;
+    if (hasAmountMin || hasAmountMax) {
+      if (hasAmountMin && hasAmountMax) {
         parts.push(`Amount between ${formatCurrency(conditions.amountMin, homeCurrency, homeCurrency)} and ${formatCurrency(conditions.amountMax, homeCurrency, homeCurrency)}`);
-      } else if (conditions.amountMin !== null) {
+      } else if (hasAmountMin) {
         parts.push(`Amount ≥ ${formatCurrency(conditions.amountMin, homeCurrency, homeCurrency)}`);
       } else {
         parts.push(`Amount ≤ ${formatCurrency(conditions.amountMax, homeCurrency, homeCurrency)}`);

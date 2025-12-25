@@ -190,16 +190,16 @@ function matchesRule(transaction: ImportedTransaction, rule: CategorizationRule)
     }
   }
 
-  // Check amount range conditions
+  // Check amount range conditions (only if they are meaningful values > 0)
   const txAmount = Math.abs(transaction.amount);
 
-  if (conditions.amountMin !== null && conditions.amountMin !== undefined) {
+  if (conditions.amountMin != null && conditions.amountMin > 0) {
     if (txAmount < conditions.amountMin) {
       return false;
     }
   }
 
-  if (conditions.amountMax !== null && conditions.amountMax !== undefined) {
+  if (conditions.amountMax != null && conditions.amountMax > 0) {
     if (txAmount > conditions.amountMax) {
       return false;
     }
