@@ -11674,26 +11674,32 @@ Respond in JSON format:
   // Apply categorization rules to uncategorized transactions
   apiRouter.post("/categorization-rules/apply", async (req: Request, res: Response) => {
     try {
-      // Get all uncategorized/unmatched transactions
+      // Get all unmatched/uncategorized transactions (including those with existing suggestions)
       const allTransactions = await storage.getImportedTransactions();
-      const uncategorizedTransactions = allTransactions.filter(tx => 
-        tx.status === 'unmatched' && !tx.matchedTransactionId && !tx.suggestedAccountId
+      const uncategorizedTransactions = allTransactions.filter(tx =>
+        tx.status === 'unmatched' && !tx.matchedTransactionId
       );
 
       let categorizedCount = 0;
-      
+      let updatedCount = 0;
+
       // Apply rules to each uncategorized transaction
       for (const tx of uncategorizedTransactions) {
         const ruleMatch = await applyRulesToTransaction(tx);
         if (ruleMatch && ruleMatch.accountId) {
           try {
+            // Update the transaction with the rule match
             await storage.updateImportedTransaction(tx.id!, {
               suggestedAccountId: ruleMatch.accountId,
               suggestedSalesTaxId: ruleMatch.salesTaxId || null,
               suggestedContactName: ruleMatch.contactName || null,
               suggestedMemo: ruleMatch.memo || null,
             });
-            categorizedCount++;
+            if (tx.suggestedAccountId) {
+              updatedCount++;
+            } else {
+              categorizedCount++;
+            }
           } catch (error) {
             console.error(`Error categorizing transaction ${tx.id}:`, error);
           }
@@ -11703,6 +11709,7 @@ Respond in JSON format:
       res.json({
         success: true,
         categorizedCount,
+        updatedCount,
         totalUncategorized: uncategorizedTransactions.length
       });
     } catch (error) {
@@ -11837,6 +11844,25 @@ Respond in JSON format:
     } catch (error) {
       console.error("Error deleting AI rules:", error);
       res.status(500).json({ message: "Failed to delete AI rules" });
+    }
+  });
+
+  // Enable all disabled AI rules
+  apiRouter.post("/categorization-rules/ai/enable-all", async (req: Request, res: Response) => {
+    try {
+      const aiRules = await storage.getCategorizationRulesByType('ai');
+      const disabledRules = aiRules.filter(r => !r.isEnabled);
+
+      let enabledCount = 0;
+      for (const rule of disabledRules) {
+        await storage.updateCategorizationRule(rule.id, { isEnabled: true });
+        enabledCount++;
+      }
+
+      res.json({ success: true, enabledCount, totalAiRules: aiRules.length });
+    } catch (error) {
+      console.error("Error enabling AI rules:", error);
+      res.status(500).json({ message: "Failed to enable AI rules" });
     }
   });
 

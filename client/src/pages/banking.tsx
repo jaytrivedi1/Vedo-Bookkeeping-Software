@@ -401,6 +401,31 @@ function RulesManagementTab() {
     },
   });
 
+  // Enable all AI rules
+  const enableAllAiRulesMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/categorization-rules/ai/enable-all', 'POST');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "AI Rules Enabled",
+        description: `Enabled ${data.enabledCount} AI rule(s)`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to enable AI rules",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Check if any AI rules are disabled
+  const hasDisabledAiRules = aiRules.some((rule: any) => !rule.isEnabled);
+
   const getAccountName = (accountId: number | null) => {
     if (!accountId) return 'None';
     const account = accounts.find(a => a.id === accountId);
@@ -647,6 +672,17 @@ function RulesManagementTab() {
           >
             {applyRulesMutation.isPending ? 'Applying...' : 'Apply Rules to Existing'}
           </Button>
+          {activeRuleType === 'ai' && aiRules.length > 0 && hasDisabledAiRules && (
+            <Button
+              variant="outline"
+              onClick={() => enableAllAiRulesMutation.mutate()}
+              disabled={enableAllAiRulesMutation.isPending}
+              data-testid="button-enable-all-ai"
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {enableAllAiRulesMutation.isPending ? 'Enabling...' : 'Enable All'}
+            </Button>
+          )}
           {activeRuleType === 'ai' && aiRules.length > 0 && (
             <Button
               variant="outline"
