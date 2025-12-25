@@ -9099,6 +9099,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: contactName || importedTx.name, // Update name if contact was selected
         });
 
+        // Record feedback for AI learning
+        try {
+          const { recordCategorizationFeedback } = await import('./services/feedback-service');
+          const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+
+          const merchantName = importedTx.merchantName || importedTx.name;
+          console.log('[Categorization-Expense] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
+
+          const feedbackStorage = {
+            getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+            createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
+            updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
+            getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+            createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+            getAccount: (id: number) => storage.getAccount(id),
+            getContact: (id: number) => storage.getContact(id),
+            createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
+            getPreferences: () => storage.getPreferences(),
+          };
+
+          const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
+            importedTransactionId: importedTxId,
+            merchantName: merchantName,
+            transactionAmount: importedTx.amount,
+            transactionDate: new Date(importedTx.date),
+            suggestionSource: 'none',
+            suggestedAccountId: importedTx.suggestedAccountId,
+            suggestedContactId: null,
+            suggestedTaxId: importedTx.suggestedSalesTaxId,
+            aiConfidence: null,
+            chosenAccountId: accountId,
+            chosenContactId: contactId,
+            chosenTaxId: salesTaxId,
+            chosenTransactionType: 'expense',
+          });
+          console.log('[Categorization-Expense] Feedback recorded:', feedbackResult);
+        } catch (feedbackError) {
+          console.error('[Categorization-Expense] Error recording feedback:', feedbackError);
+        }
+
         res.json({ success: true, transaction, type: 'expense' });
       } else {
         // Bank transactions are tax-inclusive: the amount already includes tax
@@ -9187,6 +9227,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: 'matched',
           name: contactName || importedTx.name, // Update name if contact was selected
         });
+
+        // Record feedback for AI learning
+        try {
+          const { recordCategorizationFeedback } = await import('./services/feedback-service');
+          const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+
+          const merchantName = importedTx.merchantName || importedTx.name;
+          console.log('[Categorization-Deposit] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
+
+          const feedbackStorage = {
+            getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+            createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
+            updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
+            getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+            createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
+            getAccount: (id: number) => storage.getAccount(id),
+            getContact: (id: number) => storage.getContact(id),
+            createCategorizationFeedback: (feedback: any) => storage.createCategorizationFeedback(feedback),
+            getPreferences: () => storage.getPreferences(),
+          };
+
+          const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
+            importedTransactionId: importedTxId,
+            merchantName: merchantName,
+            transactionAmount: importedTx.amount,
+            transactionDate: new Date(importedTx.date),
+            suggestionSource: 'none',
+            suggestedAccountId: importedTx.suggestedAccountId,
+            suggestedContactId: null,
+            suggestedTaxId: importedTx.suggestedSalesTaxId,
+            aiConfidence: null,
+            chosenAccountId: accountId,
+            chosenContactId: contactId,
+            chosenTaxId: salesTaxId,
+            chosenTransactionType: 'deposit',
+          });
+          console.log('[Categorization-Deposit] Feedback recorded:', feedbackResult);
+        } catch (feedbackError) {
+          console.error('[Categorization-Deposit] Error recording feedback:', feedbackError);
+        }
 
         res.json({ success: true, transaction, type: 'deposit' });
       }
