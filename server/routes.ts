@@ -13854,6 +13854,47 @@ Respond in JSON format:
     }
   });
 
+  // Test pattern creation (for debugging)
+  apiRouter.post("/admin/test-pattern-creation", async (req: Request, res: Response) => {
+    try {
+      console.log("[Admin] Testing pattern creation...");
+
+      // Create a test pattern
+      const testPattern = await storage.createMerchantPattern({
+        merchantNameNormalized: "TEST MERCHANT",
+        merchantNameVariants: ["Test Merchant", "TEST MERCHANT INC"],
+        defaultAccountId: null,
+        defaultContactId: null,
+        defaultSalesTaxId: null,
+        defaultTransactionType: "expense",
+        totalOccurrences: 1,
+        userConfirmations: 1,
+        userCorrections: 0,
+        confidenceScore: "0.5000",
+        lastSeenAt: new Date(),
+      });
+
+      console.log("[Admin] Test pattern created:", testPattern);
+
+      // Read it back
+      const patterns = await storage.getMerchantPatterns();
+
+      res.json({
+        success: true,
+        message: "Test pattern created successfully!",
+        createdPattern: testPattern,
+        totalPatterns: patterns.length
+      });
+    } catch (error: any) {
+      console.error("[Admin] Test pattern creation failed:", error);
+      res.status(500).json({
+        success: false,
+        message: "Test pattern creation failed",
+        error: error?.message || String(error)
+      });
+    }
+  });
+
   app.use("/api", apiRouter);
 
   const httpServer = createServer(app);
