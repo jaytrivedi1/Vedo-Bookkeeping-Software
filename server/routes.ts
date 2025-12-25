@@ -69,7 +69,7 @@ import fs from 'fs';
 
 // Helper function to apply categorization rules to an imported transaction
 // Uses the new RulesEngine for reliable rule matching
-async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string } | null> {
+async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string; autoApply?: boolean } | null> {
   try {
     const rules = await RulesEngine.getEnabledRules();
     const match = RulesEngine.matchTransaction({
@@ -86,11 +86,167 @@ async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: n
         memo: match.memo,
         salesTaxId: match.salesTaxId ?? undefined,
         matchedRule: match.ruleName,
+        autoApply: match.autoApply,
       };
     }
     return null;
   } catch (error) {
     console.error('[applyRulesToTransaction] Error:', error);
+    return null;
+  }
+}
+
+// Helper function to auto-categorize an imported transaction (creates expense/deposit transaction)
+// Returns the created transaction or null if failed
+async function autoCategorizeTransaction(
+  importedTx: any,
+  ruleMatch: { accountId: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string },
+  storage: any
+): Promise<any | null> {
+  try {
+    console.log('[AutoCategorize] Processing tx', importedTx.id, 'with rule:', ruleMatch.matchedRule);
+
+    // Determine transaction type based on amount
+    const isExpense = importedTx.amount < 0;
+    const absoluteAmount = Math.abs(importedTx.amount);
+
+    // Find the bank/cash GL account
+    let glAccountId: number;
+    if (importedTx.source === 'csv') {
+      glAccountId = importedTx.accountId!;
+    } else {
+      const bankAccount = await storage.getBankAccount(importedTx.bankAccountId!);
+      if (!bankAccount || !bankAccount.linkedAccountId) {
+        console.log('[AutoCategorize] Skipping tx', importedTx.id, '- no linked GL account');
+        return null;
+      }
+      glAccountId = bankAccount.linkedAccountId;
+    }
+
+    // Find or create contact if contactName is provided
+    let contactId: number | null = null;
+    if (ruleMatch.contactName && ruleMatch.contactName.trim()) {
+      const contacts = await storage.getContacts();
+      let contact = contacts.find((c: any) => c.name.toLowerCase() === ruleMatch.contactName!.toLowerCase());
+      if (!contact) {
+        contact = await storage.createContact({
+          name: ruleMatch.contactName,
+          type: isExpense ? 'vendor' : 'customer',
+        });
+      }
+      contactId = contact.id;
+    }
+
+    // Calculate tax if applicable
+    let baseAmount = absoluteAmount;
+    let taxAmount = 0;
+    const salesTaxId = ruleMatch.salesTaxId;
+
+    if (salesTaxId) {
+      const allTaxes = await storage.getSalesTaxes();
+      const tax = allTaxes.find((t: any) => t.id === salesTaxId);
+      if (tax) {
+        baseAmount = absoluteAmount / (1 + tax.rate / 100);
+        taxAmount = absoluteAmount - baseAmount;
+      }
+    }
+
+    const description = ruleMatch.memo || importedTx.name;
+
+    // Create line items
+    const lineItems: any[] = [{
+      accountId: ruleMatch.accountId,
+      description: description,
+      quantity: 1,
+      unitPrice: baseAmount,
+      amount: baseAmount,
+      salesTaxId: salesTaxId || null,
+      transactionId: 0,
+    }];
+
+    // Create ledger entries
+    const ledgerEntries: any[] = isExpense ? [
+      {
+        transactionId: 0,
+        accountId: ruleMatch.accountId, // Debit expense account
+        description: description,
+        debit: baseAmount,
+        credit: 0,
+        date: importedTx.date,
+      },
+      {
+        transactionId: 0,
+        accountId: glAccountId, // Credit bank account
+        description: description,
+        debit: 0,
+        credit: absoluteAmount,
+        date: importedTx.date,
+      },
+    ] : [
+      {
+        transactionId: 0,
+        accountId: glAccountId, // Debit bank account
+        description: description,
+        debit: absoluteAmount,
+        credit: 0,
+        date: importedTx.date,
+      },
+      {
+        transactionId: 0,
+        accountId: ruleMatch.accountId, // Credit income account
+        description: description,
+        debit: 0,
+        credit: baseAmount,
+        date: importedTx.date,
+      },
+    ];
+
+    // Add tax entry if applicable
+    if (salesTaxId && taxAmount > 0) {
+      const allTaxes = await storage.getSalesTaxes();
+      const tax = allTaxes.find((t: any) => t.id === salesTaxId);
+      if (tax && tax.accountId) {
+        ledgerEntries.push({
+          transactionId: 0,
+          accountId: tax.accountId,
+          description: `${tax.name} on ${description}`,
+          debit: isExpense ? taxAmount : 0,
+          credit: isExpense ? 0 : taxAmount,
+          date: importedTx.date,
+        });
+      }
+    }
+
+    // Create the transaction
+    const transaction = await storage.createTransaction(
+      {
+        type: isExpense ? 'expense' : 'deposit',
+        reference: null,
+        date: importedTx.date,
+        description: description,
+        amount: absoluteAmount,
+        contactId,
+        status: 'completed',
+        paymentAccountId: glAccountId,
+        paymentMethod: 'bank_transfer',
+        paymentDate: importedTx.date,
+      },
+      lineItems,
+      ledgerEntries
+    );
+
+    // Update imported transaction status to matched
+    await storage.updateImportedTransaction(importedTx.id!, {
+      matchedTransactionId: transaction.id,
+      status: 'matched',
+      name: ruleMatch.contactName || importedTx.name,
+    });
+
+    console.log('[AutoCategorize] Successfully categorized tx', importedTx.id, 'as', isExpense ? 'expense' : 'deposit', '- Transaction ID:', transaction.id);
+
+    return transaction;
+  } catch (error) {
+    console.error('[AutoCategorize] Error categorizing transaction', importedTx.id, ':', error);
     return null;
   }
 }
@@ -8871,17 +9027,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Try to apply categorization rules
           const ruleMatch = await applyRulesToTransaction(imported);
           if (ruleMatch && ruleMatch.accountId) {
-            // Auto-categorize using the matched rule
             try {
-              // Update the imported transaction with suggested categorization info
-              await storage.updateImportedTransaction(imported.id!, {
-                suggestedAccountId: ruleMatch.accountId,
-                suggestedSalesTaxId: ruleMatch.salesTaxId || null,
-                suggestedContactName: ruleMatch.contactName || null,
-                suggestedMemo: ruleMatch.memo || null,
-              });
+              if (ruleMatch.autoApply) {
+                // Auto-categorize: create the expense/deposit transaction immediately
+                await autoCategorizeTransaction(imported, ruleMatch, storage);
+              } else {
+                // Just set suggestions (no auto-categorization)
+                await storage.updateImportedTransaction(imported.id!, {
+                  suggestedAccountId: ruleMatch.accountId,
+                  suggestedSalesTaxId: ruleMatch.salesTaxId || null,
+                  suggestedContactName: ruleMatch.contactName || null,
+                  suggestedMemo: ruleMatch.memo || null,
+                });
+              }
             } catch (error) {
-              console.error('Error auto-categorizing transaction:', error);
+              console.error('Error applying rule to transaction:', error);
             }
           }
         }
@@ -9578,14 +9738,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const ruleMatch = await applyRulesToTransaction(tx);
         if (ruleMatch && ruleMatch.accountId) {
           try {
-            await storage.updateImportedTransaction(tx.id!, {
-              suggestedAccountId: ruleMatch.accountId,
-              suggestedSalesTaxId: ruleMatch.salesTaxId || null,
-              suggestedContactName: ruleMatch.contactName || null,
-              suggestedMemo: ruleMatch.memo || null,
-            });
+            if (ruleMatch.autoApply) {
+              // Auto-categorize: create the expense/deposit transaction immediately
+              await autoCategorizeTransaction(tx, ruleMatch, storage);
+            } else {
+              // Just set suggestions (no auto-categorization)
+              await storage.updateImportedTransaction(tx.id!, {
+                suggestedAccountId: ruleMatch.accountId,
+                suggestedSalesTaxId: ruleMatch.salesTaxId || null,
+                suggestedContactName: ruleMatch.contactName || null,
+                suggestedMemo: ruleMatch.memo || null,
+              });
+            }
           } catch (error) {
-            console.error('Error auto-categorizing CSV transaction:', error);
+            console.error('Error applying rule to CSV transaction:', error);
           }
         }
       }
@@ -11541,6 +11707,9 @@ Respond in JSON format:
         }
         if (req.body.isEnabled !== undefined) {
           updateData.isEnabled = req.body.isEnabled === 'true' || req.body.isEnabled === true;
+        }
+        if (req.body.autoApply !== undefined) {
+          updateData.autoApply = req.body.autoApply === 'true' || req.body.autoApply === true;
         }
       }
 

@@ -29,6 +29,7 @@ export interface Rule {
   id: number;
   name: string;
   isEnabled: boolean;
+  autoApply: boolean;
   priority: number;
   conditions: RuleConditions;
   actions: RuleActions;
@@ -46,6 +47,7 @@ export interface CreateRuleInput {
   priority?: number;
   ruleType?: 'manual' | 'ai';
   isEnabled?: boolean;
+  autoApply?: boolean;
 }
 
 export interface UpdateRuleInput {
@@ -55,6 +57,7 @@ export interface UpdateRuleInput {
   salesTaxId?: number | null;
   priority?: number;
   isEnabled?: boolean;
+  autoApply?: boolean;
   ruleType?: 'manual' | 'ai';
 }
 
@@ -72,6 +75,7 @@ export interface MatchResult {
   contactName?: string;
   memo?: string;
   salesTaxId?: number | null;
+  autoApply: boolean;
 }
 
 // ============= Helper Functions =============
@@ -84,6 +88,7 @@ function rowToRule(row: any): Rule {
     id: row.id,
     name: row.name,
     isEnabled: row.is_enabled === true || row.is_enabled === 't' || row.is_enabled === 1,
+    autoApply: row.auto_apply === true || row.auto_apply === 't' || row.auto_apply === 1 || row.auto_apply === undefined,
     priority: row.priority,
     conditions: typeof row.conditions === 'string' ? JSON.parse(row.conditions) : row.conditions,
     actions: typeof row.actions === 'string' ? JSON.parse(row.actions) : row.actions,
@@ -109,6 +114,7 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
     priority = 0,
     ruleType = 'manual',
     isEnabled = true,
+    autoApply = true,
   } = input;
 
   // Validate required fields
@@ -131,15 +137,16 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
     cleanConditions.amountMax = conditions.amountMax;
   }
 
-  console.log('[RulesEngine] Creating rule:', { name, conditions: cleanConditions, actions, isEnabled });
+  console.log('[RulesEngine] Creating rule:', { name, conditions: cleanConditions, actions, isEnabled, autoApply });
 
   const result = await db.execute(sql`
     INSERT INTO categorization_rules (
-      name, is_enabled, priority, conditions, actions,
+      name, is_enabled, auto_apply, priority, conditions, actions,
       sales_tax_id, rule_type, created_at, updated_at
     ) VALUES (
       ${name.trim()},
       ${isEnabled},
+      ${autoApply},
       ${priority},
       ${JSON.stringify(cleanConditions)}::json,
       ${JSON.stringify(actions)}::json,
@@ -248,6 +255,10 @@ export async function updateRule(id: number, input: UpdateRuleInput): Promise<Ru
   if (input.ruleType !== undefined) {
     updates.push('rule_type = $' + (values.length + 1));
     values.push(input.ruleType);
+  }
+  if (input.autoApply !== undefined) {
+    updates.push('auto_apply = $' + (values.length + 1));
+    values.push(input.autoApply);
   }
 
   updates.push('updated_at = NOW()');
@@ -378,7 +389,7 @@ export function matchTransaction(transaction: Transaction, rules: Rule[]): Match
 
     // If all conditions match, return this rule's actions
     if (matches) {
-      console.log('[RulesEngine] MATCH! Rule:', rule.name, '-> Account:', rule.actions.accountId);
+      console.log('[RulesEngine] MATCH! Rule:', rule.name, '-> Account:', rule.actions.accountId, '| AutoApply:', rule.autoApply);
       return {
         ruleId: rule.id,
         ruleName: rule.name,
@@ -386,6 +397,7 @@ export function matchTransaction(transaction: Transaction, rules: Rule[]): Match
         contactName: rule.actions.contactName,
         memo: rule.actions.memo,
         salesTaxId: rule.salesTaxId,
+        autoApply: rule.autoApply,
       };
     }
   }

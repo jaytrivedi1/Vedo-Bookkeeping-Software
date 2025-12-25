@@ -848,6 +848,7 @@ export const categorizationRulesSchema = pgTable('categorization_rules', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
   isEnabled: boolean('is_enabled').notNull().default(true),
+  autoApply: boolean('auto_apply').notNull().default(true), // When true, automatically categorize matching transactions
   priority: integer('priority').notNull().default(0), // Lower number = higher priority (manual: 0-499, ai: 500-999)
   conditions: json('conditions').notNull(), // {descriptionContains, amountMin, amountMax}
   actions: json('actions').notNull(), // {accountId, contactName, memo}

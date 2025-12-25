@@ -293,7 +293,7 @@ function RulesManagementTab() {
   // Toggle rule enabled/disabled
   const toggleRuleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
-      return await apiRequest(`/api/categorization-rules/${id}`, 'PATCH', { enabled });
+      return await apiRequest(`/api/categorization-rules/${id}`, 'PATCH', { isEnabled: enabled });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
@@ -302,6 +302,29 @@ function RulesManagementTab() {
       toast({
         title: "Success",
         description: "Rule updated",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update rule",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Toggle rule auto-apply
+  const toggleAutoApplyMutation = useMutation({
+    mutationFn: async ({ id, autoApply }: { id: number; autoApply: boolean }) => {
+      return await apiRequest(`/api/categorization-rules/${id}`, 'PATCH', { autoApply });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/manual'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/categorization-rules/type/ai'] });
+      toast({
+        title: "Success",
+        description: "Auto-apply setting updated",
       });
     },
     onError: (error: any) => {
@@ -524,6 +547,7 @@ function RulesManagementTab() {
             {isAiRules && <TableHead>Uses</TableHead>}
             <TableHead>Priority</TableHead>
             <TableHead className="w-20">Enabled</TableHead>
+            <TableHead className="w-24">Auto Apply</TableHead>
             <TableHead className="w-32">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -595,15 +619,27 @@ function RulesManagementTab() {
                 </div>
               </TableCell>
               <TableCell>
-                <Checkbox
-                  checked={rule.enabled}
+                <Switch
+                  checked={rule.isEnabled ?? rule.enabled}
                   onCheckedChange={(checked) => {
                     toggleRuleMutation.mutate({
                       id: rule.id,
-                      enabled: !!checked
+                      enabled: checked
                     });
                   }}
-                  data-testid={`checkbox-rule-enabled-${rule.id}`}
+                  data-testid={`switch-rule-enabled-${rule.id}`}
+                />
+              </TableCell>
+              <TableCell>
+                <Switch
+                  checked={rule.autoApply !== false}
+                  onCheckedChange={(checked) => {
+                    toggleAutoApplyMutation.mutate({
+                      id: rule.id,
+                      autoApply: checked
+                    });
+                  }}
+                  data-testid={`switch-rule-auto-apply-${rule.id}`}
                 />
               </TableCell>
               <TableCell>

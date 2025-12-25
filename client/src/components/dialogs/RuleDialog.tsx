@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -51,6 +52,8 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
   const [memo, setMemo] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeAttachment, setRemoveAttachment] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(true);
+  const [autoApply, setAutoApply] = useState(true);
 
   // Fetch accounts
   const { data: accounts = [] } = useQuery<GLAccount[]>({
@@ -103,6 +106,8 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setMemo(rule.actions?.memo || "");
       setSelectedFile(null);
       setRemoveAttachment(false);
+      setIsEnabled(rule.isEnabled !== false);
+      setAutoApply(rule.autoApply !== false);
     } else {
       // Reset form for new rule
       setName("");
@@ -115,6 +120,8 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       setMemo("");
       setSelectedFile(null);
       setRemoveAttachment(false);
+      setIsEnabled(true);
+      setAutoApply(true);
     }
   }, [rule, open]);
 
@@ -213,11 +220,11 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
     formData.append('name', name.trim());
     formData.append('conditions', JSON.stringify(conditions));
     formData.append('actions', JSON.stringify(actions));
-    
-    // Preserve existing values for isEnabled and priority when editing, or use defaults for new rules
-    const isEnabled = rule?.isEnabled !== undefined ? rule.isEnabled : true;
+
+    // Use form state for isEnabled and autoApply, preserve priority when editing
     const priority = rule?.priority !== undefined ? rule.priority : 0;
     formData.append('isEnabled', JSON.stringify(isEnabled));
+    formData.append('autoApply', JSON.stringify(autoApply));
     formData.append('priority', String(priority));
     
     if (salesTaxId) {
@@ -256,6 +263,44 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
               data-testid="input-rule-name"
             />
           </div>
+
+          {/* Rule Settings */}
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-medium mb-4">Rule Settings</h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="rule-enabled" className="text-base">Enabled</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When disabled, this rule will not be applied to any transactions
+                    </p>
+                  </div>
+                  <Switch
+                    id="rule-enabled"
+                    checked={isEnabled}
+                    onCheckedChange={setIsEnabled}
+                    data-testid="switch-rule-enabled"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="rule-auto-apply" className="text-base">Auto Apply</Label>
+                    <p className="text-xs text-muted-foreground">
+                      When enabled, matching transactions will be automatically categorized.
+                      When disabled, they will only show as suggestions.
+                    </p>
+                  </div>
+                  <Switch
+                    id="rule-auto-apply"
+                    checked={autoApply}
+                    onCheckedChange={setAutoApply}
+                    data-testid="switch-rule-auto-apply"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Conditions Section */}
           <Card>
