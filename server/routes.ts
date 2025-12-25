@@ -386,6 +386,51 @@ async function tryAutoApplyToSingleTransaction(
   }
 }
 
+// Helper function to update suggestions on other uncategorized transactions with the same merchant
+// This is called after a transaction is categorized to help users categorize similar transactions
+async function updateSuggestionsForMatchingTransactions(
+  normalizedMerchant: string,
+  accountId: number,
+  salesTaxId: number | null,
+  contactName: string | null,
+  storage: any
+): Promise<{ updatedCount: number }> {
+  try {
+    const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+
+    // Get all uncategorized transactions
+    const allTransactions = await storage.getImportedTransactions();
+    const uncategorizedTransactions = allTransactions.filter(
+      (tx: any) => tx.status === 'unmatched'
+    );
+
+    let updatedCount = 0;
+
+    for (const tx of uncategorizedTransactions) {
+      const txMerchant = tx.merchantName || tx.name;
+      const txNormalized = normalizeMerchantName(txMerchant);
+
+      // Check if this transaction has the same normalized merchant name
+      if (txNormalized === normalizedMerchant) {
+        // Update suggestions on this transaction
+        await storage.updateImportedTransaction(tx.id, {
+          suggestedAccountId: accountId,
+          suggestedSalesTaxId: salesTaxId,
+          suggestedContactName: contactName,
+        });
+        updatedCount++;
+        console.log('[UpdateSuggestions] Updated suggestion for tx', tx.id, ':', txMerchant);
+      }
+    }
+
+    console.log('[UpdateSuggestions] Updated', updatedCount, 'transactions for merchant:', normalizedMerchant);
+    return { updatedCount };
+  } catch (error) {
+    console.error('[UpdateSuggestions] Error:', error);
+    return { updatedCount: 0 };
+  }
+}
+
 // Helper function to check if a transaction date is locked
 async function checkTransactionLocked(transactionDate: Date): Promise<{ isLocked: boolean; lockDate?: Date }> {
   try {
@@ -9404,6 +9449,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           console.log('[Categorization-Expense] Feedback recorded:', feedbackResult);
 
+          // Update suggestions on other transactions with the same merchant
+          if (feedbackResult.patternUpdated) {
+            const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+            const normalizedMerchant = normalizeMerchantName(merchantName);
+            await updateSuggestionsForMatchingTransactions(
+              normalizedMerchant,
+              accountId,
+              salesTaxId,
+              contactName || null,
+              storage
+            );
+          }
+
           // If an AI rule was generated, apply it to remaining uncategorized transactions
           if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
             console.log('[Categorization-Expense] AI rule generated, applying to existing transactions...');
@@ -9547,6 +9605,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             chosenTransactionType: 'deposit',
           });
           console.log('[Categorization-Deposit] Feedback recorded:', feedbackResult);
+
+          // Update suggestions on other transactions with the same merchant
+          if (feedbackResult.patternUpdated) {
+            const { normalizeMerchantName } = await import('./services/merchant-normalizer');
+            const normalizedMerchant = normalizeMerchantName(merchantName);
+            await updateSuggestionsForMatchingTransactions(
+              normalizedMerchant,
+              accountId,
+              salesTaxId,
+              contactName || null,
+              storage
+            );
+          }
 
           // If an AI rule was generated, apply it to remaining uncategorized transactions
           if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
@@ -10573,6 +10644,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           chosenTransactionType: transactionType,
         });
         console.log('[Categorization] Feedback recorded:', feedbackResult);
+
+        // Update suggestions on other transactions with the same merchant
+        if (feedbackResult.patternUpdated) {
+          const normalizedMerchant = normalizeMerchantName(merchantName);
+          await updateSuggestionsForMatchingTransactions(
+            normalizedMerchant,
+            accountId,
+            salesTaxId,
+            contactName || null,
+            storage
+          );
+        }
 
         // If an AI rule was generated, apply it to remaining uncategorized transactions
         if (feedbackResult.ruleGenerated && feedbackResult.generatedRule) {
