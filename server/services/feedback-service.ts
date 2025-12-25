@@ -109,7 +109,9 @@ export async function recordCategorizationFeedback(
 
       // 3. Check if we should generate an AI rule
       const prefs = await storage.getPreferences();
-      if (prefs?.aiRuleGenerationEnabled && patternResult.shouldGenerateRule) {
+      // Default to true if aiRuleGenerationEnabled is null/undefined (for backwards compatibility)
+      const aiRuleGenerationEnabled = prefs?.aiRuleGenerationEnabled ?? true;
+      if (aiRuleGenerationEnabled && patternResult.shouldGenerateRule) {
         const rule = await generateAiRuleFromPattern(storage, normalizedMerchant);
         if (rule) {
           ruleGenerated = true;
