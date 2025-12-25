@@ -332,6 +332,60 @@ async function applyRuleToExistingTransactions(
   return { categorizedCount, skippedCount, errorCount };
 }
 
+// Helper function to try auto-applying rules to a single transaction that just became uncategorized
+// This is called when a transaction is restored, undone, or unmatched
+async function tryAutoApplyToSingleTransaction(
+  transactionId: number,
+  storage: any
+): Promise<{ applied: boolean; ruleName?: string; transactionId?: number } | null> {
+  try {
+    // Get the transaction
+    const importedTx = await storage.getImportedTransaction(transactionId);
+    if (!importedTx || importedTx.status !== 'unmatched') {
+      return null;
+    }
+
+    // Get all enabled auto-apply rules
+    const allRules = await RulesEngine.getEnabledRules();
+    const autoApplyRules = allRules.filter((rule: any) => rule.autoApply === true);
+
+    if (autoApplyRules.length === 0) {
+      return null;
+    }
+
+    // Try to match against auto-apply rules
+    const match = RulesEngine.matchTransaction({
+      id: importedTx.id,
+      name: importedTx.name || '',
+      merchantName: importedTx.merchantName,
+      amount: importedTx.amount,
+    }, autoApplyRules);
+
+    if (match && match.accountId) {
+      console.log('[AutoApplySingle] Transaction', transactionId, 'matches rule:', match.ruleName);
+
+      // Auto-categorize the transaction
+      const ruleMatch = {
+        accountId: match.accountId,
+        contactName: match.contactName,
+        memo: match.memo,
+        salesTaxId: match.salesTaxId ?? undefined,
+        matchedRule: match.ruleName,
+      };
+
+      const createdTx = await autoCategorizeTransaction(importedTx, ruleMatch, storage);
+      if (createdTx) {
+        return { applied: true, ruleName: match.ruleName, transactionId: createdTx.id };
+      }
+    }
+
+    return { applied: false };
+  } catch (error) {
+    console.error('[AutoApplySingle] Error:', error);
+    return null;
+  }
+}
+
 // Helper function to check if a transaction date is locked
 async function checkTransactionLocked(transactionDate: Date): Promise<{ isLocked: boolean; lockDate?: Date }> {
   try {
@@ -9527,11 +9581,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/plaid/imported-transactions/:id/restore", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Restore by marking status as 'unmatched' (uncategorized)
       await storage.updateImportedTransaction(id, { status: 'unmatched' });
-      
-      res.json({ success: true });
+
+      // Try to auto-apply rules to this transaction
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, storage);
+
+      res.json({ success: true, autoApplyResult });
     } catch (error: any) {
       console.error('Error restoring imported transaction:', error);
       res.status(500).json({ error: error.message });
@@ -9569,28 +9626,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Get the imported transaction to find the matched transaction ID
       const importedTx = await storage.getImportedTransaction(id);
       if (!importedTx) {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
-      
+
       // Save the matched transaction ID for deletion
       const matchedTransactionId = importedTx.matchedTransactionId;
-      
+
       // FIRST: Clear the foreign key reference to avoid constraint violation
-      await storage.updateImportedTransaction(id, { 
+      await storage.updateImportedTransaction(id, {
         status: 'unmatched',
-        matchedTransactionId: null 
+        matchedTransactionId: null
       });
-      
+
       // THEN: Delete the matched transaction (this will cascade to line items and ledger entries)
       if (matchedTransactionId) {
         await storage.deleteTransaction(matchedTransactionId);
       }
-      
-      res.json({ success: true });
+
+      // Try to auto-apply rules to this transaction
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, storage);
+
+      res.json({ success: true, autoApplyResult });
     } catch (error: any) {
       console.error('Error undoing transaction categorization:', error);
       res.status(500).json({ error: error.message });
@@ -10954,16 +11014,20 @@ Respond in JSON format:
           })
           .where(eq(importedTransactionsSchema.id, transactionId));
 
+        // Try to auto-apply rules to this transaction
+        const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, storage);
+
         return res.json({
           success: true,
           message: 'Bank transaction unlinked from manual entry',
+          autoApplyResult,
         });
       }
 
       // If it's an auto-created match, we need to reverse the transaction and payment applications
       if (importedTx.matchedTransactionId) {
         const matchedTx = await storage.getTransaction(importedTx.matchedTransactionId);
-        
+
         if (matchedTx && matchedTx.type === 'payment') {
           // Remove payment applications
           await db
@@ -10988,9 +11052,13 @@ Respond in JSON format:
         })
         .where(eq(importedTransactionsSchema.id, transactionId));
 
+      // Try to auto-apply rules to this transaction
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, storage);
+
       res.json({
         success: true,
         message: 'Match undone successfully',
+        autoApplyResult,
       });
     } catch (error: any) {
       console.error('Error unmatching transaction:', error);
