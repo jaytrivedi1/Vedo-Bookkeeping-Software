@@ -92,8 +92,11 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
     if (rule) {
       setName(rule.name || "");
       setDescriptionContains(rule.conditions?.descriptionContains || "");
-      setAmountMin(rule.conditions?.amountMin?.toString() || "");
-      setAmountMax(rule.conditions?.amountMax?.toString() || "");
+      // Treat 0 as empty since it's not a meaningful filter value
+      const minVal = rule.conditions?.amountMin;
+      const maxVal = rule.conditions?.amountMax;
+      setAmountMin(minVal && minVal > 0 ? minVal.toString() : "");
+      setAmountMax(maxVal && maxVal > 0 ? maxVal.toString() : "");
       setAccountId(rule.actions?.accountId?.toString() || "");
       setSalesTaxId(rule.salesTaxId?.toString() || "");
       setContactName(rule.actions?.contactName || "");
@@ -180,16 +183,18 @@ export function RuleDialog({ open, onOpenChange, rule }: RuleDialogProps) {
       return;
     }
 
-    // Build conditions
+    // Build conditions (only include meaningful values, not 0)
     const conditions: any = {};
     if (descriptionContains.trim()) {
       conditions.descriptionContains = descriptionContains.trim();
     }
-    if (amountMin) {
-      conditions.amountMin = parseFloat(amountMin);
+    const parsedMin = amountMin ? parseFloat(amountMin) : 0;
+    const parsedMax = amountMax ? parseFloat(amountMax) : 0;
+    if (parsedMin > 0) {
+      conditions.amountMin = parsedMin;
     }
-    if (amountMax) {
-      conditions.amountMax = parseFloat(amountMax);
+    if (parsedMax > 0) {
+      conditions.amountMax = parsedMax;
     }
 
     // Build actions
