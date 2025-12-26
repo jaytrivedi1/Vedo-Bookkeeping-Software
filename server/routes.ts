@@ -14748,7 +14748,7 @@ Respond in JSON format:
       const companyId = primaryAssignment ? primaryAssignment.companyId : userCompanies[0].companyId;
 
       // Get company preferences for currency
-      const preferences = await storage.getPreferences(companyId);
+      const preferences = await storage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'CAD';
 
       // Process the chat query
