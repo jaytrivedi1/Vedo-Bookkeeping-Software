@@ -14727,15 +14727,25 @@ Respond in JSON format:
   apiRouter.post("/ai-chat", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
-      const companyId = req.user?.companyId;
 
       if (!query || typeof query !== 'string') {
         return res.status(400).json({ error: 'Query is required' });
       }
 
-      if (!companyId) {
-        return res.status(400).json({ error: 'No active company selected' });
+      // Get the user's active company from user_companies table
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const userCompanies = await storage.getUserCompanies(userId);
+      if (userCompanies.length === 0) {
+        return res.status(400).json({ error: 'No company found. Please create or join a company first.' });
+      }
+
+      // Find primary company or use first one
+      const primaryAssignment = userCompanies.find(uc => uc.isPrimary);
+      const companyId = primaryAssignment ? primaryAssignment.companyId : userCompanies[0].companyId;
 
       // Get company preferences for currency
       const preferences = await storage.getPreferences(companyId);
