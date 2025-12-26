@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import Sidebar from "./Sidebar";
 import { GlobalTopPanel } from "@/components/GlobalTopPanel";
+import { AIChatWidget } from "@/components/ai-chat/AIChatWidget";
 import { MenuIcon } from "lucide-react";
 
 const HIDDEN_TOP_PANEL_PATTERNS = [
@@ -74,6 +75,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* AI Chat Widget - Floating */}
+      <AIChatWidget />
     </div>
   );
 }

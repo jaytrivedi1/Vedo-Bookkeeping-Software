@@ -61,6 +61,7 @@ import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth"
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
 import { CountryCode, Products } from 'plaid';
 import { logActivity } from "./activity-logger";
+import { processAIChat } from "./services/ai-chat";
 import crypto from 'crypto';
 import multer from 'multer';
 import Papa from 'papaparse';
@@ -14718,6 +14719,37 @@ Respond in JSON format:
         success: false,
         message: "Test pattern creation failed",
         error: error?.message || String(error)
+      });
+    }
+  });
+
+  // ===== AI CHAT ENDPOINT =====
+  apiRouter.post("/ai-chat", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { query } = req.body;
+      const companyId = req.session?.activeCompanyId;
+
+      if (!query || typeof query !== 'string') {
+        return res.status(400).json({ error: 'Query is required' });
+      }
+
+      if (!companyId) {
+        return res.status(400).json({ error: 'No active company selected' });
+      }
+
+      // Get company preferences for currency
+      const preferences = await storage.getPreferences(companyId);
+      const homeCurrency = preferences?.homeCurrency || 'CAD';
+
+      // Process the chat query
+      const response = await processAIChat(query, storage, companyId, homeCurrency);
+
+      res.json(response);
+    } catch (error: any) {
+      console.error('[AI Chat] Error:', error);
+      res.status(500).json({
+        message: 'Sorry, I encountered an error processing your request. Please try again.',
+        error: error.message
       });
     }
   });
