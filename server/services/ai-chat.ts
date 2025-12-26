@@ -81,8 +81,8 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      // Get revenue (deposits/invoices)
-      const transactions = await ctx.storage.getTransactions(ctx.companyId);
+      // Get all transactions (storage doesn't take companyId - single tenant)
+      const transactions = await ctx.storage.getTransactions();
       const periodTransactions = transactions.filter(t => {
         const txDate = new Date(t.date);
         return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
@@ -98,15 +98,17 @@ const queryPatterns: QueryPattern[] = [
 
       const netIncome = revenue - expenses;
 
-      // Get unpaid invoices
-      const invoices = await ctx.storage.getInvoices(ctx.companyId);
-      const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'overdue');
-      const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.total || 0), 0);
+      // Get unpaid invoices (invoices are transactions with type='invoice')
+      const unpaidInvoices = transactions.filter(i =>
+        i.type === 'invoice' && (i.status === 'open' || i.status === 'overdue' || i.status === 'partial')
+      );
+      const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
 
       // Get unpaid bills
-      const bills = await ctx.storage.getBills(ctx.companyId);
-      const unpaidBills = bills.filter(b => b.status === 'pending' || b.status === 'overdue');
-      const unpaidBillsTotal = unpaidBills.reduce((sum, b) => sum + Number(b.total || 0), 0);
+      const unpaidBills = transactions.filter(b =>
+        b.type === 'bill' && (b.status === 'open' || b.status === 'overdue' || b.status === 'partial')
+      );
+      const unpaidBillsTotal = unpaidBills.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
 
       const periodLabel = format(dateRange.startDate, 'MMMM yyyy');
 
@@ -149,7 +151,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions(ctx.companyId);
+      const transactions = await ctx.storage.getTransactions();
       const expenses = transactions.filter(t => {
         const txDate = new Date(t.date);
         return (t.type === 'expense' || t.type === 'bill' || t.type === 'cheque') &&
@@ -161,7 +163,7 @@ const queryPatterns: QueryPattern[] = [
       // Group by category/account
       const byAccount: Record<string, number> = {};
       for (const exp of expenses) {
-        const accountName = exp.lineItems?.[0]?.accountName || 'Uncategorized';
+        const accountName = (exp as any).lineItems?.[0]?.accountName || 'Uncategorized';
         byAccount[accountName] = (byAccount[accountName] || 0) + Number(exp.total || 0);
       }
 
@@ -208,12 +210,13 @@ const queryPatterns: QueryPattern[] = [
       /accounts?\s+receivable/i,
     ],
     handler: async (match, ctx) => {
-      const invoices = await ctx.storage.getInvoices(ctx.companyId);
-      const unpaid = invoices.filter(i => i.status === 'sent' || i.status === 'overdue');
+      const transactions = await ctx.storage.getTransactions();
+      const invoices = transactions.filter(t => t.type === 'invoice');
+      const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
 
-      const total = unpaid.reduce((sum, i) => sum + Number(i.total || 0), 0);
+      const total = unpaid.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
       const overdue = unpaid.filter(i => i.status === 'overdue');
-      const overdueTotal = overdue.reduce((sum, i) => sum + Number(i.total || 0), 0);
+      const overdueTotal = overdue.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid invoices** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
@@ -227,13 +230,17 @@ const queryPatterns: QueryPattern[] = [
         .slice(0, 5);
 
       if (topUnpaid.length > 0) {
+        // Get contacts for customer names
+        const contacts = await ctx.storage.getContacts();
+        const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
         const tableData = {
           type: 'table',
           headers: ['Invoice', 'Customer', 'Amount', 'Status'],
           rows: topUnpaid.map(inv => [
-            inv.invoiceNumber || `#${inv.id}`,
-            inv.customerName || 'Unknown',
-            formatCurrency(Number(inv.total || 0), ctx.homeCurrency),
+            inv.reference || `#${inv.id}`,
+            contactMap.get(inv.contactId || 0) || 'Unknown',
+            formatCurrency(Number(inv.balance || inv.total || 0), ctx.homeCurrency),
             inv.status === 'overdue' ? '🔴 Overdue' : '🟡 Pending'
           ])
         };
@@ -264,14 +271,19 @@ const queryPatterns: QueryPattern[] = [
       const numMatch = match.input?.match(/top\s+(\d+)/i);
       const limit = numMatch ? parseInt(numMatch[1]) : 5;
 
-      const invoices = await ctx.storage.getInvoices(ctx.companyId);
+      const transactions = await ctx.storage.getTransactions();
+      const invoices = transactions.filter(t => t.type === 'invoice');
       const paidInvoices = invoices.filter(i => i.status === 'paid');
+
+      // Get contacts for names
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       // Group by customer
       const byCustomer: Record<string, { name: string; total: number; count: number }> = {};
       for (const inv of paidInvoices) {
-        const customerId = inv.customerId?.toString() || 'unknown';
-        const name = inv.customerName || 'Unknown Customer';
+        const customerId = inv.contactId?.toString() || 'unknown';
+        const name = contactMap.get(inv.contactId || 0) || 'Unknown Customer';
         if (!byCustomer[customerId]) {
           byCustomer[customerId] = { name, total: 0, count: 0 };
         }
@@ -282,8 +294,6 @@ const queryPatterns: QueryPattern[] = [
       const topCustomers = Object.values(byCustomer)
         .sort((a, b) => b.total - a.total)
         .slice(0, limit);
-
-      const totalRevenue = topCustomers.reduce((sum, c) => sum + c.total, 0);
 
       let message = `Here are your top ${limit} customers by revenue:\n\n`;
 
@@ -321,7 +331,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions(ctx.companyId);
+      const transactions = await ctx.storage.getTransactions();
       const revenue = transactions.filter(t => {
         const txDate = new Date(t.date);
         return (t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt') &&
@@ -372,12 +382,13 @@ const queryPatterns: QueryPattern[] = [
       /accounts?\s+payable/i,
     ],
     handler: async (match, ctx) => {
-      const bills = await ctx.storage.getBills(ctx.companyId);
-      const unpaid = bills.filter(b => b.status === 'pending' || b.status === 'overdue');
+      const transactions = await ctx.storage.getTransactions();
+      const bills = transactions.filter(t => t.type === 'bill');
+      const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
 
-      const total = unpaid.reduce((sum, b) => sum + Number(b.total || 0), 0);
+      const total = unpaid.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
       const overdue = unpaid.filter(b => b.status === 'overdue');
-      const overdueTotal = overdue.reduce((sum, b) => sum + Number(b.total || 0), 0);
+      const overdueTotal = overdue.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid bills** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
@@ -391,13 +402,17 @@ const queryPatterns: QueryPattern[] = [
         .slice(0, 5);
 
       if (topBills.length > 0) {
+        // Get contacts for vendor names
+        const contacts = await ctx.storage.getContacts();
+        const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
         const tableData = {
           type: 'table',
           headers: ['Bill', 'Vendor', 'Amount', 'Due'],
           rows: topBills.map(bill => [
-            bill.billNumber || `#${bill.id}`,
-            bill.vendorName || 'Unknown',
-            formatCurrency(Number(bill.total || 0), ctx.homeCurrency),
+            bill.reference || `#${bill.id}`,
+            contactMap.get(bill.contactId || 0) || 'Unknown',
+            formatCurrency(Number(bill.balance || bill.total || 0), ctx.homeCurrency),
             bill.dueDate ? format(new Date(bill.dueDate), 'MMM d') : '-'
           ])
         };
