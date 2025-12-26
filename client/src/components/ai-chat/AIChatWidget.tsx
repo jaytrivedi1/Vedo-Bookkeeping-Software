@@ -11,7 +11,9 @@ import {
   Users,
   Loader2,
   ChevronRight,
-  BarChart3
+  BarChart3,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -47,6 +49,7 @@ const SUGGESTED_QUERIES: SuggestedQuery[] = [
 
 export function AIChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -137,16 +140,30 @@ export function AIChatWidget() {
         <Sparkles className="w-6 h-6" />
       </button>
 
+      {/* Backdrop for expanded mode */}
+      {isExpanded && isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm transition-opacity duration-300"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Chat Panel */}
       <div
         className={cn(
-          "fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-3rem)]",
-          "bg-white rounded-2xl shadow-2xl border border-slate-200/60",
+          "fixed z-50",
+          "bg-white shadow-2xl border border-slate-200/60",
           "flex flex-col overflow-hidden",
           "transition-all duration-300 ease-out",
+          // Expanded mode: full-height side panel
+          isExpanded
+            ? "top-0 right-0 bottom-0 w-[480px] max-w-[90vw] rounded-none border-r-0 border-t-0 border-b-0"
+            : "bottom-6 right-6 w-[400px] max-w-[calc(100vw-3rem)] rounded-2xl h-[600px] max-h-[calc(100vh-3rem)]",
           isOpen
-            ? "opacity-100 translate-y-0 h-[600px] max-h-[calc(100vh-3rem)]"
-            : "opacity-0 translate-y-4 h-0 pointer-events-none"
+            ? "opacity-100 translate-x-0"
+            : isExpanded
+              ? "opacity-0 translate-x-full pointer-events-none"
+              : "opacity-0 translate-y-4 pointer-events-none h-0"
         )}
       >
         {/* Header */}
@@ -160,15 +177,31 @@ export function AIChatWidget() {
               <p className="text-[10px] text-slate-500">Financial Assistant</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
-            onClick={() => setIsOpen(false)}
-            data-testid="button-ai-chat-close"
-          >
-            <X className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+              onClick={() => setIsExpanded(!isExpanded)}
+              data-testid="button-ai-chat-expand"
+              title={isExpanded ? "Minimize" : "Expand"}
+            >
+              {isExpanded ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+              onClick={() => setIsOpen(false)}
+              data-testid="button-ai-chat-close"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Messages Area */}
