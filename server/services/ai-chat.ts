@@ -24,6 +24,34 @@ interface QueryContext {
   homeCurrency: string;
 }
 
+interface FinancialSummary {
+  currentMonth: {
+    revenue: number;
+    expenses: number;
+    netIncome: number;
+    transactionCount: number;
+  };
+  unpaidInvoices: {
+    count: number;
+    total: number;
+    overdue: number;
+  };
+  unpaidBills: {
+    count: number;
+    total: number;
+    overdue: number;
+  };
+  cashBalance: number;
+  recentTransactions: Array<{
+    date: string;
+    type: string;
+    description: string;
+    amount: number;
+  }>;
+  topCustomers: Array<{ name: string; revenue: number }>;
+  topVendors: Array<{ name: string; spend: number }>;
+}
+
 // Helper to format currency
 function formatCurrency(amount: number, currency: string = 'CAD'): string {
   return new Intl.NumberFormat('en-CA', {
@@ -62,6 +90,226 @@ function parseDateReference(text: string): { startDate: Date; endDate: Date } | 
   }
   // Default to this month
   return { startDate: startOfMonth(now), endDate: now };
+}
+
+// Build financial context for AI
+async function buildFinancialContext(ctx: QueryContext): Promise<FinancialSummary> {
+  const now = new Date();
+  const monthStart = startOfMonth(now);
+
+  // Get all data in parallel
+  const [transactions, accounts, contacts] = await Promise.all([
+    ctx.storage.getTransactions(),
+    ctx.storage.getAccounts(),
+    ctx.storage.getContacts(),
+  ]);
+
+  const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
+  // Current month transactions
+  const monthTransactions = transactions.filter(t => {
+    const txDate = new Date(t.date);
+    return txDate >= monthStart && txDate <= now;
+  });
+
+  const revenue = monthTransactions
+    .filter(t => t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+  const expenses = monthTransactions
+    .filter(t => t.type === 'expense' || t.type === 'bill' || t.type === 'cheque')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+  // Unpaid invoices
+  const invoices = transactions.filter(t => t.type === 'invoice');
+  const unpaidInvoices = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
+  const overdueInvoices = unpaidInvoices.filter(i => i.status === 'overdue');
+
+  // Unpaid bills
+  const bills = transactions.filter(t => t.type === 'bill');
+  const unpaidBills = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
+  const overdueBills = unpaidBills.filter(b => b.status === 'overdue');
+
+  // Cash balance (bank accounts and cash-related accounts by name)
+  const bankAccounts = accounts.filter(a =>
+    a.type === 'bank' ||
+    a.name.toLowerCase().includes('bank') || a.name.toLowerCase().includes('cash')
+  );
+  const cashBalance = bankAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+
+  // Recent transactions
+  const recentTransactions = transactions.slice(0, 10).map(t => ({
+    date: format(new Date(t.date), 'yyyy-MM-dd'),
+    type: t.type,
+    description: t.description || contactMap.get(t.contactId || 0) || 'Unknown',
+    amount: Number(t.amount || 0),
+  }));
+
+  // Top customers
+  const customerRevenue: Record<string, { name: string; revenue: number }> = {};
+  invoices.filter(i => i.status === 'paid').forEach(inv => {
+    const name = contactMap.get(inv.contactId || 0) || 'Unknown';
+    if (!customerRevenue[name]) customerRevenue[name] = { name, revenue: 0 };
+    customerRevenue[name].revenue += Number(inv.amount || 0);
+  });
+  const topCustomers = Object.values(customerRevenue)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  // Top vendors
+  const vendorSpend: Record<string, { name: string; spend: number }> = {};
+  transactions.filter(t => t.type === 'bill' || t.type === 'expense').forEach(bill => {
+    const name = contactMap.get(bill.contactId || 0) || 'Unknown';
+    if (!vendorSpend[name]) vendorSpend[name] = { name, spend: 0 };
+    vendorSpend[name].spend += Number(bill.amount || 0);
+  });
+  const topVendors = Object.values(vendorSpend)
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 5);
+
+  return {
+    currentMonth: {
+      revenue,
+      expenses,
+      netIncome: revenue - expenses,
+      transactionCount: monthTransactions.length,
+    },
+    unpaidInvoices: {
+      count: unpaidInvoices.length,
+      total: unpaidInvoices.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0),
+      overdue: overdueInvoices.length,
+    },
+    unpaidBills: {
+      count: unpaidBills.length,
+      total: unpaidBills.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0),
+      overdue: overdueBills.length,
+    },
+    cashBalance,
+    recentTransactions,
+    topCustomers,
+    topVendors,
+  };
+}
+
+// Call OpenAI for complex queries
+async function askOpenAI(query: string, ctx: QueryContext): Promise<ChatResponse> {
+  try {
+    // Check if OpenAI API key is available
+    const apiKey = process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    if (!apiKey) {
+      console.log('OpenAI API key not configured, falling back to default response');
+      return {
+        message: `I'm not sure how to help with that specific question. Try asking about:\n\n` +
+          `• Your monthly summary or financial overview\n` +
+          `• Expenses or revenue for a specific period\n` +
+          `• Unpaid invoices or bills\n` +
+          `• Top customers or vendors\n` +
+          `• Cash or bank balance\n\n` +
+          `Or type "help" for more options.`,
+      };
+    }
+
+    // Build financial context
+    const financialData = await buildFinancialContext(ctx);
+
+    // Dynamic import of OpenAI
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({
+      apiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+
+    const systemPrompt = `You are Vedo AI, a helpful financial assistant for a small business bookkeeping application.
+You have access to the user's financial data and can answer questions about their business finances.
+
+Current date: ${format(new Date(), 'MMMM d, yyyy')}
+Currency: ${ctx.homeCurrency}
+
+Here is the user's current financial summary:
+
+**This Month (${format(startOfMonth(new Date()), 'MMMM yyyy')}):**
+- Revenue: ${formatCurrency(financialData.currentMonth.revenue, ctx.homeCurrency)}
+- Expenses: ${formatCurrency(financialData.currentMonth.expenses, ctx.homeCurrency)}
+- Net Income: ${formatCurrency(financialData.currentMonth.netIncome, ctx.homeCurrency)}
+- Transactions: ${financialData.currentMonth.transactionCount}
+
+**Outstanding Receivables:**
+- Unpaid Invoices: ${financialData.unpaidInvoices.count} totaling ${formatCurrency(financialData.unpaidInvoices.total, ctx.homeCurrency)}
+- Overdue: ${financialData.unpaidInvoices.overdue}
+
+**Bills to Pay:**
+- Unpaid Bills: ${financialData.unpaidBills.count} totaling ${formatCurrency(financialData.unpaidBills.total, ctx.homeCurrency)}
+- Overdue: ${financialData.unpaidBills.overdue}
+
+**Cash Position:**
+- Total Cash & Bank Balance: ${formatCurrency(financialData.cashBalance, ctx.homeCurrency)}
+
+**Top 5 Customers by Revenue:**
+${financialData.topCustomers.map((c, i) => `${i + 1}. ${c.name}: ${formatCurrency(c.revenue, ctx.homeCurrency)}`).join('\n')}
+
+**Top 5 Vendors by Spend:**
+${financialData.topVendors.map((v, i) => `${i + 1}. ${v.name}: ${formatCurrency(v.spend, ctx.homeCurrency)}`).join('\n')}
+
+**Recent Transactions:**
+${financialData.recentTransactions.map(t => `- ${t.date} | ${t.type} | ${t.description} | ${formatCurrency(t.amount, ctx.homeCurrency)}`).join('\n')}
+
+Guidelines:
+1. Be concise but helpful. Keep responses focused and actionable.
+2. Use the financial data provided to give accurate answers.
+3. When appropriate, suggest relevant actions the user might want to take.
+4. Format numbers as currency with appropriate symbols.
+5. Be conversational and friendly, but professional.
+6. If you don't have enough information to answer accurately, say so.
+7. Don't make up data - only use what's provided above.
+8. Use markdown formatting for readability (bold for emphasis, bullet points for lists).`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: query },
+      ],
+      max_tokens: 500,
+      temperature: 0.7,
+    });
+
+    const aiMessage = response.choices[0]?.message?.content || 'I apologize, but I was unable to process your request.';
+
+    // Parse the response to potentially extract suggested actions
+    const suggestedActions: ChatAction[] = [];
+
+    // Add relevant actions based on query content
+    if (query.toLowerCase().includes('invoice') || aiMessage.toLowerCase().includes('invoice')) {
+      suggestedActions.push({ label: 'View Invoices', action: 'navigate', params: { path: '/invoices' } });
+    }
+    if (query.toLowerCase().includes('expense') || aiMessage.toLowerCase().includes('expense')) {
+      suggestedActions.push({ label: 'View Expenses', action: 'navigate', params: { path: '/expenses' } });
+    }
+    if (query.toLowerCase().includes('bill') || aiMessage.toLowerCase().includes('bills to pay')) {
+      suggestedActions.push({ label: 'Pay Bills', action: 'navigate', params: { path: '/pay-bill' } });
+    }
+    if (query.toLowerCase().includes('report') || query.toLowerCase().includes('p&l') || query.toLowerCase().includes('profit')) {
+      suggestedActions.push({ label: 'View Reports', action: 'navigate', params: { path: '/reports' } });
+    }
+    if (query.toLowerCase().includes('customer')) {
+      suggestedActions.push({ label: 'View Customers', action: 'navigate', params: { path: '/customers' } });
+    }
+
+    return {
+      message: aiMessage,
+      actions: suggestedActions.length > 0 ? suggestedActions.slice(0, 2) : undefined,
+    };
+
+  } catch (error) {
+    console.error('OpenAI API error:', error);
+    return {
+      message: `I encountered an issue processing your question. Please try rephrasing it, or ask about:\n\n` +
+        `• Monthly financial summary\n` +
+        `• Revenue or expenses\n` +
+        `• Unpaid invoices or bills\n` +
+        `• Cash balance`,
+    };
+  }
 }
 
 // Query patterns and handlers
@@ -443,7 +691,7 @@ const queryPatterns: QueryPattern[] = [
 
       // Get bank and cash accounts
       const bankAccounts = accounts.filter(a =>
-        a.type === 'bank' || a.type === 'cash' || a.name.toLowerCase().includes('bank') || a.name.toLowerCase().includes('cash')
+        a.type === 'bank' || a.name.toLowerCase().includes('bank') || a.name.toLowerCase().includes('cash')
       );
 
       const totalCash = bankAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
@@ -674,12 +922,13 @@ const queryPatterns: QueryPattern[] = [
     ],
     handler: async () => {
       return {
-        message: `Hello! 👋 I'm your financial assistant. How can I help you today?\n\n` +
+        message: `Hello! 👋 I'm your AI-powered financial assistant. How can I help you today?\n\n` +
           `Try asking me:\n` +
           `• "How are we doing this month?"\n` +
           `• "Show me unpaid invoices"\n` +
           `• "What's our cash balance?"\n` +
-          `• "Who are our top customers?"`,
+          `• "Who are our top customers?"\n\n` +
+          `You can also ask complex questions and I'll analyze your data!`,
       };
     }
   },
@@ -716,7 +965,10 @@ const queryPatterns: QueryPattern[] = [
           `🏦 **Bank:** "What's our cash balance?"\n` +
           `📈 **Profit:** "Are we profitable?"\n` +
           `🔄 **Recent:** "Show recent transactions"\n\n` +
-          `Just ask in natural language!`,
+          `💡 **Pro tip:** You can also ask complex questions in natural language - I'm powered by AI and can analyze your financial data to answer questions like:\n` +
+          `• "Should I be worried about my cash flow?"\n` +
+          `• "How does this month compare to last month?"\n` +
+          `• "What are my biggest expense categories?"`,
         data: {
           type: 'list',
           items: [
@@ -727,6 +979,7 @@ const queryPatterns: QueryPattern[] = [
             'Top customers and vendors',
             'Profit & loss analysis',
             'Recent transactions',
+            'Complex financial questions (AI-powered)',
           ]
         }
       };
@@ -760,13 +1013,7 @@ export async function processAIChat(
     }
   }
 
-  // No pattern matched - provide helpful response
-  return {
-    message: `I'm not sure how to help with that. Try asking about:\n\n` +
-      `• Your monthly summary\n` +
-      `• Expenses or revenue\n` +
-      `• Unpaid invoices or bills\n` +
-      `• Top customers\n\n` +
-      `Or type "help" for more options.`,
-  };
+  // No pattern matched - use OpenAI for complex/natural language queries
+  console.log('No pattern match, falling back to OpenAI for query:', query);
+  return await askOpenAI(query, context);
 }
