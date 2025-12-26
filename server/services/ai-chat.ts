@@ -90,11 +90,11 @@ const queryPatterns: QueryPattern[] = [
 
       const revenue = periodTransactions
         .filter(t => t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt')
-        .reduce((sum, t) => sum + Number(t.total || 0), 0);
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
       const expenses = periodTransactions
         .filter(t => t.type === 'expense' || t.type === 'bill' || t.type === 'cheque')
-        .reduce((sum, t) => sum + Number(t.total || 0), 0);
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
       const netIncome = revenue - expenses;
 
@@ -102,13 +102,13 @@ const queryPatterns: QueryPattern[] = [
       const unpaidInvoices = transactions.filter(i =>
         i.type === 'invoice' && (i.status === 'open' || i.status === 'overdue' || i.status === 'partial')
       );
-      const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
+      const unpaidTotal = unpaidInvoices.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
 
       // Get unpaid bills
       const unpaidBills = transactions.filter(b =>
         b.type === 'bill' && (b.status === 'open' || b.status === 'overdue' || b.status === 'partial')
       );
-      const unpaidBillsTotal = unpaidBills.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
+      const unpaidBillsTotal = unpaidBills.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
 
       const periodLabel = format(dateRange.startDate, 'MMMM yyyy');
 
@@ -158,13 +158,13 @@ const queryPatterns: QueryPattern[] = [
           txDate >= dateRange.startDate && txDate <= dateRange.endDate;
       });
 
-      const total = expenses.reduce((sum, e) => sum + Number(e.total || 0), 0);
+      const total = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       // Group by category/account
       const byAccount: Record<string, number> = {};
       for (const exp of expenses) {
         const accountName = (exp as any).lineItems?.[0]?.accountName || 'Uncategorized';
-        byAccount[accountName] = (byAccount[accountName] || 0) + Number(exp.total || 0);
+        byAccount[accountName] = (byAccount[accountName] || 0) + Number(exp.amount || 0);
       }
 
       const topCategories = Object.entries(byAccount)
@@ -214,9 +214,9 @@ const queryPatterns: QueryPattern[] = [
       const invoices = transactions.filter(t => t.type === 'invoice');
       const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
 
-      const total = unpaid.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
+      const total = unpaid.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
       const overdue = unpaid.filter(i => i.status === 'overdue');
-      const overdueTotal = overdue.reduce((sum, i) => sum + Number(i.balance || i.total || 0), 0);
+      const overdueTotal = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid invoices** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
@@ -226,7 +226,7 @@ const queryPatterns: QueryPattern[] = [
 
       // Show top 5 largest unpaid
       const topUnpaid = unpaid
-        .sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
         .slice(0, 5);
 
       if (topUnpaid.length > 0) {
@@ -240,7 +240,7 @@ const queryPatterns: QueryPattern[] = [
           rows: topUnpaid.map(inv => [
             inv.reference || `#${inv.id}`,
             contactMap.get(inv.contactId || 0) || 'Unknown',
-            formatCurrency(Number(inv.balance || inv.total || 0), ctx.homeCurrency),
+            formatCurrency(Number(inv.balance || inv.amount || 0), ctx.homeCurrency),
             inv.status === 'overdue' ? '🔴 Overdue' : '🟡 Pending'
           ])
         };
@@ -287,7 +287,7 @@ const queryPatterns: QueryPattern[] = [
         if (!byCustomer[customerId]) {
           byCustomer[customerId] = { name, total: 0, count: 0 };
         }
-        byCustomer[customerId].total += Number(inv.total || 0);
+        byCustomer[customerId].total += Number(inv.amount || 0);
         byCustomer[customerId].count += 1;
       }
 
@@ -338,7 +338,7 @@ const queryPatterns: QueryPattern[] = [
           txDate >= dateRange.startDate && txDate <= dateRange.endDate;
       });
 
-      const total = revenue.reduce((sum, r) => sum + Number(r.total || 0), 0);
+      const total = revenue.reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
       // Compare to previous period
       const periodLength = dateRange.endDate.getTime() - dateRange.startDate.getTime();
@@ -350,7 +350,7 @@ const queryPatterns: QueryPattern[] = [
         return (t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt') &&
           txDate >= prevStart && txDate <= prevEnd;
       });
-      const prevTotal = prevRevenue.reduce((sum, r) => sum + Number(r.total || 0), 0);
+      const prevTotal = prevRevenue.reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
       const change = prevTotal > 0 ? ((total - prevTotal) / prevTotal * 100).toFixed(1) : 0;
       const trend = total >= prevTotal ? '📈' : '📉';
@@ -386,9 +386,9 @@ const queryPatterns: QueryPattern[] = [
       const bills = transactions.filter(t => t.type === 'bill');
       const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
 
-      const total = unpaid.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
+      const total = unpaid.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
       const overdue = unpaid.filter(b => b.status === 'overdue');
-      const overdueTotal = overdue.reduce((sum, b) => sum + Number(b.balance || b.total || 0), 0);
+      const overdueTotal = overdue.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid bills** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
@@ -398,7 +398,7 @@ const queryPatterns: QueryPattern[] = [
 
       // Show top 5 bills
       const topBills = unpaid
-        .sort((a, b) => Number(b.total || 0) - Number(a.total || 0))
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
         .slice(0, 5);
 
       if (topBills.length > 0) {
@@ -412,7 +412,7 @@ const queryPatterns: QueryPattern[] = [
           rows: topBills.map(bill => [
             bill.reference || `#${bill.id}`,
             contactMap.get(bill.contactId || 0) || 'Unknown',
-            formatCurrency(Number(bill.balance || bill.total || 0), ctx.homeCurrency),
+            formatCurrency(Number(bill.balance || bill.amount || 0), ctx.homeCurrency),
             bill.dueDate ? format(new Date(bill.dueDate), 'MMM d') : '-'
           ])
         };
