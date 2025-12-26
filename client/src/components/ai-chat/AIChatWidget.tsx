@@ -84,10 +84,33 @@ export function AIChatWidget() {
       setMessages(prev => [...prev, assistantMessage]);
     },
     onError: (error: any) => {
+      // Parse error message to extract user-friendly text
+      let errorContent = 'Sorry, I encountered an error processing your request.';
+
+      try {
+        const errorStr = error.message || '';
+        // Check for "No active company selected" error
+        if (errorStr.includes('No active company selected') || errorStr.includes('"error":"No active company')) {
+          errorContent = "Please select a company first to use the AI assistant. Go to Settings → Company to set up or select your company.";
+        } else if (errorStr.includes('{')) {
+          // Try to parse JSON error
+          const jsonMatch = errorStr.match(/\{.*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            errorContent = parsed.error || parsed.message || errorContent;
+          }
+        } else if (errorStr) {
+          // Use error message directly if it's not JSON
+          errorContent = errorStr.replace(/^\d+:\s*/, ''); // Remove status code prefix
+        }
+      } catch {
+        // Keep default error message
+      }
+
       const errorMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: error.message || 'Sorry, I encountered an error processing your request.',
+        content: errorContent,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
