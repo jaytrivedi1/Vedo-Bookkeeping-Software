@@ -14727,7 +14727,7 @@ Respond in JSON format:
   apiRouter.post("/ai-chat", requireAuth, async (req: Request, res: Response) => {
     try {
       const { query } = req.body;
-      const companyId = req.session?.activeCompanyId;
+      const companyId = req.user?.companyId;
 
       if (!query || typeof query !== 'string') {
         return res.status(400).json({ error: 'Query is required' });
