@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { useLocation } from 'wouter';
 import {
   MessageCircle,
   X,
@@ -13,7 +14,8 @@ import {
   ChevronRight,
   BarChart3,
   Maximize2,
-  Minimize2
+  Minimize2,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -54,6 +56,16 @@ export function AIChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [, setLocation] = useLocation();
+
+  // Handle action button clicks
+  const handleAction = (action: ChatAction) => {
+    if (action.action === 'navigate' && action.params?.path) {
+      setIsOpen(false); // Close chat panel
+      setLocation(action.params.path);
+    }
+    // Add more action handlers as needed
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -259,7 +271,7 @@ export function AIChatWidget() {
           ) : (
             <>
               {messages.map((message) => (
-                <ChatMessageBubble key={message.id} message={message} />
+                <ChatMessageBubble key={message.id} message={message} onAction={handleAction} />
               ))}
 
               {/* Typing indicator */}
@@ -316,7 +328,7 @@ export function AIChatWidget() {
 }
 
 // Chat message bubble component
-function ChatMessageBubble({ message }: { message: ChatMessage }) {
+function ChatMessageBubble({ message, onAction }: { message: ChatMessage; onAction?: (action: ChatAction) => void }) {
   const isUser = message.role === 'user';
 
   return (
@@ -357,9 +369,11 @@ function ChatMessageBubble({ message }: { message: ChatMessage }) {
             {message.actions.map((action, index) => (
               <button
                 key={index}
-                className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition-colors"
+                onClick={() => onAction?.(action)}
+                className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-700 rounded-lg text-xs font-medium transition-colors flex items-center gap-1"
               >
                 {action.label}
+                <ExternalLink className="w-3 h-3" />
               </button>
             ))}
           </div>

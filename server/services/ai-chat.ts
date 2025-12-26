@@ -430,6 +430,273 @@ const queryPatterns: QueryPattern[] = [
     }
   },
 
+  // ===== BANK/CASH BALANCE =====
+  {
+    patterns: [
+      /(?:what(?:'s|is)|show|get)\s+(?:my|our|the)?\s*(?:cash|bank)\s*balance/i,
+      /how\s+much\s+(?:cash|money)\s+(?:do\s+)?(?:we|i)\s+have/i,
+      /(?:cash|bank)\s+(?:on\s+hand|available)/i,
+      /(?:what(?:'s|is)|show)\s+(?:in\s+)?(?:my|our|the)?\s*bank/i,
+    ],
+    handler: async (match, ctx) => {
+      const accounts = await ctx.storage.getAccounts();
+
+      // Get bank and cash accounts
+      const bankAccounts = accounts.filter(a =>
+        a.type === 'bank' || a.type === 'cash' || a.name.toLowerCase().includes('bank') || a.name.toLowerCase().includes('cash')
+      );
+
+      const totalCash = bankAccounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+
+      let message = `💵 **Total Cash & Bank Balance:** ${formatCurrency(totalCash, ctx.homeCurrency)}\n\n`;
+
+      if (bankAccounts.length > 0) {
+        message += `**Account Breakdown:**\n`;
+        bankAccounts.forEach(acc => {
+          message += `• ${acc.name}: ${formatCurrency(Number(acc.balance || 0), ctx.homeCurrency)}\n`;
+        });
+      }
+
+      return {
+        message,
+        data: {
+          type: 'summary',
+          metrics: {
+            'Total Cash': formatCurrency(totalCash, ctx.homeCurrency),
+            'Bank Accounts': bankAccounts.length.toString(),
+          }
+        },
+        actions: [
+          { label: 'View Chart of Accounts', action: 'navigate', params: { path: '/chart-of-accounts' } },
+        ]
+      };
+    }
+  },
+
+  // ===== RECENT TRANSACTIONS =====
+  {
+    patterns: [
+      /(?:show|list|get)\s+(?:me\s+)?(?:recent|latest|last)\s+transactions/i,
+      /what\s+(?:happened|transactions)\s+(?:today|yesterday|recently)/i,
+      /(?:recent|latest)\s+(?:activity|transactions)/i,
+    ],
+    handler: async (match, ctx) => {
+      const transactions = await ctx.storage.getTransactions();
+      const recent = transactions.slice(0, 10); // Get 10 most recent
+
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
+      let message = `Here are your **${recent.length} most recent transactions**:\n\n`;
+
+      const tableData = {
+        type: 'table',
+        headers: ['Date', 'Type', 'Description', 'Amount'],
+        rows: recent.map(t => [
+          format(new Date(t.date), 'MMM d'),
+          t.type.charAt(0).toUpperCase() + t.type.slice(1).replace('_', ' '),
+          t.description || contactMap.get(t.contactId || 0) || '-',
+          formatCurrency(Number(t.amount || 0), ctx.homeCurrency)
+        ])
+      };
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'View Banking', action: 'navigate', params: { path: '/banking' } },
+        ]
+      };
+    }
+  },
+
+  // ===== TRANSACTION COUNTS =====
+  {
+    patterns: [
+      /how\s+many\s+(?:invoices|bills|expenses|transactions)/i,
+      /(?:count|number\s+of)\s+(?:invoices|bills|expenses|transactions)/i,
+    ],
+    handler: async (match, ctx) => {
+      const dateRange = parseDateReference(match.input || '') || {
+        startDate: startOfMonth(new Date()),
+        endDate: new Date()
+      };
+
+      const transactions = await ctx.storage.getTransactions();
+      const periodTransactions = transactions.filter(t => {
+        const txDate = new Date(t.date);
+        return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
+      });
+
+      const invoiceCount = periodTransactions.filter(t => t.type === 'invoice').length;
+      const billCount = periodTransactions.filter(t => t.type === 'bill').length;
+      const expenseCount = periodTransactions.filter(t => t.type === 'expense').length;
+      const depositCount = periodTransactions.filter(t => t.type === 'deposit').length;
+
+      const periodLabel = format(dateRange.startDate, 'MMM d') + ' - ' + format(dateRange.endDate, 'MMM d, yyyy');
+
+      return {
+        message: `📊 **Transaction counts for ${periodLabel}:**\n\n` +
+          `📄 Invoices: **${invoiceCount}**\n` +
+          `📥 Bills: **${billCount}**\n` +
+          `💸 Expenses: **${expenseCount}**\n` +
+          `💰 Deposits: **${depositCount}**\n` +
+          `\n**Total:** ${periodTransactions.length} transactions`,
+        data: {
+          type: 'summary',
+          metrics: {
+            'Invoices': invoiceCount.toString(),
+            'Bills': billCount.toString(),
+            'Expenses': expenseCount.toString(),
+            'Deposits': depositCount.toString(),
+          }
+        }
+      };
+    }
+  },
+
+  // ===== PROFIT/LOSS =====
+  {
+    patterns: [
+      /(?:what(?:'s|is)|show)\s+(?:my|our|the)?\s*(?:profit|net\s+income|bottom\s+line)/i,
+      /(?:are|am)\s+(?:we|i)\s+(?:profitable|making\s+money)/i,
+      /profit\s+(?:and\s+)?loss/i,
+      /p\s*&\s*l/i,
+    ],
+    handler: async (match, ctx) => {
+      const dateRange = parseDateReference(match.input || '') || {
+        startDate: startOfMonth(new Date()),
+        endDate: new Date()
+      };
+
+      const transactions = await ctx.storage.getTransactions();
+      const periodTransactions = transactions.filter(t => {
+        const txDate = new Date(t.date);
+        return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
+      });
+
+      const revenue = periodTransactions
+        .filter(t => t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt')
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+      const expenses = periodTransactions
+        .filter(t => t.type === 'expense' || t.type === 'bill' || t.type === 'cheque')
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+      const profit = revenue - expenses;
+      const profitMargin = revenue > 0 ? (profit / revenue * 100).toFixed(1) : '0';
+      const isProfitable = profit >= 0;
+
+      const periodLabel = format(dateRange.startDate, 'MMMM yyyy');
+
+      return {
+        message: `📈 **Profit & Loss for ${periodLabel}:**\n\n` +
+          `Revenue: ${formatCurrency(revenue, ctx.homeCurrency)}\n` +
+          `Expenses: ${formatCurrency(expenses, ctx.homeCurrency)}\n` +
+          `\n${isProfitable ? '✅' : '⚠️'} **Net ${isProfitable ? 'Profit' : 'Loss'}:** ${formatCurrency(Math.abs(profit), ctx.homeCurrency)}\n` +
+          `📊 Profit Margin: **${profitMargin}%**`,
+        data: {
+          type: 'summary',
+          metrics: {
+            'Revenue': formatCurrency(revenue, ctx.homeCurrency),
+            'Expenses': formatCurrency(expenses, ctx.homeCurrency),
+            'Net Profit': formatCurrency(profit, ctx.homeCurrency),
+            'Profit Margin': `${profitMargin}%`,
+          }
+        },
+        actions: [
+          { label: 'View P&L Report', action: 'navigate', params: { path: '/reports' } },
+        ]
+      };
+    }
+  },
+
+  // ===== TOP VENDORS =====
+  {
+    patterns: [
+      /(?:who\s+are|show|list)\s+(?:my|our|the)?\s*top\s+(?:\d+\s+)?vendors?/i,
+      /(?:biggest|largest)\s+vendors?/i,
+      /vendors?\s+by\s+(?:spend|expense|amount)/i,
+      /who\s+do\s+(?:we|i)\s+pay\s+(?:the\s+)?most/i,
+    ],
+    handler: async (match, ctx) => {
+      const numMatch = match.input?.match(/top\s+(\d+)/i);
+      const limit = numMatch ? parseInt(numMatch[1]) : 5;
+
+      const transactions = await ctx.storage.getTransactions();
+      const bills = transactions.filter(t => t.type === 'bill' || t.type === 'expense');
+
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
+      const byVendor: Record<string, { name: string; total: number; count: number }> = {};
+      for (const bill of bills) {
+        const vendorId = bill.contactId?.toString() || 'unknown';
+        const name = contactMap.get(bill.contactId || 0) || 'Unknown Vendor';
+        if (!byVendor[vendorId]) {
+          byVendor[vendorId] = { name, total: 0, count: 0 };
+        }
+        byVendor[vendorId].total += Number(bill.amount || 0);
+        byVendor[vendorId].count += 1;
+      }
+
+      const topVendors = Object.values(byVendor)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, limit);
+
+      let message = `Here are your top ${limit} vendors by spend:\n\n`;
+
+      const tableData = {
+        type: 'table',
+        headers: ['Vendor', 'Total Spend', 'Transactions'],
+        rows: topVendors.map((v, i) => [
+          `${i + 1}. ${v.name}`,
+          formatCurrency(v.total, ctx.homeCurrency),
+          v.count.toString()
+        ])
+      };
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'View Expenses', action: 'navigate', params: { path: '/expenses' } },
+        ]
+      };
+    }
+  },
+
+  // ===== GREETINGS =====
+  {
+    patterns: [
+      /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening))$/i,
+      /^(?:what's\s+up|howdy|greetings)$/i,
+    ],
+    handler: async () => {
+      return {
+        message: `Hello! 👋 I'm your financial assistant. How can I help you today?\n\n` +
+          `Try asking me:\n` +
+          `• "How are we doing this month?"\n` +
+          `• "Show me unpaid invoices"\n` +
+          `• "What's our cash balance?"\n` +
+          `• "Who are our top customers?"`,
+      };
+    }
+  },
+
+  // ===== THANKS =====
+  {
+    patterns: [
+      /^(?:thanks|thank\s+you|thx|ty)$/i,
+      /(?:thanks|thank\s+you)\s+(?:for\s+)?(?:your\s+)?(?:help|that|the\s+info)/i,
+    ],
+    handler: async () => {
+      return {
+        message: `You're welcome! 😊 Let me know if you need anything else.`,
+      };
+    }
+  },
+
   // ===== HELP =====
   {
     patterns: [
@@ -445,7 +712,10 @@ const queryPatterns: QueryPattern[] = [
           `📉 **Expenses:** "Show me expenses for last month"\n` +
           `📄 **Invoices:** "List unpaid invoices"\n` +
           `📥 **Bills:** "What bills are due?"\n` +
-          `👥 **Customers:** "Who are my top 5 customers?"\n\n` +
+          `👥 **Customers:** "Who are my top 5 customers?"\n` +
+          `🏦 **Bank:** "What's our cash balance?"\n` +
+          `📈 **Profit:** "Are we profitable?"\n` +
+          `🔄 **Recent:** "Show recent transactions"\n\n` +
           `Just ask in natural language!`,
         data: {
           type: 'list',
@@ -453,8 +723,10 @@ const queryPatterns: QueryPattern[] = [
             'Monthly/weekly summaries',
             'Revenue and expense tracking',
             'Unpaid invoices and bills',
-            'Top customers analysis',
-            'Period comparisons',
+            'Cash and bank balances',
+            'Top customers and vendors',
+            'Profit & loss analysis',
+            'Recent transactions',
           ]
         }
       };
