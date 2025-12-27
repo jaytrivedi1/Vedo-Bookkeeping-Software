@@ -228,6 +228,7 @@ async function askOpenAI(query: string, ctx: QueryContext): Promise<ChatResponse
   try {
     // Check if OpenAI API key is available - check multiple possible env var names
     const apiKey = process.env.OPENAI_API_KEY
+      || process.env.OPEN_API_KEY  // Common typo
       || process.env.AI_INTEGRATIONS_OPENAI_API_KEY
       || process.env.OPENAI_KEY
       || process.env.VITE_OPENAI_API_KEY;
@@ -236,6 +237,7 @@ async function askOpenAI(query: string, ctx: QueryContext): Promise<ChatResponse
     console.log('OpenAI API key check:', apiKey ? `Found (${apiKey.substring(0, 15)}...)` : 'Not found');
     console.log('Checking env vars:', {
       OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET',
+      OPEN_API_KEY: process.env.OPEN_API_KEY ? 'SET' : 'NOT SET',
       AI_INTEGRATIONS_OPENAI_API_KEY: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ? 'SET' : 'NOT SET',
       OPENAI_KEY: process.env.OPENAI_KEY ? 'SET' : 'NOT SET',
       VITE_OPENAI_API_KEY: process.env.VITE_OPENAI_API_KEY ? 'SET' : 'NOT SET',
