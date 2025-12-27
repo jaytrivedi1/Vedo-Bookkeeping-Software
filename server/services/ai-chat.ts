@@ -448,12 +448,71 @@ const queryPatterns: QueryPattern[] = [
     }
   },
 
+  // ===== OVERDUE INVOICES (specific) =====
+  {
+    patterns: [
+      /(?:show|list|get|what\s+are)\s+(?:me\s+)?(?:my|our|the)?\s*overdue\s+invoices/i,
+      /overdue\s+invoices/i,
+      /invoices?\s+(?:that\s+are\s+)?overdue/i,
+      /late\s+invoices/i,
+      /past\s+due\s+invoices/i,
+    ],
+    handler: async (match, ctx) => {
+      const transactions = await ctx.storage.getTransactions();
+      const invoices = transactions.filter(t => t.type === 'invoice');
+      const overdue = invoices.filter(i => i.status === 'overdue');
+
+      const total = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
+
+      if (overdue.length === 0) {
+        return {
+          message: `Great news! You have **no overdue invoices** at the moment. 🎉`,
+          actions: [
+            { label: 'View All Invoices', action: 'navigate', params: { path: '/invoices' } },
+          ]
+        };
+      }
+
+      let message = `⚠️ You have **${overdue.length} overdue invoice${overdue.length > 1 ? 's' : ''}** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
+
+      // Get contacts for customer names
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
+      // Show all overdue (up to 10)
+      const topOverdue = overdue
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+        .slice(0, 10);
+
+      const tableData = {
+        type: 'table',
+        headers: ['Invoice', 'Customer', 'Amount', 'Due Date'],
+        rows: topOverdue.map(inv => [
+          inv.reference || `#${inv.id}`,
+          contactMap.get(inv.contactId || 0) || 'Unknown',
+          formatCurrency(Number(inv.balance || inv.amount || 0), ctx.homeCurrency),
+          inv.dueDate ? format(new Date(inv.dueDate), 'MMM d, yyyy') : '-'
+        ])
+      };
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'View All Invoices', action: 'navigate', params: { path: '/invoices' } },
+          { label: 'Send Reminders', action: 'sendReminders', params: { invoiceIds: overdue.map(i => i.id) } },
+        ]
+      };
+    }
+  },
+
   // ===== UNPAID INVOICES =====
   {
     patterns: [
-      /(?:show|list|get|what\s+are)\s+(?:my|our|the)?\s*unpaid\s+invoices/i,
+      /(?:show|list|get|what\s+are)\s+(?:me\s+)?(?:my|our|the)?\s*unpaid\s+invoices/i,
+      /unpaid\s+invoices/i,
       /outstanding\s+invoices/i,
-      /invoices?\s+(?:that\s+are\s+)?(?:unpaid|overdue|outstanding)/i,
+      /invoices?\s+(?:that\s+are\s+)?(?:unpaid|outstanding)/i,
       /(?:who|which\s+customers?)\s+(?:owes?|haven't\s+paid)/i,
       /accounts?\s+receivable/i,
     ],
@@ -621,11 +680,69 @@ const queryPatterns: QueryPattern[] = [
     }
   },
 
+  // ===== OVERDUE BILLS (specific) =====
+  {
+    patterns: [
+      /(?:show|list|get|what\s+are)\s+(?:me\s+)?(?:my|our|the)?\s*overdue\s+bills/i,
+      /overdue\s+bills/i,
+      /bills?\s+(?:that\s+are\s+)?overdue/i,
+      /late\s+bills/i,
+      /past\s+due\s+bills/i,
+    ],
+    handler: async (match, ctx) => {
+      const transactions = await ctx.storage.getTransactions();
+      const bills = transactions.filter(t => t.type === 'bill');
+      const overdue = bills.filter(b => b.status === 'overdue');
+
+      const total = overdue.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
+
+      if (overdue.length === 0) {
+        return {
+          message: `Great news! You have **no overdue bills** at the moment. 🎉`,
+          actions: [
+            { label: 'View All Bills', action: 'navigate', params: { path: '/pay-bill' } },
+          ]
+        };
+      }
+
+      let message = `⚠️ You have **${overdue.length} overdue bill${overdue.length > 1 ? 's' : ''}** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
+
+      // Get contacts for vendor names
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c.name]));
+
+      // Show all overdue (up to 10)
+      const topOverdue = overdue
+        .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+        .slice(0, 10);
+
+      const tableData = {
+        type: 'table',
+        headers: ['Bill', 'Vendor', 'Amount', 'Due Date'],
+        rows: topOverdue.map(bill => [
+          bill.reference || `#${bill.id}`,
+          contactMap.get(bill.contactId || 0) || 'Unknown',
+          formatCurrency(Number(bill.balance || bill.amount || 0), ctx.homeCurrency),
+          bill.dueDate ? format(new Date(bill.dueDate), 'MMM d, yyyy') : '-'
+        ])
+      };
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'Pay Bills Now', action: 'navigate', params: { path: '/pay-bill' } },
+        ]
+      };
+    }
+  },
+
   // ===== UNPAID BILLS =====
   {
     patterns: [
-      /(?:show|list|get|what\s+are)\s+(?:my|our|the)?\s*unpaid\s+bills/i,
-      /bills?\s+(?:to\s+pay|due|outstanding)/i,
+      /(?:show|list|get|what\s+are)\s+(?:me\s+)?(?:my|our|the)?\s*unpaid\s+bills/i,
+      /unpaid\s+bills/i,
+      /bills?\s+(?:to\s+pay|outstanding)/i,
       /(?:what|how\s+much)\s+do\s+(?:we|i)\s+owe/i,
       /accounts?\s+payable/i,
     ],
