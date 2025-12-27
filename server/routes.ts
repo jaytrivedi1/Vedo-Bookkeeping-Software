@@ -52,7 +52,9 @@ import {
   insertTransactionAttachmentSchema,
   importedTransactionsSchema,
   bankTransactionMatchesSchema,
-  insertBankTransactionMatchSchema
+  insertBankTransactionMatchSchema,
+  insertAiConversationSchema,
+  insertAiMessageSchema
 } from "@shared/schema";
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
@@ -14757,6 +14759,226 @@ Respond in JSON format:
       res.json(response);
     } catch (error: any) {
       console.error('[AI Chat] Error:', error);
+      res.status(500).json({
+        message: 'Sorry, I encountered an error processing your request. Please try again.',
+        error: error.message
+      });
+    }
+  });
+
+  // ===== AI CONVERSATION ENDPOINTS =====
+
+  // Get all conversations for the current user
+  apiRouter.get("/ai-conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userCompanies = await storage.getUserCompanies(userId);
+      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
+
+      const conversations = await storage.getAiConversations(userId, companyId);
+      res.json(conversations);
+    } catch (error: any) {
+      console.error('[AI Conversations] Error fetching conversations:', error);
+      res.status(500).json({ error: 'Failed to fetch conversations' });
+    }
+  });
+
+  // Create a new conversation
+  apiRouter.post("/ai-conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userCompanies = await storage.getUserCompanies(userId);
+      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
+
+      const parsed = insertAiConversationSchema.safeParse({
+        userId,
+        companyId,
+        title: req.body.title || 'New Conversation'
+      });
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'Invalid conversation data', details: parsed.error });
+      }
+
+      const conversation = await storage.createAiConversation(parsed.data);
+      res.status(201).json(conversation);
+    } catch (error: any) {
+      console.error('[AI Conversations] Error creating conversation:', error);
+      res.status(500).json({ error: 'Failed to create conversation' });
+    }
+  });
+
+  // Get a single conversation with its messages
+  apiRouter.get("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const conversationId = parseInt(req.params.id);
+      if (isNaN(conversationId)) {
+        return res.status(400).json({ error: 'Invalid conversation ID' });
+      }
+
+      const conversation = await storage.getAiConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      // Verify ownership
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const messages = await storage.getAiMessages(conversationId);
+      res.json({ ...conversation, messages });
+    } catch (error: any) {
+      console.error('[AI Conversations] Error fetching conversation:', error);
+      res.status(500).json({ error: 'Failed to fetch conversation' });
+    }
+  });
+
+  // Update a conversation (title, archive status)
+  apiRouter.patch("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const conversationId = parseInt(req.params.id);
+      if (isNaN(conversationId)) {
+        return res.status(400).json({ error: 'Invalid conversation ID' });
+      }
+
+      const conversation = await storage.getAiConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { title, isArchived } = req.body;
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (isArchived !== undefined) updates.isArchived = isArchived;
+
+      const updated = await storage.updateAiConversation(conversationId, updates);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('[AI Conversations] Error updating conversation:', error);
+      res.status(500).json({ error: 'Failed to update conversation' });
+    }
+  });
+
+  // Delete a conversation
+  apiRouter.delete("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const conversationId = parseInt(req.params.id);
+      if (isNaN(conversationId)) {
+        return res.status(400).json({ error: 'Invalid conversation ID' });
+      }
+
+      const conversation = await storage.getAiConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      await storage.deleteAiConversation(conversationId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('[AI Conversations] Error deleting conversation:', error);
+      res.status(500).json({ error: 'Failed to delete conversation' });
+    }
+  });
+
+  // Add a message to a conversation and get AI response
+  apiRouter.post("/ai-conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const conversationId = parseInt(req.params.id);
+      if (isNaN(conversationId)) {
+        return res.status(400).json({ error: 'Invalid conversation ID' });
+      }
+
+      const conversation = await storage.getAiConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+
+      const { content } = req.body;
+      if (!content || typeof content !== 'string') {
+        return res.status(400).json({ error: 'Message content is required' });
+      }
+
+      // Save user message
+      const userMessage = await storage.createAiMessage({
+        conversationId,
+        role: 'user',
+        content
+      });
+
+      // Get company context for AI
+      const userCompanies = await storage.getUserCompanies(userId);
+      const companyId = conversation.companyId || userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
+      const preferences = await storage.getPreferences();
+      const homeCurrency = preferences?.homeCurrency || 'CAD';
+
+      // Process with AI
+      const aiResponse = await processAIChat(content, storage, companyId, homeCurrency);
+
+      // Save assistant message
+      const assistantMessage = await storage.createAiMessage({
+        conversationId,
+        role: 'assistant',
+        content: aiResponse.message,
+        data: aiResponse.data || null,
+        actions: aiResponse.actions || null
+      });
+
+      // Auto-generate title from first message if this is the first user message
+      const allMessages = await storage.getAiMessages(conversationId);
+      if (allMessages.filter(m => m.role === 'user').length === 1) {
+        // Generate a title from the first message (first 50 chars)
+        const autoTitle = content.length > 50 ? content.substring(0, 47) + '...' : content;
+        await storage.updateAiConversation(conversationId, { title: autoTitle });
+      }
+
+      res.json({
+        userMessage,
+        assistantMessage,
+        response: aiResponse
+      });
+    } catch (error: any) {
+      console.error('[AI Conversations] Error sending message:', error);
       res.status(500).json({
         message: 'Sorry, I encountered an error processing your request. Please try again.',
         error: error.message

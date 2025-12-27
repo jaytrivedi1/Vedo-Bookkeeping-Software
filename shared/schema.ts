@@ -1160,3 +1160,44 @@ export const insertInvoiceActivitySchema = createInsertSchema(invoiceActivitiesS
 
 export type InvoiceActivity = typeof invoiceActivitiesSchema.$inferSelect;
 export type InsertInvoiceActivity = z.infer<typeof insertInvoiceActivitySchema>;
+
+// AI Chat Conversations - stores chat conversation sessions
+export const aiConversationsSchema = pgTable('ai_conversations', {
+  id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id),
+  userId: integer('user_id').references(() => usersSchema.id),
+  title: text('title').notNull().default('New Conversation'),
+  isArchived: boolean('is_archived').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// AI Chat Messages - stores individual messages within conversations
+export const aiMessagesSchema = pgTable('ai_messages', {
+  id: serial('id').primaryKey(),
+  conversationId: integer('conversation_id').notNull().references(() => aiConversationsSchema.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' or 'assistant'
+  content: text('content').notNull(),
+  data: json('data'), // For tables, charts, or structured data
+  actions: json('actions'), // Suggested actions (buttons)
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Insert schemas for AI chat tables
+export const insertAiConversationSchema = createInsertSchema(aiConversationsSchema).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertAiMessageSchema = createInsertSchema(aiMessagesSchema).omit({
+  id: true,
+  createdAt: true
+});
+
+// Types for AI chat tables
+export type AiConversation = typeof aiConversationsSchema.$inferSelect;
+export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
+
+export type AiMessage = typeof aiMessagesSchema.$inferSelect;
+export type InsertAiMessage = z.infer<typeof insertAiMessageSchema>;

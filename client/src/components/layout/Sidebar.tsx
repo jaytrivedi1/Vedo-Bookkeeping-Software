@@ -21,7 +21,8 @@ import {
   ShieldIcon,
   ClipboardListIcon,
   ChevronDownIcon,
-  XIcon
+  XIcon,
+  Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +47,7 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
 
   const baseMenuItems = [
     { path: "/", label: "Dashboard", icon: <LayoutDashboardIcon className="w-[18px] h-[18px]" /> },
+    { path: "/ai-assistant", label: "AI Assistant", icon: <Sparkles className="w-[18px] h-[18px]" /> },
     { path: "/banking", label: "Banking", icon: <BuildingIcon className="w-[18px] h-[18px]" /> },
     { path: "/invoices", label: "Invoices", icon: <FileTextIcon className="w-[18px] h-[18px]" /> },
     { path: "/expenses", label: "Expenses", icon: <BanknoteIcon className="w-[18px] h-[18px]" /> },

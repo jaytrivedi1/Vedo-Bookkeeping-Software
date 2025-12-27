@@ -47,6 +47,7 @@ import RecurringInvoices from "@/pages/recurring-invoices";
 import RecurringInvoiceForm from "@/pages/recurring-invoice-form";
 import CustomerDetail from "@/pages/customer-detail";
 import VendorDetail from "@/pages/vendor-detail";
+import AIAssistant from "@/pages/ai-assistant";
 import MainLayout from "@/components/layout/MainLayout";
 import { Company } from "@shared/schema";
 
@@ -218,6 +219,7 @@ function Router() {
               <Route path="/customers/:id" component={CustomerDetail} />
               <Route path="/vendors/:id" component={VendorDetail} />
               <Route path="/manage-users" component={ManageUsers} />
+              <Route path="/ai-assistant" component={AIAssistant} />
               <Route path="/admin">
                 {() => <AdminRoute component={AdminDashboard} />}
               </Route>

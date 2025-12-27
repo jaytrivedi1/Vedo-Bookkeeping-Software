@@ -8,6 +8,7 @@ import {
   AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
   RecurringTemplate, RecurringLine, RecurringHistory,
   MerchantPattern, CategorizationFeedback,
+  AiConversation, AiMessage,
   InsertAccount, InsertContact, InsertContactNote, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
@@ -16,6 +17,7 @@ import {
   InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
   InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
   InsertMerchantPattern, InsertCategorizationFeedback,
+  InsertAiConversation, InsertAiMessage,
   accounts, contacts, contactNotesSchema, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema,
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
@@ -23,7 +25,8 @@ import {
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
   accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema,
   recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema,
-  merchantPatternsSchema, categorizationFeedbackSchema
+  merchantPatternsSchema, categorizationFeedbackSchema,
+  aiConversationsSchema, aiMessagesSchema
 } from "@shared/schema";
 import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
@@ -4155,5 +4158,84 @@ export class DatabaseStorage implements IStorage {
       .where(eq(categorizationRulesSchema.ruleType, 'ai'));
 
     return result.rowCount || 0;
+  }
+
+  // AI Conversations
+  async getAiConversations(userId: number, companyId?: number): Promise<AiConversation[]> {
+    if (companyId) {
+      return await db.select()
+        .from(aiConversationsSchema)
+        .where(
+          and(
+            eq(aiConversationsSchema.userId, userId),
+            eq(aiConversationsSchema.companyId, companyId),
+            eq(aiConversationsSchema.isArchived, false)
+          )
+        )
+        .orderBy(desc(aiConversationsSchema.updatedAt));
+    }
+    return await db.select()
+      .from(aiConversationsSchema)
+      .where(
+        and(
+          eq(aiConversationsSchema.userId, userId),
+          eq(aiConversationsSchema.isArchived, false)
+        )
+      )
+      .orderBy(desc(aiConversationsSchema.updatedAt));
+  }
+
+  async getAiConversation(id: number): Promise<AiConversation | undefined> {
+    const result = await db.select()
+      .from(aiConversationsSchema)
+      .where(eq(aiConversationsSchema.id, id));
+    return result[0];
+  }
+
+  async createAiConversation(conversation: InsertAiConversation): Promise<AiConversation> {
+    const [newConversation] = await db.insert(aiConversationsSchema)
+      .values(conversation)
+      .returning();
+    return newConversation;
+  }
+
+  async updateAiConversation(id: number, conversation: Partial<AiConversation>): Promise<AiConversation | undefined> {
+    const [updated] = await db.update(aiConversationsSchema)
+      .set({ ...conversation, updatedAt: new Date() })
+      .where(eq(aiConversationsSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAiConversation(id: number): Promise<boolean> {
+    const result = await db.delete(aiConversationsSchema)
+      .where(eq(aiConversationsSchema.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // AI Messages
+  async getAiMessages(conversationId: number): Promise<AiMessage[]> {
+    return await db.select()
+      .from(aiMessagesSchema)
+      .where(eq(aiMessagesSchema.conversationId, conversationId))
+      .orderBy(aiMessagesSchema.createdAt);
+  }
+
+  async createAiMessage(message: InsertAiMessage): Promise<AiMessage> {
+    // Update conversation's updatedAt timestamp
+    await db.update(aiConversationsSchema)
+      .set({ updatedAt: new Date() })
+      .where(eq(aiConversationsSchema.id, message.conversationId));
+
+    const [newMessage] = await db.insert(aiMessagesSchema)
+      .values(message)
+      .returning();
+    return newMessage;
+  }
+
+  async deleteOldAiConversations(olderThan: Date): Promise<number> {
+    const result = await db.delete(aiConversationsSchema)
+      .where(lt(aiConversationsSchema.updatedAt, olderThan));
+    return result.rowCount ?? 0;
   }
 }

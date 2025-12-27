@@ -315,6 +315,19 @@ export function AIChatWidget() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
+              onClick={() => {
+                setIsOpen(false);
+                setLocation('/ai-assistant');
+              }}
+              data-testid="button-ai-chat-full-page"
+              title="Open full assistant"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600"
               onClick={() => setIsExpanded(!isExpanded)}
               data-testid="button-ai-chat-expand"
               title={isExpanded ? "Minimize" : "Expand"}

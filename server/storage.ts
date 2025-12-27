@@ -100,6 +100,12 @@ import {
   type InsertRecurringLine,
   type RecurringHistory,
   type InsertRecurringHistory,
+  aiConversationsSchema,
+  aiMessagesSchema,
+  type AiConversation,
+  type InsertAiConversation,
+  type AiMessage,
+  type InsertAiMessage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -420,6 +426,18 @@ export interface IStorage {
   getRecurringHistory(templateId: number): Promise<RecurringHistory[]>;
   createRecurringHistory(history: InsertRecurringHistory): Promise<RecurringHistory>;
   getActiveTemplatesDue(now: Date): Promise<RecurringTemplate[]>;
+
+  // AI Conversations
+  getAiConversations(userId: number, companyId?: number): Promise<AiConversation[]>;
+  getAiConversation(id: number): Promise<AiConversation | undefined>;
+  createAiConversation(conversation: InsertAiConversation): Promise<AiConversation>;
+  updateAiConversation(id: number, conversation: Partial<AiConversation>): Promise<AiConversation | undefined>;
+  deleteAiConversation(id: number): Promise<boolean>;
+
+  // AI Messages
+  getAiMessages(conversationId: number): Promise<AiMessage[]>;
+  createAiMessage(message: InsertAiMessage): Promise<AiMessage>;
+  deleteOldAiConversations(olderThan: Date): Promise<number>;
 }
 
 export class MemStorage implements IStorage {
@@ -1675,6 +1693,40 @@ export class MemStorage implements IStorage {
 
   async createCurrencyLock(currencyLock: InsertCurrencyLock): Promise<CurrencyLock> {
     throw new Error("Currency locks not supported in MemStorage");
+  }
+
+  // AI Conversations
+  async getAiConversations(userId: number, companyId?: number): Promise<AiConversation[]> {
+    throw new Error("AI conversations not supported in MemStorage");
+  }
+
+  async getAiConversation(id: number): Promise<AiConversation | undefined> {
+    throw new Error("AI conversations not supported in MemStorage");
+  }
+
+  async createAiConversation(conversation: InsertAiConversation): Promise<AiConversation> {
+    throw new Error("AI conversations not supported in MemStorage");
+  }
+
+  async updateAiConversation(id: number, conversation: Partial<AiConversation>): Promise<AiConversation | undefined> {
+    throw new Error("AI conversations not supported in MemStorage");
+  }
+
+  async deleteAiConversation(id: number): Promise<boolean> {
+    throw new Error("AI conversations not supported in MemStorage");
+  }
+
+  // AI Messages
+  async getAiMessages(conversationId: number): Promise<AiMessage[]> {
+    throw new Error("AI messages not supported in MemStorage");
+  }
+
+  async createAiMessage(message: InsertAiMessage): Promise<AiMessage> {
+    throw new Error("AI messages not supported in MemStorage");
+  }
+
+  async deleteOldAiConversations(olderThan: Date): Promise<number> {
+    throw new Error("AI conversations not supported in MemStorage");
   }
 }
 
