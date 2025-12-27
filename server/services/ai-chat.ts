@@ -66,6 +66,38 @@ function parseDateReference(text: string): { startDate: Date; endDate: Date } | 
   const now = new Date();
   const lowerText = text.toLowerCase();
 
+  // Parse specific month + year (e.g., "Nov 2025", "November 2025", "for November")
+  const monthNames = [
+    'january', 'february', 'march', 'april', 'may', 'june',
+    'july', 'august', 'september', 'october', 'november', 'december'
+  ];
+  const monthAbbrevs = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+  // Try to match "Month Year" or "Month" patterns
+  for (let i = 0; i < monthNames.length; i++) {
+    const fullName = monthNames[i];
+    const abbrev = monthAbbrevs[i];
+
+    // Match patterns like "Nov 2025", "November 2025", "for November", "in Nov"
+    const monthYearRegex = new RegExp(`(?:for|in)?\\s*(?:${fullName}|${abbrev})\\s*(\\d{4})?`, 'i');
+    const match = lowerText.match(monthYearRegex);
+
+    if (match) {
+      const year = match[1] ? parseInt(match[1]) : now.getFullYear();
+      const targetDate = new Date(year, i, 1);
+
+      // If the month is in the future of the specified year, use previous year
+      if (!match[1] && targetDate > now) {
+        targetDate.setFullYear(now.getFullYear() - 1);
+      }
+
+      return {
+        startDate: startOfMonth(targetDate),
+        endDate: endOfMonth(targetDate)
+      };
+    }
+  }
+
   if (lowerText.includes('this month') || lowerText.includes('current month')) {
     return { startDate: startOfMonth(now), endDate: now };
   }
@@ -194,16 +226,30 @@ async function buildFinancialContext(ctx: QueryContext): Promise<FinancialSummar
 // Call OpenAI for complex queries
 async function askOpenAI(query: string, ctx: QueryContext): Promise<ChatResponse> {
   try {
-    // Check if OpenAI API key is available
-    const apiKey = process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-    console.log('OpenAI API key check:', apiKey ? `Found (${apiKey.substring(0, 10)}...)` : 'Not found');
-    console.log('Available env keys:', Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('AI_')));
+    // Check if OpenAI API key is available - check multiple possible env var names
+    const apiKey = process.env.OPENAI_API_KEY
+      || process.env.AI_INTEGRATIONS_OPENAI_API_KEY
+      || process.env.OPENAI_KEY
+      || process.env.VITE_OPENAI_API_KEY;
+
+    // Debug logging
+    console.log('OpenAI API key check:', apiKey ? `Found (${apiKey.substring(0, 15)}...)` : 'Not found');
+    console.log('Checking env vars:', {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET',
+      AI_INTEGRATIONS_OPENAI_API_KEY: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ? 'SET' : 'NOT SET',
+      OPENAI_KEY: process.env.OPENAI_KEY ? 'SET' : 'NOT SET',
+      VITE_OPENAI_API_KEY: process.env.VITE_OPENAI_API_KEY ? 'SET' : 'NOT SET',
+    });
+    console.log('All env keys containing OPENAI or AI:', Object.keys(process.env).filter(k =>
+      k.toUpperCase().includes('OPENAI') || k.toUpperCase().includes('AI_')
+    ));
 
     if (!apiKey) {
       console.log('OpenAI API key not configured, falling back to default response');
       return {
         message: `I'm not sure how to help with that specific question.\n\n` +
           `💡 **Tip:** To enable AI-powered responses for complex questions, add your OpenAI API key to your Vercel environment variables as \`OPENAI_API_KEY\`.\n\n` +
+          `**Important:** After adding the key in Vercel, you must **redeploy** for it to take effect.\n\n` +
           `In the meantime, try asking about:\n\n` +
           `• Your monthly summary or financial overview\n` +
           `• Expenses or revenue for a specific period\n` +
