@@ -196,10 +196,15 @@ async function askOpenAI(query: string, ctx: QueryContext): Promise<ChatResponse
   try {
     // Check if OpenAI API key is available
     const apiKey = process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+    console.log('OpenAI API key check:', apiKey ? `Found (${apiKey.substring(0, 10)}...)` : 'Not found');
+    console.log('Available env keys:', Object.keys(process.env).filter(k => k.includes('OPENAI') || k.includes('AI_')));
+
     if (!apiKey) {
       console.log('OpenAI API key not configured, falling back to default response');
       return {
-        message: `I'm not sure how to help with that specific question. Try asking about:\n\n` +
+        message: `I'm not sure how to help with that specific question.\n\n` +
+          `💡 **Tip:** To enable AI-powered responses for complex questions, add your OpenAI API key to your Vercel environment variables as \`OPENAI_API_KEY\`.\n\n` +
+          `In the meantime, try asking about:\n\n` +
           `• Your monthly summary or financial overview\n` +
           `• Expenses or revenue for a specific period\n` +
           `• Unpaid invoices or bills\n` +
@@ -311,10 +316,28 @@ Guidelines:
       actions: suggestedActions.length > 0 ? suggestedActions.slice(0, 2) : undefined,
     };
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('OpenAI API error:', error);
+    console.error('Error details:', {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      type: error?.type,
+    });
+
+    // Provide more specific error messages
+    let errorMessage = `I encountered an issue processing your question.`;
+
+    if (error?.status === 401 || error?.code === 'invalid_api_key') {
+      errorMessage = `⚠️ OpenAI API key issue. Please check your API key configuration in Vercel environment variables.`;
+    } else if (error?.status === 429) {
+      errorMessage = `⚠️ Rate limit reached. Please try again in a moment.`;
+    } else if (error?.status === 500 || error?.status === 503) {
+      errorMessage = `⚠️ OpenAI service is temporarily unavailable. Please try again later.`;
+    }
+
     return {
-      message: `I encountered an issue processing your question. Please try rephrasing it, or ask about:\n\n` +
+      message: errorMessage + `\n\nIn the meantime, try asking about:\n\n` +
         `• Monthly financial summary\n` +
         `• Revenue or expenses\n` +
         `• Unpaid invoices or bills\n` +
@@ -593,11 +616,12 @@ const queryPatterns: QueryPattern[] = [
   // ===== SEND REMINDER TO SPECIFIC CUSTOMER =====
   {
     patterns: [
-      /send\s+(?:a\s+)?reminder\s+to\s+(.+?)(?:\s+about\s+(?:their|the)\s+(?:invoice|payment|overdue))?$/i,
-      /remind\s+(.+?)\s+(?:about|of)\s+(?:their|the)\s+(?:invoice|payment|overdue)/i,
-      /email\s+(.+?)\s+(?:about|for|regarding)\s+(?:their|the)\s+(?:invoice|overdue|payment)/i,
-      /send\s+(?:invoice\s+)?reminder\s+(?:email\s+)?to\s+(.+)/i,
-      /chase\s+(?:up\s+)?(.+?)(?:\s+(?:for|about)\s+(?:payment|invoice))?$/i,
+      /(?:can\s+you\s+)?send\s+(?:a\s+)?(?:email\s+)?reminder\s+to\s+(.+?)(?:\s+about\s+(?:their|the)\s+(?:invoice|payment|overdue))?$/i,
+      /(?:can\s+you\s+)?remind\s+(.+?)\s+(?:about|of)\s+(?:their|the)\s+(?:invoice|payment|overdue)/i,
+      /(?:can\s+you\s+)?email\s+(.+?)\s+(?:about|for|regarding)\s+(?:their|the|an?)?\s*(?:invoice|overdue|payment|reminder)/i,
+      /(?:can\s+you\s+)?send\s+(?:invoice\s+)?(?:email\s+)?reminder\s+(?:email\s+)?to\s+(.+)/i,
+      /(?:can\s+you\s+)?chase\s+(?:up\s+)?(.+?)(?:\s+(?:for|about)\s+(?:payment|invoice))?$/i,
+      /(?:can\s+you\s+)?(?:email|send)\s+(?:a\s+)?(?:payment\s+)?reminder\s+(?:email\s+)?to\s+(.+)/i,
     ],
     handler: async (match, ctx) => {
       // Extract customer name from the captured group
@@ -844,10 +868,11 @@ const queryPatterns: QueryPattern[] = [
   // ===== REVENUE =====
   {
     patterns: [
-      /(?:what|how\s+much)\s+(?:is|was|were)\s+(?:my|our|the)?\s*revenue/i,
-      /(?:total|show)\s+revenue/i,
+      /(?:what|how\s+much)\s*(?:'s|is|was|were)\s+(?:my|our|the)?\s*revenue/i,
+      /(?:total|show)\s+(?:me\s+)?(?:my|our|the)?\s*revenue/i,
       /how\s+much\s+(?:did\s+(?:we|i)\s+(?:make|earn)|money\s+came\s+in)/i,
       /income\s+(?:summary|this\s+month)/i,
+      /revenue\s+for\s+(?:\w+\s+)?\d{4}/i,
     ],
     handler: async (match, ctx) => {
       const dateRange = parseDateReference(match.input || '') || {
