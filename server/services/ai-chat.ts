@@ -517,6 +517,79 @@ const queryPatterns: QueryPattern[] = [
     }
   },
 
+  // ===== SEND INVOICE REMINDERS =====
+  {
+    patterns: [
+      /send\s+(?:invoice\s+)?reminders?(?:\s+(?:for|to)\s+(?:all\s+)?(?:overdue|unpaid)\s+invoices?)?/i,
+      /remind\s+(?:customers?|clients?)\s+(?:about|for)\s+(?:overdue|unpaid)\s+invoices?/i,
+      /email\s+(?:customers?|clients?)\s+(?:about|for)\s+(?:overdue|unpaid|late)\s+(?:invoices?|payments?)/i,
+      /notify\s+(?:customers?|clients?)\s+(?:about|of)\s+(?:overdue|late)\s+(?:invoices?|payments?)/i,
+      /chase\s+(?:up\s+)?(?:overdue|unpaid|late)\s+(?:invoices?|payments?)/i,
+    ],
+    handler: async (match, ctx) => {
+      const transactions = await ctx.storage.getTransactions();
+      const invoices = transactions.filter(t => t.type === 'invoice');
+      const overdue = invoices.filter(i => i.status === 'overdue');
+
+      if (overdue.length === 0) {
+        return {
+          message: `Great news! You have **no overdue invoices** to send reminders for. 🎉\n\nAll your customers are up to date with their payments!`,
+          actions: [
+            { label: 'View All Invoices', action: 'navigate', params: { path: '/invoices' } },
+          ]
+        };
+      }
+
+      const total = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
+
+      // Get contacts for customer names
+      const contacts = await ctx.storage.getContacts();
+      const contactMap = new Map(contacts.map(c => [c.id, c]));
+
+      // Check how many have emails
+      const withEmail = overdue.filter(inv => {
+        const contact = contactMap.get(inv.contactId || 0);
+        return contact?.email;
+      });
+
+      let message = `📧 **Ready to send reminders for ${overdue.length} overdue invoice${overdue.length > 1 ? 's' : ''}**\n\n` +
+        `Total outstanding: **${formatCurrency(total, ctx.homeCurrency)}**\n\n`;
+
+      if (withEmail.length < overdue.length) {
+        message += `⚠️ Note: ${overdue.length - withEmail.length} customer${overdue.length - withEmail.length > 1 ? 's have' : ' has'} no email on file and will be skipped.\n\n`;
+      }
+
+      message += `Click **"Send Reminders"** below to email your customers.`;
+
+      const tableData = {
+        type: 'table',
+        headers: ['Customer', 'Invoice', 'Amount', 'Email'],
+        rows: overdue.slice(0, 5).map(inv => {
+          const contact = contactMap.get(inv.contactId || 0);
+          return [
+            contact?.name || 'Unknown',
+            inv.reference || `#${inv.id}`,
+            formatCurrency(Number(inv.balance || inv.amount || 0), ctx.homeCurrency),
+            contact?.email ? '✅' : '❌ No email'
+          ];
+        })
+      };
+
+      if (overdue.length > 5) {
+        message += `\n\n_Showing 5 of ${overdue.length} invoices_`;
+      }
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'Send Reminders', action: 'sendReminders', params: { invoiceIds: overdue.map(i => i.id) } },
+          { label: 'View All Invoices', action: 'navigate', params: { path: '/invoices' } },
+        ]
+      };
+    }
+  },
+
   // ===== UNPAID INVOICES =====
   {
     patterns: [

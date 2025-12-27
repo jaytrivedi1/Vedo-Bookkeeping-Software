@@ -15,11 +15,30 @@ import {
   BarChart3,
   Maximize2,
   Minimize2,
-  ExternalLink
+  ExternalLink,
+  Mail,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiRequest } from '@/lib/queryClient';
+
+interface ReminderPreview {
+  invoiceId: number;
+  invoiceNumber: string;
+  customerName: string;
+  customerEmail: string | null;
+  amount: number;
+  canSend: boolean;
+  reason?: string;
+}
+
+interface PendingAction {
+  type: 'sendReminders';
+  invoiceIds: number[];
+  previews?: ReminderPreview[];
+}
 
 interface ChatMessage {
   id: string;
@@ -54,17 +73,96 @@ export function AIChatWidget() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [, setLocation] = useLocation();
+
+  // Preview reminders mutation
+  const previewRemindersMutation = useMutation({
+    mutationFn: async (invoiceIds: number[]) => {
+      return await apiRequest('/api/invoice-reminders/preview', 'POST', { invoiceIds });
+    },
+    onSuccess: (data, invoiceIds) => {
+      setPendingAction({
+        type: 'sendReminders',
+        invoiceIds,
+        previews: data.previews,
+      });
+    },
+    onError: (error: any) => {
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Sorry, I couldn't prepare the reminders: ${error.message || 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    },
+  });
+
+  // Send reminders mutation
+  const sendRemindersMutation = useMutation({
+    mutationFn: async (invoiceIds: number[]) => {
+      return await apiRequest('/api/invoice-reminders/send', 'POST', { invoiceIds });
+    },
+    onSuccess: (data) => {
+      setPendingAction(null);
+      const resultMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `✅ **Reminders sent!**\n\n` +
+          `• Sent: ${data.sent}\n` +
+          `• Failed: ${data.failed}\n` +
+          `• Skipped (no email): ${data.skipped}\n\n` +
+          (data.sent > 0 ? `Your customers have been notified about their overdue invoices.` : ''),
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, resultMessage]);
+    },
+    onError: (error: any) => {
+      setPendingAction(null);
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `❌ Failed to send reminders: ${error.message || 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    },
+  });
 
   // Handle action button clicks
   const handleAction = (action: ChatAction) => {
     if (action.action === 'navigate' && action.params?.path) {
       setIsOpen(false); // Close chat panel
       setLocation(action.params.path);
+    } else if (action.action === 'sendReminders' && action.params?.invoiceIds) {
+      // Show confirmation before sending reminders
+      previewRemindersMutation.mutate(action.params.invoiceIds);
     }
-    // Add more action handlers as needed
+  };
+
+  // Confirm sending reminders
+  const handleConfirmReminders = () => {
+    if (pendingAction?.invoiceIds) {
+      const canSendIds = pendingAction.previews
+        ?.filter(p => p.canSend)
+        .map(p => p.invoiceId) || pendingAction.invoiceIds;
+      sendRemindersMutation.mutate(canSendIds);
+    }
+  };
+
+  // Cancel pending action
+  const handleCancelAction = () => {
+    setPendingAction(null);
+    const cancelMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: 'Okay, I cancelled the reminder action. Let me know if you need anything else!',
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, cancelMessage]);
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -289,6 +387,92 @@ export function AIChatWidget() {
                   </div>
                 </div>
               )}
+
+              {/* Pending action confirmation */}
+              {pendingAction && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1 bg-amber-50 border border-amber-200 rounded-2xl rounded-tl-md p-4">
+                    <h4 className="font-semibold text-amber-800 text-sm mb-2 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Confirm: Send Invoice Reminders
+                    </h4>
+
+                    {previewRemindersMutation.isPending ? (
+                      <div className="flex items-center gap-2 text-amber-700 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Preparing reminders...
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-amber-700 mb-3">
+                          Ready to send reminders to {pendingAction.previews?.filter(p => p.canSend).length || 0} customers:
+                        </p>
+
+                        <div className="space-y-2 mb-3 max-h-32 overflow-y-auto">
+                          {pendingAction.previews?.map((preview) => (
+                            <div
+                              key={preview.invoiceId}
+                              className={cn(
+                                "flex items-center justify-between text-xs p-2 rounded",
+                                preview.canSend ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-500"
+                              )}
+                            >
+                              <div className="flex items-center gap-2">
+                                {preview.canSend ? (
+                                  <Check className="w-3 h-3 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="w-3 h-3 text-slate-400" />
+                                )}
+                                <span className="font-medium">{preview.customerName}</span>
+                              </div>
+                              <div className="text-right">
+                                <div>{preview.invoiceNumber}</div>
+                                {!preview.canSend && (
+                                  <div className="text-[10px] text-slate-400">{preview.reason}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={handleConfirmReminders}
+                            disabled={sendRemindersMutation.isPending || !pendingAction.previews?.some(p => p.canSend)}
+                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs"
+                          >
+                            {sendRemindersMutation.isPending ? (
+                              <>
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="w-3 h-3 mr-1" />
+                                Send Reminders
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelAction}
+                            disabled={sendRemindersMutation.isPending}
+                            className="text-xs"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </>
           )}

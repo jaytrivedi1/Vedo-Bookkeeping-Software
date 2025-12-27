@@ -14764,6 +14764,69 @@ Respond in JSON format:
     }
   });
 
+  // ===== INVOICE REMINDER ENDPOINTS =====
+
+  // Preview reminders (for confirmation)
+  apiRouter.post("/invoice-reminders/preview", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { invoiceIds } = req.body;
+
+      if (!invoiceIds || !Array.isArray(invoiceIds)) {
+        return res.status(400).json({ error: 'invoiceIds array is required' });
+      }
+
+      const { previewInvoiceReminders } = await import('./services/invoice-reminder-service');
+      const previews = await previewInvoiceReminders(storage, invoiceIds);
+
+      res.json({
+        total: previews.length,
+        canSend: previews.filter(p => p.canSend).length,
+        cannotSend: previews.filter(p => !p.canSend).length,
+        previews
+      });
+    } catch (error: any) {
+      console.error('[Invoice Reminders] Preview error:', error);
+      res.status(500).json({ error: 'Failed to preview reminders' });
+    }
+  });
+
+  // Send reminders
+  apiRouter.post("/invoice-reminders/send", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { invoiceIds } = req.body;
+
+      if (!invoiceIds || !Array.isArray(invoiceIds)) {
+        return res.status(400).json({ error: 'invoiceIds array is required' });
+      }
+
+      // Get company info
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const userCompanies = await storage.getUserCompanies(userId);
+      if (userCompanies.length === 0) {
+        return res.status(400).json({ error: 'No company found' });
+      }
+
+      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0].companyId;
+      const companySettings = await storage.getCompanySettings();
+      const preferences = await storage.getPreferences();
+
+      const companyName = companySettings?.name || 'Your Company';
+      const currency = preferences?.homeCurrency || 'CAD';
+
+      const { sendInvoiceReminders } = await import('./services/invoice-reminder-service');
+      const result = await sendInvoiceReminders(storage, invoiceIds, companyName, currency);
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('[Invoice Reminders] Send error:', error);
+      res.status(500).json({ error: 'Failed to send reminders', message: error.message });
+    }
+  });
+
   app.use("/api", apiRouter);
 
   const httpServer = createServer(app);
