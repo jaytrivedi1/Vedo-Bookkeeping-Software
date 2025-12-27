@@ -61,6 +61,19 @@ function formatCurrency(amount: number, currency: string = 'CAD'): string {
   }).format(amount);
 }
 
+// Helper to check if a transaction is overdue (by due date, not just status)
+function isOverdue(transaction: { status?: string; dueDate?: string | Date | null }): boolean {
+  if (transaction.status === 'overdue') return true;
+  if (transaction.status === 'paid' || transaction.status === 'completed') return false;
+  if (transaction.dueDate) {
+    const dueDate = new Date(transaction.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  }
+  return false;
+}
+
 // Helper to parse date references
 function parseDateReference(text: string): { startDate: Date; endDate: Date } | null {
   const now = new Date();
@@ -155,12 +168,14 @@ async function buildFinancialContext(ctx: QueryContext): Promise<FinancialSummar
   // Unpaid invoices
   const invoices = transactions.filter(t => t.type === 'invoice');
   const unpaidInvoices = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
-  const overdueInvoices = unpaidInvoices.filter(i => i.status === 'overdue');
+  // Use isOverdue helper to check by due date, not just status
+  const overdueInvoices = unpaidInvoices.filter(i => isOverdue(i));
 
   // Unpaid bills
   const bills = transactions.filter(t => t.type === 'bill');
   const unpaidBills = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
-  const overdueBills = unpaidBills.filter(b => b.status === 'overdue');
+  // Use isOverdue helper to check by due date, not just status
+  const overdueBills = unpaidBills.filter(b => isOverdue(b));
 
   // Cash balance (bank accounts and cash-related accounts by name)
   const bankAccounts = accounts.filter(a =>
@@ -542,7 +557,9 @@ const queryPatterns: QueryPattern[] = [
     handler: async (match, ctx) => {
       const transactions = await ctx.storage.getTransactions();
       const invoices = transactions.filter(t => t.type === 'invoice');
-      const overdue = invoices.filter(i => i.status === 'overdue');
+      // Use isOverdue helper to check by due date, not just status
+      const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
+      const overdue = unpaid.filter(i => isOverdue(i));
 
       const total = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
 
@@ -600,7 +617,9 @@ const queryPatterns: QueryPattern[] = [
     handler: async (match, ctx) => {
       const transactions = await ctx.storage.getTransactions();
       const invoices = transactions.filter(t => t.type === 'invoice');
-      const overdue = invoices.filter(i => i.status === 'overdue');
+      // Use isOverdue helper to check by due date, not just status
+      const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
+      const overdue = unpaid.filter(i => isOverdue(i));
 
       if (overdue.length === 0) {
         return {
@@ -714,21 +733,18 @@ const queryPatterns: QueryPattern[] = [
       const transactions = await ctx.storage.getTransactions();
       const customerIds = new Set(matchingContacts.map(c => c.id));
 
-      const overdueInvoices = transactions.filter(t =>
+      // Use isOverdue helper to check by due date, not just status
+      const customerInvoices = transactions.filter(t =>
         t.type === 'invoice' &&
-        t.status === 'overdue' &&
+        (t.status === 'open' || t.status === 'overdue' || t.status === 'partial') &&
         t.contactId &&
         customerIds.has(t.contactId)
       );
+      const overdueInvoices = customerInvoices.filter(i => isOverdue(i));
 
       if (overdueInvoices.length === 0) {
         // Check if they have any unpaid invoices (not just overdue)
-        const unpaidInvoices = transactions.filter(t =>
-          t.type === 'invoice' &&
-          (t.status === 'open' || t.status === 'partial') &&
-          t.contactId &&
-          customerIds.has(t.contactId)
-        );
+        const unpaidInvoices = customerInvoices.filter(i => !isOverdue(i));
 
         const customerName = matchingContacts[0]?.name || match[1];
 
@@ -811,7 +827,8 @@ const queryPatterns: QueryPattern[] = [
       const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
 
       const total = unpaid.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
-      const overdue = unpaid.filter(i => i.status === 'overdue');
+      // Use isOverdue helper to check by due date, not just status
+      const overdue = unpaid.filter(i => isOverdue(i));
       const overdueTotal = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid invoices** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
@@ -837,7 +854,7 @@ const queryPatterns: QueryPattern[] = [
             inv.reference || `#${inv.id}`,
             contactMap.get(inv.contactId || 0) || 'Unknown',
             formatCurrency(Number(inv.balance || inv.amount || 0), ctx.homeCurrency),
-            inv.status === 'overdue' ? '🔴 Overdue' : '🟡 Pending'
+            isOverdue(inv) ? '🔴 Overdue' : '🟡 Pending'
           ])
         };
 
@@ -982,7 +999,9 @@ const queryPatterns: QueryPattern[] = [
     handler: async (match, ctx) => {
       const transactions = await ctx.storage.getTransactions();
       const bills = transactions.filter(t => t.type === 'bill');
-      const overdue = bills.filter(b => b.status === 'overdue');
+      // Use isOverdue helper to check by due date, not just status
+      const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
+      const overdue = unpaid.filter(b => isOverdue(b));
 
       const total = overdue.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
 
@@ -1042,7 +1061,8 @@ const queryPatterns: QueryPattern[] = [
       const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
 
       const total = unpaid.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
-      const overdue = unpaid.filter(b => b.status === 'overdue');
+      // Use isOverdue helper to check by due date, not just status
+      const overdue = unpaid.filter(b => isOverdue(b));
       const overdueTotal = overdue.reduce((sum, b) => sum + Number(b.balance || b.amount || 0), 0);
 
       let message = `You have **${unpaid.length} unpaid bills** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
