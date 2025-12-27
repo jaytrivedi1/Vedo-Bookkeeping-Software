@@ -590,6 +590,139 @@ const queryPatterns: QueryPattern[] = [
     }
   },
 
+  // ===== SEND REMINDER TO SPECIFIC CUSTOMER =====
+  {
+    patterns: [
+      /send\s+(?:a\s+)?reminder\s+to\s+(.+?)(?:\s+about\s+(?:their|the)\s+(?:invoice|payment|overdue))?$/i,
+      /remind\s+(.+?)\s+(?:about|of)\s+(?:their|the)\s+(?:invoice|payment|overdue)/i,
+      /email\s+(.+?)\s+(?:about|for|regarding)\s+(?:their|the)\s+(?:invoice|overdue|payment)/i,
+      /send\s+(?:invoice\s+)?reminder\s+(?:email\s+)?to\s+(.+)/i,
+      /chase\s+(?:up\s+)?(.+?)(?:\s+(?:for|about)\s+(?:payment|invoice))?$/i,
+    ],
+    handler: async (match, ctx) => {
+      // Extract customer name from the captured group
+      const customerNameQuery = match[1]?.trim().toLowerCase();
+
+      if (!customerNameQuery) {
+        return {
+          message: `Please specify the customer name. For example:\n• "Send reminder to Acme Corp"\n• "Remind John Smith about their invoice"`,
+        };
+      }
+
+      // Get contacts and find matching customer
+      const contacts = await ctx.storage.getContacts();
+      const matchingContacts = contacts.filter(c =>
+        c.name.toLowerCase().includes(customerNameQuery) ||
+        customerNameQuery.includes(c.name.toLowerCase())
+      );
+
+      if (matchingContacts.length === 0) {
+        // Try more fuzzy matching - split into words
+        const queryWords = customerNameQuery.split(/\s+/);
+        const fuzzyMatches = contacts.filter(c => {
+          const contactWords = c.name.toLowerCase().split(/\s+/);
+          return queryWords.some(qw =>
+            contactWords.some(cw => cw.includes(qw) || qw.includes(cw))
+          );
+        });
+
+        if (fuzzyMatches.length === 0) {
+          return {
+            message: `I couldn't find a customer named "${match[1]}". Please check the name and try again.\n\nYou can also say "send reminders" to email all customers with overdue invoices.`,
+            actions: [
+              { label: 'View Customers', action: 'navigate', params: { path: '/customers' } },
+            ]
+          };
+        }
+
+        matchingContacts.push(...fuzzyMatches);
+      }
+
+      // Get transactions and find overdue invoices for matching customers
+      const transactions = await ctx.storage.getTransactions();
+      const customerIds = new Set(matchingContacts.map(c => c.id));
+
+      const overdueInvoices = transactions.filter(t =>
+        t.type === 'invoice' &&
+        t.status === 'overdue' &&
+        t.contactId &&
+        customerIds.has(t.contactId)
+      );
+
+      if (overdueInvoices.length === 0) {
+        // Check if they have any unpaid invoices (not just overdue)
+        const unpaidInvoices = transactions.filter(t =>
+          t.type === 'invoice' &&
+          (t.status === 'open' || t.status === 'partial') &&
+          t.contactId &&
+          customerIds.has(t.contactId)
+        );
+
+        const customerName = matchingContacts[0]?.name || match[1];
+
+        if (unpaidInvoices.length > 0) {
+          const total = unpaidInvoices.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
+          return {
+            message: `**${customerName}** has **${unpaidInvoices.length} unpaid invoice${unpaidInvoices.length > 1 ? 's' : ''}** (${formatCurrency(total, ctx.homeCurrency)}), but none are overdue yet.\n\nWould you like to send a reminder anyway?`,
+            actions: [
+              { label: 'Send Reminder Anyway', action: 'sendReminders', params: { invoiceIds: unpaidInvoices.map(i => i.id) } },
+              { label: 'View Invoices', action: 'navigate', params: { path: '/invoices' } },
+            ]
+          };
+        }
+
+        return {
+          message: `**${customerName}** has no overdue invoices at this time. 🎉`,
+          actions: [
+            { label: 'View Invoices', action: 'navigate', params: { path: '/invoices' } },
+          ]
+        };
+      }
+
+      // Found overdue invoices for this customer
+      const contactMap = new Map(matchingContacts.map(c => [c.id, c]));
+      const total = overdueInvoices.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
+
+      // Group by customer in case multiple matched
+      const customerNames = [...new Set(overdueInvoices.map(inv =>
+        contactMap.get(inv.contactId || 0)?.name || 'Unknown'
+      ))];
+
+      const displayName = customerNames.length === 1 ? customerNames[0] : customerNames.join(', ');
+      const contact = contactMap.get(overdueInvoices[0].contactId || 0);
+
+      let message = `📧 **Ready to send reminder to ${displayName}**\n\n`;
+      message += `**${overdueInvoices.length} overdue invoice${overdueInvoices.length > 1 ? 's' : ''}** totaling **${formatCurrency(total, ctx.homeCurrency)}**\n\n`;
+
+      if (!contact?.email) {
+        message += `⚠️ **Warning:** No email address on file for this customer.\n\n`;
+      } else {
+        message += `Email will be sent to: ${contact.email}\n\n`;
+      }
+
+      message += `Click **"Send Reminder"** below to email the customer.`;
+
+      const tableData = {
+        type: 'table',
+        headers: ['Invoice', 'Amount', 'Due Date'],
+        rows: overdueInvoices.map(inv => [
+          inv.reference || `#${inv.id}`,
+          formatCurrency(Number(inv.balance || inv.amount || 0), ctx.homeCurrency),
+          inv.dueDate ? format(new Date(inv.dueDate), 'MMM d, yyyy') : '-'
+        ])
+      };
+
+      return {
+        message,
+        data: tableData,
+        actions: [
+          { label: 'Send Reminder', action: 'sendReminders', params: { invoiceIds: overdueInvoices.map(i => i.id) } },
+          { label: 'View Invoices', action: 'navigate', params: { path: '/invoices' } },
+        ]
+      };
+    }
+  },
+
   // ===== UNPAID INVOICES =====
   {
     patterns: [
@@ -1166,6 +1299,10 @@ const queryPatterns: QueryPattern[] = [
           `🏦 **Bank:** "What's our cash balance?"\n` +
           `📈 **Profit:** "Are we profitable?"\n` +
           `🔄 **Recent:** "Show recent transactions"\n\n` +
+          `📧 **Actions I can take:**\n` +
+          `• "Send reminders for overdue invoices"\n` +
+          `• "Send reminder to [Customer Name]"\n` +
+          `• "Remind Acme Corp about their invoice"\n\n` +
           `💡 **Pro tip:** You can also ask complex questions in natural language - I'm powered by AI and can analyze your financial data to answer questions like:\n` +
           `• "Should I be worried about my cash flow?"\n` +
           `• "How does this month compare to last month?"\n` +
