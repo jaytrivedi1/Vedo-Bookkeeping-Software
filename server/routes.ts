@@ -11780,23 +11780,92 @@ Respond in JSON format:
   // Reconciliation routes
   apiRouter.post("/reconciliations", async (req: Request, res: Response) => {
     try {
-      const { accountId, statementDate, statementEndingBalance } = req.body;
-      
+      const { accountId, statementDate, statementEndingBalance, forceNew } = req.body;
+
       if (!accountId || !statementDate || statementEndingBalance === undefined) {
         return res.status(400).json({ message: "Account ID, statement date, and statement ending balance are required" });
       }
-      
+
+      const numericAccountId = Number(accountId);
+
+      // Check for existing in-progress reconciliation (unless forceNew is true)
+      if (!forceNew) {
+        const existingInProgress = await storage.getInProgressReconciliation(numericAccountId);
+        if (existingInProgress) {
+          return res.json({
+            ...existingInProgress,
+            isResumed: true,
+            message: "Resumed existing in-progress reconciliation"
+          });
+        }
+      }
+
+      // Calculate opening balance from last completed reconciliation
+      const lastCompleted = await storage.getLastCompletedReconciliation(numericAccountId);
+      const openingBalance = lastCompleted?.statementEndingBalance || 0;
+      const previousReconciliationId = lastCompleted?.id || null;
+
       const reconciliation = await storage.createReconciliation({
-        accountId: Number(accountId),
+        accountId: numericAccountId,
         statementDate: new Date(statementDate),
         statementEndingBalance: Number(statementEndingBalance),
+        openingBalance,
+        previousReconciliationId,
         status: 'in_progress',
       });
-      
+
       res.json(reconciliation);
     } catch (error) {
       console.error("Error creating reconciliation:", error);
       res.status(500).json({ message: "Failed to create reconciliation" });
+    }
+  });
+
+  // Get in-progress reconciliation for an account (for resume feature)
+  apiRouter.get("/reconciliations/in-progress/:accountId", async (req: Request, res: Response) => {
+    try {
+      const accountId = Number(req.params.accountId);
+      const reconciliation = await storage.getInProgressReconciliation(accountId);
+
+      if (!reconciliation) {
+        return res.status(404).json({ message: "No in-progress reconciliation found" });
+      }
+
+      res.json(reconciliation);
+    } catch (error) {
+      console.error("Error fetching in-progress reconciliation:", error);
+      res.status(500).json({ message: "Failed to fetch in-progress reconciliation" });
+    }
+  });
+
+  // Get last completed reconciliation for an account
+  apiRouter.get("/reconciliations/last-completed/:accountId", async (req: Request, res: Response) => {
+    try {
+      const accountId = Number(req.params.accountId);
+      const reconciliation = await storage.getLastCompletedReconciliation(accountId);
+
+      if (!reconciliation) {
+        return res.status(404).json({ message: "No completed reconciliation found" });
+      }
+
+      res.json(reconciliation);
+    } catch (error) {
+      console.error("Error fetching last completed reconciliation:", error);
+      res.status(500).json({ message: "Failed to fetch last completed reconciliation" });
+    }
+  });
+
+  // Get reconciliation history for an account
+  apiRouter.get("/reconciliations/history/:accountId", async (req: Request, res: Response) => {
+    try {
+      const accountId = Number(req.params.accountId);
+      const limit = Number(req.query.limit) || 50;
+      const history = await storage.getReconciliationHistory(accountId, limit);
+
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching reconciliation history:", error);
+      res.status(500).json({ message: "Failed to fetch reconciliation history" });
     }
   });
 
@@ -11909,29 +11978,261 @@ Respond in JSON format:
     try {
       const reconciliationId = Number(req.params.id);
       const reconciliation = await storage.getReconciliation(reconciliationId);
-      
+
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
-      
+
       // Check if difference is zero
       if (Math.abs(reconciliation.difference) > 0.01) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: "Cannot complete reconciliation with a non-zero difference",
           difference: reconciliation.difference
         });
       }
-      
+
       // Mark as completed
       const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
         status: 'completed',
         completedAt: new Date(),
       });
-      
+
+      // Update account's last reconciled info
+      await storage.updateAccountLastReconciled(
+        reconciliation.accountId,
+        reconciliation.statementDate,
+        reconciliation.statementEndingBalance
+      );
+
       res.json(updatedReconciliation);
     } catch (error) {
       console.error("Error completing reconciliation:", error);
       res.status(500).json({ message: "Failed to complete reconciliation" });
+    }
+  });
+
+  // Undo a completed reconciliation (revert to in_progress)
+  apiRouter.post("/reconciliations/:id/undo", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+
+      const undoneReconciliation = await storage.undoReconciliation(reconciliationId);
+
+      if (!undoneReconciliation) {
+        return res.status(400).json({ message: "Cannot undo this reconciliation" });
+      }
+
+      res.json(undoneReconciliation);
+    } catch (error: any) {
+      console.error("Error undoing reconciliation:", error);
+      res.status(400).json({ message: error.message || "Failed to undo reconciliation" });
+    }
+  });
+
+  // Auto-match ledger entries by amounts
+  apiRouter.post("/reconciliations/:id/suggest-matches", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+      const { amounts, tolerance = 0.01 } = req.body;
+
+      if (!Array.isArray(amounts) || amounts.length === 0) {
+        return res.status(400).json({ message: "amounts must be a non-empty array of numbers" });
+      }
+
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+
+      // Get ledger entries for this account up to the statement date
+      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+        reconciliation.accountId,
+        reconciliation.statementDate
+      );
+
+      // Get existing reconciliation items to know what's already cleared
+      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const clearedEntryIds = new Set(
+        reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
+      );
+
+      // Find entries matching the amounts (only uncleared ones)
+      const numericAmounts = amounts.map(Number);
+      const matchingEntries = ledgerEntries.filter(entry => {
+        if (clearedEntryIds.has(entry.id)) return false; // Skip already cleared
+        const entryAmount = entry.debit - entry.credit;
+        return numericAmounts.some(amount => Math.abs(entryAmount - amount) <= tolerance);
+      });
+
+      // Get transaction details for the matching entries
+      const transactions = await storage.getTransactions();
+      const transactionMap = new Map(transactions.map(t => [t.id, t]));
+
+      const enrichedMatches = matchingEntries.map(entry => ({
+        ...entry,
+        matchedAmount: entry.debit - entry.credit,
+        transaction: transactionMap.get(entry.transactionId),
+      }));
+
+      res.json({
+        matches: enrichedMatches,
+        totalMatched: enrichedMatches.length,
+      });
+    } catch (error) {
+      console.error("Error suggesting matches:", error);
+      res.status(500).json({ message: "Failed to suggest matches" });
+    }
+  });
+
+  // Bulk update reconciliation items (clear/unclear all)
+  apiRouter.patch("/reconciliations/:id/bulk-items", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+      const { action } = req.body; // 'clear_all' or 'unclear_all'
+
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+
+      // Get all ledger entries for this reconciliation
+      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+        reconciliation.accountId,
+        reconciliation.statementDate
+      );
+
+      const allEntryIds = ledgerEntries.map(e => e.id);
+      const isCleared = action === 'clear_all';
+
+      // Bulk update all items
+      await storage.bulkUpsertReconciliationItems(reconciliationId, allEntryIds, isCleared);
+
+      // Recalculate cleared balance
+      let clearedBalance = 0;
+      if (isCleared) {
+        for (const entry of ledgerEntries) {
+          clearedBalance += entry.debit - entry.credit;
+        }
+      }
+
+      const difference = roundTo2Decimals(reconciliation.statementEndingBalance - clearedBalance);
+
+      // Update reconciliation with new balances
+      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+        clearedBalance: roundTo2Decimals(clearedBalance),
+        difference,
+      });
+
+      res.json({
+        reconciliation: updatedReconciliation,
+        itemsUpdated: allEntryIds.length,
+      });
+    } catch (error) {
+      console.error("Error bulk updating reconciliation items:", error);
+      res.status(500).json({ message: "Failed to bulk update reconciliation items" });
+    }
+  });
+
+  // Generate reconciliation report
+  apiRouter.get("/reconciliations/:id/report", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+
+      // Get account details
+      const account = await storage.getAccount(reconciliation.accountId);
+
+      // Get ledger entries and reconciliation items
+      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+        reconciliation.accountId,
+        reconciliation.statementDate
+      );
+
+      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const clearedEntryIds = new Set(
+        reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
+      );
+
+      // Get transaction details
+      const transactions = await storage.getTransactions();
+      const transactionMap = new Map(transactions.map(t => [t.id, t]));
+
+      // Separate cleared and uncleared entries
+      const clearedEntries = ledgerEntries
+        .filter(e => clearedEntryIds.has(e.id))
+        .map(entry => ({
+          ...entry,
+          transaction: transactionMap.get(entry.transactionId),
+        }));
+
+      const unclearedEntries = ledgerEntries
+        .filter(e => !clearedEntryIds.has(e.id))
+        .map(entry => ({
+          ...entry,
+          transaction: transactionMap.get(entry.transactionId),
+        }));
+
+      // Calculate totals
+      const clearedDebits = clearedEntries.reduce((sum, e) => sum + e.debit, 0);
+      const clearedCredits = clearedEntries.reduce((sum, e) => sum + e.credit, 0);
+      const unclearedDebits = unclearedEntries.reduce((sum, e) => sum + e.debit, 0);
+      const unclearedCredits = unclearedEntries.reduce((sum, e) => sum + e.credit, 0);
+
+      res.json({
+        reconciliation: {
+          ...reconciliation,
+          accountName: account?.name,
+          accountCode: account?.code,
+        },
+        summary: {
+          openingBalance: reconciliation.openingBalance || 0,
+          statementEndingBalance: reconciliation.statementEndingBalance,
+          clearedBalance: reconciliation.clearedBalance,
+          difference: reconciliation.difference,
+          clearedDebits: roundTo2Decimals(clearedDebits),
+          clearedCredits: roundTo2Decimals(clearedCredits),
+          unclearedDebits: roundTo2Decimals(unclearedDebits),
+          unclearedCredits: roundTo2Decimals(unclearedCredits),
+          totalClearedItems: clearedEntries.length,
+          totalUnclearedItems: unclearedEntries.length,
+        },
+        clearedEntries,
+        unclearedEntries,
+      });
+    } catch (error) {
+      console.error("Error generating reconciliation report:", error);
+      res.status(500).json({ message: "Failed to generate reconciliation report" });
+    }
+  });
+
+  // Delete an in-progress reconciliation
+  apiRouter.delete("/reconciliations/:id", async (req: Request, res: Response) => {
+    try {
+      const reconciliationId = Number(req.params.id);
+      const reconciliation = await storage.getReconciliation(reconciliationId);
+
+      if (!reconciliation) {
+        return res.status(404).json({ message: "Reconciliation not found" });
+      }
+
+      if (reconciliation.status === 'completed') {
+        return res.status(400).json({ message: "Cannot delete a completed reconciliation. Use undo first." });
+      }
+
+      const deleted = await storage.deleteReconciliation(reconciliationId);
+
+      if (!deleted) {
+        return res.status(500).json({ message: "Failed to delete reconciliation" });
+      }
+
+      res.json({ success: true, message: "Reconciliation deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting reconciliation:", error);
+      res.status(500).json({ message: "Failed to delete reconciliation" });
     }
   });
 

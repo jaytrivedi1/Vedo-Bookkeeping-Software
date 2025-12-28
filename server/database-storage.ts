@@ -28,7 +28,7 @@ import {
   merchantPatternsSchema, categorizationFeedbackSchema,
   aiConversationsSchema, aiMessagesSchema
 } from "@shared/schema";
-import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, ne, or, isNull, like, ilike, lt, gt, inArray } from "drizzle-orm";
 import { IStorage } from "./storage";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -3202,16 +3202,140 @@ export class DatabaseStorage implements IStorage {
               inArray(reconciliationItems.ledgerEntryId, ledgerEntryIds)
             )
           );
-        
+
         // Insert new reconciliation items
         const items = ledgerEntryIds.map(ledgerEntryId => ({
           reconciliationId,
           ledgerEntryId,
           isCleared
         }));
-        
+
         await tx.insert(reconciliationItems).values(items);
       }
+    });
+  }
+
+  // Get in-progress reconciliation for an account (for resume feature)
+  async getInProgressReconciliation(accountId: number): Promise<Reconciliation | undefined> {
+    const result = await db.select()
+      .from(reconciliations)
+      .where(
+        and(
+          eq(reconciliations.accountId, accountId),
+          eq(reconciliations.status, 'in_progress')
+        )
+      )
+      .orderBy(desc(reconciliations.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  // Get last completed reconciliation for an account
+  async getLastCompletedReconciliation(accountId: number): Promise<Reconciliation | undefined> {
+    const result = await db.select()
+      .from(reconciliations)
+      .where(
+        and(
+          eq(reconciliations.accountId, accountId),
+          eq(reconciliations.status, 'completed')
+        )
+      )
+      .orderBy(desc(reconciliations.completedAt))
+      .limit(1);
+    return result[0];
+  }
+
+  // Get reconciliation history for an account (completed ones)
+  async getReconciliationHistory(accountId: number, limit: number = 50): Promise<Reconciliation[]> {
+    return await db.select()
+      .from(reconciliations)
+      .where(
+        and(
+          eq(reconciliations.accountId, accountId),
+          eq(reconciliations.status, 'completed')
+        )
+      )
+      .orderBy(desc(reconciliations.completedAt))
+      .limit(limit);
+  }
+
+  // Undo a completed reconciliation (revert to in_progress)
+  async undoReconciliation(id: number): Promise<Reconciliation | undefined> {
+    // First check if this is the most recent completed reconciliation for the account
+    const reconciliation = await this.getReconciliation(id);
+    if (!reconciliation || reconciliation.status !== 'completed') {
+      return undefined;
+    }
+
+    // Check if there's a newer completed reconciliation
+    const newerReconciliations = await db.select()
+      .from(reconciliations)
+      .where(
+        and(
+          eq(reconciliations.accountId, reconciliation.accountId),
+          eq(reconciliations.status, 'completed'),
+          gt(reconciliations.completedAt, reconciliation.completedAt!)
+        )
+      )
+      .limit(1);
+
+    if (newerReconciliations.length > 0) {
+      throw new Error('Cannot undo: there are newer completed reconciliations');
+    }
+
+    // Revert the reconciliation status
+    const [updatedReconciliation] = await db.update(reconciliations)
+      .set({
+        status: 'in_progress',
+        completedAt: null,
+      })
+      .where(eq(reconciliations.id, id))
+      .returning();
+
+    // Update the account's last reconciled info to the previous reconciliation
+    const previousCompleted = await this.getLastCompletedReconciliation(reconciliation.accountId);
+    if (previousCompleted) {
+      await db.update(accounts)
+        .set({
+          lastReconciledDate: previousCompleted.statementDate,
+          lastReconciledBalance: previousCompleted.statementEndingBalance,
+        })
+        .where(eq(accounts.id, reconciliation.accountId));
+    } else {
+      // No previous reconciliation, clear the last reconciled info
+      await db.update(accounts)
+        .set({
+          lastReconciledDate: null,
+          lastReconciledBalance: 0,
+        })
+        .where(eq(accounts.id, reconciliation.accountId));
+    }
+
+    return updatedReconciliation;
+  }
+
+  // Update account's last reconciled info
+  async updateAccountLastReconciled(accountId: number, date: Date, balance: number): Promise<void> {
+    await db.update(accounts)
+      .set({
+        lastReconciledDate: date,
+        lastReconciledBalance: balance,
+      })
+      .where(eq(accounts.id, accountId));
+  }
+
+  // Find ledger entries matching specific amounts (for auto-matching feature)
+  async findLedgerEntriesByAmounts(accountId: number, amounts: number[], tolerance: number = 0.01): Promise<LedgerEntry[]> {
+    // Get all ledger entries for the account
+    const entries = await db.select()
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.accountId, accountId))
+      .orderBy(ledgerEntries.date);
+
+    // Filter entries that match any of the amounts within tolerance
+    return entries.filter(entry => {
+      const entryAmount = entry.debit - entry.credit;
+      return amounts.some(amount => Math.abs(entryAmount - amount) <= tolerance);
     });
   }
 

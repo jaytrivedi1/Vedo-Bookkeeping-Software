@@ -34,6 +34,7 @@ import { addCompanyCodeMigration } from "../server/migrations/add-company-code";
 import { addAiCategorizationTables } from "../server/migrations/add-ai-categorization";
 import { addAiConversationsTables } from "../server/migrations/add-ai-conversations";
 import { addCompanyScopingToAi } from "../server/migrations/add-company-scoping-to-ai";
+import { addReconciliationEnhancements } from "../server/migrations/add-reconciliation-enhancements";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -156,6 +157,10 @@ async function runMigrations() {
     // Add company scoping to AI categorization
     log("Running company scoping for AI categorization...");
     await addCompanyScopingToAi();
+
+    // Add reconciliation enhancements
+    log("Running reconciliation enhancements migration...");
+    await addReconciliationEnhancements();
 
     log("All migrations completed successfully!");
     process.exit(0);

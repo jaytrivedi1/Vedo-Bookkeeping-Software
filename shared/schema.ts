@@ -58,6 +58,8 @@ export const accounts = pgTable('accounts', {
   balance: doublePrecision('balance').notNull().default(0),
   isActive: boolean('is_active').notNull().default(true),
   cashFlowCategory: cashFlowCategoryEnum('cash_flow_category').default('none'),
+  lastReconciledDate: timestamp('last_reconciled_date'),
+  lastReconciledBalance: doublePrecision('last_reconciled_balance').default(0),
 });
 
 // Relations are defined through foreign keys in the table definitions
@@ -162,11 +164,13 @@ export const reconciliations = pgTable('reconciliations', {
   accountId: integer('account_id').notNull().references(() => accounts.id),
   statementDate: timestamp('statement_date').notNull(),
   statementEndingBalance: doublePrecision('statement_ending_balance').notNull(),
+  openingBalance: doublePrecision('opening_balance').default(0),
   clearedBalance: doublePrecision('cleared_balance').notNull().default(0),
   difference: doublePrecision('difference').notNull().default(0),
   status: reconciliationStatusEnum('status').notNull().default('in_progress'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   completedAt: timestamp('completed_at'),
+  previousReconciliationId: integer('previous_reconciliation_id'),
   notes: text('notes'),
 });
 

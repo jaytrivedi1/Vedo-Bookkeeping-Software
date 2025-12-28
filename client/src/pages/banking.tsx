@@ -73,7 +73,14 @@ import {
   Sparkles,
   ArrowUpRight,
   Zap,
-  Pencil
+  Pencil,
+  History,
+  Undo2,
+  CheckSquare,
+  Square,
+  FileText,
+  Printer,
+  RotateCcw
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -869,6 +876,13 @@ export default function Banking() {
   const [reconcileStatementBalance, setReconcileStatementBalance] = useState('');
   const [activeReconciliationId, setActiveReconciliationId] = useState<number | null>(null);
   const [clearedEntries, setClearedEntries] = useState<Set<number>>(new Set());
+  const [showReconciliationHistory, setShowReconciliationHistory] = useState(false);
+  const [showReconciliationReport, setShowReconciliationReport] = useState(false);
+  const [reconciliationSearchQuery, setReconciliationSearchQuery] = useState('');
+  const [showOnlyUncleared, setShowOnlyUncleared] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [existingInProgressReconciliation, setExistingInProgressReconciliation] = useState<any>(null);
+  const [autoMatchAmounts, setAutoMatchAmounts] = useState('');
 
   // Column widths state with localStorage persistence
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(() => {
@@ -1407,7 +1421,7 @@ export default function Banking() {
 
   // Create reconciliation mutation
   const createReconciliationMutation = useMutation({
-    mutationFn: async (data: { accountId: number; statementDate: string; statementEndingBalance: number }) => {
+    mutationFn: async (data: { accountId: number; statementDate: string; statementEndingBalance: number; forceNew?: boolean }) => {
       return await apiRequest('/api/reconciliations', 'POST', data);
     },
     onSuccess: (data) => {
@@ -1476,6 +1490,7 @@ export default function Banking() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/reconciliations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
       setActiveReconciliationId(null);
       setReconcileAccountId(null);
       setReconcileStatementDate('');
@@ -1495,6 +1510,176 @@ export default function Banking() {
     },
   });
 
+  // Fetch last completed reconciliation for the selected account
+  const { data: lastCompletedReconciliation } = useQuery({
+    queryKey: ['/api/reconciliations/last-completed', reconcileAccountId],
+    queryFn: async () => {
+      if (!reconcileAccountId) return null;
+      const response = await fetch(`/api/reconciliations/last-completed/${reconcileAccountId}`);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error('Failed to fetch last completed reconciliation');
+      return response.json();
+    },
+    enabled: !!reconcileAccountId && !activeReconciliationId,
+  });
+
+  // Fetch in-progress reconciliation for the selected account
+  const { data: inProgressReconciliation } = useQuery({
+    queryKey: ['/api/reconciliations/in-progress', reconcileAccountId],
+    queryFn: async () => {
+      if (!reconcileAccountId) return null;
+      const response = await fetch(`/api/reconciliations/in-progress/${reconcileAccountId}`);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error('Failed to fetch in-progress reconciliation');
+      return response.json();
+    },
+    enabled: !!reconcileAccountId && !activeReconciliationId,
+  });
+
+  // Fetch reconciliation history for the selected account
+  const { data: reconciliationHistory = [] } = useQuery({
+    queryKey: ['/api/reconciliations/history', reconcileAccountId],
+    queryFn: async () => {
+      if (!reconcileAccountId) return [];
+      const response = await fetch(`/api/reconciliations/history/${reconcileAccountId}`);
+      if (!response.ok) throw new Error('Failed to fetch reconciliation history');
+      return response.json();
+    },
+    enabled: !!reconcileAccountId && showReconciliationHistory,
+  });
+
+  // Fetch reconciliation report
+  const { data: reconciliationReport, isLoading: reportLoading } = useQuery({
+    queryKey: ['/api/reconciliations', activeReconciliationId, 'report'],
+    queryFn: async () => {
+      if (!activeReconciliationId) return null;
+      const response = await fetch(`/api/reconciliations/${activeReconciliationId}/report`);
+      if (!response.ok) throw new Error('Failed to fetch reconciliation report');
+      return response.json();
+    },
+    enabled: !!activeReconciliationId && showReconciliationReport,
+  });
+
+  // Undo reconciliation mutation
+  const undoReconciliationMutation = useMutation({
+    mutationFn: async (reconciliationId: number) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/undo`, 'POST');
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/accounts'] });
+      setActiveReconciliationId(data.id);
+      setShowReconciliationHistory(false);
+      toast({
+        title: "Success",
+        description: "Reconciliation reopened for editing",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to undo reconciliation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk update reconciliation items mutation
+  const bulkUpdateReconciliationItemsMutation = useMutation({
+    mutationFn: async ({ reconciliationId, action }: { reconciliationId: number; action: 'clear_all' | 'unclear_all' }) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/bulk-items`, 'PATCH', { action });
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations', activeReconciliationId, 'ledger-entries'] });
+      // Update local cleared entries state
+      if (data.reconciliation) {
+        const ledgerEntries = reconciliationLedgerEntries || [];
+        if (data.reconciliation.clearedBalance === 0) {
+          setClearedEntries(new Set());
+        } else {
+          setClearedEntries(new Set(ledgerEntries.map((e: any) => e.id)));
+        }
+      }
+      toast({
+        title: "Success",
+        description: `Updated ${data.itemsUpdated} items`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update items",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Auto-match by amounts mutation
+  const suggestMatchesMutation = useMutation({
+    mutationFn: async ({ reconciliationId, amounts }: { reconciliationId: number; amounts: number[] }) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}/suggest-matches`, 'POST', { amounts });
+    },
+    onSuccess: (data) => {
+      if (data.matches && data.matches.length > 0) {
+        // Add matched entries to cleared set
+        const newCleared = new Set(clearedEntries);
+        data.matches.forEach((match: any) => newCleared.add(match.id));
+        setClearedEntries(newCleared);
+
+        // Update on server
+        updateReconciliationItemsMutation.mutate({
+          reconciliationId: activeReconciliationId!,
+          ledgerEntryIds: data.matches.map((m: any) => m.id),
+          isCleared: true,
+        });
+
+        toast({
+          title: "Matches Found",
+          description: `Found and cleared ${data.totalMatched} matching transactions`,
+        });
+      } else {
+        toast({
+          title: "No Matches",
+          description: "No matching transactions found for the provided amounts",
+        });
+      }
+      setAutoMatchAmounts('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to find matches",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete reconciliation mutation
+  const deleteReconciliationMutation = useMutation({
+    mutationFn: async (reconciliationId: number) => {
+      return await apiRequest(`/api/reconciliations/${reconciliationId}`, 'DELETE');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/reconciliations'] });
+      setActiveReconciliationId(null);
+      setReconcileAccountId(null);
+      setReconcileStatementDate('');
+      setReconcileStatementBalance('');
+      setClearedEntries(new Set());
+      toast({
+        title: "Success",
+        description: "Reconciliation deleted",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete reconciliation",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Calculate total table width for fixed table layout
   const totalTableWidth = Object.values(columnWidths).reduce((sum, width) => sum + width, 0);
@@ -2022,6 +2207,41 @@ export default function Banking() {
   const selectedAccount = accountsWithFeedStatus.find(a => a.id === selectedAccountId);
 
   // Handle starting reconciliation
+  // Handle resuming an existing in-progress reconciliation
+  const handleResumeReconciliation = () => {
+    if (inProgressReconciliation) {
+      setActiveReconciliationId(inProgressReconciliation.id);
+      setShowResumePrompt(false);
+    }
+  };
+
+  // Handle starting a new reconciliation (force new even if one exists)
+  const handleForceNewReconciliation = () => {
+    if (!reconcileAccountId || !reconcileStatementDate || !reconcileStatementBalance) return;
+
+    // Delete the existing in-progress reconciliation first
+    if (inProgressReconciliation) {
+      deleteReconciliationMutation.mutate(inProgressReconciliation.id, {
+        onSuccess: () => {
+          createReconciliationMutation.mutate({
+            accountId: reconcileAccountId,
+            statementDate: reconcileStatementDate,
+            statementEndingBalance: parseFloat(reconcileStatementBalance),
+            forceNew: true,
+          });
+        }
+      });
+    } else {
+      createReconciliationMutation.mutate({
+        accountId: reconcileAccountId,
+        statementDate: reconcileStatementDate,
+        statementEndingBalance: parseFloat(reconcileStatementBalance),
+        forceNew: true,
+      });
+    }
+    setShowResumePrompt(false);
+  };
+
   const handleStartReconciliation = () => {
     if (!reconcileAccountId) {
       toast({
@@ -2048,12 +2268,60 @@ export default function Banking() {
       return;
     }
 
+    // Check if there's an in-progress reconciliation
+    if (inProgressReconciliation) {
+      setShowResumePrompt(true);
+      return;
+    }
+
     createReconciliationMutation.mutate({
       accountId: reconcileAccountId,
       statementDate: reconcileStatementDate,
       statementEndingBalance: parseFloat(reconcileStatementBalance),
     });
   };
+
+  // Handle auto-matching by amounts
+  const handleAutoMatch = () => {
+    if (!activeReconciliationId || !autoMatchAmounts.trim()) return;
+
+    // Parse amounts from comma-separated or newline-separated string
+    const amounts = autoMatchAmounts
+      .split(/[,\n]+/)
+      .map(s => parseFloat(s.trim()))
+      .filter(n => !isNaN(n));
+
+    if (amounts.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please enter valid amounts (comma or newline separated)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    suggestMatchesMutation.mutate({ reconciliationId: activeReconciliationId, amounts });
+  };
+
+  // Filter reconciliation ledger entries based on search query and filters
+  const filteredReconciliationEntries = (reconciliationLedgerEntries || []).filter((entry: any) => {
+    // Filter by search query
+    if (reconciliationSearchQuery) {
+      const query = reconciliationSearchQuery.toLowerCase();
+      const matchesSearch =
+        (entry.description || '').toLowerCase().includes(query) ||
+        (entry.reference || '').toLowerCase().includes(query) ||
+        (entry.transactionType || '').toLowerCase().includes(query);
+      if (!matchesSearch) return false;
+    }
+
+    // Filter by uncleared only
+    if (showOnlyUncleared && clearedEntries.has(entry.id)) {
+      return false;
+    }
+
+    return true;
+  });
 
   // Handle toggling cleared status of a ledger entry
   const handleToggleCleared = (entryId: number, isCleared: boolean) => {
@@ -3174,14 +3442,205 @@ export default function Banking() {
           
           <TabsContent value="reconciliation">
             <div className="space-y-6">
+              {/* Resume Prompt Dialog */}
+              <AlertDialog open={showResumePrompt} onOpenChange={setShowResumePrompt}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Resume Existing Reconciliation?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      There is an in-progress reconciliation from {inProgressReconciliation ? format(new Date(inProgressReconciliation.createdAt), 'MMM dd, yyyy') : ''}.
+                      Would you like to resume it or start a new one?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setShowResumePrompt(false)}>Cancel</AlertDialogCancel>
+                    <Button variant="outline" onClick={handleForceNewReconciliation}>
+                      Start New
+                    </Button>
+                    <AlertDialogAction onClick={handleResumeReconciliation}>
+                      Resume Existing
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Reconciliation History Dialog */}
+              <AlertDialog open={showReconciliationHistory} onOpenChange={setShowReconciliationHistory}>
+                <AlertDialogContent className="max-w-2xl">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reconciliation History</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      View past reconciliations for this account
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="max-h-96 overflow-y-auto">
+                    {reconciliationHistory.length === 0 ? (
+                      <p className="text-center py-8 text-gray-500">No completed reconciliations found</p>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Statement Date</TableHead>
+                            <TableHead className="text-right">Statement Balance</TableHead>
+                            <TableHead>Completed</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reconciliationHistory.map((rec: any, index: number) => (
+                            <TableRow key={rec.id}>
+                              <TableCell>{format(new Date(rec.statementDate), 'MMM dd, yyyy')}</TableCell>
+                              <TableCell className="text-right">{formatCurrency(rec.statementEndingBalance, homeCurrency, homeCurrency)}</TableCell>
+                              <TableCell>{rec.completedAt ? format(new Date(rec.completedAt), 'MMM dd, yyyy') : '-'}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex gap-2 justify-end">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setActiveReconciliationId(rec.id);
+                                      setShowReconciliationReport(true);
+                                      setShowReconciliationHistory(false);
+                                    }}
+                                  >
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    Report
+                                  </Button>
+                                  {index === 0 && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => undoReconciliationMutation.mutate(rec.id)}
+                                      disabled={undoReconciliationMutation.isPending}
+                                    >
+                                      <Undo2 className="h-4 w-4 mr-1" />
+                                      Undo
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Close</AlertDialogCancel>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Reconciliation Report Dialog */}
+              <AlertDialog open={showReconciliationReport} onOpenChange={setShowReconciliationReport}>
+                <AlertDialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center justify-between">
+                      <span>Reconciliation Report</span>
+                      <Button variant="outline" size="sm" onClick={() => window.print()}>
+                        <Printer className="h-4 w-4 mr-1" />
+                        Print
+                      </Button>
+                    </AlertDialogTitle>
+                  </AlertDialogHeader>
+                  {reportLoading ? (
+                    <div className="text-center py-8 text-gray-500">Loading report...</div>
+                  ) : reconciliationReport && (
+                    <div className="space-y-6 print:text-sm">
+                      {/* Report Header */}
+                      <div className="border-b pb-4">
+                        <h3 className="font-semibold text-lg">{reconciliationReport.reconciliation.accountName}</h3>
+                        <p className="text-sm text-gray-500">
+                          Statement Date: {format(new Date(reconciliationReport.reconciliation.statementDate), 'MMMM dd, yyyy')}
+                        </p>
+                        {reconciliationReport.reconciliation.completedAt && (
+                          <p className="text-sm text-gray-500">
+                            Completed: {format(new Date(reconciliationReport.reconciliation.completedAt), 'MMMM dd, yyyy')}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Summary */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg">
+                        <div>
+                          <p className="text-xs text-gray-500">Opening Balance</p>
+                          <p className="font-semibold">{formatCurrency(reconciliationReport.summary.openingBalance, homeCurrency, homeCurrency)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Statement Balance</p>
+                          <p className="font-semibold">{formatCurrency(reconciliationReport.summary.statementEndingBalance, homeCurrency, homeCurrency)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Cleared Balance</p>
+                          <p className="font-semibold">{formatCurrency(reconciliationReport.summary.clearedBalance, homeCurrency, homeCurrency)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Difference</p>
+                          <p className={`font-semibold ${reconciliationReport.summary.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(reconciliationReport.summary.difference, homeCurrency, homeCurrency)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Cleared Transactions */}
+                      <div>
+                        <h4 className="font-medium mb-2">Cleared Transactions ({reconciliationReport.summary.totalClearedItems})</h4>
+                        <div className="text-sm space-y-1">
+                          <div className="flex justify-between text-gray-500">
+                            <span>Total Debits:</span>
+                            <span>{formatCurrency(reconciliationReport.summary.clearedDebits, homeCurrency, homeCurrency)}</span>
+                          </div>
+                          <div className="flex justify-between text-gray-500">
+                            <span>Total Credits:</span>
+                            <span>{formatCurrency(reconciliationReport.summary.clearedCredits, homeCurrency, homeCurrency)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Uncleared Transactions */}
+                      {reconciliationReport.summary.totalUnclearedItems > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-2 text-amber-600">Uncleared Transactions ({reconciliationReport.summary.totalUnclearedItems})</h4>
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between text-gray-500">
+                              <span>Total Debits:</span>
+                              <span>{formatCurrency(reconciliationReport.summary.unclearedDebits, homeCurrency, homeCurrency)}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-500">
+                              <span>Total Credits:</span>
+                              <span>{formatCurrency(reconciliationReport.summary.unclearedCredits, homeCurrency, homeCurrency)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Close</AlertDialogCancel>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
               {/* Reconciliation Header */}
               {!activeReconciliationId && (
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Reconcile Account</CardTitle>
-                    <CardDescription>
-                      Match your book transactions with your bank statement
-                    </CardDescription>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Reconcile Account</CardTitle>
+                      <CardDescription>
+                        Match your book transactions with your bank statement
+                      </CardDescription>
+                    </div>
+                    {reconcileAccountId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowReconciliationHistory(true)}
+                      >
+                        <History className="h-4 w-4 mr-1" />
+                        History
+                      </Button>
+                    )}
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {/* Account Selection */}
@@ -3206,8 +3665,8 @@ export default function Banking() {
 
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Statement Ending Date</label>
-                        <Input 
-                          type="date" 
+                        <Input
+                          type="date"
                           value={reconcileStatementDate}
                           onChange={(e) => setReconcileStatementDate(e.target.value)}
                           data-testid="input-statement-date"
@@ -3216,9 +3675,9 @@ export default function Banking() {
 
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Statement Ending Balance</label>
-                        <Input 
-                          type="number" 
-                          step="0.01" 
+                        <Input
+                          type="number"
+                          step="0.01"
                           placeholder="0.00"
                           value={reconcileStatementBalance}
                           onChange={(e) => setReconcileStatementBalance(e.target.value)}
@@ -3227,8 +3686,38 @@ export default function Banking() {
                       </div>
                     </div>
 
-                    <Button 
-                      className="w-full md:w-auto" 
+                    {/* Last Reconciled Info */}
+                    {reconcileAccountId && lastCompletedReconciliation && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-800">
+                          <span className="font-medium">Last Reconciled:</span>{' '}
+                          {format(new Date(lastCompletedReconciliation.statementDate), 'MMM dd, yyyy')} •{' '}
+                          <span className="font-medium">Balance:</span>{' '}
+                          {formatCurrency(lastCompletedReconciliation.statementEndingBalance, homeCurrency, homeCurrency)}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* In-Progress Info */}
+                    {reconcileAccountId && inProgressReconciliation && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
+                        <p className="text-sm text-amber-800">
+                          <span className="font-medium">In Progress:</span>{' '}
+                          Reconciliation from {format(new Date(inProgressReconciliation.createdAt), 'MMM dd, yyyy')}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleResumeReconciliation}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Resume
+                        </Button>
+                      </div>
+                    )}
+
+                    <Button
+                      className="w-full md:w-auto"
                       onClick={handleStartReconciliation}
                       disabled={createReconciliationMutation.isPending}
                       data-testid="button-start-reconciliation"
@@ -3243,25 +3732,37 @@ export default function Banking() {
               {activeReconciliationId && activeReconciliation && (
                 <>
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between">
                       <CardTitle>Reconciliation Summary</CardTitle>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowReconciliationReport(true)}
+                      >
+                        <FileText className="h-4 w-4 mr-1" />
+                        View Report
+                      </Button>
                     </CardHeader>
                     <CardContent>
                       {reconciliationLoading ? (
                         <div className="text-center py-8 text-gray-500">Loading...</div>
                       ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Opening Balance</p>
+                            <p className="text-lg font-semibold">{formatCurrency(activeReconciliation.openingBalance || 0, homeCurrency, homeCurrency)}</p>
+                          </div>
                           <div>
                             <p className="text-sm text-gray-500">Statement Balance</p>
-                            <p className="text-xl font-semibold">{formatCurrency(activeReconciliation.statementEndingBalance, homeCurrency, homeCurrency)}</p>
+                            <p className="text-lg font-semibold">{formatCurrency(activeReconciliation.statementEndingBalance, homeCurrency, homeCurrency)}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Cleared Balance</p>
-                            <p className="text-xl font-semibold">{formatCurrency(activeReconciliation.clearedBalance || 0, homeCurrency, homeCurrency)}</p>
+                            <p className="text-lg font-semibold">{formatCurrency(activeReconciliation.clearedBalance || 0, homeCurrency, homeCurrency)}</p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-500">Difference</p>
-                            <p className={`text-xl font-semibold ${activeReconciliation.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <p className={`text-lg font-semibold ${activeReconciliation.difference === 0 ? 'text-green-600' : 'text-red-600'}`}>
                               {formatCurrency(activeReconciliation.difference || 0, homeCurrency, homeCurrency)}
                             </p>
                           </div>
@@ -3279,22 +3780,104 @@ export default function Banking() {
                   {/* Transactions to Reconcile */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Transactions</CardTitle>
-                      <CardDescription>
-                        Check off transactions that appear on your bank statement
-                      </CardDescription>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                          <CardTitle>Transactions</CardTitle>
+                          <CardDescription>
+                            Check off transactions that appear on your bank statement
+                          </CardDescription>
+                        </div>
+
+                        {/* Search and Filters */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              placeholder="Search transactions..."
+                              value={reconciliationSearchQuery}
+                              onChange={(e) => setReconciliationSearchQuery(e.target.value)}
+                              className="pl-8 w-48"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="show-uncleared"
+                              checked={showOnlyUncleared}
+                              onCheckedChange={(checked) => setShowOnlyUncleared(checked as boolean)}
+                            />
+                            <Label htmlFor="show-uncleared" className="text-sm">Uncleared only</Label>
+                          </div>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent>
+                      {/* Bulk Actions and Auto-Match */}
+                      <div className="mb-4 flex flex-wrap items-center gap-3 border-b pb-4">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => bulkUpdateReconciliationItemsMutation.mutate({ reconciliationId: activeReconciliationId!, action: 'clear_all' })}
+                            disabled={bulkUpdateReconciliationItemsMutation.isPending}
+                          >
+                            <CheckSquare className="h-4 w-4 mr-1" />
+                            Clear All
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => bulkUpdateReconciliationItemsMutation.mutate({ reconciliationId: activeReconciliationId!, action: 'unclear_all' })}
+                            disabled={bulkUpdateReconciliationItemsMutation.isPending}
+                          >
+                            <Square className="h-4 w-4 mr-1" />
+                            Unclear All
+                          </Button>
+                        </div>
+
+                        <div className="border-l h-6 mx-2" />
+
+                        {/* Auto-Match */}
+                        <div className="flex items-center gap-2">
+                          <Input
+                            placeholder="Enter amounts (comma-separated)"
+                            value={autoMatchAmounts}
+                            onChange={(e) => setAutoMatchAmounts(e.target.value)}
+                            className="w-56"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAutoMatch}
+                            disabled={suggestMatchesMutation.isPending || !autoMatchAmounts.trim()}
+                          >
+                            <Zap className="h-4 w-4 mr-1" />
+                            Auto-Match
+                          </Button>
+                        </div>
+
+                        <div className="ml-auto text-sm text-gray-500">
+                          Showing {filteredReconciliationEntries.length} of {reconciliationLedgerEntries.length} transactions •
+                          Cleared: {clearedEntries.size}
+                        </div>
+                      </div>
+
                       {ledgerEntriesLoading ? (
                         <div className="text-center py-12 text-gray-500">Loading transactions...</div>
                       ) : reconciliationLedgerEntries.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">
                           <p>No transactions found for this reconciliation period</p>
                         </div>
+                      ) : filteredReconciliationEntries.length === 0 ? (
+                        <div className="text-center py-12 text-gray-500">
+                          <p>No transactions match your search criteria</p>
+                          <Button variant="link" onClick={() => { setReconciliationSearchQuery(''); setShowOnlyUncleared(false); }}>
+                            Clear filters
+                          </Button>
+                        </div>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto max-h-96">
                           <Table>
-                            <TableHeader>
+                            <TableHeader className="sticky top-0 bg-white">
                               <TableRow>
                                 <TableHead className="w-12">Cleared</TableHead>
                                 <TableHead>Date</TableHead>
@@ -3307,13 +3890,13 @@ export default function Banking() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {reconciliationLedgerEntries.map((entry: any, index: number) => {
+                              {filteredReconciliationEntries.map((entry: any, index: number) => {
                                 const runningBalance = reconciliationLedgerEntries
-                                  .slice(0, index + 1)
+                                  .slice(0, reconciliationLedgerEntries.findIndex((e: any) => e.id === entry.id) + 1)
                                   .reduce((sum: number, e: any) => sum + (e.debit || 0) - (e.credit || 0), 0);
-                                
+
                                 return (
-                                  <TableRow key={entry.id}>
+                                  <TableRow key={entry.id} className={clearedEntries.has(entry.id) ? 'bg-green-50' : ''}>
                                     <TableCell>
                                       <Checkbox
                                         checked={clearedEntries.has(entry.id)}
