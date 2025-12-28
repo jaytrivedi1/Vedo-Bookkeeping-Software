@@ -82,7 +82,7 @@ export async function sendEmail(options: {
   subject: string;
   html?: string;
   text?: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; data?: any }> {
   try {
     const resend = await getResendClient();
 
@@ -93,7 +93,7 @@ export async function sendEmail(options: {
 
     const { client, fromEmail } = resend;
 
-    await client.emails.send({
+    const response = await client.emails.send({
       from: fromEmail,
       to: options.to,
       subject: options.subject,
@@ -101,7 +101,14 @@ export async function sendEmail(options: {
       text: options.text,
     });
 
-    return { success: true };
+    console.log('Resend API response:', JSON.stringify(response, null, 2));
+
+    // Check if there's an error in the response
+    if (response.error) {
+      return { success: false, error: response.error.message, data: response };
+    }
+
+    return { success: true, data: response };
   } catch (error: any) {
     console.error('Failed to send email:', error);
     return { success: false, error: error.message };

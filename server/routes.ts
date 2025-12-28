@@ -521,12 +521,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (result.success) {
         res.json({
           status: "ok",
-          message: `Test email sent successfully to ${email}. Check your inbox (and spam folder).`
+          message: `Test email sent successfully to ${email}. Check your inbox (and spam folder).`,
+          resendResponse: result.data
         });
       } else {
         res.status(500).json({
           status: "error",
-          message: result.error || "Failed to send email"
+          message: result.error || "Failed to send email",
+          resendResponse: result.data
         });
       }
     } catch (error: any) {
