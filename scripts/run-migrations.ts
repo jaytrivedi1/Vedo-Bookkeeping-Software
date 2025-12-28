@@ -36,6 +36,7 @@ import { addAiConversationsTables } from "../server/migrations/add-ai-conversati
 import { addCompanyScopingToAi } from "../server/migrations/add-company-scoping-to-ai";
 import { addReconciliationEnhancements } from "../server/migrations/add-reconciliation-enhancements";
 import { addCompanyScopingToCoreTables } from "../server/migrations/add-company-scoping-to-core-tables";
+import { addAuthSecurityFieldsMigration } from "../server/migrations/add-auth-security-fields";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -167,6 +168,10 @@ async function runMigrations() {
     // Add company scoping to AI categorization
     log("Running company scoping for AI categorization...");
     await addCompanyScopingToAi();
+
+    // Add auth security fields (email verification, account lockout, password reset)
+    log("Running auth security fields migration...");
+    await addAuthSecurityFieldsMigration();
 
     log("All migrations completed successfully!");
     process.exit(0);

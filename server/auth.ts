@@ -4,8 +4,27 @@ import { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { storage } from "./storage";
-import { User as SchemaUser } from "@shared/schema";
-import { pool } from "./db";
+import { User as SchemaUser, usersSchema } from "@shared/schema";
+import { pool, db } from "./db";
+import { eq } from "drizzle-orm";
+import {
+  loginRateLimiter,
+  registrationRateLimiter,
+  passwordResetRateLimiter,
+  emailVerificationRateLimiter
+} from "./middleware/rate-limiter";
+import {
+  createVerificationToken,
+  sendVerificationEmail,
+  verifyEmailToken,
+  resendVerificationEmail
+} from "./services/email-verification";
+import {
+  requestPasswordReset,
+  validateResetToken,
+  resetPassword,
+  validatePasswordStrength
+} from "./services/password-reset";
 
 declare global {
   namespace Express {
@@ -14,8 +33,63 @@ declare global {
   }
 }
 
+// Account lockout settings
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 30;
+
 // Create PostgreSQL session store
 const PgSession = connectPgSimple(session);
+
+/**
+ * Check if user account is locked
+ */
+async function isAccountLocked(user: SchemaUser): Promise<boolean> {
+  if (!user.lockedUntil) return false;
+  if (new Date() > user.lockedUntil) {
+    // Lockout has expired, reset the counter
+    await db.update(usersSchema)
+      .set({ failedLoginAttempts: 0, lockedUntil: null })
+      .where(eq(usersSchema.id, user.id));
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Record failed login attempt
+ */
+async function recordFailedLogin(userId: number, currentAttempts: number): Promise<{
+  locked: boolean;
+  attemptsRemaining: number;
+}> {
+  const newAttempts = currentAttempts + 1;
+  const locked = newAttempts >= MAX_FAILED_ATTEMPTS;
+
+  const lockedUntil = locked
+    ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000)
+    : null;
+
+  await db.update(usersSchema)
+    .set({
+      failedLoginAttempts: newAttempts,
+      lockedUntil
+    })
+    .where(eq(usersSchema.id, userId));
+
+  return {
+    locked,
+    attemptsRemaining: Math.max(0, MAX_FAILED_ATTEMPTS - newAttempts)
+  };
+}
+
+/**
+ * Reset failed login attempts on successful login
+ */
+async function resetFailedAttempts(userId: number): Promise<void> {
+  await db.update(usersSchema)
+    .set({ failedLoginAttempts: 0, lockedUntil: null })
+    .where(eq(usersSchema.id, userId));
+}
 
 export function setupAuth(app: Express): void {
   // Configure session with PostgreSQL store
@@ -56,15 +130,51 @@ export function setupAuth(app: Express): void {
         if (!user) {
           user = await storage.getUserByUsername(username);
         }
-        
-        // If user not found or password doesn't match
-        if (!user || !(await storage.validatePassword(user.password, password))) {
+
+        // If user not found
+        if (!user) {
           return done(null, false, { message: 'Incorrect email or password' });
         }
-        
+
+        // Check if account is locked
+        if (await isAccountLocked(user)) {
+          const remainingMinutes = Math.ceil(
+            (user.lockedUntil!.getTime() - Date.now()) / 60000
+          );
+          return done(null, false, {
+            message: `Account is locked. Please try again in ${remainingMinutes} minutes.`
+          });
+        }
+
+        // Validate password
+        if (!(await storage.validatePassword(user.password, password))) {
+          // Record failed attempt
+          const result = await recordFailedLogin(user.id, user.failedLoginAttempts || 0);
+
+          if (result.locked) {
+            return done(null, false, {
+              message: `Too many failed attempts. Account is locked for ${LOCKOUT_DURATION_MINUTES} minutes.`
+            });
+          }
+
+          return done(null, false, {
+            message: `Incorrect email or password. ${result.attemptsRemaining} attempts remaining.`
+          });
+        }
+
+        // Check if email is verified
+        if (!user.emailVerified) {
+          return done(null, false, {
+            message: 'Please verify your email address before logging in. Check your inbox for the verification link.'
+          });
+        }
+
+        // Reset failed attempts on successful login
+        await resetFailedAttempts(user.id);
+
         // Update last login time
         await storage.updateUserLastLogin(user.id);
-        
+
         // Return user
         return done(null, user);
       } catch (error) {
@@ -88,24 +198,28 @@ export function setupAuth(app: Express): void {
     }
   });
 
-  // Register authentication routes
-  app.post("/api/register", async (req: Request, res: Response, next: NextFunction) => {
+  // Register authentication routes with rate limiting
+  app.post("/api/register", registrationRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { username, email, password, firstName, lastName } = req.body;
-      
+
       // Validate required fields
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
-      
+
       // Validate email format
       if (!email.includes('@')) {
         return res.status(400).json({ message: "Invalid email format" });
       }
-      
+
       // Validate password strength
-      if (password.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: "Password does not meet requirements",
+          errors: passwordValidation.errors
+        });
       }
 
       // Check if email already exists
@@ -113,7 +227,7 @@ export function setupAuth(app: Express): void {
       if (existingEmail) {
         return res.status(400).json({ message: "An account with this email already exists" });
       }
-      
+
       // Check if username already exists (username defaults to email if not provided)
       const usernameToUse = username || email;
       const existingUser = await storage.getUserByUsername(usernameToUse);
@@ -132,21 +246,19 @@ export function setupAuth(app: Express): void {
         isActive: true
       });
 
-      // Note: User is not auto-assigned to any companies
-      // They will create their own companies after signing up
+      // Create verification token and send email
+      const token = await createVerificationToken(user.id);
+      const emailResult = await sendVerificationEmail(email, token, firstName);
 
-      // Log in the newly created user
-      req.login(user, (err) => {
-        if (err) return next(err);
-        return res.status(201).json({
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive,
-          firstName: user.firstName,
-          lastName: user.lastName,
-        });
+      if (!emailResult.success) {
+        console.error('Failed to send verification email:', emailResult.error);
+        // Still allow registration but warn about email
+      }
+
+      // Return success without logging in (user must verify email first)
+      return res.status(201).json({
+        message: "Registration successful! Please check your email to verify your account.",
+        requiresVerification: true
       });
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -154,14 +266,15 @@ export function setupAuth(app: Express): void {
     }
   });
 
-  app.post("/api/login", (req: Request, res: Response, next: NextFunction) => {
+  // Login with rate limiting
+  app.post("/api/login", loginRateLimiter, (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate("local", (err: any, user: SchemaUser | false, info: any) => {
       if (err) return next(err);
       if (!user) return res.status(401).json({ message: info?.message || "Authentication failed" });
-      
+
       req.login(user, (loginErr) => {
         if (loginErr) return next(loginErr);
-        
+
         // Handle "Remember me" functionality
         if (req.body.rememberMe) {
           // Extend session duration to 30 days
@@ -170,7 +283,7 @@ export function setupAuth(app: Express): void {
           // Default session duration (24 hours)
           req.session.cookie.maxAge = 24 * 60 * 60 * 1000;
         }
-        
+
         return res.status(200).json({
           id: user.id,
           username: user.username,
@@ -179,6 +292,7 @@ export function setupAuth(app: Express): void {
           isActive: user.isActive,
           firstName: user.firstName,
           lastName: user.lastName,
+          emailVerified: user.emailVerified
         });
       });
     })(req, res, next);
@@ -197,7 +311,7 @@ export function setupAuth(app: Express): void {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    
+
     const user = req.user;
     return res.status(200).json({
       id: user.id,
@@ -207,10 +321,144 @@ export function setupAuth(app: Express): void {
       isActive: user.isActive,
       firstName: user.firstName,
       lastName: user.lastName,
+      emailVerified: user.emailVerified
     });
   });
 
-  // Change password endpoint
+  // Email verification endpoint
+  app.get("/api/verify-email", emailVerificationRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ message: "Verification token is required" });
+      }
+
+      const result = await verifyEmailToken(token);
+
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+
+      return res.status(200).json({
+        message: "Email verified successfully! You can now log in.",
+        verified: true
+      });
+    } catch (error: any) {
+      console.error("Email verification error:", error);
+      return res.status(500).json({ message: "Verification failed" });
+    }
+  });
+
+  // Resend verification email
+  app.post("/api/resend-verification", emailVerificationRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const result = await resendVerificationEmail(email);
+
+      // Always return success to prevent email enumeration
+      return res.status(200).json({
+        message: "If an account exists with this email, a verification link has been sent."
+      });
+    } catch (error: any) {
+      console.error("Resend verification error:", error);
+      return res.status(500).json({ message: "Failed to resend verification email" });
+    }
+  });
+
+  // Forgot password - request reset
+  app.post("/api/forgot-password", passwordResetRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      await requestPasswordReset(email);
+
+      // Always return success to prevent email enumeration
+      return res.status(200).json({
+        message: "If an account exists with this email, a password reset link has been sent."
+      });
+    } catch (error: any) {
+      console.error("Forgot password error:", error);
+      return res.status(500).json({ message: "Failed to process request" });
+    }
+  });
+
+  // Validate reset token (for checking if token is valid before showing reset form)
+  app.get("/api/validate-reset-token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ valid: false, message: "Token is required" });
+      }
+
+      const result = await validateResetToken(token);
+
+      return res.status(200).json({
+        valid: result.valid,
+        message: result.error
+      });
+    } catch (error: any) {
+      console.error("Validate reset token error:", error);
+      return res.status(500).json({ valid: false, message: "Validation failed" });
+    }
+  });
+
+  // Reset password with token
+  app.post("/api/reset-password", passwordResetRateLimiter, async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      // Validate password strength
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: "Password does not meet requirements",
+          errors: passwordValidation.errors
+        });
+      }
+
+      const result = await resetPassword(token, password);
+
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+
+      return res.status(200).json({
+        message: "Password reset successfully! You can now log in with your new password."
+      });
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      return res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Validate password strength endpoint (for client-side validation)
+  app.post("/api/validate-password", (req: Request, res: Response) => {
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
+
+    const result = validatePasswordStrength(password);
+    return res.status(200).json(result);
+  });
+
+  // Change password endpoint (for authenticated users)
   app.post("/api/user/change-password", async (req: Request, res: Response) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
@@ -223,8 +471,13 @@ export function setupAuth(app: Express): void {
         return res.status(400).json({ message: "Current password and new password are required" });
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json({ message: "New password must be at least 6 characters long" });
+      // Validate new password strength
+      const passwordValidation = validatePasswordStrength(newPassword);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: "New password does not meet requirements",
+          errors: passwordValidation.errors
+        });
       }
 
       // Get the current user from storage
@@ -267,7 +520,7 @@ export function setupAuth(app: Express): void {
         if (!username || username.trim().length === 0) {
           return res.status(400).json({ message: "Username cannot be empty" });
         }
-        
+
         // Check if username is already taken by another user
         const existingUser = await storage.getUserByUsername(username);
         if (existingUser && existingUser.id !== req.user.id) {
@@ -331,11 +584,11 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   if (!req.isAuthenticated()) {
     return res.status(401).json({ message: "Authentication required" });
   }
-  
+
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: "Admin access required" });
   }
-  
+
   next();
 }
 
@@ -345,29 +598,29 @@ export function requirePermission(permissionName: string) {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    
+
     try {
       // Get user's role
       const userRole = req.user.role;
-      
+
       // Get permissions for the role
       const rolePermissions = await storage.getRolePermissions(userRole);
-      
+
       // Get the permission ID for the required permission
       const permission = await storage.getPermissionByName(permissionName);
-      
+
       if (!permission) {
         console.error(`Permission "${permissionName}" not found in the system`);
         return res.status(403).json({ message: "Access denied" });
       }
-      
+
       // Check if the role has the required permission
       const hasPermission = rolePermissions.some(rp => rp.permissionId === permission.id);
-      
+
       if (!hasPermission) {
         return res.status(403).json({ message: "Insufficient permissions" });
       }
-      
+
       next();
     } catch (error) {
       console.error("Error checking permissions:", error);

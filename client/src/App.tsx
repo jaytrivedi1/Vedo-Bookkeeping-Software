@@ -41,6 +41,9 @@ import ManageUsers from "@/pages/manage-users";
 import AcceptInvitation from "@/pages/accept-invitation";
 import Login from "@/pages/login";
 import Onboarding from "@/pages/onboarding";
+import VerifyEmail from "@/pages/verify-email";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import InvoicePublicView from "@/pages/invoice-public-view";
 import Quotations from "@/pages/quotations";
 import RecurringInvoices from "@/pages/recurring-invoices";
@@ -127,7 +130,7 @@ function Router() {
     );
   }
 
-  const isPublicRoute = location === '/login' || location === '/signup' || location === '/onboarding' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
+  const isPublicRoute = location === '/login' || location === '/signup' || location === '/onboarding' || location === '/verify-email' || location === '/forgot-password' || location === '/reset-password' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
   
   // Redirect /signup to /login?tab=register
   if (location === '/signup') {
@@ -168,6 +171,9 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/onboarding" component={Onboarding} />
+      <Route path="/verify-email" component={VerifyEmail} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/accept-invitation/:token" component={AcceptInvitation} />
       <Route path="/invoice/public/:token" component={InvoicePublicView} />
       <Route>

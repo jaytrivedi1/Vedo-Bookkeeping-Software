@@ -560,6 +560,16 @@ export const usersSchema = pgTable('users', {
   companyId: integer('company_id').references(() => companiesSchema.id),
   firmId: integer('firm_id').references(() => accountingFirmsSchema.id), // For accountants belonging to a firm
   currentCompanyId: integer('current_company_id').references(() => companiesSchema.id), // Track which company context accountant is viewing
+  // Email verification fields
+  emailVerified: boolean('email_verified').notNull().default(false),
+  emailVerificationToken: text('email_verification_token'),
+  emailVerificationExpires: timestamp('email_verification_expires'),
+  // Account lockout fields
+  failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+  lockedUntil: timestamp('locked_until'),
+  // Password reset fields
+  passwordResetToken: text('password_reset_token'),
+  passwordResetExpires: timestamp('password_reset_expires'),
 });
 
 // Firm-Client Access - grants accounting firm users access to client companies

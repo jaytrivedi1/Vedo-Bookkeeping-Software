@@ -15,13 +15,25 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Check
+  Check,
+  X,
+  Mail,
+  CheckCircle2
 } from 'lucide-react';
+
+// Password requirements
+const PASSWORD_REQUIREMENTS = [
+  { id: 'length', label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
+  { id: 'uppercase', label: 'One uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
+  { id: 'lowercase', label: 'One lowercase letter', test: (p: string) => /[a-z]/.test(p) },
+  { id: 'number', label: 'One number', test: (p: string) => /[0-9]/.test(p) },
+  { id: 'special', label: 'One special character (!@#$%^&*)', test: (p: string) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
+];
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const { toast } = useToast();
 
   // Parse URL params to determine initial tab
@@ -37,6 +49,22 @@ export default function Login() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Register form state
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registerFirstName, setRegisterFirstName] = useState('');
+  const [registerLastName, setRegisterLastName] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+
+  // Resend verification state
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [showResendForm, setShowResendForm] = useState(false);
 
   // Load remember me preference from localStorage
   useEffect(() => {
@@ -57,14 +85,17 @@ export default function Login() {
     }
   }, [searchString]);
 
-  // Register form state
-  const [registerEmail, setRegisterEmail] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
-  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
-  const [registerFirstName, setRegisterFirstName] = useState('');
-  const [registerLastName, setRegisterLastName] = useState('');
-  const [registerLoading, setRegisterLoading] = useState(false);
+  // Password validation
+  const getPasswordStrength = (): 'weak' | 'medium' | 'strong' => {
+    const passedChecks = PASSWORD_REQUIREMENTS.filter(req => req.test(registerPassword)).length;
+    if (passedChecks >= 5 && registerPassword.length >= 12) return 'strong';
+    if (passedChecks >= 4) return 'medium';
+    return 'weak';
+  };
+
+  const passwordStrength = getPasswordStrength();
+  const passwordsMatch = registerPassword === registerConfirmPassword && registerPassword.length > 0;
+  const allRequirementsMet = PASSWORD_REQUIREMENTS.every(req => req.test(registerPassword));
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +112,11 @@ export default function Login() {
       });
       setLocation('/');
     } catch (error: any) {
+      // Check if it's a verification error
+      if (error.message?.includes('verify your email')) {
+        setShowResendForm(true);
+        setResendEmail(loginEmail);
+      }
       toast({
         title: 'Error',
         description: error.message || 'Login failed',
@@ -94,6 +130,16 @@ export default function Login() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate password requirements
+    if (!allRequirementsMet) {
+      toast({
+        title: 'Error',
+        description: 'Password does not meet all requirements',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Validate passwords match
     if (registerPassword !== registerConfirmPassword) {
       toast({
@@ -104,36 +150,32 @@ export default function Login() {
       return;
     }
 
-    // Validate password strength
-    if (registerPassword.length < 6) {
-      toast({
-        title: 'Error',
-        description: 'Password must be at least 6 characters',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setRegisterLoading(true);
 
     try {
-      await register(
-        registerEmail, // Use email as username
-        registerPassword,
-        registerEmail,
-        registerFirstName,
-        registerLastName
-      );
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: registerEmail,
+          password: registerPassword,
+          firstName: registerFirstName,
+          lastName: registerLastName
+        })
+      });
 
-      // Clear all cached data to ensure fresh state for new user
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
+
+      // Clear all cached data to ensure fresh state
       queryClient.clear();
 
-      toast({
-        title: 'Success',
-        description: 'Account created successfully',
-      });
-      // New users go to onboarding to create their first company
-      setLocation('/onboarding');
+      // Show success message
+      setRegistrationSuccess(true);
+      setResendEmail(registerEmail);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -142,6 +184,32 @@ export default function Login() {
       });
     } finally {
       setRegisterLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendLoading(true);
+    try {
+      const response = await fetch('/api/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resendEmail })
+      });
+
+      const data = await response.json();
+
+      toast({
+        title: 'Email Sent',
+        description: data.message || 'Verification email sent. Check your inbox.',
+      });
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to resend verification email',
+        variant: 'destructive',
+      });
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -162,6 +230,60 @@ export default function Login() {
       description: 'Handle transactions in multiple currencies with ease'
     }
   ];
+
+  // Registration success screen
+  if (registrationSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-teal-400 flex items-center justify-center shadow-lg shadow-sky-500/20">
+              <Mail className="w-8 h-8 text-white" />
+            </div>
+          </div>
+
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h1>
+          <p className="text-slate-600 mb-6">
+            We've sent a verification link to <strong>{resendEmail}</strong>
+          </p>
+
+          <div className="bg-slate-50 rounded-xl p-4 mb-6 text-left">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-slate-600">
+                <p className="font-medium text-slate-900 mb-1">Next steps:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Open your email inbox</li>
+                  <li>Click the verification link</li>
+                  <li>Return here to sign in</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Button
+              onClick={() => {
+                setRegistrationSuccess(false);
+                setActiveTab('login');
+              }}
+              className="w-full bg-sky-500 hover:bg-sky-600"
+            >
+              Go to Sign In
+            </Button>
+
+            <button
+              onClick={handleResendVerification}
+              disabled={resendLoading}
+              className="text-sm text-slate-500 hover:text-sky-600 transition-colors"
+            >
+              {resendLoading ? 'Sending...' : "Didn't receive the email? Resend"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -282,7 +404,33 @@ export default function Login() {
                         Remember me
                       </Label>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setLocation('/forgot-password')}
+                      className="text-sm text-sky-600 hover:text-sky-700 font-medium"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
+
+                  {/* Resend verification form */}
+                  {showResendForm && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-sm text-amber-800 mb-3">
+                        Please verify your email before logging in.
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={handleResendVerification}
+                        disabled={resendLoading}
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                      >
+                        {resendLoading ? 'Sending...' : 'Resend Verification Email'}
+                      </Button>
+                    </div>
+                  )}
 
                   <Button
                     type="submit"
@@ -306,42 +454,6 @@ export default function Login() {
                     )}
                   </Button>
                 </form>
-
-                {/* Social Login */}
-                <div className="mt-6">
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-200" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-slate-400">Or continue with</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                        <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                      </svg>
-                      Google
-                    </button>
-                    <button
-                      type="button"
-                      className="flex items-center justify-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M11.4 24H1.6C.7 24 0 23.3 0 22.4V1.6C0 .7.7 0 1.6 0h20.8c.9 0 1.6.7 1.6 1.6v20.8c0 .9-.7 1.6-1.6 1.6h-5.8v-9.3h3.1l.5-3.6h-3.6V8.8c0-1 .3-1.7 1.8-1.7h1.9V3.8c-.3 0-1.5-.1-2.8-.1-2.8 0-4.7 1.7-4.7 4.8v2.6H9.6v3.6h3.1V24h-1.3z"/>
-                      </svg>
-                      Microsoft
-                    </button>
-                  </div>
-                </div>
 
                 <p className="text-center text-sm text-slate-500 mt-6">
                   Don't have an account?{' '}
@@ -423,7 +535,7 @@ export default function Login() {
                         type={showRegisterPassword ? 'text' : 'password'}
                         value={registerPassword}
                         onChange={(e) => setRegisterPassword(e.target.value)}
-                        placeholder="At least 6 characters"
+                        placeholder="Create a strong password"
                         required
                         className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 pr-11 placeholder:text-slate-400 transition-all duration-150"
                         data-testid="input-register-password"
@@ -436,27 +548,84 @@ export default function Login() {
                         {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+
+                    {/* Password strength indicator */}
+                    {registerPassword && (
+                      <div className="mt-2">
+                        <div className="flex gap-1 mb-1.5">
+                          <div className={`h-1 flex-1 rounded ${
+                            passwordStrength === 'weak' ? 'bg-red-500' :
+                            passwordStrength === 'medium' ? 'bg-yellow-500' : 'bg-emerald-500'
+                          }`} />
+                          <div className={`h-1 flex-1 rounded ${
+                            passwordStrength === 'medium' ? 'bg-yellow-500' :
+                            passwordStrength === 'strong' ? 'bg-emerald-500' : 'bg-slate-200'
+                          }`} />
+                          <div className={`h-1 flex-1 rounded ${
+                            passwordStrength === 'strong' ? 'bg-emerald-500' : 'bg-slate-200'
+                          }`} />
+                        </div>
+                        <p className={`text-xs ${
+                          passwordStrength === 'weak' ? 'text-red-500' :
+                          passwordStrength === 'medium' ? 'text-yellow-600' : 'text-emerald-500'
+                        }`}>
+                          Password strength: {passwordStrength}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Password requirements */}
+                    {registerPassword && (
+                      <div className="mt-2 space-y-0.5">
+                        {PASSWORD_REQUIREMENTS.map(req => (
+                          <div key={req.id} className="flex items-center gap-2 text-xs">
+                            {req.test(registerPassword) ? (
+                              <Check className="w-3 h-3 text-emerald-500" />
+                            ) : (
+                              <X className="w-3 h-3 text-slate-300" />
+                            )}
+                            <span className={req.test(registerPassword) ? 'text-emerald-600' : 'text-slate-500'}>
+                              {req.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="register-confirm-password" className="text-sm font-medium text-slate-700">
                       Confirm Password
                     </Label>
-                    <Input
-                      id="register-confirm-password"
-                      type="password"
-                      value={registerConfirmPassword}
-                      onChange={(e) => setRegisterConfirmPassword(e.target.value)}
-                      required
-                      className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 transition-all duration-150"
-                      data-testid="input-register-confirm-password"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="register-confirm-password"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={registerConfirmPassword}
+                        onChange={(e) => setRegisterConfirmPassword(e.target.value)}
+                        required
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 pr-11 transition-all duration-150"
+                        data-testid="input-register-confirm-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {registerConfirmPassword && (
+                      <p className={`text-xs ${passwordsMatch ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {passwordsMatch ? 'Passwords match' : 'Passwords do not match'}
+                      </p>
+                    )}
                   </div>
 
                   <Button
                     type="submit"
                     className="w-full h-12 bg-sky-500 hover:bg-sky-600 text-white font-medium rounded-xl shadow-lg shadow-sky-500/25 transition-all mt-2"
-                    disabled={registerLoading}
+                    disabled={registerLoading || !allRequirementsMet || !passwordsMatch}
                     data-testid="button-register"
                   >
                     {registerLoading ? (
