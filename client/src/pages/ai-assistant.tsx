@@ -119,7 +119,7 @@ export default function AIAssistantPage() {
 
   // Fetch active conversation with messages
   const { data: activeConversation, isLoading: loadingMessages } = useQuery<ConversationWithMessages>({
-    queryKey: ['/api/ai-conversations', activeConversationId],
+    queryKey: [`/api/ai-conversations/${activeConversationId}`],
     enabled: !!activeConversationId,
   });
 
@@ -165,8 +165,8 @@ export default function AIAssistantPage() {
     mutationFn: async ({ conversationId, content }: { conversationId: number; content: string }) => {
       return await apiRequest(`/api/ai-conversations/${conversationId}/messages`, 'POST', { content });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/ai-conversations', activeConversationId] });
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/ai-conversations/${variables.conversationId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/ai-conversations'] });
     },
   });
@@ -192,7 +192,9 @@ export default function AIAssistantPage() {
     },
     onSuccess: () => {
       setPendingAction(null);
-      queryClient.invalidateQueries({ queryKey: ['/api/ai-conversations', activeConversationId] });
+      if (activeConversationId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/ai-conversations/${activeConversationId}`] });
+      }
     },
   });
 
