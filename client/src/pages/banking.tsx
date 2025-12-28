@@ -72,7 +72,8 @@ import {
   Hand,
   Sparkles,
   ArrowUpRight,
-  Zap
+  Zap,
+  Pencil
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
@@ -536,159 +537,166 @@ function RulesManagementTab() {
     }
 
     return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-12"></TableHead>
-            <TableHead>Rule Name</TableHead>
-            <TableHead>Conditions</TableHead>
-            <TableHead>Account</TableHead>
-            {isAiRules && <TableHead>Confidence</TableHead>}
-            {isAiRules && <TableHead>Uses</TableHead>}
-            <TableHead>Priority</TableHead>
-            <TableHead className="w-20">Enabled</TableHead>
-            <TableHead className="w-24">Auto Apply</TableHead>
-            <TableHead className="w-32">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rulesList.map((rule: any, index: number) => (
-            <TableRow key={rule.id}>
-              <TableCell>
-                <GripVertical className="h-4 w-4 text-gray-400" />
-              </TableCell>
-              <TableCell className="font-medium">
-                <div className="flex items-center gap-2">
-                  {isAiRules && <Brain className="h-4 w-4 text-purple-500" />}
-                  {rule.name}
-                </div>
-              </TableCell>
-              <TableCell className="text-sm text-gray-600">
-                {formatConditions(rule.conditions)}
-              </TableCell>
-              <TableCell className="text-sm">
-                {getAccountName(rule.actions?.accountId)}
-              </TableCell>
-              {isAiRules && (
-                <TableCell>
-                  {rule.confidenceScore && (
-                    <Badge variant={formatConfidence(rule.confidenceScore)! >= 80 ? "default" : "secondary"}>
-                      {formatConfidence(rule.confidenceScore)}%
-                    </Badge>
-                  )}
-                </TableCell>
-              )}
-              {isAiRules && (
-                <TableCell className="text-sm text-gray-600">
-                  {rule.occurrenceCount || 0}
-                </TableCell>
-              )}
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (index > 0) {
-                        updatePriorityMutation.mutate({
-                          id: rule.id,
-                          priority: rule.priority - 1
-                        });
-                      }
-                    }}
-                    disabled={index === 0}
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm">{rule.priority}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (index < rulesList.length - 1) {
-                        updatePriorityMutation.mutate({
-                          id: rule.id,
-                          priority: rule.priority + 1
-                        });
-                      }
-                    }}
-                    disabled={index === rulesList.length - 1}
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Switch
-                  checked={rule.isEnabled ?? rule.enabled}
-                  onCheckedChange={(checked) => {
-                    toggleRuleMutation.mutate({
-                      id: rule.id,
-                      enabled: checked
-                    });
-                  }}
-                  data-testid={`switch-rule-enabled-${rule.id}`}
-                />
-              </TableCell>
-              <TableCell>
-                <Switch
-                  checked={rule.autoApply !== false}
-                  onCheckedChange={(checked) => {
-                    toggleAutoApplyMutation.mutate({
-                      id: rule.id,
-                      autoApply: checked
-                    });
-                  }}
-                  data-testid={`switch-rule-auto-apply-${rule.id}`}
-                />
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-1">
-                  {isAiRules && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => promoteRuleMutation.mutate(rule.id)}
-                            disabled={promoteRuleMutation.isPending}
-                            data-testid={`button-promote-rule-${rule.id}`}
-                          >
-                            <ArrowUpRight className="h-4 w-4 text-green-600" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Promote to Manual Rule</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setEditingRule(rule);
-                      setRuleDialogOpen(true);
-                    }}
-                    data-testid={`button-edit-rule-${rule.id}`}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteRuleMutation.mutate(rule.id)}
-                    data-testid={`button-delete-rule-${rule.id}`}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </TableCell>
+      <div className="overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b border-slate-200 hover:bg-transparent">
+              <TableHead className="w-8 px-2"></TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Rule Name</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Conditions</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Account</TableHead>
+              {isAiRules && <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Confidence</TableHead>}
+              {isAiRules && <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Uses</TableHead>}
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Priority</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">Enabled</TableHead>
+              <TableHead className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-20">Auto</TableHead>
+              <TableHead className="w-28"></TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {rulesList.map((rule: any, index: number) => (
+              <TableRow key={rule.id} className="group border-b border-slate-100 hover:bg-slate-50/50">
+                <TableCell className="px-2 py-2.5">
+                  <GripVertical className="h-4 w-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <div className="flex items-center gap-2">
+                    {isAiRules && <Brain className="h-4 w-4 text-purple-500 flex-shrink-0" />}
+                    <span className="font-medium text-slate-900">{rule.name}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <span className="text-sm text-slate-500">{formatConditions(rule.conditions)}</span>
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <span className="text-sm text-slate-700">{getAccountName(rule.actions?.accountId)}</span>
+                </TableCell>
+                {isAiRules && (
+                  <TableCell className="py-2.5">
+                    {rule.confidenceScore && (
+                      <Badge variant={formatConfidence(rule.confidenceScore)! >= 80 ? "default" : "secondary"} className="text-xs">
+                        {formatConfidence(rule.confidenceScore)}%
+                      </Badge>
+                    )}
+                  </TableCell>
+                )}
+                {isAiRules && (
+                  <TableCell className="py-2.5">
+                    <span className="text-sm text-slate-500 tabular-nums">{rule.occurrenceCount || 0}</span>
+                  </TableCell>
+                )}
+                <TableCell className="py-2.5">
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        if (index > 0) {
+                          updatePriorityMutation.mutate({
+                            id: rule.id,
+                            priority: rule.priority - 1
+                          });
+                        }
+                      }}
+                      disabled={index === 0}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="text-sm text-slate-600 tabular-nums w-4 text-center">{rule.priority}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => {
+                        if (index < rulesList.length - 1) {
+                          updatePriorityMutation.mutate({
+                            id: rule.id,
+                            priority: rule.priority + 1
+                          });
+                        }
+                      }}
+                      disabled={index === rulesList.length - 1}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <Switch
+                    checked={rule.isEnabled ?? rule.enabled}
+                    onCheckedChange={(checked) => {
+                      toggleRuleMutation.mutate({
+                        id: rule.id,
+                        enabled: checked
+                      });
+                    }}
+                    data-testid={`switch-rule-enabled-${rule.id}`}
+                  />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <Switch
+                    checked={rule.autoApply !== false}
+                    onCheckedChange={(checked) => {
+                      toggleAutoApplyMutation.mutate({
+                        id: rule.id,
+                        autoApply: checked
+                      });
+                    }}
+                    data-testid={`switch-rule-auto-apply-${rule.id}`}
+                  />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isAiRules && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => promoteRuleMutation.mutate(rule.id)}
+                              disabled={promoteRuleMutation.isPending}
+                              data-testid={`button-promote-rule-${rule.id}`}
+                            >
+                              <ArrowUpRight className="h-4 w-4 text-green-600" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Promote to Manual Rule</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => {
+                        setEditingRule(rule);
+                        setRuleDialogOpen(true);
+                      }}
+                      data-testid={`button-edit-rule-${rule.id}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => deleteRuleMutation.mutate(rule.id)}
+                      data-testid={`button-delete-rule-${rule.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-slate-400 hover:text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     );
   };
 
@@ -745,9 +753,9 @@ function RulesManagementTab() {
         </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <Tabs value={activeRuleType} onValueChange={(value) => setActiveRuleType(value as 'manual' | 'ai')}>
+      <div className="bg-white rounded-xl">
+        <Tabs value={activeRuleType} onValueChange={(value) => setActiveRuleType(value as 'manual' | 'ai')}>
+          <div className="px-4 pt-4">
             <TabsList className="mb-4">
               <TabsTrigger value="manual" className="flex items-center gap-2">
                 <Hand className="h-4 w-4" />
@@ -764,43 +772,41 @@ function RulesManagementTab() {
                 )}
               </TabsTrigger>
             </TabsList>
+          </div>
 
-            <TabsContent value="manual">
-              {renderRulesTable(manualRules, false)}
-            </TabsContent>
+          <TabsContent value="manual" className="mt-0">
+            {renderRulesTable(manualRules, false)}
+          </TabsContent>
 
-            <TabsContent value="ai">
-              <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-100 space-y-3">
-                <p className="text-sm text-purple-800">
-                  <Brain className="h-4 w-4 inline mr-1" />
-                  AI rules are automatically learned from your categorization decisions.
-                  After categorizing a merchant 3+ times with 80%+ consistency, an AI rule is created.
-                  Promote rules to manual to give them higher priority.
-                </p>
-                <div className="flex items-center justify-between pt-2 border-t border-purple-200">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-amber-500" />
-                    <Label className="text-sm font-medium text-purple-900">
-                      Auto-Post High Confidence Matches
-                    </Label>
-                    {aiSettings?.aiAutoPostEnabled && (
-                      <Badge variant="secondary" className="text-xs">
-                        {Math.round(parseFloat(aiSettings?.aiAutoPostMinConfidence || "0.95") * 100)}% threshold
-                      </Badge>
-                    )}
-                  </div>
-                  <Switch
-                    checked={aiSettings?.aiAutoPostEnabled ?? false}
-                    onCheckedChange={(checked) => updateAutoPost.mutate(checked)}
-                    disabled={updateAutoPost.isPending}
-                  />
-                </div>
+          <TabsContent value="ai" className="mt-0">
+            <div className="mx-4 mb-3 py-2.5 px-4 bg-purple-50 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Brain className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                <span className="text-sm text-purple-700">
+                  AI rules are learned from your categorization patterns. Promote to manual for higher priority.
+                </span>
               </div>
-              {renderRulesTable(aiRules, true)}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-xs font-medium text-purple-800">Auto-Post</span>
+                  {aiSettings?.aiAutoPostEnabled && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {Math.round(parseFloat(aiSettings?.aiAutoPostMinConfidence || "0.95") * 100)}%
+                    </Badge>
+                  )}
+                </div>
+                <Switch
+                  checked={aiSettings?.aiAutoPostEnabled ?? false}
+                  onCheckedChange={(checked) => updateAutoPost.mutate(checked)}
+                  disabled={updateAutoPost.isPending}
+                />
+              </div>
+            </div>
+            {renderRulesTable(aiRules, true)}
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Rule Dialog */}
       <RuleDialog
