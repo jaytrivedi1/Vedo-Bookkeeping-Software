@@ -9739,14 +9739,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
 
-      // Decrease merchant pattern count when undoing categorization
+      // Decrease merchant pattern count when undoing categorization (company-scoped)
+      const userCompanyId = req.user?.companyId;
       try {
         const { normalizeMerchantName } = await import('./services/merchant-normalizer');
         const merchantName = importedTx.merchantName || importedTx.name;
         const normalizedMerchant = normalizeMerchantName(merchantName);
 
-        if (normalizedMerchant) {
-          const pattern = await storage.getMerchantPatternByName(normalizedMerchant);
+        if (normalizedMerchant && userCompanyId) {
+          const pattern = await storage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
           if (pattern && pattern.totalOccurrences > 0) {
             const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
             const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
@@ -9761,7 +9762,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               confidenceScore: newConfidence.toFixed(4),
               updatedAt: new Date(),
             });
-            console.log('[Undo] Decreased pattern count for', normalizedMerchant, ':', {
+            console.log('[Undo] Decreased pattern count for', normalizedMerchant, 'company:', userCompanyId, ':', {
               oldOccurrences: pattern.totalOccurrences,
               newOccurrences,
               oldConfirmations: pattern.userConfirmations,
@@ -9773,11 +9774,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const MIN_OCCURRENCES_FOR_RULE = 3;
             const MIN_CONFIDENCE_FOR_RULE = 0.80;
             if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
-              // Find and delete the AI rule for this merchant
-              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant);
+              // Find and delete the AI rule for this merchant (company-scoped)
+              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
                 await RulesEngine.deleteRule(aiRule.id);
-                console.log('[Undo] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, '- pattern no longer meets thresholds');
+                console.log('[Undo] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId, '- pattern no longer meets thresholds');
               }
             }
           }
@@ -11160,9 +11161,10 @@ Respond in JSON format:
   });
 
   // DELETE /api/bank-feeds/:id/unmatch - Undo a match
-  apiRouter.delete("/bank-feeds/:id/unmatch", async (req: Request, res: Response) => {
+  apiRouter.delete("/bank-feeds/:id/unmatch", requireAuth, async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
+      const userCompanyId = req.user?.companyId;
 
       if (!transactionId) {
         return res.status(400).json({ error: 'Transaction ID is required' });
@@ -11182,14 +11184,14 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is not matched' });
       }
 
-      // Decrease merchant pattern count when unmatching
+      // Decrease merchant pattern count when unmatching (company-scoped)
       try {
         const { normalizeMerchantName } = await import('./services/merchant-normalizer');
         const merchantName = importedTx.merchantName || importedTx.name;
         const normalizedMerchant = normalizeMerchantName(merchantName);
 
-        if (normalizedMerchant) {
-          const pattern = await storage.getMerchantPatternByName(normalizedMerchant);
+        if (normalizedMerchant && userCompanyId) {
+          const pattern = await storage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
           if (pattern && pattern.totalOccurrences > 0) {
             const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
             const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
@@ -11204,20 +11206,20 @@ Respond in JSON format:
               confidenceScore: newConfidence.toFixed(4),
               updatedAt: new Date(),
             });
-            console.log('[Unmatch] Decreased pattern count for', normalizedMerchant, ':', {
+            console.log('[Unmatch] Decreased pattern count for', normalizedMerchant, 'company:', userCompanyId, ':', {
               oldOccurrences: pattern.totalOccurrences,
               newOccurrences,
               newConfidence,
             });
 
-            // Check if AI rule should be removed
+            // Check if AI rule should be removed (company-scoped)
             const MIN_OCCURRENCES_FOR_RULE = 3;
             const MIN_CONFIDENCE_FOR_RULE = 0.80;
             if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
-              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant);
+              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
                 await RulesEngine.deleteRule(aiRule.id);
-                console.log('[Unmatch] Deleted AI rule', aiRule.id, 'for', normalizedMerchant);
+                console.log('[Unmatch] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId);
               }
             }
           }
