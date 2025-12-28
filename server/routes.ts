@@ -488,6 +488,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send a test email to verify Resend works end-to-end
+  app.post("/api/test-resend-send", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          status: "error",
+          message: "Please provide an email address in the request body: { \"email\": \"your@email.com\" }"
+        });
+      }
+
+      const { sendEmail } = await import('./resend-client');
+      const result = await sendEmail({
+        to: email,
+        subject: "Vedo Bookkeeping - Test Email",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">Test Email Successful!</h2>
+            <p>This is a test email from Vedo Bookkeeping Software.</p>
+            <p>If you received this email, your Resend configuration is working correctly.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+            <p style="color: #6b7280; font-size: 12px;">
+              This is an automated test email. No action is required.
+            </p>
+          </div>
+        `,
+        text: "Test Email Successful! This is a test email from Vedo Bookkeeping Software. If you received this email, your Resend configuration is working correctly."
+      });
+
+      if (result.success) {
+        res.json({
+          status: "ok",
+          message: `Test email sent successfully to ${email}. Check your inbox (and spam folder).`
+        });
+      } else {
+        res.status(500).json({
+          status: "error",
+          message: result.error || "Failed to send email"
+        });
+      }
+    } catch (error: any) {
+      res.status(500).json({
+        status: "error",
+        message: error.message
+      });
+    }
+  });
+
   // Configure authentication
   setupAuth(app);
   // API routes
