@@ -226,6 +226,7 @@ export default function AIAssistantPage() {
     if (!activeConversationId) {
       const newConversation = await createConversationMutation.mutateAsync('New Conversation');
       conversationId = newConversation.id;
+      setActiveConversationId(conversationId);
     }
 
     sendMessageMutation.mutate({ conversationId, content: inputValue });
@@ -239,6 +240,7 @@ export default function AIAssistantPage() {
     if (!activeConversationId) {
       const newConversation = await createConversationMutation.mutateAsync('New Conversation');
       conversationId = newConversation.id;
+      setActiveConversationId(conversationId);
     }
 
     sendMessageMutation.mutate({ conversationId, content: query });
