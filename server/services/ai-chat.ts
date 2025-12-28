@@ -885,16 +885,21 @@ const queryPatterns: QueryPattern[] = [
       const limit = numMatch ? parseInt(numMatch[1]) : 5;
 
       const transactions = await ctx.storage.getTransactions(ctx.companyId);
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
+
+      // Debug logging
+      console.log(`[AI Chat] Top Customers Query - companyId: ${ctx.companyId}, total transactions: ${transactions.length}, total contacts: ${contacts.length}`);
+
+      // Include ALL invoices (not just paid) to show total business with customer
       const invoices = transactions.filter(t => t.type === 'invoice');
-      const paidInvoices = invoices.filter(i => i.status === 'paid');
+      console.log(`[AI Chat] Found ${invoices.length} invoices`);
 
       // Get contacts for names
-      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
-      // Group by customer
+      // Group by customer - count ALL invoices for total revenue
       const byCustomer: Record<string, { name: string; total: number; count: number }> = {};
-      for (const inv of paidInvoices) {
+      for (const inv of invoices) {
         const customerId = inv.contactId?.toString() || 'unknown';
         const name = contactMap.get(inv.contactId || 0) || 'Unknown Customer';
         if (!byCustomer[customerId]) {
@@ -908,7 +913,11 @@ const queryPatterns: QueryPattern[] = [
         .sort((a, b) => b.total - a.total)
         .slice(0, limit);
 
-      let message = `Here are your top ${limit} customers by revenue:\n\n`;
+      console.log(`[AI Chat] Top ${limit} customers:`, topCustomers);
+
+      let message = topCustomers.length > 0
+        ? `Here are your top ${limit} customers by revenue:\n\n`
+        : `No customer invoices found. Make sure you have invoices in your system.`;
 
       const tableData = {
         type: 'table',
@@ -924,7 +933,7 @@ const queryPatterns: QueryPattern[] = [
         message,
         data: tableData,
         actions: [
-          { label: 'View Customers', action: 'navigate', params: { path: '/customers' } },
+          { label: 'View Invoices', action: 'navigate', params: { path: '/invoices' } },
         ]
       };
     }
