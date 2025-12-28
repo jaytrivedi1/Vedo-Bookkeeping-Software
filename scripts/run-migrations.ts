@@ -66,6 +66,10 @@ async function runMigrations() {
     log("Running user_companies table migration...");
     await addUserCompaniesTable();
 
+    // Add reconciliation enhancements (must run before any migration that queries accounts table)
+    log("Running reconciliation enhancements migration...");
+    await addReconciliationEnhancements();
+
     // Run sales tax components migration
     log("Running sales tax components migration...");
     await migrateSalesTaxComponents();
@@ -157,10 +161,6 @@ async function runMigrations() {
     // Add company scoping to AI categorization
     log("Running company scoping for AI categorization...");
     await addCompanyScopingToAi();
-
-    // Add reconciliation enhancements
-    log("Running reconciliation enhancements migration...");
-    await addReconciliationEnhancements();
 
     log("All migrations completed successfully!");
     process.exit(0);
