@@ -69,6 +69,11 @@ async function runMigrations() {
     log("Running company scoping for core tables migration...");
     await addCompanyScopingToCoreTables();
 
+    // Add auth security fields (email verification, account lockout, password reset)
+    // MUST run before any migration that does db.select().from(usersSchema)
+    log("Running auth security fields migration...");
+    await addAuthSecurityFieldsMigration();
+
     // Run user_companies table migration
     log("Running user_companies table migration...");
     await addUserCompaniesTable();
@@ -168,10 +173,6 @@ async function runMigrations() {
     // Add company scoping to AI categorization
     log("Running company scoping for AI categorization...");
     await addCompanyScopingToAi();
-
-    // Add auth security fields (email verification, account lockout, password reset)
-    log("Running auth security fields migration...");
-    await addAuthSecurityFieldsMigration();
 
     log("All migrations completed successfully!");
     process.exit(0);
