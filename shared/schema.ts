@@ -50,6 +50,7 @@ export const cashFlowCategoryEnum = pgEnum('cash_flow_category', [
 // Chart of Accounts
 export const accounts = pgTable('accounts', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   code: text('code').unique(),
   name: text('name').notNull(),
   type: accountTypeEnum('type').notNull(),
@@ -67,6 +68,7 @@ export const accounts = pgTable('accounts', {
 // Contacts (Customers and Vendors)
 export const contacts = pgTable('contacts', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   name: text('name').notNull(), // Company/Business name
   contactName: text('contact_name'), // Primary contact person's name
   email: text('email'),
@@ -94,6 +96,7 @@ export const contactNotesSchema = pgTable('contact_notes', {
 // Transaction Headers
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   reference: text('reference'),  // Made optional - can be left blank
   type: transactionTypeEnum('type').notNull(),
   date: timestamp('date').notNull().defaultNow(),
@@ -341,6 +344,7 @@ export const salesTaxesTable = 'sales_taxes';
 // Sales Tax Schema
 export const salesTaxSchema = pgTable(salesTaxesTable, {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   name: text('name').notNull(),
   description: text('description'),
   rate: doublePrecision('rate').notNull().default(0),
@@ -380,6 +384,7 @@ export interface TaxComponentInfo {
 // Products & Services schema
 export const productsSchema = pgTable('products', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   name: text('name').notNull(),
   description: text('description'),
   sku: text('sku'),
@@ -692,6 +697,7 @@ export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
 // Bank Connections (for Plaid integration)
 export const bankConnectionsSchema = pgTable('bank_connections', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   itemId: text('item_id').notNull().unique(), // Plaid item_id
   accessToken: text('access_token').notNull(), // Plaid access_token (encrypted in production)
   institutionId: text('institution_id').notNull(),
@@ -742,6 +748,7 @@ export const csvMappingPreferencesSchema = pgTable('csv_mapping_preferences', {
 // Imported Transactions (from bank feeds - Plaid or CSV)
 export const importedTransactionsSchema = pgTable('imported_transactions', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id'), // Company isolation - FK added via migration
   source: text('source').notNull().default('plaid'), // 'plaid' or 'csv'
   bankAccountId: integer('bank_account_id').references(() => bankAccountsSchema.id), // For Plaid imports
   accountId: integer('account_id').references(() => accounts.id), // For CSV imports (chart of accounts)

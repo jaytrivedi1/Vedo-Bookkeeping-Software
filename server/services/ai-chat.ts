@@ -144,9 +144,9 @@ async function buildFinancialContext(ctx: QueryContext): Promise<FinancialSummar
 
   // Get all data in parallel
   const [transactions, accounts, contacts] = await Promise.all([
-    ctx.storage.getTransactions(),
-    ctx.storage.getAccounts(),
-    ctx.storage.getContacts(),
+    ctx.storage.getTransactions(ctx.companyId),
+    ctx.storage.getAccounts(ctx.companyId),
+    ctx.storage.getContacts(ctx.companyId),
   ]);
 
   const contactMap = new Map(contacts.map(c => [c.id, c.name]));
@@ -427,7 +427,7 @@ const queryPatterns: QueryPattern[] = [
       };
 
       // Get all transactions (storage doesn't take companyId - single tenant)
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const periodTransactions = transactions.filter(t => {
         const txDate = new Date(t.date);
         return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
@@ -496,7 +496,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const expenses = transactions.filter(t => {
         const txDate = new Date(t.date);
         return (t.type === 'expense' || t.type === 'bill' || t.type === 'cheque') &&
@@ -555,7 +555,7 @@ const queryPatterns: QueryPattern[] = [
       /past\s+due\s+invoices/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const invoices = transactions.filter(t => t.type === 'invoice');
       // Use isOverdue helper to check by due date, not just status
       const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
@@ -575,7 +575,7 @@ const queryPatterns: QueryPattern[] = [
       let message = `⚠️ You have **${overdue.length} overdue invoice${overdue.length > 1 ? 's' : ''}** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
       // Get contacts for customer names
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       // Show all overdue (up to 10)
@@ -615,7 +615,7 @@ const queryPatterns: QueryPattern[] = [
       /chase\s+(?:up\s+)?(?:overdue|unpaid|late)\s+(?:invoices?|payments?)/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const invoices = transactions.filter(t => t.type === 'invoice');
       // Use isOverdue helper to check by due date, not just status
       const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
@@ -633,7 +633,7 @@ const queryPatterns: QueryPattern[] = [
       const total = overdue.reduce((sum, i) => sum + Number(i.balance || i.amount || 0), 0);
 
       // Get contacts for customer names
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c]));
 
       // Check how many have emails
@@ -701,7 +701,7 @@ const queryPatterns: QueryPattern[] = [
       }
 
       // Get contacts and find matching customer
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const matchingContacts = contacts.filter(c =>
         c.name.toLowerCase().includes(customerNameQuery) ||
         customerNameQuery.includes(c.name.toLowerCase())
@@ -730,7 +730,7 @@ const queryPatterns: QueryPattern[] = [
       }
 
       // Get transactions and find overdue invoices for matching customers
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const customerIds = new Set(matchingContacts.map(c => c.id));
 
       // Use isOverdue helper to check by due date, not just status
@@ -822,7 +822,7 @@ const queryPatterns: QueryPattern[] = [
       /accounts?\s+receivable/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const invoices = transactions.filter(t => t.type === 'invoice');
       const unpaid = invoices.filter(i => i.status === 'open' || i.status === 'overdue' || i.status === 'partial');
 
@@ -844,7 +844,7 @@ const queryPatterns: QueryPattern[] = [
 
       if (topUnpaid.length > 0) {
         // Get contacts for customer names
-        const contacts = await ctx.storage.getContacts();
+        const contacts = await ctx.storage.getContacts(ctx.companyId);
         const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
         const tableData = {
@@ -884,12 +884,12 @@ const queryPatterns: QueryPattern[] = [
       const numMatch = match.input?.match(/top\s+(\d+)/i);
       const limit = numMatch ? parseInt(numMatch[1]) : 5;
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const invoices = transactions.filter(t => t.type === 'invoice');
       const paidInvoices = invoices.filter(i => i.status === 'paid');
 
       // Get contacts for names
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       // Group by customer
@@ -945,7 +945,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const revenue = transactions.filter(t => {
         const txDate = new Date(t.date);
         return (t.type === 'deposit' || t.type === 'invoice' || t.type === 'sales_receipt') &&
@@ -997,7 +997,7 @@ const queryPatterns: QueryPattern[] = [
       /past\s+due\s+bills/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const bills = transactions.filter(t => t.type === 'bill');
       // Use isOverdue helper to check by due date, not just status
       const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
@@ -1017,7 +1017,7 @@ const queryPatterns: QueryPattern[] = [
       let message = `⚠️ You have **${overdue.length} overdue bill${overdue.length > 1 ? 's' : ''}** totaling **${formatCurrency(total, ctx.homeCurrency)}**.\n\n`;
 
       // Get contacts for vendor names
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       // Show all overdue (up to 10)
@@ -1056,7 +1056,7 @@ const queryPatterns: QueryPattern[] = [
       /accounts?\s+payable/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const bills = transactions.filter(t => t.type === 'bill');
       const unpaid = bills.filter(b => b.status === 'open' || b.status === 'overdue' || b.status === 'partial');
 
@@ -1078,7 +1078,7 @@ const queryPatterns: QueryPattern[] = [
 
       if (topBills.length > 0) {
         // Get contacts for vendor names
-        const contacts = await ctx.storage.getContacts();
+        const contacts = await ctx.storage.getContacts(ctx.companyId);
         const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
         const tableData = {
@@ -1114,7 +1114,7 @@ const queryPatterns: QueryPattern[] = [
       /(?:what(?:'s|is)|show)\s+(?:in\s+)?(?:my|our|the)?\s*bank/i,
     ],
     handler: async (match, ctx) => {
-      const accounts = await ctx.storage.getAccounts();
+      const accounts = await ctx.storage.getAccounts(ctx.companyId);
 
       // Get bank and cash accounts
       const bankAccounts = accounts.filter(a =>
@@ -1156,10 +1156,10 @@ const queryPatterns: QueryPattern[] = [
       /(?:recent|latest)\s+(?:activity|transactions)/i,
     ],
     handler: async (match, ctx) => {
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const recent = transactions.slice(0, 10); // Get 10 most recent
 
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       let message = `Here are your **${recent.length} most recent transactions**:\n\n`;
@@ -1197,7 +1197,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const periodTransactions = transactions.filter(t => {
         const txDate = new Date(t.date);
         return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
@@ -1244,7 +1244,7 @@ const queryPatterns: QueryPattern[] = [
         endDate: new Date()
       };
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const periodTransactions = transactions.filter(t => {
         const txDate = new Date(t.date);
         return txDate >= dateRange.startDate && txDate <= dateRange.endDate;
@@ -1298,10 +1298,10 @@ const queryPatterns: QueryPattern[] = [
       const numMatch = match.input?.match(/top\s+(\d+)/i);
       const limit = numMatch ? parseInt(numMatch[1]) : 5;
 
-      const transactions = await ctx.storage.getTransactions();
+      const transactions = await ctx.storage.getTransactions(ctx.companyId);
       const bills = transactions.filter(t => t.type === 'bill' || t.type === 'expense');
 
-      const contacts = await ctx.storage.getContacts();
+      const contacts = await ctx.storage.getContacts(ctx.companyId);
       const contactMap = new Map(contacts.map(c => [c.id, c.name]));
 
       const byVendor: Record<string, { name: string; total: number; count: number }> = {};

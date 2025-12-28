@@ -55,8 +55,13 @@ async function comparePasswords(supplied: string, stored: string): Promise<boole
 }
 
 export class DatabaseStorage implements IStorage {
-  // Accounts
-  async getAccounts(): Promise<Account[]> {
+  // Accounts (with company isolation)
+  async getAccounts(companyId?: number): Promise<Account[]> {
+    if (companyId) {
+      return await db.select().from(accounts)
+        .where(eq(accounts.companyId, companyId))
+        .orderBy(accounts.code);
+    }
     return await db.select().from(accounts).orderBy(accounts.code);
   }
 
@@ -65,7 +70,12 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getAccountByCode(code: string): Promise<Account | undefined> {
+  async getAccountByCode(code: string, companyId?: number): Promise<Account | undefined> {
+    if (companyId) {
+      const result = await db.select().from(accounts)
+        .where(and(eq(accounts.code, code), eq(accounts.companyId, companyId)));
+      return result[0];
+    }
     const result = await db.select().from(accounts).where(eq(accounts.code, code));
     return result[0];
   }
@@ -166,11 +176,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Contacts
-  async getContacts(includeInactive = false): Promise<Contact[]> {
-    if (includeInactive) {
-      return await db.select().from(contacts).orderBy(contacts.name);
+  async getContacts(companyId?: number, includeInactive = false): Promise<Contact[]> {
+    const conditions = [];
+    if (companyId) {
+      conditions.push(eq(contacts.companyId, companyId));
     }
-    return await db.select().from(contacts).where(eq(contacts.isActive, true)).orderBy(contacts.name);
+    if (!includeInactive) {
+      conditions.push(eq(contacts.isActive, true));
+    }
+
+    if (conditions.length > 0) {
+      return await db.select().from(contacts)
+        .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+        .orderBy(contacts.name);
+    }
+    return await db.select().from(contacts).orderBy(contacts.name);
   }
 
   async getContact(id: number): Promise<Contact | undefined> {
@@ -334,8 +354,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Transactions
-  async getTransactions(): Promise<Transaction[]> {
+  async getTransactions(companyId?: number): Promise<Transaction[]> {
     try {
+      if (companyId) {
+        const results = await db.select().from(transactions)
+          .where(eq(transactions.companyId, companyId))
+          .orderBy(desc(transactions.date));
+        return results;
+      }
       const results = await db.select().from(transactions).orderBy(desc(transactions.date));
       return results;
     } catch (error) {
@@ -1405,14 +1431,19 @@ export class DatabaseStorage implements IStorage {
   /**
    * Gets transactions for a specific contact
    */
-  async getTransactionsByContact(contactId: number): Promise<Transaction[]> {
+  async getTransactionsByContact(contactId: number, companyId?: number): Promise<Transaction[]> {
     try {
+      const conditions = [eq(transactions.contactId, contactId)];
+      if (companyId) {
+        conditions.push(eq(transactions.companyId, companyId));
+      }
+
       const transactionsList = await db
         .select()
         .from(transactions)
-        .where(eq(transactions.contactId, contactId))
+        .where(conditions.length === 1 ? conditions[0] : and(...conditions))
         .orderBy(desc(transactions.date));
-      
+
       return transactionsList;
     } catch (error) {
       console.error(`Error getting transactions for contact ${contactId}:`, error);
@@ -1424,25 +1455,29 @@ export class DatabaseStorage implements IStorage {
    * Searches for transactions that contain a specific text in their description
    * @param searchText Text to search for in transaction descriptions
    * @param type Optional transaction type filter
+   * @param companyId Optional company ID for data isolation
    * @returns Array of matching transactions
    */
-  async getTransactionsByDescription(searchText: string, type?: string): Promise<Transaction[]> {
+  async getTransactionsByDescription(searchText: string, type?: string, companyId?: number): Promise<Transaction[]> {
     try {
-      // Build the query
-      let query = db
+      // Build conditions
+      const conditions = [sql`LOWER(${transactions.description}) LIKE LOWER(${'%' + searchText + '%'})`];
+
+      if (type) {
+        conditions.push(eq(transactions.type, type as any));
+      }
+
+      if (companyId) {
+        conditions.push(eq(transactions.companyId, companyId));
+      }
+
+      // Execute the query with combined conditions
+      const result = await db
         .select()
         .from(transactions)
-        .where(sql`LOWER(${transactions.description}) LIKE LOWER(${'%' + searchText + '%'})`)
+        .where(conditions.length === 1 ? conditions[0] : and(...conditions))
         .orderBy(desc(transactions.date));
-      
-      // Add type filter if provided
-      if (type) {
-        query = query.where(eq(transactions.type, type as any));
-      }
-      
-      // Execute the query
-      const result = await query;
-      
+
       console.log(`Found ${result.length} transactions containing "${searchText}" with type ${type || 'any'}`);
       return result;
     } catch (error) {
@@ -1455,21 +1490,26 @@ export class DatabaseStorage implements IStorage {
    * Gets transactions for a specific contact filtered by type
    * @param contactId The contact ID to filter by
    * @param type The transaction type to filter by
+   * @param companyId Optional company ID for data isolation
    * @returns Array of matching transactions
    */
-  async getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]> {
+  async getTransactionsByContactAndType(contactId: number, type: string, companyId?: number): Promise<Transaction[]> {
     try {
+      const conditions = [
+        eq(transactions.contactId, contactId),
+        eq(transactions.type, type as any)
+      ];
+
+      if (companyId) {
+        conditions.push(eq(transactions.companyId, companyId));
+      }
+
       const result = await db
         .select()
         .from(transactions)
-        .where(
-          and(
-            eq(transactions.contactId, contactId),
-            eq(transactions.type, type as any)
-          )
-        )
+        .where(and(...conditions))
         .orderBy(desc(transactions.date));
-      
+
       return result;
     } catch (error) {
       console.error(`Error getting ${type} transactions for contact ${contactId}:`, error);
@@ -1477,20 +1517,24 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getRecentTransactions(limit: number): Promise<Transaction[]> {
+  async getRecentTransactions(limit: number, companyId?: number): Promise<Transaction[]> {
     try {
+      const conditions = [
+        ne(transactions.type, 'customer_credit' as any),
+        ne(transactions.type, 'vendor_credit' as any)
+      ];
+
+      if (companyId) {
+        conditions.push(eq(transactions.companyId, companyId));
+      }
+
       const result = await db
         .select()
         .from(transactions)
-        .where(
-          and(
-            ne(transactions.type, 'customer_credit' as any),
-            ne(transactions.type, 'vendor_credit' as any)
-          )
-        )
+        .where(and(...conditions))
         .orderBy(desc(transactions.date))
         .limit(limit);
-      
+
       return result;
     } catch (error) {
       console.error(`Error getting recent transactions:`, error);
@@ -1498,7 +1542,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async searchAll(query: string): Promise<{
+  async searchAll(query: string, companyId?: number): Promise<{
     transactions: any[];
     contacts: Contact[];
     accounts: Account[];
@@ -1508,7 +1552,61 @@ export class DatabaseStorage implements IStorage {
       const searchTerm = `%${query}%`;
       const numericQuery = parseFloat(query);
       const isNumeric = !isNaN(numericQuery);
-      
+
+      // Build transaction conditions
+      const transactionConditions = [
+        or(
+          ilike(transactions.reference, searchTerm),
+          ilike(transactions.description, searchTerm),
+          ilike(transactions.memo, searchTerm),
+          ilike(contacts.name, searchTerm),
+          isNumeric ? sql`CAST(${transactions.amount} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
+        ),
+        ne(transactions.type, 'customer_credit' as any),
+        ne(transactions.type, 'vendor_credit' as any)
+      ];
+      if (companyId) {
+        transactionConditions.push(eq(transactions.companyId, companyId));
+      }
+
+      // Build contact conditions
+      const contactConditions = [
+        or(
+          ilike(contacts.name, searchTerm),
+          ilike(contacts.email, searchTerm),
+          ilike(contacts.phone, searchTerm),
+          ilike(contacts.address, searchTerm),
+          ilike(contacts.contactName, searchTerm)
+        )
+      ];
+      if (companyId) {
+        contactConditions.push(eq(contacts.companyId, companyId));
+      }
+
+      // Build account conditions
+      const accountConditions = [
+        or(
+          ilike(accounts.name, searchTerm),
+          ilike(accounts.code, searchTerm)
+        )
+      ];
+      if (companyId) {
+        accountConditions.push(eq(accounts.companyId, companyId));
+      }
+
+      // Build product conditions
+      const productConditions = [
+        or(
+          ilike(productsSchema.name, searchTerm),
+          ilike(productsSchema.sku, searchTerm),
+          ilike(productsSchema.description, searchTerm),
+          isNumeric ? sql`CAST(${productsSchema.price} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
+        )
+      ];
+      if (companyId) {
+        productConditions.push(eq(productsSchema.companyId, companyId));
+      }
+
       // Search transactions with contact names joined
       const transactionsWithContactsQuery = db
         .select({
@@ -1526,70 +1624,36 @@ export class DatabaseStorage implements IStorage {
         })
         .from(transactions)
         .leftJoin(contacts, eq(transactions.contactId, contacts.id))
-        .where(
-          and(
-            or(
-              ilike(transactions.reference, searchTerm),
-              ilike(transactions.description, searchTerm),
-              ilike(transactions.memo, searchTerm),
-              ilike(contacts.name, searchTerm),
-              // Search by amount (exact or partial)
-              isNumeric ? sql`CAST(${transactions.amount} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
-            ),
-            ne(transactions.type, 'customer_credit' as any),
-            ne(transactions.type, 'vendor_credit' as any)
-          )
-        )
+        .where(and(...transactionConditions))
         .orderBy(desc(transactions.date))
         .limit(25);
 
       const [transactionsResult, contactsResult, accountsResult, productsResult] = await Promise.all([
         transactionsWithContactsQuery,
-        
+
         db
           .select()
           .from(contacts)
-          .where(
-            or(
-              ilike(contacts.name, searchTerm),
-              ilike(contacts.email, searchTerm),
-              ilike(contacts.phone, searchTerm),
-              ilike(contacts.address, searchTerm),
-              ilike(contacts.contactName, searchTerm)
-            )
-          )
+          .where(contactConditions.length === 1 ? contactConditions[0] : and(...contactConditions))
           .orderBy(contacts.name)
           .limit(15),
-        
+
         db
           .select()
           .from(accounts)
-          .where(
-            or(
-              ilike(accounts.name, searchTerm),
-              ilike(accounts.code, searchTerm)
-            )
-          )
+          .where(accountConditions.length === 1 ? accountConditions[0] : and(...accountConditions))
           .orderBy(accounts.code)
           .limit(10),
-        
+
         // Search products
         db
           .select()
           .from(productsSchema)
-          .where(
-            or(
-              ilike(productsSchema.name, searchTerm),
-              ilike(productsSchema.sku, searchTerm),
-              ilike(productsSchema.description, searchTerm),
-              // Search by price
-              isNumeric ? sql`CAST(${productsSchema.price} AS TEXT) LIKE ${searchTerm}` : sql`1=0`
-            )
-          )
+          .where(productConditions.length === 1 ? productConditions[0] : and(...productConditions))
           .orderBy(productsSchema.name)
           .limit(10)
       ]);
-      
+
       return {
         transactions: transactionsResult,
         contacts: contactsResult,
@@ -1706,8 +1770,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Reports
-  async getAccountBalances(): Promise<{ account: Account; balance: number }[]> {
-    const allAccounts = await this.getAccounts();
+  async getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]> {
+    const allAccounts = await this.getAccounts(companyId);
     const allLedgerEntries = await this.getAllLedgerEntries();
     
     // Create a map to store balances for each account
@@ -2401,7 +2465,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Sales Taxes
-  async getSalesTaxes(): Promise<SalesTax[]> {
+  async getSalesTaxes(companyId?: number): Promise<SalesTax[]> {
+    if (companyId) {
+      return await db.select().from(salesTaxSchema)
+        .where(eq(salesTaxSchema.companyId, companyId))
+        .orderBy(salesTaxSchema.name);
+    }
     return await db.select().from(salesTaxSchema).orderBy(salesTaxSchema.name);
   }
 
@@ -2432,7 +2501,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Product Methods
-  async getProducts(): Promise<Product[]> {
+  async getProducts(companyId?: number): Promise<Product[]> {
+    if (companyId) {
+      return await db.select().from(productsSchema)
+        .where(eq(productsSchema.companyId, companyId))
+        .orderBy(productsSchema.name);
+    }
     return await db.select().from(productsSchema).orderBy(productsSchema.name);
   }
 
@@ -2892,7 +2966,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Bank Connections
-  async getBankConnections(): Promise<BankConnection[]> {
+  async getBankConnections(companyId?: number): Promise<BankConnection[]> {
+    if (companyId) {
+      return await db.select()
+        .from(bankConnectionsSchema)
+        .where(eq(bankConnectionsSchema.companyId, companyId))
+        .orderBy(desc(bankConnectionsSchema.createdAt));
+    }
     return await db.select().from(bankConnectionsSchema).orderBy(desc(bankConnectionsSchema.createdAt));
   }
 
@@ -3002,7 +3082,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Imported Transactions
-  async getImportedTransactions(): Promise<ImportedTransaction[]> {
+  async getImportedTransactions(companyId?: number): Promise<ImportedTransaction[]> {
+    if (companyId) {
+      return await db.select()
+        .from(importedTransactionsSchema)
+        .where(eq(importedTransactionsSchema.companyId, companyId))
+        .orderBy(desc(importedTransactionsSchema.date));
+    }
     return await db.select().from(importedTransactionsSchema).orderBy(desc(importedTransactionsSchema.date));
   }
 
@@ -3025,10 +3111,14 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
-  async getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]> {
+  async getUnmatchedImportedTransactions(companyId?: number): Promise<ImportedTransaction[]> {
+    const conditions = [eq(importedTransactionsSchema.status, 'unmatched')];
+    if (companyId) {
+      conditions.push(eq(importedTransactionsSchema.companyId, companyId));
+    }
     return await db.select()
       .from(importedTransactionsSchema)
-      .where(eq(importedTransactionsSchema.status, 'unmatched'))
+      .where(conditions.length === 1 ? conditions[0] : and(...conditions))
       .orderBy(desc(importedTransactionsSchema.date));
   }
 

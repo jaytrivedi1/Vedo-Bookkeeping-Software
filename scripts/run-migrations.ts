@@ -35,6 +35,7 @@ import { addAiCategorizationTables } from "../server/migrations/add-ai-categoriz
 import { addAiConversationsTables } from "../server/migrations/add-ai-conversations";
 import { addCompanyScopingToAi } from "../server/migrations/add-company-scoping-to-ai";
 import { addReconciliationEnhancements } from "../server/migrations/add-reconciliation-enhancements";
+import { addCompanyScopingToCoreTables } from "../server/migrations/add-company-scoping-to-core-tables";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -61,6 +62,11 @@ async function runMigrations() {
     // Add unique company codes (VED-XXXXXXXX format)
     log("Running company code migration...");
     await addCompanyCodeMigration();
+
+    // CRITICAL: Add company scoping to core tables (accounts, contacts, transactions, etc.)
+    // Must run early before any migration that queries these tables
+    log("Running company scoping for core tables migration...");
+    await addCompanyScopingToCoreTables();
 
     // Run user_companies table migration
     log("Running user_companies table migration...");

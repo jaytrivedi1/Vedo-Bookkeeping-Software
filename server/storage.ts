@@ -109,31 +109,31 @@ import {
 } from "@shared/schema";
 
 export interface IStorage {
-  // Accounts
-  getAccounts(): Promise<Account[]>;
+  // Accounts (companyId for data isolation)
+  getAccounts(companyId?: number): Promise<Account[]>;
   getAccount(id: number): Promise<Account | undefined>;
-  getAccountByCode(code: string): Promise<Account | undefined>;
+  getAccountByCode(code: string, companyId?: number): Promise<Account | undefined>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: number, account: Partial<Account>): Promise<Account | undefined>;
   deleteAccount(id: number): Promise<boolean>;
   hasAccountTransactions(accountId: number): Promise<boolean>;
 
-  // Sales Taxes
-  getSalesTaxes(): Promise<SalesTax[]>;
+  // Sales Taxes (companyId for data isolation)
+  getSalesTaxes(companyId?: number): Promise<SalesTax[]>;
   getSalesTax(id: number): Promise<SalesTax | undefined>;
   createSalesTax(salesTax: InsertSalesTax): Promise<SalesTax>;
   updateSalesTax(id: number, salesTax: Partial<SalesTax>): Promise<SalesTax | undefined>;
   deleteSalesTax(id: number): Promise<boolean>;
 
-  // Products & Services
-  getProducts(): Promise<Product[]>;
+  // Products & Services (companyId for data isolation)
+  getProducts(companyId?: number): Promise<Product[]>;
   getProduct(id: number): Promise<Product | undefined>;
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: number, product: Partial<Product>): Promise<Product | undefined>;
   deleteProduct(id: number): Promise<boolean>;
 
-  // Contacts
-  getContacts(includeInactive?: boolean): Promise<Contact[]>;
+  // Contacts (companyId for data isolation)
+  getContacts(companyId?: number, includeInactive?: boolean): Promise<Contact[]>;
   getContact(id: number): Promise<Contact | undefined>;
   createContact(contact: InsertContact): Promise<Contact>;
   updateContact(id: number, contact: Partial<Contact>): Promise<Contact | undefined>;
@@ -148,22 +148,23 @@ export interface IStorage {
   deleteContactNote(id: number): Promise<boolean>;
   unpinAllContactNotes(contactId: number): Promise<void>;
 
-  // Transactions
-  getTransactions(): Promise<Transaction[]>;
+  // Transactions (companyId for data isolation)
+  getTransactions(companyId?: number): Promise<Transaction[]>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   createTransaction(transaction: InsertTransaction, lineItems: InsertLineItem[], ledgerEntries: InsertLedgerEntry[]): Promise<Transaction>;
   updateTransaction(id: number, transaction: Partial<Transaction>): Promise<Transaction | undefined>;
   deleteTransaction(id: number): Promise<boolean>;
-  getTransactionsByContact(contactId: number): Promise<Transaction[]>;
-  getTransactionsByDescription(searchText: string, type?: string): Promise<Transaction[]>;
-  getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]>;
-  getRecentTransactions(limit: number): Promise<Transaction[]>;
+  getTransactionsByContact(contactId: number, companyId?: number): Promise<Transaction[]>;
+  getTransactionsByDescription(searchText: string, type?: string, companyId?: number): Promise<Transaction[]>;
+  getTransactionsByContactAndType(contactId: number, type: string, companyId?: number): Promise<Transaction[]>;
+  getRecentTransactions(limit: number, companyId?: number): Promise<Transaction[]>;
   
-  // Global Search
-  searchAll(query: string): Promise<{
-    transactions: Transaction[];
+  // Global Search (companyId for data isolation)
+  searchAll(query: string, companyId?: number): Promise<{
+    transactions: any[];
     contacts: Contact[];
     accounts: Account[];
+    products: any[];
   }>;
 
   // Line Items
@@ -178,8 +179,8 @@ export interface IStorage {
   createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry>;
   updateLedgerEntry(id: number, ledgerEntry: Partial<LedgerEntry>): Promise<LedgerEntry | undefined>;
 
-  // Reports
-  getAccountBalances(): Promise<{ account: Account; balance: number }[]>;
+  // Reports (companyId for data isolation)
+  getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]>;
   getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
     account: Account;
     totalDebits: number;
@@ -281,8 +282,8 @@ export interface IStorage {
   validatePassword(storedPassword: string, suppliedPassword: string): Promise<boolean>;
   hashPassword(password: string): Promise<string>;
   
-  // Bank Connections
-  getBankConnections(): Promise<BankConnection[]>;
+  // Bank Connections (companyId for data isolation)
+  getBankConnections(companyId?: number): Promise<BankConnection[]>;
   getBankConnection(id: number): Promise<BankConnection | undefined>;
   getBankConnectionByItemId(itemId: string): Promise<BankConnection | undefined>;
   createBankConnection(connection: InsertBankConnection): Promise<BankConnection>;
@@ -298,12 +299,12 @@ export interface IStorage {
   updateBankAccount(id: number, account: Partial<BankAccount>): Promise<BankAccount | undefined>;
   deleteBankAccount(id: number): Promise<boolean>;
   
-  // Imported Transactions
-  getImportedTransactions(): Promise<ImportedTransaction[]>;
+  // Imported Transactions (companyId for data isolation)
+  getImportedTransactions(companyId?: number): Promise<ImportedTransaction[]>;
   getImportedTransaction(id: number): Promise<ImportedTransaction | undefined>;
   getImportedTransactionsByBankAccount(bankAccountId: number): Promise<ImportedTransaction[]>;
   getImportedTransactionByPlaidId(plaidTransactionId: string): Promise<ImportedTransaction | undefined>;
-  getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]>;
+  getUnmatchedImportedTransactions(companyId?: number): Promise<ImportedTransaction[]>;
   createImportedTransaction(transaction: InsertImportedTransaction): Promise<ImportedTransaction>;
   updateImportedTransaction(id: number, transaction: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined>;
   deleteImportedTransaction(id: number): Promise<boolean>;
@@ -557,16 +558,23 @@ export class MemStorage implements IStorage {
   }
 
   // Account Methods
-  async getAccounts(): Promise<Account[]> {
-    return Array.from(this.accounts.values());
+  async getAccounts(companyId?: number): Promise<Account[]> {
+    const accounts = Array.from(this.accounts.values());
+    if (companyId) {
+      return accounts.filter(a => a.companyId === companyId);
+    }
+    return accounts;
   }
 
   async getAccount(id: number): Promise<Account | undefined> {
     return this.accounts.get(id);
   }
 
-  async getAccountByCode(code: string): Promise<Account | undefined> {
-    return Array.from(this.accounts.values()).find(account => account.code === code);
+  async getAccountByCode(code: string, companyId?: number): Promise<Account | undefined> {
+    const accounts = Array.from(this.accounts.values());
+    return accounts.find(account =>
+      account.code === code && (!companyId || account.companyId === companyId)
+    );
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
@@ -591,8 +599,12 @@ export class MemStorage implements IStorage {
   }
 
   // Sales Tax Methods
-  async getSalesTaxes(): Promise<SalesTax[]> {
-    return Array.from(this.salesTaxes.values());
+  async getSalesTaxes(companyId?: number): Promise<SalesTax[]> {
+    const taxes = Array.from(this.salesTaxes.values());
+    if (companyId) {
+      return taxes.filter(t => t.companyId === companyId);
+    }
+    return taxes;
   }
 
   async getSalesTax(id: number): Promise<SalesTax | undefined> {
@@ -688,8 +700,11 @@ export class MemStorage implements IStorage {
   }
 
   // Contact Methods
-  async getContacts(includeInactive = false): Promise<Contact[]> {
-    const allContacts = Array.from(this.contacts.values());
+  async getContacts(companyId?: number, includeInactive = false): Promise<Contact[]> {
+    let allContacts = Array.from(this.contacts.values());
+    if (companyId) {
+      allContacts = allContacts.filter(c => c.companyId === companyId);
+    }
     if (includeInactive) {
       return allContacts;
     }
@@ -741,8 +756,12 @@ export class MemStorage implements IStorage {
   }
 
   // Transaction Methods
-  async getTransactions(): Promise<Transaction[]> {
-    return Array.from(this.transactions.values());
+  async getTransactions(companyId?: number): Promise<Transaction[]> {
+    const txs = Array.from(this.transactions.values());
+    if (companyId) {
+      return txs.filter(t => t.companyId === companyId);
+    }
+    return txs;
   }
 
   async getTransaction(id: number): Promise<Transaction | undefined> {
@@ -922,8 +941,8 @@ export class MemStorage implements IStorage {
   }
 
   // Reports
-  async getAccountBalances(): Promise<{ account: Account; balance: number }[]> {
-    const accounts = await this.getAccounts();
+  async getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]> {
+    const accounts = await this.getAccounts(companyId);
     return accounts.map(account => ({ account, balance: account.balance }));
   }
 
@@ -990,8 +1009,12 @@ export class MemStorage implements IStorage {
   }
 
   // Product Methods
-  async getProducts(): Promise<Product[]> {
-    return Array.from(this.products.values());
+  async getProducts(companyId?: number): Promise<Product[]> {
+    const products = Array.from(this.products.values());
+    if (companyId) {
+      return products.filter(p => p.companyId === companyId);
+    }
+    return products;
   }
 
   async getProduct(id: number): Promise<Product | undefined> {
@@ -1443,7 +1466,7 @@ export class MemStorage implements IStorage {
   }
 
   // Bank Connections
-  async getBankConnections(): Promise<BankConnection[]> {
+  async getBankConnections(companyId?: number): Promise<BankConnection[]> {
     throw new Error("Bank connections not supported in MemStorage");
   }
 
@@ -1497,7 +1520,7 @@ export class MemStorage implements IStorage {
   }
 
   // Imported Transactions
-  async getImportedTransactions(): Promise<ImportedTransaction[]> {
+  async getImportedTransactions(companyId?: number): Promise<ImportedTransaction[]> {
     throw new Error("Imported transactions not supported in MemStorage");
   }
 
@@ -1513,7 +1536,7 @@ export class MemStorage implements IStorage {
     throw new Error("Imported transactions not supported in MemStorage");
   }
 
-  async getUnmatchedImportedTransactions(): Promise<ImportedTransaction[]> {
+  async getUnmatchedImportedTransactions(companyId?: number): Promise<ImportedTransaction[]> {
     throw new Error("Imported transactions not supported in MemStorage");
   }
 
