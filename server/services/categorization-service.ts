@@ -63,18 +63,18 @@ interface RuleActions {
  * Storage interface for categorization operations
  */
 export interface CategorizationStorage {
-  // Merchant Patterns
-  getMerchantPatternByName(merchantNameNormalized: string): Promise<MerchantPattern | null>;
+  // Merchant Patterns (company-scoped)
+  getMerchantPatternByName(merchantNameNormalized: string, companyId?: number): Promise<MerchantPattern | null | undefined>;
 
-  // Categorization Rules
-  getEnabledCategorizationRules(): Promise<CategorizationRule[]>;
+  // Categorization Rules (company-scoped)
+  getEnabledCategorizationRules(companyId?: number): Promise<CategorizationRule[]>;
 
   // Accounts
-  getAccount(id: number): Promise<Account | null>;
+  getAccount(id: number): Promise<Account | null | undefined>;
   getAccounts(): Promise<Account[]>;
 
   // Contacts
-  getContact(id: number): Promise<{ id: number; name: string } | null>;
+  getContact(id: number): Promise<{ id: number; name: string } | null | undefined>;
   getContacts(): Promise<Array<{ id: number; name: string; type: string }>>;
 
   // Preferences
@@ -84,11 +84,13 @@ export interface CategorizationStorage {
 /**
  * Gets a categorization suggestion for a bank transaction.
  * Uses multi-layer approach for best accuracy.
+ * Patterns and rules are company-specific for data isolation.
  */
 export async function getCategorization(
   storage: CategorizationStorage,
   transaction: ImportedTransaction,
-  preferences?: Preferences | null
+  preferences?: Preferences | null,
+  companyId?: number
 ): Promise<CategorizationSuggestion> {
   const merchantName = transaction.merchantName || transaction.name;
   const normalizedMerchant = normalizeMerchantName(merchantName);
@@ -98,9 +100,9 @@ export async function getCategorization(
   const aiAutoPostEnabled = prefs?.aiAutoPostEnabled || false;
   const aiAutoPostMinConfidence = parseFloat(prefs?.aiAutoPostMinConfidence?.toString() || '0.95');
 
-  // Layer 1: Check merchant patterns (local, fastest)
+  // Layer 1: Check merchant patterns (local, fastest, company-scoped)
   if (normalizedMerchant) {
-    const pattern = await storage.getMerchantPatternByName(normalizedMerchant);
+    const pattern = await storage.getMerchantPatternByName(normalizedMerchant, companyId);
 
     if (pattern && pattern.defaultAccountId) {
       const confidence = parseFloat(pattern.confidenceScore?.toString() || '0.5');
@@ -128,8 +130,8 @@ export async function getCategorization(
     }
   }
 
-  // Layer 2: Check categorization rules (manual rules first, then AI rules)
-  const rules = await storage.getEnabledCategorizationRules();
+  // Layer 2: Check categorization rules (manual rules first, then AI rules, company-scoped)
+  const rules = await storage.getEnabledCategorizationRules(companyId);
   const sortedRules = rules.sort((a, b) => a.priority - b.priority);
 
   for (const rule of sortedRules) {
@@ -303,13 +305,15 @@ Respond with JSON only (no markdown):
 
 /**
  * Gets a complete categorization suggestion, including AI fallback if needed.
+ * Patterns and rules are company-specific for data isolation.
  */
 export async function getFullCategorization(
   storage: CategorizationStorage,
-  transaction: ImportedTransaction
+  transaction: ImportedTransaction,
+  companyId?: number
 ): Promise<CategorizationSuggestion> {
-  // First try local sources (patterns and rules)
-  const localSuggestion = await getCategorization(storage, transaction);
+  // First try local sources (patterns and rules, company-scoped)
+  const localSuggestion = await getCategorization(storage, transaction, null, companyId);
 
   // If we have a local match, return it
   if (localSuggestion.source !== 'none') {

@@ -24,6 +24,7 @@ import type { SuggestionSource } from './categorization-service';
  * Parameters for recording categorization feedback
  */
 export interface RecordFeedbackParams {
+  companyId: number; // Company-specific feedback for data isolation
   importedTransactionId: number;
   merchantName: string;
   transactionAmount: number;
@@ -72,14 +73,16 @@ export async function recordCategorizationFeedback(
   const wasSuggestionAccepted = params.suggestedAccountId === params.chosenAccountId;
 
   console.log('[FeedbackService] Recording feedback:', {
+    companyId: params.companyId,
     merchantName: params.merchantName,
     normalizedMerchant,
     chosenAccountId: params.chosenAccountId,
     chosenTransactionType: params.chosenTransactionType,
   });
 
-  // 1. Store feedback record
+  // 1. Store feedback record (company-scoped)
   const feedback = await storage.createCategorizationFeedback({
+    companyId: params.companyId, // Company-specific feedback
     importedTransactionId: params.importedTransactionId,
     merchantName: params.merchantName,
     merchantNameNormalized: normalizedMerchant,
@@ -100,10 +103,11 @@ export async function recordCategorizationFeedback(
   let ruleGenerated = false;
   let generatedRule: CategorizationRule | undefined;
 
-  // 2. Update merchant pattern (if merchant name exists)
+  // 2. Update merchant pattern (if merchant name exists) - company-scoped
   if (normalizedMerchant) {
     try {
       const patternResult = await updateMerchantPattern(storage, {
+        companyId: params.companyId, // Company-specific pattern
         merchantName: params.merchantName,
         chosenAccountId: params.chosenAccountId,
         chosenContactId: params.chosenContactId,
@@ -113,6 +117,7 @@ export async function recordCategorizationFeedback(
       });
 
       console.log('[FeedbackService] Pattern update result:', {
+        companyId: params.companyId,
         patternId: patternResult.pattern.id,
         isNew: patternResult.isNew,
         totalOccurrences: patternResult.pattern.totalOccurrences,
@@ -123,18 +128,19 @@ export async function recordCategorizationFeedback(
 
       patternUpdated = true;
 
-      // 3. Check if we should generate an AI rule
+      // 3. Check if we should generate an AI rule (company-scoped)
       const prefs = await storage.getPreferences();
       // Default to true if aiRuleGenerationEnabled is null/undefined (for backwards compatibility)
       const aiRuleGenerationEnabled = prefs?.aiRuleGenerationEnabled ?? true;
       console.log('[FeedbackService] AI rule generation check:', {
+        companyId: params.companyId,
         aiRuleGenerationEnabled,
         shouldGenerateRule: patternResult.shouldGenerateRule,
         willGenerate: aiRuleGenerationEnabled && patternResult.shouldGenerateRule,
       });
       if (aiRuleGenerationEnabled && patternResult.shouldGenerateRule) {
-        const rule = await generateAiRuleFromPattern(storage, normalizedMerchant);
-        console.log('[FeedbackService] AI rule generated:', rule ? { ruleId: rule.id, ruleName: rule.name } : null);
+        const rule = await generateAiRuleFromPattern(storage, normalizedMerchant, params.companyId);
+        console.log('[FeedbackService] AI rule generated:', rule ? { ruleId: rule.id, ruleName: rule.name, companyId: params.companyId } : null);
         if (rule) {
           ruleGenerated = true;
           generatedRule = rule;

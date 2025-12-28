@@ -9422,11 +9422,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const merchantName = importedTx.merchantName || importedTx.name;
           console.log('[Categorization-Expense] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
 
+          const userCompanyId = req.user?.companyId;
           const feedbackStorage = {
-            getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+            getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
             createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
             updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
-            getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+            getAiRuleByMerchant: (name: string, companyId?: number) => storage.getAiRuleByMerchant(name, companyId),
             createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
             updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
             getAccount: (id: number) => storage.getAccount(id),
@@ -9436,6 +9437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
 
           const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
+            companyId: userCompanyId!, // Company-specific feedback
             importedTransactionId: importedTxId,
             merchantName: merchantName,
             transactionAmount: importedTx.amount,
@@ -9579,11 +9581,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const merchantName = importedTx.merchantName || importedTx.name;
           console.log('[Categorization-Deposit] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
 
+          const userCompanyId = req.user?.companyId;
           const feedbackStorage = {
-            getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+            getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
             createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
             updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
-            getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+            getAiRuleByMerchant: (name: string, companyId?: number) => storage.getAiRuleByMerchant(name, companyId),
             createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
             updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
             getAccount: (id: number) => storage.getAccount(id),
@@ -9593,6 +9596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
 
           const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
+            companyId: userCompanyId!, // Company-specific feedback
             importedTransactionId: importedTxId,
             merchantName: merchantName,
             transactionAmount: importedTx.amount,
@@ -10612,11 +10616,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('[Categorization] Recording feedback for merchant:', merchantName, '-> normalized:', normalizeMerchantName(merchantName));
 
         // Create storage adapter for feedback service
+        const userCompanyId = req.user?.companyId;
         const feedbackStorage = {
-          getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+          getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
           createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
           updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
-          getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+          getAiRuleByMerchant: (name: string, companyId?: number) => storage.getAiRuleByMerchant(name, companyId),
           createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
           updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
           getAccount: (id: number) => storage.getAccount(id),
@@ -10632,6 +10637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const feedbackResult = await recordCategorizationFeedback(feedbackStorage, {
+          companyId: userCompanyId!, // Company-specific feedback
           importedTransactionId: transactionId,
           merchantName: merchantName,
           transactionAmount: importedTx.amount,
@@ -12445,28 +12451,33 @@ Respond in JSON format:
   });
 
   // Generate AI rules from existing patterns (retroactive)
-  apiRouter.post("/categorization-rules/generate-from-patterns", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/generate-from-patterns", requireAuth, async (req: Request, res: Response) => {
     try {
       console.log("[GenerateFromPatterns] Starting rule generation from patterns...");
       const { generateAiRuleFromPattern } = await import('./services/pattern-learning-service');
+      const userCompanyId = req.user?.companyId;
 
-      // Get all merchant patterns
-      console.log("[GenerateFromPatterns] Fetching merchant patterns...");
+      // Get all merchant patterns for this company
+      console.log("[GenerateFromPatterns] Fetching merchant patterns for company:", userCompanyId);
       const patterns = await storage.getMerchantPatterns();
-      console.log("[GenerateFromPatterns] Found", patterns.length, "patterns");
+      // Filter to company-specific patterns
+      const companyPatterns = userCompanyId
+        ? patterns.filter(p => p.companyId === userCompanyId)
+        : patterns;
+      console.log("[GenerateFromPatterns] Found", companyPatterns.length, "patterns for company");
 
       // Filter patterns that meet the threshold (3+ occurrences, 80%+ confidence)
-      const eligiblePatterns = patterns.filter(p => {
+      const eligiblePatterns = companyPatterns.filter(p => {
         const occurrences = p.totalOccurrences || 0;
         const confidence = parseFloat(p.confidenceScore?.toString() || '0');
         return occurrences >= 3 && confidence >= 0.80;
       });
 
       const patternStorage = {
-        getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
+        getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
         createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
         updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
-        getAiRuleByMerchant: (name: string) => storage.getAiRuleByMerchant(name),
+        getAiRuleByMerchant: (name: string, companyId?: number) => storage.getAiRuleByMerchant(name, companyId),
         createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
         updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
         getAccount: (id: number) => storage.getAccount(id),
@@ -12477,14 +12488,14 @@ Respond in JSON format:
       const createdRules: any[] = [];
 
       for (const pattern of eligiblePatterns) {
-        // Check if rule already exists
-        const existingRule = await storage.getAiRuleByMerchant(pattern.merchantNameNormalized);
+        // Check if rule already exists for this company
+        const existingRule = await storage.getAiRuleByMerchant(pattern.merchantNameNormalized, userCompanyId);
         if (existingRule) {
           continue; // Skip if rule already exists
         }
 
-        // Generate the rule
-        const rule = await generateAiRuleFromPattern(patternStorage, pattern.merchantNameNormalized);
+        // Generate the rule for this company
+        const rule = await generateAiRuleFromPattern(patternStorage, pattern.merchantNameNormalized, userCompanyId!);
         if (rule) {
           rulesCreated++;
           createdRules.push({
@@ -12709,9 +12720,10 @@ Respond in JSON format:
   });
 
   // Get smart categorization suggestion (multi-layer)
-  apiRouter.post("/bank-feeds/smart-suggestion", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/smart-suggestion", requireAuth, async (req: Request, res: Response) => {
     try {
       const { transactionId } = req.body;
+      const userCompanyId = req.user?.companyId;
 
       if (!transactionId) {
         return res.status(400).json({ message: "Transaction ID is required" });
@@ -12725,10 +12737,10 @@ Respond in JSON format:
       // Import categorization service
       const { getFullCategorization } = await import('./services/categorization-service');
 
-      // Create a storage adapter for the categorization service
+      // Create a storage adapter for the categorization service (company-scoped)
       const categorizationStorage = {
-        getMerchantPatternByName: (name: string) => storage.getMerchantPatternByName(name),
-        getEnabledCategorizationRules: () => storage.getEnabledCategorizationRules(),
+        getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
+        getEnabledCategorizationRules: (companyId?: number) => storage.getEnabledCategorizationRules(companyId),
         getAccount: (id: number) => storage.getAccount(id),
         getAccounts: () => storage.getAccounts(),
         getContact: (id: number) => storage.getContact(id),
@@ -12736,7 +12748,7 @@ Respond in JSON format:
         getPreferences: () => storage.getPreferences(),
       };
 
-      const suggestion = await getFullCategorization(categorizationStorage, transaction);
+      const suggestion = await getFullCategorization(categorizationStorage, transaction, userCompanyId);
 
       res.json({
         transaction: {

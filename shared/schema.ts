@@ -846,6 +846,7 @@ export const ruleTypeEnum = pgEnum('rule_type', ['manual', 'ai']);
 // Bank Feed Categorization Rules
 export const categorizationRulesSchema = pgTable('categorization_rules', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company-specific rules
   name: text('name').notNull(),
   isEnabled: boolean('is_enabled').notNull().default(true),
   autoApply: boolean('auto_apply').notNull().default(true), // When true, automatically categorize matching transactions
@@ -877,6 +878,7 @@ export type InsertCategorizationRule = z.infer<typeof insertCategorizationRuleSc
 // Merchant Patterns - learned categorizations from user behavior
 export const merchantPatternsSchema = pgTable('merchant_patterns', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company-specific patterns
   merchantNameNormalized: text('merchant_name_normalized').notNull(), // Normalized merchant name (e.g., "STARBUCKS")
   merchantNameVariants: json('merchant_name_variants').default([]), // Array of original names seen ["STARBUCKS #123", "STARBUCKS COFFEE"]
   defaultAccountId: integer('default_account_id').references(() => accounts.id),
@@ -907,6 +909,7 @@ export const suggestionSourceEnum = pgEnum('suggestion_source', ['pattern', 'rul
 // Categorization Feedback - tracks user decisions for learning
 export const categorizationFeedbackSchema = pgTable('categorization_feedback', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company-specific feedback
   importedTransactionId: integer('imported_transaction_id').references(() => importedTransactionsSchema.id),
   // Transaction info for analysis
   merchantName: text('merchant_name'),

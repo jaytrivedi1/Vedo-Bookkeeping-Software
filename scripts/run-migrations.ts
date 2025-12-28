@@ -33,6 +33,7 @@ import { addUserCompaniesTable } from "../server/migrations/add-user-companies";
 import { addCompanyCodeMigration } from "../server/migrations/add-company-code";
 import { addAiCategorizationTables } from "../server/migrations/add-ai-categorization";
 import { addAiConversationsTables } from "../server/migrations/add-ai-conversations";
+import { addCompanyScopingToAi } from "../server/migrations/add-company-scoping-to-ai";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -151,6 +152,10 @@ async function runMigrations() {
     // Add AI conversations tables
     log("Running AI conversations migration...");
     await addAiConversationsTables();
+
+    // Add company scoping to AI categorization
+    log("Running company scoping for AI categorization...");
+    await addCompanyScopingToAi();
 
     log("All migrations completed successfully!");
     process.exit(0);

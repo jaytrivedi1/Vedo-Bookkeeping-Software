@@ -18,6 +18,7 @@ const MANUAL_RULE_PRIORITY_MAX = 499;
 const AI_RULE_PRIORITY_START = 500;
 
 export interface PatternUpdateParams {
+  companyId: number; // Company-specific pattern tracking
   merchantName: string;
   chosenAccountId: number;
   chosenContactId?: number | null;
@@ -37,24 +38,25 @@ export interface PatternUpdateResult {
  * This interface allows the service to work with any storage implementation.
  */
 export interface PatternLearningStorage {
-  // Merchant Patterns
-  getMerchantPatternByName(merchantNameNormalized: string): Promise<MerchantPattern | null>;
+  // Merchant Patterns (company-scoped)
+  getMerchantPatternByName(merchantNameNormalized: string, companyId?: number): Promise<MerchantPattern | null | undefined>;
   createMerchantPattern(pattern: InsertMerchantPattern): Promise<MerchantPattern>;
   updateMerchantPattern(id: number, updates: Partial<MerchantPattern>): Promise<MerchantPattern>;
 
-  // Categorization Rules
-  getAiRuleByMerchant(merchantNameNormalized: string): Promise<CategorizationRule | null>;
+  // Categorization Rules (company-scoped)
+  getAiRuleByMerchant(merchantNameNormalized: string, companyId?: number): Promise<CategorizationRule | null | undefined>;
   createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule>;
   updateCategorizationRule(id: number, updates: Partial<CategorizationRule>): Promise<CategorizationRule | undefined>;
 
   // Accounts (for rule creation)
-  getAccount(id: number): Promise<{ id: number; name: string } | null>;
-  getContact(id: number): Promise<{ id: number; name: string } | null>;
+  getAccount(id: number): Promise<{ id: number; name: string } | null | undefined>;
+  getContact(id: number): Promise<{ id: number; name: string } | null | undefined>;
 }
 
 /**
  * Updates merchant pattern based on user categorization.
  * Called whenever a user categorizes a bank transaction.
+ * Patterns are company-specific to ensure data isolation.
  */
 export async function updateMerchantPattern(
   storage: PatternLearningStorage,
@@ -66,7 +68,8 @@ export async function updateMerchantPattern(
     throw new Error('Cannot update pattern: merchant name is empty after normalization');
   }
 
-  const existingPattern = await storage.getMerchantPatternByName(normalizedName);
+  // Look up pattern for this specific company
+  const existingPattern = await storage.getMerchantPatternByName(normalizedName, params.companyId);
 
   if (existingPattern) {
     // Update existing pattern
@@ -100,11 +103,12 @@ export async function updateMerchantPattern(
       updatedAt: new Date(),
     });
 
-    // Check if we should generate an AI rule
+    // Check if we should generate an AI rule (company-scoped)
     const shouldGenerateRule = await shouldGenerateAiRule(
       storage,
       normalizedName,
-      updatedPattern
+      updatedPattern,
+      params.companyId
     );
 
     return {
@@ -113,8 +117,9 @@ export async function updateMerchantPattern(
       shouldGenerateRule,
     };
   } else {
-    // Create new pattern
+    // Create new pattern for this company
     const newPattern = await storage.createMerchantPattern({
+      companyId: params.companyId, // Company-specific pattern
       merchantNameNormalized: normalizedName,
       merchantNameVariants: extractMerchantVariants(params.merchantName),
       defaultAccountId: params.chosenAccountId,
@@ -138,11 +143,13 @@ export async function updateMerchantPattern(
 
 /**
  * Determines if an AI rule should be generated for a merchant pattern.
+ * Rules are company-specific to ensure data isolation.
  */
 async function shouldGenerateAiRule(
   storage: PatternLearningStorage,
   merchantNameNormalized: string,
-  pattern: MerchantPattern
+  pattern: MerchantPattern,
+  companyId: number
 ): Promise<boolean> {
   // Check thresholds
   const hasEnoughOccurrences = pattern.totalOccurrences >= MIN_OCCURRENCES_FOR_RULE;
@@ -151,6 +158,7 @@ async function shouldGenerateAiRule(
 
   console.log('[PatternLearning] shouldGenerateAiRule check:', {
     merchantNameNormalized,
+    companyId,
     totalOccurrences: pattern.totalOccurrences,
     minOccurrences: MIN_OCCURRENCES_FOR_RULE,
     hasEnoughOccurrences,
@@ -164,26 +172,28 @@ async function shouldGenerateAiRule(
     return false;
   }
 
-  // Check if AI rule already exists for this merchant
-  const existingRule = await storage.getAiRuleByMerchant(merchantNameNormalized);
+  // Check if AI rule already exists for this merchant in this company
+  const existingRule = await storage.getAiRuleByMerchant(merchantNameNormalized, companyId);
   console.log('[PatternLearning] Existing rule check:', existingRule ? { ruleId: existingRule.id } : 'none');
   if (existingRule) {
     return false;
   }
 
-  console.log('[PatternLearning] All checks passed - will generate rule');
+  console.log('[PatternLearning] All checks passed - will generate rule for company', companyId);
   return true;
 }
 
 /**
  * Generates an AI rule from a merchant pattern.
  * Called when pattern reaches threshold for automatic rule creation.
+ * Rules are company-specific to ensure data isolation.
  */
 export async function generateAiRuleFromPattern(
   storage: PatternLearningStorage,
-  merchantNameNormalized: string
+  merchantNameNormalized: string,
+  companyId: number
 ): Promise<CategorizationRule | null> {
-  const pattern = await storage.getMerchantPatternByName(merchantNameNormalized);
+  const pattern = await storage.getMerchantPatternByName(merchantNameNormalized, companyId);
 
   if (!pattern || !pattern.defaultAccountId) {
     return null;
@@ -195,6 +205,7 @@ export async function generateAiRuleFromPattern(
     : null;
 
   const ruleData = {
+    companyId, // Company-specific rule
     name: `Auto: ${merchantNameNormalized}`,
     ruleType: 'ai' as const,
     isEnabled: true,

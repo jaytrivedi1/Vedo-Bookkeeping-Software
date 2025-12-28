@@ -3243,10 +3243,11 @@ export class DatabaseStorage implements IStorage {
     // Insert with explicit is_enabled = true and auto_apply = true using raw SQL to bypass Drizzle issues
     const result = await db.execute(sql`
       INSERT INTO categorization_rules (
-        name, is_enabled, auto_apply, priority, conditions, actions, sales_tax_id,
+        company_id, name, is_enabled, auto_apply, priority, conditions, actions, sales_tax_id,
         attachment_path, rule_type, source_merchant_pattern, auto_generated_at,
         occurrence_count, confidence_score, created_at, updated_at
       ) VALUES (
+        ${rule.companyId ?? null},
         ${rule.name},
         true,
         true,
@@ -3270,6 +3271,7 @@ export class DatabaseStorage implements IStorage {
     // Convert snake_case to camelCase for the return value
     const formattedRule: CategorizationRule = {
       id: newRule.id,
+      companyId: newRule.company_id,
       name: newRule.name,
       isEnabled: newRule.is_enabled,
       autoApply: newRule.auto_apply,
@@ -4005,10 +4007,14 @@ export class DatabaseStorage implements IStorage {
     return pattern;
   }
 
-  async getMerchantPatternByName(merchantNameNormalized: string): Promise<MerchantPattern | undefined> {
+  async getMerchantPatternByName(merchantNameNormalized: string, companyId?: number): Promise<MerchantPattern | undefined> {
+    const conditions = [eq(merchantPatternsSchema.merchantNameNormalized, merchantNameNormalized)];
+    if (companyId) {
+      conditions.push(eq(merchantPatternsSchema.companyId, companyId));
+    }
     const [pattern] = await db.select()
       .from(merchantPatternsSchema)
-      .where(eq(merchantPatternsSchema.merchantNameNormalized, merchantNameNormalized))
+      .where(and(...conditions))
       .limit(1);
     return pattern;
   }
@@ -4047,7 +4053,14 @@ export class DatabaseStorage implements IStorage {
     return Number(result[0]?.count || 0);
   }
 
-  async getTopMerchantPatterns(limit: number): Promise<MerchantPattern[]> {
+  async getTopMerchantPatterns(limit: number, companyId?: number): Promise<MerchantPattern[]> {
+    if (companyId) {
+      return await db.select()
+        .from(merchantPatternsSchema)
+        .where(eq(merchantPatternsSchema.companyId, companyId))
+        .orderBy(desc(merchantPatternsSchema.totalOccurrences))
+        .limit(limit);
+    }
     return await db.select()
       .from(merchantPatternsSchema)
       .orderBy(desc(merchantPatternsSchema.totalOccurrences))
@@ -4085,29 +4098,39 @@ export class DatabaseStorage implements IStorage {
   // Extended Categorization Rules (AI Rules)
   // ============================================
 
-  async getEnabledCategorizationRules(): Promise<CategorizationRule[]> {
+  async getEnabledCategorizationRules(companyId?: number): Promise<CategorizationRule[]> {
+    const conditions = [eq(categorizationRulesSchema.isEnabled, true)];
+    if (companyId) {
+      conditions.push(eq(categorizationRulesSchema.companyId, companyId));
+    }
     return await db.select()
       .from(categorizationRulesSchema)
-      .where(eq(categorizationRulesSchema.isEnabled, true))
+      .where(and(...conditions))
       .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
   }
 
-  async getCategorizationRulesByType(ruleType: 'manual' | 'ai'): Promise<CategorizationRule[]> {
+  async getCategorizationRulesByType(ruleType: 'manual' | 'ai', companyId?: number): Promise<CategorizationRule[]> {
+    const conditions = [eq(categorizationRulesSchema.ruleType, ruleType)];
+    if (companyId) {
+      conditions.push(eq(categorizationRulesSchema.companyId, companyId));
+    }
     return await db.select()
       .from(categorizationRulesSchema)
-      .where(eq(categorizationRulesSchema.ruleType, ruleType))
+      .where(and(...conditions))
       .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
   }
 
-  async getAiRuleByMerchant(merchantNameNormalized: string): Promise<CategorizationRule | undefined> {
+  async getAiRuleByMerchant(merchantNameNormalized: string, companyId?: number): Promise<CategorizationRule | undefined> {
+    const conditions = [
+      eq(categorizationRulesSchema.ruleType, 'ai'),
+      eq(categorizationRulesSchema.sourceMerchantPattern, merchantNameNormalized)
+    ];
+    if (companyId) {
+      conditions.push(eq(categorizationRulesSchema.companyId, companyId));
+    }
     const [rule] = await db.select()
       .from(categorizationRulesSchema)
-      .where(
-        and(
-          eq(categorizationRulesSchema.ruleType, 'ai'),
-          eq(categorizationRulesSchema.sourceMerchantPattern, merchantNameNormalized)
-        )
-      )
+      .where(and(...conditions))
       .limit(1);
     return rule;
   }
