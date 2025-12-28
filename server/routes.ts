@@ -458,7 +458,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/health", (req: Request, res: Response) => {
     res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
   });
-  
+
+  // Test Resend email configuration (temporary - remove after verification)
+  app.get("/api/test-resend", async (req: Request, res: Response) => {
+    try {
+      const { getResendClient } = await import('./resend-client');
+      const client = await getResendClient();
+
+      if (!client) {
+        return res.status(500).json({
+          status: "error",
+          message: "Resend not configured. Check RESEND_API_KEY environment variable.",
+          configured: false
+        });
+      }
+
+      res.json({
+        status: "ok",
+        message: "Resend is configured correctly!",
+        configured: true,
+        fromEmail: client.fromEmail
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+        configured: false
+      });
+    }
+  });
+
   // Configure authentication
   setupAuth(app);
   // API routes
