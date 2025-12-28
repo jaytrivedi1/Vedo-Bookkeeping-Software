@@ -21,22 +21,48 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
   console.log('[Migration] Starting company scoping migration for core tables...');
 
   try {
-    // Get default company ID for backfill (first company or create one)
-    const companiesResult = await db.execute(sql`
-      SELECT id FROM companies ORDER BY id LIMIT 1
+    // IMPORTANT: Get the company that users are actually assigned to
+    // This ensures existing data is backfilled to the right company that users log into
+    let defaultCompanyId: number;
+
+    // First, try to find the company that users are assigned to
+    const userCompanyResult = await db.execute(sql`
+      SELECT company_id FROM user_companies
+      WHERE company_id IS NOT NULL
+      ORDER BY is_primary DESC, created_at ASC
+      LIMIT 1
     `);
 
-    let defaultCompanyId: number;
-    if (companiesResult.rows.length === 0) {
-      console.log('[Migration] No companies found, creating default company...');
-      const newCompany = await db.execute(sql`
-        INSERT INTO companies (name, company_code)
-        VALUES ('Default Company', 'VED-DEFAULT')
-        RETURNING id
-      `);
-      defaultCompanyId = (newCompany.rows[0] as any).id;
+    if (userCompanyResult.rows.length > 0 && (userCompanyResult.rows[0] as any).company_id) {
+      defaultCompanyId = (userCompanyResult.rows[0] as any).company_id;
+      console.log(`[Migration] Found user-assigned company ID ${defaultCompanyId}`);
     } else {
-      defaultCompanyId = (companiesResult.rows[0] as any).id;
+      // If no user-company assignments, try to find the default company
+      const defaultCompany = await db.execute(sql`
+        SELECT id FROM companies WHERE is_default = true LIMIT 1
+      `);
+
+      if (defaultCompany.rows.length > 0) {
+        defaultCompanyId = (defaultCompany.rows[0] as any).id;
+        console.log(`[Migration] Found default company ID ${defaultCompanyId}`);
+      } else {
+        // Fall back to first company by ID
+        const companiesResult = await db.execute(sql`
+          SELECT id FROM companies ORDER BY id LIMIT 1
+        `);
+
+        if (companiesResult.rows.length === 0) {
+          console.log('[Migration] No companies found, creating default company...');
+          const newCompany = await db.execute(sql`
+            INSERT INTO companies (name, company_code, is_default)
+            VALUES ('Default Company', 'VED-DEFAULT', true)
+            RETURNING id
+          `);
+          defaultCompanyId = (newCompany.rows[0] as any).id;
+        } else {
+          defaultCompanyId = (companiesResult.rows[0] as any).id;
+        }
+      }
     }
 
     console.log(`[Migration] Using company ID ${defaultCompanyId} for backfill`);
@@ -58,7 +84,14 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_accounts_company_id ON accounts(company_id)`);
     } else {
-      console.log('[Migration] accounts.company_id already exists, skipping...');
+      // Column exists - ensure data is assigned to the correct company
+      console.log('[Migration] accounts.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE accounts SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      // Also repair any records that were assigned to a non-existent company
+      await db.execute(sql`
+        UPDATE accounts SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== CONTACTS TABLE =====
@@ -78,7 +111,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_contacts_company_id ON contacts(company_id)`);
     } else {
-      console.log('[Migration] contacts.company_id already exists, skipping...');
+      console.log('[Migration] contacts.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE contacts SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE contacts SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== TRANSACTIONS TABLE =====
@@ -98,7 +136,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_transactions_company_id ON transactions(company_id)`);
     } else {
-      console.log('[Migration] transactions.company_id already exists, skipping...');
+      console.log('[Migration] transactions.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE transactions SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE transactions SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== SALES_TAXES TABLE =====
@@ -118,7 +161,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_sales_taxes_company_id ON sales_taxes(company_id)`);
     } else {
-      console.log('[Migration] sales_taxes.company_id already exists, skipping...');
+      console.log('[Migration] sales_taxes.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE sales_taxes SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE sales_taxes SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== PRODUCTS TABLE =====
@@ -138,7 +186,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_products_company_id ON products(company_id)`);
     } else {
-      console.log('[Migration] products.company_id already exists, skipping...');
+      console.log('[Migration] products.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE products SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE products SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== BANK_CONNECTIONS TABLE =====
@@ -158,7 +211,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_bank_connections_company_id ON bank_connections(company_id)`);
     } else {
-      console.log('[Migration] bank_connections.company_id already exists, skipping...');
+      console.log('[Migration] bank_connections.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE bank_connections SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE bank_connections SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     // ===== IMPORTED_TRANSACTIONS TABLE =====
@@ -178,7 +236,12 @@ export async function addCompanyScopingToCoreTables(): Promise<void> {
       `);
       await db.execute(sql`CREATE INDEX idx_imported_transactions_company_id ON imported_transactions(company_id)`);
     } else {
-      console.log('[Migration] imported_transactions.company_id already exists, skipping...');
+      console.log('[Migration] imported_transactions.company_id exists, checking for data repair...');
+      await db.execute(sql`UPDATE imported_transactions SET company_id = ${defaultCompanyId} WHERE company_id IS NULL`);
+      await db.execute(sql`
+        UPDATE imported_transactions SET company_id = ${defaultCompanyId}
+        WHERE company_id NOT IN (SELECT id FROM companies)
+      `);
     }
 
     console.log('[Migration] Company scoping migration completed successfully!');
