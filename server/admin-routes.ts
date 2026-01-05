@@ -24,7 +24,8 @@ adminRouter.use(requireAdmin);
 // Get all users with their company associations
 adminRouter.get("/users", async (req: Request, res: Response) => {
   try {
-    const users = await storage.getUsers();
+    // Include inactive users so admin can see all users in the system
+    const users = await storage.getUsers({ includeInactive: true });
     
     // Get company associations for each user
     const usersWithCompanies = await Promise.all(
