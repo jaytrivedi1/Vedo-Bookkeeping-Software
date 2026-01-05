@@ -60,6 +60,8 @@ import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
 import { adminRouter } from "./admin-routes";
 import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
+import { companyContextMiddleware, requireCompanyContext } from "./middleware/company-context";
+import { createScopedStorage, CompanyAccessError, NoCompanyContextError } from "./scoped-storage";
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
 import { CountryCode, Products } from 'plaid';
 import { logActivity } from "./activity-logger";
@@ -544,6 +546,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Configure authentication
   setupAuth(app);
+
+  // Configure company context middleware (must be after auth)
+  // This sets req.companyId for all authenticated requests
+  app.use(companyContextMiddleware(storage));
+
   // API routes
   const apiRouter = express.Router();
   
@@ -737,9 +744,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Accounts routes
-  apiRouter.get("/accounts", async (req: Request, res: Response) => {
+  apiRouter.get("/accounts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const accountBalances = await storage.getAccountBalances();
+      const scopedStorage = createScopedStorage(req);
+      const accountBalances = await scopedStorage.getAccountBalances();
       // Transform to include balance property directly on account
       const accountsWithBalances = accountBalances.map(({ account, balance }) => ({
         ...account,
@@ -747,19 +755,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }));
       res.json(accountsWithBalances);
     } catch (error) {
+      console.error("Error fetching accounts:", error);
       res.status(500).json({ message: "Failed to fetch accounts" });
     }
   });
 
-  apiRouter.get("/accounts/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/accounts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const account = await storage.getAccount(id);
-      
+      const account = await scopedStorage.getAccount(id);
+
       if (!account) {
         return res.status(404).json({ message: "Account not found" });
       }
-      
+
       res.json(account);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch account" });
@@ -970,49 +980,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contacts routes
-  apiRouter.get("/contacts", async (req: Request, res: Response) => {
+  apiRouter.get("/contacts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const includeInactive = req.query.includeInactive === 'true';
-      const contacts = await storage.getContacts(includeInactive);
+      const contacts = await scopedStorage.getContacts(includeInactive);
       res.json(contacts);
     } catch (error) {
+      console.error("Error fetching contacts:", error);
       res.status(500).json({ message: "Failed to fetch contacts" });
     }
   });
 
-  apiRouter.get("/contacts/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/contacts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const contact = await storage.getContact(id);
-      
+      const contact = await scopedStorage.getContact(id);
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
-      
+
       res.json(contact);
     } catch (error) {
+      console.error("Error fetching contact:", error);
       res.status(500).json({ message: "Failed to fetch contact" });
     }
   });
 
-  apiRouter.post("/contacts", async (req: Request, res: Response) => {
+  apiRouter.post("/contacts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const contactData = insertContactSchema.parse(req.body);
-      const contact = await storage.createContact(contactData);
+      const contact = await scopedStorage.createContact(contactData);
       res.status(201).json(contact);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid contact data", errors: error.errors });
       }
+      console.error("Error creating contact:", error);
       res.status(500).json({ message: "Failed to create contact" });
     }
   });
-  
-  apiRouter.patch("/contacts/:id", async (req: Request, res: Response) => {
+
+  apiRouter.patch("/contacts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const contact = await storage.getContact(id);
-      
+      const contact = await scopedStorage.getContact(id);
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
@@ -1324,38 +1341,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transactions routes
-  apiRouter.get("/transactions", async (req: Request, res: Response) => {
+  apiRouter.get("/transactions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      let transactions = await storage.getTransactions();
-      
+      const scopedStorage = createScopedStorage(req);
+      let transactions = await scopedStorage.getTransactions();
+
       // Filter by type if provided
       if (req.query.type) {
         transactions = transactions.filter(t => t.type === req.query.type);
       }
-      
+
       // Filter by status if provided
       if (req.query.status) {
         transactions = transactions.filter(t => t.status === req.query.status);
       }
-      
+
       res.json(transactions);
     } catch (error) {
+      console.error("Error fetching transactions:", error);
       res.status(500).json({ message: "Failed to fetch transactions" });
     }
   });
 
-  apiRouter.get("/transactions/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/transactions/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const transaction = await storage.getTransaction(id);
-      
+      const transaction = await scopedStorage.getTransaction(id);
+
       if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
-      
+
       // Get related line items and ledger entries
-      const lineItems = await storage.getLineItemsByTransaction(id);
-      const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
+      const lineItems = await scopedStorage.getLineItemsByTransaction(id);
+      const ledgerEntries = await scopedStorage.getLedgerEntriesByTransaction(id);
       
       res.json({
         transaction,
@@ -4695,36 +4715,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Products & Services routes
-  apiRouter.get("/products", async (req: Request, res: Response) => {
+  apiRouter.get("/products", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const products = await storage.getProducts();
+      const scopedStorage = createScopedStorage(req);
+      const products = await scopedStorage.getProducts();
       res.json(products);
     } catch (error) {
+      console.error("Error fetching products:", error);
       res.status(500).json({ message: "Failed to fetch products" });
     }
   });
 
-  apiRouter.get("/products/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/products/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const product = await storage.getProduct(id);
-      
+      const product = await scopedStorage.getProduct(id);
+
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      
+
       res.json(product);
     } catch (error) {
+      console.error("Error fetching product:", error);
       res.status(500).json({ message: "Failed to fetch product" });
     }
   });
 
-  apiRouter.post("/products", async (req: Request, res: Response) => {
+  apiRouter.post("/products", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log("Product creation request body:", req.body);
       const productData = insertProductSchema.parse(req.body);
       console.log("Parsed product data:", productData);
-      const product = await storage.createProduct(productData);
+      const product = await scopedStorage.createProduct(productData);
       res.status(201).json(product);
     } catch (error) {
       console.error("Product creation error:", error);
@@ -4735,19 +4760,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.patch("/products/:id", async (req: Request, res: Response) => {
+  apiRouter.patch("/products/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
       // Allow partial data for update (don't require all fields)
       const productData = insertProductSchema.partial().parse(req.body);
-      const product = await storage.updateProduct(id, productData);
-      
+      const product = await scopedStorage.updateProduct(id, productData);
+
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      
+
       res.json(product);
     } catch (error) {
+      if (error instanceof CompanyAccessError) {
+        return res.status(403).json({ message: error.message });
+      }
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid product data", errors: error.errors });
       }
@@ -6177,25 +6206,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales Tax routes
-  apiRouter.get("/sales-taxes", async (req: Request, res: Response) => {
+  apiRouter.get("/sales-taxes", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Handle query for component taxes by parent ID
       if (req.query.parentId) {
         const parentId = parseInt(req.query.parentId as string);
-        
-        // Fetch child taxes directly from the database
+
+        // Fetch child taxes directly from the database (filtered by company)
         const childTaxes = await db
           .select()
           .from(salesTaxSchema)
-          .where(eq(salesTaxSchema.parentId, parentId))
+          .where(and(
+            eq(salesTaxSchema.parentId, parentId),
+            eq(salesTaxSchema.companyId, req.companyId!)
+          ))
           .execute();
-          
+
         console.log(`Fetched ${childTaxes.length} component taxes for parent ID ${parentId}:`, childTaxes);
         return res.json(childTaxes);
       }
-      
+
       // Default: fetch all parent-level taxes (not components)
-      const salesTaxes = await storage.getSalesTaxes();
+      const salesTaxes = await scopedStorage.getSalesTaxes();
       res.json(salesTaxes);
     } catch (error) {
       console.error("Error fetching sales taxes:", error);
@@ -6203,17 +6236,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/sales-taxes/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/sales-taxes/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const salesTax = await storage.getSalesTax(id);
-      
+      const salesTax = await scopedStorage.getSalesTax(id);
+
       if (!salesTax) {
         return res.status(404).json({ message: "Sales tax not found" });
       }
-      
+
       res.json(salesTax);
     } catch (error) {
+      console.error("Error fetching sales tax:", error);
       res.status(500).json({ message: "Failed to fetch sales tax" });
     }
   });
@@ -6359,9 +6394,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard metrics route
-  apiRouter.get("/dashboard/metrics", async (req: Request, res: Response) => {
+  apiRouter.get("/dashboard/metrics", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const metrics = await storage.getDashboardMetrics();
+      const scopedStorage = createScopedStorage(req);
+      const metrics = await scopedStorage.getDashboardMetrics();
       res.json(metrics);
     } catch (error) {
       console.error("Error fetching dashboard metrics:", error);
@@ -6728,15 +6764,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Global Search - Search across transactions, contacts, and accounts
-  apiRouter.get("/search", async (req: Request, res: Response) => {
+  apiRouter.get("/search", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const query = req.query.q as string;
-      
+
       if (!query || query.trim() === "") {
         return res.status(400).json({ message: "Search query is required" });
       }
-      
-      const results = await storage.searchAll(query);
+
+      const results = await scopedStorage.searchAll(query);
       res.json(results);
     } catch (error) {
       console.error("Error performing search:", error);
@@ -6745,10 +6782,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Recent Transactions - Get most recently modified transactions
-  apiRouter.get("/search/recent", async (req: Request, res: Response) => {
+  apiRouter.get("/search/recent", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const limit = parseInt(req.query.limit as string) || 5;
-      const recentTransactions = await storage.getRecentTransactions(limit);
+      const recentTransactions = await scopedStorage.getRecentTransactions(limit);
       res.json(recentTransactions);
     } catch (error) {
       console.error("Error fetching recent transactions:", error);
