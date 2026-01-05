@@ -17,7 +17,7 @@ import {
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry,
   InsertSalesTax, InsertProduct, ContactNote, InsertContactNote,
   ImportedTransaction, InsertImportedTransaction, BankConnection, BankAccount,
-  CategorizationRule, InsertCategorizationRule
+  CategorizationRule, InsertCategorizationRule, Reconciliation
 } from "@shared/schema";
 
 /**
@@ -351,23 +351,23 @@ export class CompanyScopedStorage {
   // ============ REPORTS ============
 
   async getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date) {
-    return this.storage.getTrialBalance(asOfDate, fiscalYearStartDate);
+    return this.storage.getTrialBalance(asOfDate, fiscalYearStartDate, this.companyId);
   }
 
   async getIncomeStatement(startDate?: Date, endDate?: Date) {
-    return this.storage.getIncomeStatement(startDate, endDate);
+    return this.storage.getIncomeStatement(startDate, endDate, this.companyId);
   }
 
   async getBalanceSheet() {
-    return this.storage.getBalanceSheet();
+    return this.storage.getBalanceSheet(this.companyId);
   }
 
   async getCashFlowStatement(startDate?: Date, endDate?: Date) {
-    return this.storage.getCashFlowStatement(startDate, endDate);
+    return this.storage.getCashFlowStatement(startDate, endDate, this.companyId);
   }
 
   async getDashboardMetrics() {
-    return this.storage.getDashboardMetrics();
+    return this.storage.getDashboardMetrics(this.companyId);
   }
 
   // ============ BANK CONNECTIONS ============
@@ -379,7 +379,26 @@ export class CompanyScopedStorage {
   // ============ CATEGORIZATION RULES ============
 
   async getCategorizationRules(): Promise<CategorizationRule[]> {
-    return this.storage.getCategorizationRules();
+    return this.storage.getCategorizationRules(this.companyId);
+  }
+
+  // ============ IMPORTED TRANSACTION (single) ============
+
+  async getImportedTransaction(id: number): Promise<ImportedTransaction | undefined> {
+    const tx = await this.storage.getImportedTransaction(id);
+    if (tx && tx.companyId !== this.companyId) {
+      return undefined; // Don't expose imported transactions from other companies
+    }
+    return tx;
+  }
+
+  async updateImportedTransaction(id: number, data: Partial<ImportedTransaction>): Promise<ImportedTransaction | undefined> {
+    const existing = await this.storage.getImportedTransaction(id);
+    if (!existing || existing.companyId !== this.companyId) {
+      throw new CompanyAccessError("Imported transaction not found or access denied");
+    }
+    const { companyId, ...safeUpdate } = data;
+    return this.storage.updateImportedTransaction(id, safeUpdate);
   }
 
   // ============ PASS-THROUGH METHODS (no company scoping needed) ============

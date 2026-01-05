@@ -181,16 +181,16 @@ export interface IStorage {
 
   // Reports (companyId for data isolation)
   getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]>;
-  getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
+  getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date, companyId?: number): Promise<{
     account: Account;
     totalDebits: number;
     totalCredits: number;
     debitBalance: number;
     creditBalance: number;
   }[]>;
-  getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }>;
-  getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }>;
-  getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{
+  getIncomeStatement(startDate?: Date, endDate?: Date, companyId?: number): Promise<{ revenues: number; expenses: number; netIncome: number }>;
+  getBalanceSheet(companyId?: number): Promise<{ assets: number; liabilities: number; equity: number }>;
+  getCashFlowStatement(startDate?: Date, endDate?: Date, companyId?: number): Promise<{
     period: { startDate: Date | null; endDate: Date | null };
     categories: {
       operating: { total: number; accounts: Array<{ account: Account; amount: number }> };
@@ -201,7 +201,7 @@ export interface IStorage {
     openingCash: number;
     closingCash: number;
   }>;
-  getDashboardMetrics(): Promise<{
+  getDashboardMetrics(companyId?: number): Promise<{
     profitLoss: {
       netProfit: number;
       percentageChange: number;
@@ -331,7 +331,7 @@ export interface IStorage {
   bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void>;
 
   // Categorization Rules
-  getCategorizationRules(): Promise<CategorizationRule[]>;
+  getCategorizationRules(companyId?: number): Promise<CategorizationRule[]>;
   getCategorizationRule(id: number): Promise<CategorizationRule | undefined>;
   createCategorizationRule(rule: InsertCategorizationRule): Promise<CategorizationRule>;
   updateCategorizationRule(id: number, rule: Partial<CategorizationRule>): Promise<CategorizationRule | undefined>;
@@ -1616,7 +1616,7 @@ export class MemStorage implements IStorage {
   }
 
   // Categorization Rules
-  async getCategorizationRules(): Promise<CategorizationRule[]> {
+  async getCategorizationRules(companyId?: number): Promise<CategorizationRule[]> {
     throw new Error("Categorization rules not supported in MemStorage");
   }
 

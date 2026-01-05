@@ -9377,21 +9377,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get imported transactions
-  apiRouter.get("/plaid/imported-transactions", requireAuth, async (req: Request, res: Response) => {
+  // Get imported transactions (company-scoped)
+  apiRouter.get("/plaid/imported-transactions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const { status } = req.query;
-      
-      // Get all transactions and filter by status
-      const allTransactions = await storage.getImportedTransactions();
-      
+      const scopedStorage = createScopedStorage(req);
+
+      // Get company-scoped transactions and filter by status
+      const allTransactions = await scopedStorage.getImportedTransactions();
+
       let transactions;
       if (status) {
         transactions = allTransactions.filter(tx => tx.status === status);
       } else {
         transactions = allTransactions;
       }
-      
+
       res.json(transactions);
     } catch (error: any) {
       console.error('Error fetching imported transactions:', error);
@@ -9399,14 +9400,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Categorize imported transaction (creates expense or deposit)
-  apiRouter.post("/plaid/categorize-transaction/:id", requireAuth, async (req: Request, res: Response) => {
+  // Categorize imported transaction (creates expense or deposit) - company-scoped
+  apiRouter.post("/plaid/categorize-transaction/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const importedTxId = parseInt(req.params.id);
       const { accountId, contactName, salesTaxId, description } = req.body;
+      const scopedStorage = createScopedStorage(req);
 
-      // Get the imported transaction
-      const importedTx = await storage.getImportedTransaction(importedTxId);
+      // Get the imported transaction (company-scoped)
+      const importedTx = await scopedStorage.getImportedTransaction(importedTxId);
       if (!importedTx) {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
@@ -9434,15 +9436,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         glAccountId = bankAccount.linkedAccountId;
       }
 
-      // Find or create contact if contactName is provided
+      // Find or create contact if contactName is provided (company-scoped)
       let contactId: number | null = null;
       if (contactName && contactName.trim()) {
-        const contacts = await storage.getContacts();
+        const contacts = await scopedStorage.getContacts();
         let contact = contacts.find(c => c.name.toLowerCase() === contactName.toLowerCase());
-        
+
         if (!contact) {
           // Create new contact as vendor for expenses, customer for deposits
-          contact = await storage.createContact({
+          contact = await scopedStorage.createContact({
             name: contactName,
             type: isExpense ? 'vendor' : 'customer',
           });
@@ -9457,9 +9459,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let baseAmount = absoluteAmount;
         let taxAmount = 0;
         let totalWithTax = absoluteAmount;
-        
+
         if (salesTaxId) {
-          const allTaxes = await storage.getSalesTaxes();
+          const allTaxes = await scopedStorage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
           if (tax) {
             // Tax-inclusive calculation

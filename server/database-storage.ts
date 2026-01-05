@@ -1711,6 +1711,29 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // Company-scoped version of getAllLedgerEntries
+  async getAllLedgerEntriesByCompany(companyId: number): Promise<any[]> {
+    const result = await db
+      .select({
+        id: ledgerEntries.id,
+        transactionId: ledgerEntries.transactionId,
+        accountId: ledgerEntries.accountId,
+        description: ledgerEntries.description,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+        date: ledgerEntries.date,
+        contactName: contacts.name,
+        transactionType: transactions.type,
+        referenceNumber: transactions.reference,
+      })
+      .from(ledgerEntries)
+      .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+      .leftJoin(contacts, eq(transactions.contactId, contacts.id))
+      .where(eq(transactions.companyId, companyId))
+      .orderBy(desc(ledgerEntries.date));
+    return result;
+  }
+
   async getLedgerEntriesUpToDate(asOfDate: Date): Promise<LedgerEntry[]> {
     const result = await db
       .select()
@@ -1720,17 +1743,42 @@ export class DatabaseStorage implements IStorage {
     return result as LedgerEntry[];
   }
 
+  // Company-scoped version of getLedgerEntriesUpToDate
+  async getLedgerEntriesUpToDateByCompany(asOfDate: Date, companyId: number): Promise<LedgerEntry[]> {
+    const result = await db
+      .select({
+        id: ledgerEntries.id,
+        transactionId: ledgerEntries.transactionId,
+        accountId: ledgerEntries.accountId,
+        description: ledgerEntries.description,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+        date: ledgerEntries.date,
+        currency: ledgerEntries.currency,
+        exchangeRate: ledgerEntries.exchangeRate,
+        foreignAmount: ledgerEntries.foreignAmount,
+      })
+      .from(ledgerEntries)
+      .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+      .where(and(
+        lte(ledgerEntries.date, asOfDate),
+        eq(transactions.companyId, companyId)
+      ))
+      .orderBy(ledgerEntries.date);
+    return result as LedgerEntry[];
+  }
+
   async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<any[]> {
     let conditions = [];
-    
+
     if (startDate) {
       conditions.push(gte(ledgerEntries.date, startDate));
     }
-    
+
     if (endDate) {
       conditions.push(lte(ledgerEntries.date, endDate));
     }
-    
+
     const query = db
       .select({
         id: ledgerEntries.id,
@@ -1747,12 +1795,46 @@ export class DatabaseStorage implements IStorage {
       .from(ledgerEntries)
       .leftJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
       .leftJoin(contacts, eq(transactions.contactId, contacts.id));
-    
+
     const finalQuery = conditions.length > 0
       ? query.where(and(...conditions))
       : query;
-      
+
     const result = await finalQuery.orderBy(ledgerEntries.date);
+    return result;
+  }
+
+  // Company-scoped version of getLedgerEntriesByDateRange
+  async getLedgerEntriesByDateRangeAndCompany(startDate: Date | undefined, endDate: Date | undefined, companyId: number): Promise<any[]> {
+    let conditions = [eq(transactions.companyId, companyId)];
+
+    if (startDate) {
+      conditions.push(gte(ledgerEntries.date, startDate));
+    }
+
+    if (endDate) {
+      conditions.push(lte(ledgerEntries.date, endDate));
+    }
+
+    const result = await db
+      .select({
+        id: ledgerEntries.id,
+        transactionId: ledgerEntries.transactionId,
+        accountId: ledgerEntries.accountId,
+        description: ledgerEntries.description,
+        debit: ledgerEntries.debit,
+        credit: ledgerEntries.credit,
+        date: ledgerEntries.date,
+        contactName: contacts.name,
+        transactionType: transactions.type,
+        referenceNumber: transactions.reference,
+      })
+      .from(ledgerEntries)
+      .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+      .leftJoin(contacts, eq(transactions.contactId, contacts.id))
+      .where(and(...conditions))
+      .orderBy(ledgerEntries.date);
+
     return result;
   }
 
@@ -1772,24 +1854,27 @@ export class DatabaseStorage implements IStorage {
   // Reports
   async getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]> {
     const allAccounts = await this.getAccounts(companyId);
-    const allLedgerEntries = await this.getAllLedgerEntries();
-    
+    // Use company-scoped ledger entries if companyId is provided
+    const allLedgerEntries = companyId
+      ? await this.getAllLedgerEntriesByCompany(companyId)
+      : await this.getAllLedgerEntries();
+
     // Create a map to store balances for each account
     const balanceMap = new Map<number, number>();
-    
+
     // Initialize all account balances to 0
     allAccounts.forEach(account => {
       balanceMap.set(account.id, 0);
     });
-    
+
     // Calculate balances from ledger entries
     allLedgerEntries.forEach(entry => {
       const account = allAccounts.find(a => a.id === entry.accountId);
       if (!account) return;
-      
+
       const currentBalance = balanceMap.get(entry.accountId) || 0;
       let newBalance = currentBalance;
-      
+
       // Apply debits and credits according to account type's normal balance
       const assetAndExpenseTypes = [
         'accounts_receivable',
@@ -1801,7 +1886,7 @@ export class DatabaseStorage implements IStorage {
         'expenses',
         'other_expense'
       ];
-      
+
       if (assetAndExpenseTypes.includes(account.type)) {
         // Debit increases (positive), credit decreases (negative)
         newBalance += entry.debit - entry.credit;
@@ -1809,10 +1894,10 @@ export class DatabaseStorage implements IStorage {
         // For liability, equity, income accounts - credit increases (positive), debit decreases (negative)
         newBalance += entry.credit - entry.debit;
       }
-      
+
       balanceMap.set(entry.accountId, newBalance);
     });
-    
+
     // Create result array with account and balance
     return allAccounts.map(account => ({
       account,
@@ -1833,15 +1918,17 @@ export class DatabaseStorage implements IStorage {
    * - Prior period P&L is excluded from income/expense accounts
    * - But that same amount is added to Retained Earnings
    */
-  async getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date): Promise<{
+  async getTrialBalance(asOfDate: Date, fiscalYearStartDate: Date, companyId?: number): Promise<{
     account: Account;
     totalDebits: number;
     totalCredits: number;
     debitBalance: number;
     creditBalance: number;
   }[]> {
-    const allAccounts = await this.getAccounts();
-    const allLedgerEntries = await this.getLedgerEntriesUpToDate(asOfDate);
+    const allAccounts = await this.getAccounts(companyId);
+    const allLedgerEntries = companyId
+      ? await this.getLedgerEntriesUpToDateByCompany(asOfDate, companyId)
+      : await this.getLedgerEntriesUpToDate(asOfDate);
     
     // Helper to check if account is income statement type
     const isIncomeStatementAccount = (accountType: string): boolean => {
@@ -1948,23 +2035,23 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getIncomeStatement(startDate?: Date, endDate?: Date): Promise<{ revenues: number; expenses: number; netIncome: number }> {
-    const accountBalances = await this.getAccountBalances();
-    
+  async getIncomeStatement(startDate?: Date, endDate?: Date, companyId?: number): Promise<{ revenues: number; expenses: number; netIncome: number }> {
+    const accountBalances = await this.getAccountBalances(companyId);
+
     // For income accounts, credit increases the balance (revenue)
-    const revenueAccounts = accountBalances.filter(item => 
+    const revenueAccounts = accountBalances.filter(item =>
       item.account.type === 'income' || item.account.type === 'other_income'
     );
     // With our fixed account balances, revenue accounts already have positive balances
     const revenues = revenueAccounts.reduce((sum, item) => sum + item.balance, 0);
-    
+
     // For expense accounts, debit increases the balance (expense)
-    const expenseAccounts = accountBalances.filter(item => 
+    const expenseAccounts = accountBalances.filter(item =>
       item.account.type === 'expenses' || item.account.type === 'cost_of_goods_sold'
     );
     // With our fixed account balances, expense accounts already have positive balances
     const expenses = expenseAccounts.reduce((sum, item) => sum + item.balance, 0);
-    
+
     return {
       revenues,
       expenses,
@@ -1972,17 +2059,19 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getDashboardMetrics() {
+  async getDashboardMetrics(companyId?: number) {
     const now = new Date();
     const currentMonthStart = startOfMonth(now);
     const currentMonthEnd = endOfMonth(now);
     const previousMonthStart = startOfMonth(subMonths(now, 1));
     const previousMonthEnd = endOfMonth(subMonths(now, 1));
 
-    // Get all accounts and ledger entries
-    const allAccounts = await this.getAccounts();
-    const allLedgerEntries = await this.getAllLedgerEntries();
-    const allTransactions = await this.getTransactions();
+    // Get company-scoped accounts, ledger entries, and transactions
+    const allAccounts = await this.getAccounts(companyId);
+    const allLedgerEntries = companyId
+      ? await this.getAllLedgerEntriesByCompany(companyId)
+      : await this.getAllLedgerEntries();
+    const allTransactions = await this.getTransactions(companyId);
 
     // Helper: Calculate income/expenses for a date range
     const calculateIncomeExpenses = (startDate: Date, endDate: Date) => {
@@ -2169,8 +2258,8 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getBalanceSheet(): Promise<{ assets: number; liabilities: number; equity: number }> {
-    const accountBalances = await this.getAccountBalances();
+  async getBalanceSheet(companyId?: number): Promise<{ assets: number; liabilities: number; equity: number }> {
+    const accountBalances = await this.getAccountBalances(companyId);
     
     // Asset accounts have debit balances
     const assetAccounts = accountBalances.filter(item => 
@@ -2226,7 +2315,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getCashFlowStatement(startDate?: Date, endDate?: Date): Promise<{
+  async getCashFlowStatement(startDate?: Date, endDate?: Date, companyId?: number): Promise<{
     period: { startDate: Date | null; endDate: Date | null };
     categories: {
       operating: { total: number; accounts: Array<{ account: Account; amount: number }> };
@@ -2237,16 +2326,18 @@ export class DatabaseStorage implements IStorage {
     openingCash: number;
     closingCash: number;
   }> {
-    // Get all accounts
-    const allAccounts = await this.getAccounts();
+    // Get all accounts (company-scoped)
+    const allAccounts = await this.getAccounts(companyId);
     const accountMap = new Map(allAccounts.map(acc => [acc.id, acc]));
-    
+
     // Identify cash accounts (bank type)
     const cashAccounts = allAccounts.filter(acc => acc.type === 'bank');
     const cashAccountIds = new Set(cashAccounts.map(acc => acc.id));
-    
-    // Get ledger entries for the date range
-    const entries = await this.getLedgerEntriesByDateRange(startDate, endDate);
+
+    // Get ledger entries for the date range (company-scoped)
+    const entries = companyId
+      ? await this.getLedgerEntriesByDateRangeAndCompany(startDate, endDate, companyId)
+      : await this.getLedgerEntriesByDateRange(startDate, endDate);
     
     // Group entries by transaction ID for efficient lookup
     const entriesByTransaction = new Map<number, LedgerEntry[]>();
@@ -3430,7 +3521,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Categorization Rules
-  async getCategorizationRules(): Promise<CategorizationRule[]> {
+  async getCategorizationRules(companyId?: number): Promise<CategorizationRule[]> {
+    if (companyId) {
+      return await db.select()
+        .from(categorizationRulesSchema)
+        .where(eq(categorizationRulesSchema.companyId, companyId))
+        .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
+    }
     return await db.select()
       .from(categorizationRulesSchema)
       .orderBy(categorizationRulesSchema.priority, categorizationRulesSchema.id);
