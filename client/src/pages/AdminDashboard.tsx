@@ -54,6 +54,7 @@ interface AdminUser {
   lastLogin: string | null;
   createdAt: string;
   companies: UserCompany[];
+  isSuperAdmin?: boolean;
 }
 
 interface BankConnectionSummary {
@@ -521,11 +522,18 @@ export default function AdminDashboard() {
                               </TableCell>
                               <TableCell>{user.email}</TableCell>
                               <TableCell className="text-center">
-                                <Badge
-                                  variant={user.role === "admin" ? "default" : "secondary"}
-                                >
-                                  {user.role}
-                                </Badge>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Badge
+                                    variant={user.role === "admin" ? "default" : "secondary"}
+                                  >
+                                    {user.role}
+                                  </Badge>
+                                  {user.isSuperAdmin && (
+                                    <Badge className="bg-purple-600 text-white text-xs">
+                                      Super
+                                    </Badge>
+                                  )}
+                                </div>
                               </TableCell>
                               <TableCell className="text-center">
                                 <Badge variant="outline">{user.companies.length}</Badge>
@@ -546,35 +554,39 @@ export default function AdminDashboard() {
                                 {format(new Date(user.createdAt), "MMM d, yyyy")}
                               </TableCell>
                               <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      data-testid={`button-user-actions-${user.id}`}
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                      onClick={() => toggleUserStatus(user.id, user.isActive)}
-                                      data-testid={`button-toggle-user-${user.id}`}
-                                    >
-                                      {user.isActive ? (
-                                        <>
-                                          <XCircle className="w-4 h-4 mr-2" />
-                                          Deactivate
-                                        </>
-                                      ) : (
-                                        <>
-                                          <CheckCircle className="w-4 h-4 mr-2" />
-                                          Activate
-                                        </>
-                                      )}
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
+                                {user.isSuperAdmin ? (
+                                  <span className="text-xs text-gray-400 italic">Protected</span>
+                                ) : (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        data-testid={`button-user-actions-${user.id}`}
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => toggleUserStatus(user.id, user.isActive)}
+                                        data-testid={`button-toggle-user-${user.id}`}
+                                      >
+                                        {user.isActive ? (
+                                          <>
+                                            <XCircle className="w-4 h-4 mr-2" />
+                                            Deactivate
+                                          </>
+                                        ) : (
+                                          <>
+                                            <CheckCircle className="w-4 h-4 mr-2" />
+                                            Activate
+                                          </>
+                                        )}
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))

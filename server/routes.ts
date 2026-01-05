@@ -70,6 +70,9 @@ import Papa from 'papaparse';
 import path from 'path';
 import fs from 'fs';
 
+// Super admin email - this user cannot be deactivated or deleted
+const SUPER_ADMIN_EMAIL = "admin@finledger.com";
+
 // Helper function to apply categorization rules to an imported transaction
 // Uses the new RulesEngine for reliable rule matching
 async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string; autoApply?: boolean } | null> {
@@ -7989,18 +7992,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.delete("/users/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Check if user exists
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       // Don't allow deleting yourself
       if (req.user?.id === id) {
         return res.status(400).json({ message: "Cannot delete your own account" });
       }
-      
+
+      // Don't allow deleting super admin
+      if (user.email === SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ message: "Cannot delete the super admin account" });
+      }
+
       // Delete the user
       const success = await storage.deleteUser(id);
       
@@ -13998,13 +14006,18 @@ Respond in JSON format:
   apiRouter.delete("/users/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Check if user exists
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
+      // Don't allow deactivating super admin
+      if (user.email === SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Cannot deactivate the super admin account" });
+      }
+
       // Tenant scoping: Verify user belongs to same company/firm as req.user
       if (req.user?.role === 'admin' && req.user.companyId) {
         if (user.companyId !== req.user.companyId) {
@@ -14015,7 +14028,7 @@ Respond in JSON format:
           return res.status(403).json({ error: "Access denied" });
         }
       }
-      
+
       // Deactivate user instead of deleting
       const deactivatedUser = await storage.updateUser(id, { isActive: false });
       
@@ -14039,19 +14052,24 @@ Respond in JSON format:
   apiRouter.put("/users/:id/role", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Validate role
       const roleSchema = z.object({
         role: z.enum(['admin', 'staff', 'read_only', 'accountant']),
       });
       const { role } = roleSchema.parse(req.body);
-      
+
       // Check if user exists
       const user = await storage.getUser(id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
+      // Don't allow modifying super admin's role
+      if (user.email === SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Cannot modify the super admin account" });
+      }
+
       // Update role
       const updatedUser = await storage.updateUser(id, { role });
       

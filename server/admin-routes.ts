@@ -5,6 +5,9 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 export const adminRouter = express.Router();
 
+// Super admin email - this user cannot be deactivated or deleted
+const SUPER_ADMIN_EMAIL = "admin@finledger.com";
+
 // Initialize Plaid client for bank feed disconnection
 const plaidConfig = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV as keyof typeof PlaidEnvironments || 'sandbox'],
@@ -31,15 +34,18 @@ adminRouter.get("/users", async (req: Request, res: Response) => {
     const usersWithCompanies = await Promise.all(
       users.map(async (user) => {
         const userCompanies = await storage.getUserCompanies(user.id);
+        const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL;
         return {
           ...user,
           // Don't send password hash to frontend
           password: undefined,
           companies: userCompanies,
+          // Mark super admin so frontend can hide delete/deactivate actions
+          isSuperAdmin,
         };
       })
     );
-    
+
     res.json(usersWithCompanies);
   } catch (error) {
     console.error("Error fetching users for admin:", error);
@@ -140,17 +146,27 @@ adminRouter.patch("/users/:id/status", async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id);
     const { isActive } = req.body;
-    
+
     if (typeof isActive !== 'boolean') {
       return res.status(400).json({ message: "isActive must be a boolean" });
     }
-    
+
+    // Check if this is the super admin - cannot be deactivated
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.email === SUPER_ADMIN_EMAIL) {
+      return res.status(403).json({ message: "Cannot modify the super admin account" });
+    }
+
     const updatedUser = await storage.updateUser(userId, { isActive });
-    
+
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     res.json({
       ...updatedUser,
       password: undefined,
