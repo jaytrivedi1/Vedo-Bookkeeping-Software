@@ -916,12 +916,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.post("/accounts", async (req: Request, res: Response) => {
+  apiRouter.post("/accounts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log("Request body:", req.body);
       const accountData = insertAccountSchema.parse(req.body);
       console.log("Parsed account data:", accountData);
-      const account = await storage.createAccount(accountData);
+      const account = await scopedStorage.createAccount(accountData);
       res.status(201).json(account);
     } catch (error) {
       console.error("Error creating account:", error);
@@ -931,18 +932,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Failed to create account" });
     }
   });
-  
-  apiRouter.patch("/accounts/:id", async (req: Request, res: Response) => {
+
+  apiRouter.patch("/accounts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
       // Allow partial data for update (don't require all fields)
       const accountData = insertAccountSchema.partial().parse(req.body);
-      const account = await storage.updateAccount(id, accountData);
-      
+      const account = await scopedStorage.updateAccount(id, accountData);
+
       if (!account) {
         return res.status(404).json({ message: "Account not found" });
       }
-      
+
       res.json(account);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -952,19 +954,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.delete("/accounts/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/accounts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      
-      // Check if account exists
-      const account = await storage.getAccount(id);
+
+      // Check if account exists (company-scoped)
+      const account = await scopedStorage.getAccount(id);
       if (!account) {
         return res.status(404).json({ message: "Account not found" });
       }
-      
+
       // Try to delete the account (will throw error if it has transactions)
-      const deleted = await storage.deleteAccount(id);
-      
+      const deleted = await scopedStorage.deleteAccount(id);
+
       if (deleted) {
         res.json({ message: "Account deleted successfully" });
       } else {
@@ -1056,26 +1059,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Delete contact (only if no transactions)
-  apiRouter.delete("/contacts/:id", async (req: Request, res: Response) => {
+  // Delete contact (only if no transactions) - company-scoped
+  apiRouter.delete("/contacts/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const contact = await storage.getContact(id);
-      
+      const contact = await scopedStorage.getContact(id);
+
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
-      
+
       // Check if contact has any transactions
       const hasTransactions = await storage.hasContactTransactions(id);
       if (hasTransactions) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           message: "Cannot delete contact with existing transactions. Mark as inactive instead.",
           error: "HAS_TRANSACTIONS"
         });
       }
-      
-      const deleted = await storage.deleteContact(id);
+
+      const deleted = await scopedStorage.deleteContact(id);
       if (deleted) {
         res.json({ message: "Contact deleted successfully" });
       } else {
