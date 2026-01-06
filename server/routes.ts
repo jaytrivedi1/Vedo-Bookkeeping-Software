@@ -6913,31 +6913,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // General Ledger report route - for date range filtering
-  apiRouter.get("/reports/general-ledger", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/reports/general-ledger", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const startDateStr = req.query.startDate as string | undefined;
       const endDateStr = req.query.endDate as string | undefined;
-      
+
       // Parse dates if provided
       const startDate = startDateStr ? new Date(startDateStr) : undefined;
       const endDate = endDateStr ? new Date(endDateStr) : undefined;
-      
-      // Get ledger entries for the date range
-      const ledgerEntries = await storage.getLedgerEntriesByDateRange(startDate, endDate);
-      
-      // Get all accounts and transactions for reference
-      const accounts = await storage.getAccounts();
-      const transactions = await storage.getTransactions();
-      
+
+      // Get ledger entries for the date range - COMPANY SCOPED
+      const ledgerEntries = await scopedStorage.getLedgerEntriesByDateRange(startDate, endDate);
+
+      // Get all accounts and transactions for reference - COMPANY SCOPED
+      const accounts = await scopedStorage.getAccounts();
+      const transactions = await scopedStorage.getTransactions();
+
       // Create account and transaction lookup maps
       const accountMap = new Map(accounts.map(acc => [acc.id, acc]));
       const transactionMap = new Map(transactions.map(tx => [tx.id, tx]));
-      
+
       // Enrich ledger entries with account and transaction data
       const enrichedEntries = ledgerEntries.map(entry => {
         const account = accountMap.get(entry.accountId);
         const transaction = transactionMap.get(entry.transactionId);
-        
+
         return {
           ...entry,
           account: account ? {
@@ -6955,7 +6957,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } : null
         };
       });
-      
+
       res.json(enrichedEntries);
     } catch (error) {
       console.error("Error fetching general ledger:", error);
@@ -6964,25 +6966,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Grouped General Ledger report - QuickBooks style with accounts grouped
-  apiRouter.get("/reports/general-ledger-grouped", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/reports/general-ledger-grouped", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const startDateStr = req.query.startDate as string | undefined;
       const endDateStr = req.query.endDate as string | undefined;
       const accountIdStr = req.query.accountId as string | undefined;
       const transactionType = req.query.transactionType as string | undefined;
-      
+
       if (!startDateStr || !endDateStr) {
         return res.status(400).json({ message: "startDate and endDate are required" });
       }
-      
+
       const startDate = new Date(startDateStr);
       const endDate = new Date(endDateStr);
-      
-      // Get all accounts, transactions, contacts, and ledger entries
-      const allAccounts = await storage.getAccounts();
-      const allTransactions = await storage.getTransactions();
-      const allContacts = await storage.getContacts();
-      const allLedgerEntries = await storage.getAllLedgerEntries();
+
+      // Get all accounts, transactions, contacts, and ledger entries - COMPANY SCOPED
+      const allAccounts = await scopedStorage.getAccounts();
+      const allTransactions = await scopedStorage.getTransactions();
+      const allContacts = await scopedStorage.getContacts();
+      const allLedgerEntries = await scopedStorage.getAllLedgerEntries();
       
       // Filter accounts if specific account is requested
       const accounts = accountIdStr 
