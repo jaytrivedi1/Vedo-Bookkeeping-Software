@@ -8075,6 +8075,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User-Company Assignment Routes
+
+  // Admin diagnostic endpoint: Get ALL user-company associations with details
+  // Useful for auditing and fixing multi-tenant access issues
+  apiRouter.get("/admin/user-company-audit", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // Get all users and companies
+      const allUsers = await storage.getUsers();
+      const allCompanies = await storage.getCompanies();
+
+      // Build a map for quick lookup
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+      const companyMap = new Map(allCompanies.map(c => [c.id, c]));
+
+      // Get all user-company associations for each user
+      const associations = [];
+      for (const user of allUsers) {
+        const userCompanies = await storage.getUserCompanies(user.id);
+        for (const uc of userCompanies) {
+          const company = companyMap.get(uc.companyId);
+          associations.push({
+            userId: user.id,
+            userEmail: user.email,
+            userName: user.username,
+            companyId: uc.companyId,
+            companyName: company?.name || 'Unknown',
+            role: uc.role,
+            isPrimary: uc.isPrimary
+          });
+        }
+      }
+
+      // Group by user for easier reading
+      const byUser = new Map<string, any[]>();
+      for (const assoc of associations) {
+        const key = assoc.userEmail || assoc.userName;
+        if (!byUser.has(key)) {
+          byUser.set(key, []);
+        }
+        byUser.get(key)!.push(assoc);
+      }
+
+      // Find users with multiple companies (potential issues)
+      const usersWithMultipleCompanies = Array.from(byUser.entries())
+        .filter(([_, assocs]) => assocs.length > 1)
+        .map(([email, assocs]) => ({
+          user: email,
+          companies: assocs.map(a => ({ id: a.companyId, name: a.companyName, role: a.role }))
+        }));
+
+      res.json({
+        totalAssociations: associations.length,
+        associations,
+        usersWithMultipleCompanies,
+        // Instructions for fixing
+        fixInstructions: {
+          message: "To remove an incorrect association, use DELETE /api/user-companies/:userId/:companyId",
+          example: "DELETE /api/user-companies/5/1 (removes user 5 from company 1)"
+        }
+      });
+    } catch (error) {
+      console.error("Error in user-company audit:", error);
+      res.status(500).json({ message: "Failed to audit user companies" });
+    }
+  });
+
   apiRouter.get("/user-companies/:userId", requireAdmin, async (req: Request, res: Response) => {
     try {
       const userId = parseInt(req.params.userId);
