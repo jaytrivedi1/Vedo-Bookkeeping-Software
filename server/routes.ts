@@ -10404,19 +10404,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/imported-transactions/:id/attachments - Upload attachment file
-  apiRouter.post("/imported-transactions/:id/attachments", attachmentUpload.single('file'), async (req: Request, res: Response) => {
+  apiRouter.post("/imported-transactions/:id/attachments", requireAuth, requireCompanyContext, attachmentUpload.single('file'), async (req: Request, res: Response) => {
     try {
+      const companyId = req.user?.companyId;
       const transactionId = parseInt(req.params.id);
-      
+
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      // Verify the imported transaction exists
+      // Verify the imported transaction exists and belongs to the user's company
       const [transaction] = await db
         .select()
         .from(importedTransactionsSchema)
-        .where(eq(importedTransactionsSchema.id, transactionId));
+        .where(and(
+          eq(importedTransactionsSchema.id, transactionId),
+          eq(importedTransactionsSchema.companyId, companyId!)
+        ));
 
       if (!transaction) {
         // Delete the uploaded file since transaction doesn't exist
@@ -10441,30 +10445,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(attachment);
     } catch (error: any) {
       console.error('Error uploading attachment:', error);
-      
+
       // Clean up file if there was an error
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
-      
+
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: 'Invalid attachment data', details: error.errors });
       }
-      
+
       res.status(500).json({ error: error.message || 'Failed to upload attachment' });
     }
   });
 
   // GET /api/imported-transactions/:id/attachments - List all attachments for a transaction
-  apiRouter.get("/imported-transactions/:id/attachments", async (req: Request, res: Response) => {
+  apiRouter.get("/imported-transactions/:id/attachments", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.user?.companyId;
       const transactionId = parseInt(req.params.id);
 
-      // Verify the imported transaction exists
+      // Verify the imported transaction exists and belongs to the user's company
       const [transaction] = await db
         .select()
         .from(importedTransactionsSchema)
-        .where(eq(importedTransactionsSchema.id, transactionId));
+        .where(and(
+          eq(importedTransactionsSchema.id, transactionId),
+          eq(importedTransactionsSchema.companyId, companyId!)
+        ));
 
       if (!transaction) {
         return res.status(404).json({ error: 'Imported transaction not found' });
@@ -10484,10 +10492,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // DELETE /api/imported-transactions/:transactionId/attachments/:attachmentId - Delete an attachment
-  apiRouter.delete("/imported-transactions/:transactionId/attachments/:attachmentId", async (req: Request, res: Response) => {
+  apiRouter.delete("/imported-transactions/:transactionId/attachments/:attachmentId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.user?.companyId;
       const transactionId = parseInt(req.params.transactionId);
       const attachmentId = parseInt(req.params.attachmentId);
+
+      // Verify the imported transaction belongs to the user's company
+      const [transaction] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(and(
+          eq(importedTransactionsSchema.id, transactionId),
+          eq(importedTransactionsSchema.companyId, companyId!)
+        ));
+
+      if (!transaction) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
 
       // Get the attachment to find the file path
       const [attachment] = await db
@@ -10507,7 +10529,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete the file from filesystem
       if (fs.existsSync(attachment.filePath)) {
         fs.unlinkSync(attachment.filePath);
-        
+
         // Try to remove the directory if it's empty
         const dir = path.dirname(attachment.filePath);
         try {
@@ -10533,10 +10555,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/imported-transactions/:transactionId/attachments/:attachmentId/download - Download attachment file
-  apiRouter.get("/imported-transactions/:transactionId/attachments/:attachmentId/download", async (req: Request, res: Response) => {
+  apiRouter.get("/imported-transactions/:transactionId/attachments/:attachmentId/download", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.user?.companyId;
       const transactionId = parseInt(req.params.transactionId);
       const attachmentId = parseInt(req.params.attachmentId);
+
+      // Verify the imported transaction belongs to the user's company
+      const [transaction] = await db
+        .select()
+        .from(importedTransactionsSchema)
+        .where(and(
+          eq(importedTransactionsSchema.id, transactionId),
+          eq(importedTransactionsSchema.companyId, companyId!)
+        ));
+
+      if (!transaction) {
+        return res.status(404).json({ error: 'Imported transaction not found' });
+      }
 
       // Get the attachment
       const [attachment] = await db
@@ -10980,8 +11016,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/bank-feeds/categorization-suggestions - Get AI-powered categorization suggestions
-  apiRouter.post("/bank-feeds/categorization-suggestions", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/categorization-suggestions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { transactionId } = req.body;
 
       if (!transactionId) {
@@ -10999,10 +11036,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Fetch available accounts, contacts, products, and taxes for context
-      const accountsList = await storage.getAccounts();
-      const contactsList = await storage.getContacts();
-      const productsList = await storage.getProducts();
-      const taxesList = await storage.getSalesTaxes();
+      const accountsList = await scopedStorage.getAccounts();
+      const contactsList = await scopedStorage.getContacts();
+      const productsList = await scopedStorage.getProducts();
+      const taxesList = await scopedStorage.getSalesTaxes();
 
       // Prepare context for AI
       const isDebit = transaction.amount < 0;
@@ -11134,17 +11171,17 @@ Respond in JSON format:
 
   // Bank Feed Matching Routes
   // GET /api/bank-feeds/:id/suggestions - Get match suggestions for a bank transaction
-  apiRouter.get("/bank-feeds/:id/suggestions", async (req: Request, res: Response) => {
+  apiRouter.get("/bank-feeds/:id/suggestions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
-      
+
       if (!transactionId) {
         return res.status(400).json({ error: 'Transaction ID is required' });
       }
 
       const { matchingService } = await import('./matching-service');
       const suggestions = await matchingService.findMatchesForBankTransaction(transactionId);
-      
+
       res.json({
         suggestions,
         count: suggestions.length,
@@ -11156,8 +11193,9 @@ Respond in JSON format:
   });
 
   // POST /api/bank-feeds/:id/match-invoice - Match bank deposit to invoice (creates payment)
-  apiRouter.post("/bank-feeds/:id/match-invoice", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/:id/match-invoice", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { invoiceId } = req.body;
 
@@ -11179,8 +11217,8 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is already matched' });
       }
 
-      // Fetch the invoice
-      const invoice = await storage.getTransaction(invoiceId);
+      // Fetch the invoice using scoped storage
+      const invoice = await scopedStorage.getTransaction(invoiceId);
       if (!invoice || invoice.type !== 'invoice') {
         return res.status(404).json({ error: 'Invoice not found' });
       }
@@ -11274,8 +11312,9 @@ Respond in JSON format:
   });
 
   // POST /api/bank-feeds/:id/match-bill - Match bank payment to bill (creates bill payment)
-  apiRouter.post("/bank-feeds/:id/match-bill", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/:id/match-bill", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { billId } = req.body;
 
@@ -11297,8 +11336,8 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is already matched' });
       }
 
-      // Fetch the bill
-      const bill = await storage.getTransaction(billId);
+      // Fetch the bill using scoped storage
+      const bill = await scopedStorage.getTransaction(billId);
       if (!bill || bill.type !== 'bill') {
         return res.status(404).json({ error: 'Bill not found' });
       }
@@ -11392,8 +11431,9 @@ Respond in JSON format:
   });
 
   // POST /api/bank-feeds/:id/link-manual - Link to existing manual entry (no new transaction)
-  apiRouter.post("/bank-feeds/:id/link-manual", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/:id/link-manual", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { manualTransactionId } = req.body;
 
@@ -11415,8 +11455,8 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Transaction is already matched' });
       }
 
-      // Fetch the manual transaction
-      const manualTx = await storage.getTransaction(manualTransactionId);
+      // Fetch the manual transaction using scoped storage
+      const manualTx = await scopedStorage.getTransaction(manualTransactionId);
       if (!manualTx) {
         return res.status(404).json({ error: 'Manual transaction not found' });
       }
@@ -11445,10 +11485,10 @@ Respond in JSON format:
   });
 
   // DELETE /api/bank-feeds/:id/unmatch - Undo a match
-  apiRouter.delete("/bank-feeds/:id/unmatch", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/bank-feeds/:id/unmatch", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
-      const userCompanyId = req.user?.companyId;
+      const userCompanyId = req.companyId;
 
       if (!transactionId) {
         return res.status(400).json({ error: 'Transaction ID is required' });
@@ -11579,8 +11619,9 @@ Respond in JSON format:
   });
 
   // POST /api/bank-feeds/:id/match-multiple-bills - Match bank payment to multiple bills
-  apiRouter.post("/bank-feeds/:id/match-multiple-bills", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/:id/match-multiple-bills", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { selectedBills, difference } = req.body;
 
@@ -11607,10 +11648,10 @@ Respond in JSON format:
       const differenceAmount = difference ? difference.amount : 0;
       const totalAmount = billsTotal + differenceAmount;
       const bankAmount = Math.abs(importedTx.amount);
-      
+
       if (Math.abs(totalAmount - bankAmount) > 0.01) {
-        return res.status(400).json({ 
-          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}` 
+        return res.status(400).json({
+          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}`
         });
       }
 
@@ -11622,8 +11663,8 @@ Respond in JSON format:
       for (const billItem of selectedBills) {
         const { billId, amountToApply } = billItem;
 
-        // Fetch the bill
-        const bill = await storage.getTransaction(billId);
+        // Fetch the bill using scoped storage
+        const bill = await scopedStorage.getTransaction(billId);
         if (!bill || bill.type !== 'bill') {
           throw new Error(`Bill ${billId} not found`);
         }
@@ -11779,8 +11820,9 @@ Respond in JSON format:
   });
 
   // POST /api/bank-feeds/:id/match-multiple-invoices - Match bank deposit to multiple invoices
-  apiRouter.post("/bank-feeds/:id/match-multiple-invoices", async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/:id/match-multiple-invoices", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { selectedInvoices, difference } = req.body;
 
@@ -11807,10 +11849,10 @@ Respond in JSON format:
       const differenceAmount = difference ? difference.amount : 0;
       const totalAmount = invoicesTotal + differenceAmount;
       const bankAmount = Math.abs(importedTx.amount);
-      
+
       if (Math.abs(totalAmount - bankAmount) > 0.01) {
-        return res.status(400).json({ 
-          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}` 
+        return res.status(400).json({
+          error: `Total amount ${totalAmount.toFixed(2)} does not match bank transaction amount ${bankAmount.toFixed(2)}`
         });
       }
 
@@ -11822,8 +11864,8 @@ Respond in JSON format:
       for (const invoiceItem of selectedInvoices) {
         const { invoiceId, amountToApply } = invoiceItem;
 
-        // Fetch the invoice
-        const invoice = await storage.getTransaction(invoiceId);
+        // Fetch the invoice using scoped storage
+        const invoice = await scopedStorage.getTransaction(invoiceId);
         if (!invoice || invoice.type !== 'invoice') {
           throw new Error(`Invoice ${invoiceId} not found`);
         }
@@ -11979,8 +12021,9 @@ Respond in JSON format:
   });
 
   // GET /api/bank-feeds/:id/matched-breakdown - Get breakdown of multi-match transactions
-  apiRouter.get("/bank-feeds/:id/matched-breakdown", async (req: Request, res: Response) => {
+  apiRouter.get("/bank-feeds/:id/matched-breakdown", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
 
       if (!transactionId) {
@@ -12021,7 +12064,7 @@ Respond in JSON format:
 
         let contactName = '';
         if (tx.contactId) {
-          const contact = await storage.getContact(tx.contactId);
+          const contact = await scopedStorage.getContact(tx.contactId);
           contactName = contact?.name || '';
         }
 
@@ -12062,8 +12105,9 @@ Respond in JSON format:
   });
 
   // Reconciliation routes
-  apiRouter.post("/reconciliations", async (req: Request, res: Response) => {
+  apiRouter.post("/reconciliations", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { accountId, statementDate, statementEndingBalance, forceNew } = req.body;
 
       if (!accountId || !statementDate || statementEndingBalance === undefined) {
@@ -12074,7 +12118,7 @@ Respond in JSON format:
 
       // Check for existing in-progress reconciliation (unless forceNew is true)
       if (!forceNew) {
-        const existingInProgress = await storage.getInProgressReconciliation(numericAccountId);
+        const existingInProgress = await scopedStorage.getInProgressReconciliation(numericAccountId);
         if (existingInProgress) {
           return res.json({
             ...existingInProgress,
@@ -12085,11 +12129,11 @@ Respond in JSON format:
       }
 
       // Calculate opening balance from last completed reconciliation
-      const lastCompleted = await storage.getLastCompletedReconciliation(numericAccountId);
+      const lastCompleted = await scopedStorage.getLastCompletedReconciliation(numericAccountId);
       const openingBalance = lastCompleted?.statementEndingBalance || 0;
       const previousReconciliationId = lastCompleted?.id || null;
 
-      const reconciliation = await storage.createReconciliation({
+      const reconciliation = await scopedStorage.createReconciliation({
         accountId: numericAccountId,
         statementDate: new Date(statementDate),
         statementEndingBalance: Number(statementEndingBalance),
@@ -12106,10 +12150,11 @@ Respond in JSON format:
   });
 
   // Get in-progress reconciliation for an account (for resume feature)
-  apiRouter.get("/reconciliations/in-progress/:accountId", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/in-progress/:accountId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const accountId = Number(req.params.accountId);
-      const reconciliation = await storage.getInProgressReconciliation(accountId);
+      const reconciliation = await scopedStorage.getInProgressReconciliation(accountId);
 
       if (!reconciliation) {
         return res.status(404).json({ message: "No in-progress reconciliation found" });
@@ -12123,10 +12168,11 @@ Respond in JSON format:
   });
 
   // Get last completed reconciliation for an account
-  apiRouter.get("/reconciliations/last-completed/:accountId", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/last-completed/:accountId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const accountId = Number(req.params.accountId);
-      const reconciliation = await storage.getLastCompletedReconciliation(accountId);
+      const reconciliation = await scopedStorage.getLastCompletedReconciliation(accountId);
 
       if (!reconciliation) {
         return res.status(404).json({ message: "No completed reconciliation found" });
@@ -12140,11 +12186,12 @@ Respond in JSON format:
   });
 
   // Get reconciliation history for an account
-  apiRouter.get("/reconciliations/history/:accountId", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/history/:accountId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const accountId = Number(req.params.accountId);
       const limit = Number(req.query.limit) || 50;
-      const history = await storage.getReconciliationHistory(accountId, limit);
+      const history = await scopedStorage.getReconciliationHistory(accountId, limit);
 
       res.json(history);
     } catch (error) {
@@ -12153,14 +12200,15 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/reconciliations/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const reconciliation = await storage.getReconciliation(Number(req.params.id));
-      
+      const scopedStorage = createScopedStorage(req);
+      const reconciliation = await scopedStorage.getReconciliation(Number(req.params.id));
+
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
-      
+
       res.json(reconciliation);
     } catch (error) {
       console.error("Error fetching reconciliation:", error);
@@ -12168,36 +12216,37 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/reconciliations/:id/ledger-entries", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/:id/ledger-entries", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const reconciliation = await storage.getReconciliation(Number(req.params.id));
-      
+      const scopedStorage = createScopedStorage(req);
+      const reconciliation = await scopedStorage.getReconciliation(Number(req.params.id));
+
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
-      
+
       // Get ledger entries for this account up to the statement date
-      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+      const ledgerEntries = await scopedStorage.getLedgerEntriesForReconciliation(
         reconciliation.accountId,
         reconciliation.statementDate
       );
-      
+
       // Get existing reconciliation items
-      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const reconciliationItems = await scopedStorage.getReconciliationItems(reconciliation.id);
       const clearedEntryIds = new Set(
         reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
       );
-      
+
       // Enrich ledger entries with cleared status and transaction details
-      const transactions = await storage.getTransactions();
+      const transactions = await scopedStorage.getTransactions();
       const transactionMap = new Map(transactions.map(t => [t.id, t]));
-      
+
       const enrichedEntries = ledgerEntries.map(entry => ({
         ...entry,
         isCleared: clearedEntryIds.has(entry.id),
         transaction: transactionMap.get(entry.transactionId),
       }));
-      
+
       res.json(enrichedEntries);
     } catch (error) {
       console.error("Error fetching ledger entries for reconciliation:", error);
@@ -12205,18 +12254,19 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.patch("/reconciliations/:id/items", async (req: Request, res: Response) => {
+  apiRouter.patch("/reconciliations/:id/items", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { ledgerEntryIds, isCleared } = req.body;
-      
+
       if (!Array.isArray(ledgerEntryIds)) {
         return res.status(400).json({ message: "ledgerEntryIds must be an array" });
       }
-      
+
       const reconciliationId = Number(req.params.id);
-      
+
       // Bulk upsert reconciliation items
-      await storage.bulkUpsertReconciliationItems(
+      await scopedStorage.bulkUpsertReconciliationItems(
         reconciliationId,
         ledgerEntryIds,
         isCleared
@@ -12258,10 +12308,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.patch("/reconciliations/:id/complete", async (req: Request, res: Response) => {
+  apiRouter.patch("/reconciliations/:id/complete", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
 
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
@@ -12276,13 +12327,13 @@ Respond in JSON format:
       }
 
       // Mark as completed
-      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+      const updatedReconciliation = await scopedStorage.updateReconciliation(reconciliationId, {
         status: 'completed',
         completedAt: new Date(),
       });
 
       // Update account's last reconciled info
-      await storage.updateAccountLastReconciled(
+      await scopedStorage.updateAccountLastReconciled(
         reconciliation.accountId,
         reconciliation.statementDate,
         reconciliation.statementEndingBalance
@@ -12296,11 +12347,12 @@ Respond in JSON format:
   });
 
   // Undo a completed reconciliation (revert to in_progress)
-  apiRouter.post("/reconciliations/:id/undo", async (req: Request, res: Response) => {
+  apiRouter.post("/reconciliations/:id/undo", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
 
-      const undoneReconciliation = await storage.undoReconciliation(reconciliationId);
+      const undoneReconciliation = await scopedStorage.undoReconciliation(reconciliationId);
 
       if (!undoneReconciliation) {
         return res.status(400).json({ message: "Cannot undo this reconciliation" });
@@ -12314,8 +12366,9 @@ Respond in JSON format:
   });
 
   // Auto-match ledger entries by amounts
-  apiRouter.post("/reconciliations/:id/suggest-matches", async (req: Request, res: Response) => {
+  apiRouter.post("/reconciliations/:id/suggest-matches", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
       const { amounts, tolerance = 0.01 } = req.body;
 
@@ -12323,19 +12376,19 @@ Respond in JSON format:
         return res.status(400).json({ message: "amounts must be a non-empty array of numbers" });
       }
 
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
 
       // Get ledger entries for this account up to the statement date
-      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+      const ledgerEntries = await scopedStorage.getLedgerEntriesForReconciliation(
         reconciliation.accountId,
         reconciliation.statementDate
       );
 
       // Get existing reconciliation items to know what's already cleared
-      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const reconciliationItems = await scopedStorage.getReconciliationItems(reconciliation.id);
       const clearedEntryIds = new Set(
         reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
       );
@@ -12349,7 +12402,7 @@ Respond in JSON format:
       });
 
       // Get transaction details for the matching entries
-      const transactions = await storage.getTransactions();
+      const transactions = await scopedStorage.getTransactions();
       const transactionMap = new Map(transactions.map(t => [t.id, t]));
 
       const enrichedMatches = matchingEntries.map(entry => ({
@@ -12369,18 +12422,19 @@ Respond in JSON format:
   });
 
   // Bulk update reconciliation items (clear/unclear all)
-  apiRouter.patch("/reconciliations/:id/bulk-items", async (req: Request, res: Response) => {
+  apiRouter.patch("/reconciliations/:id/bulk-items", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
       const { action } = req.body; // 'clear_all' or 'unclear_all'
 
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
 
       // Get all ledger entries for this reconciliation
-      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+      const ledgerEntries = await scopedStorage.getLedgerEntriesForReconciliation(
         reconciliation.accountId,
         reconciliation.statementDate
       );
@@ -12389,7 +12443,7 @@ Respond in JSON format:
       const isCleared = action === 'clear_all';
 
       // Bulk update all items
-      await storage.bulkUpsertReconciliationItems(reconciliationId, allEntryIds, isCleared);
+      await scopedStorage.bulkUpsertReconciliationItems(reconciliationId, allEntryIds, isCleared);
 
       // Recalculate cleared balance
       let clearedBalance = 0;
@@ -12418,31 +12472,32 @@ Respond in JSON format:
   });
 
   // Generate reconciliation report
-  apiRouter.get("/reconciliations/:id/report", async (req: Request, res: Response) => {
+  apiRouter.get("/reconciliations/:id/report", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
 
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
 
       // Get account details
-      const account = await storage.getAccount(reconciliation.accountId);
+      const account = await scopedStorage.getAccount(reconciliation.accountId);
 
       // Get ledger entries and reconciliation items
-      const ledgerEntries = await storage.getLedgerEntriesForReconciliation(
+      const ledgerEntries = await scopedStorage.getLedgerEntriesForReconciliation(
         reconciliation.accountId,
         reconciliation.statementDate
       );
 
-      const reconciliationItems = await storage.getReconciliationItems(reconciliation.id);
+      const reconciliationItems = await scopedStorage.getReconciliationItems(reconciliation.id);
       const clearedEntryIds = new Set(
         reconciliationItems.filter(item => item.isCleared).map(item => item.ledgerEntryId)
       );
 
       // Get transaction details
-      const transactions = await storage.getTransactions();
+      const transactions = await scopedStorage.getTransactions();
       const transactionMap = new Map(transactions.map(t => [t.id, t]));
 
       // Separate cleared and uncleared entries
@@ -12494,10 +12549,11 @@ Respond in JSON format:
   });
 
   // Delete an in-progress reconciliation
-  apiRouter.delete("/reconciliations/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/reconciliations/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const reconciliationId = Number(req.params.id);
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
 
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
@@ -12507,7 +12563,7 @@ Respond in JSON format:
         return res.status(400).json({ message: "Cannot delete a completed reconciliation. Use undo first." });
       }
 
-      const deleted = await storage.deleteReconciliation(reconciliationId);
+      const deleted = await scopedStorage.deleteReconciliation(reconciliationId);
 
       if (!deleted) {
         return res.status(500).json({ message: "Failed to delete reconciliation" });
@@ -12559,7 +12615,7 @@ Respond in JSON format:
   });
 
   // Categorization Rules routes - Using new RulesEngine
-  apiRouter.get("/categorization-rules", async (req: Request, res: Response) => {
+  apiRouter.get("/categorization-rules", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const rules = await RulesEngine.getAllRules();
       console.log('[Routes] GET /categorization-rules - Found', rules.length, 'rules');
@@ -12570,7 +12626,7 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/categorization-rules/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/categorization-rules/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const rule = await RulesEngine.getRule(Number(req.params.id));
 
@@ -12585,8 +12641,9 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/categorization-rules", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules", requireAuth, requireCompanyContext, ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       let name, conditions, actions, salesTaxId, isEnabled, autoApply, priority, ruleType;
 
       // Parse request body (handles both JSON string and regular form data)
@@ -12638,7 +12695,7 @@ Respond in JSON format:
       let autoApplyResult = null;
       if (rule.autoApply && rule.isEnabled) {
         console.log('[Routes] Auto-applying new rule to existing uncategorized transactions...');
-        autoApplyResult = await applyRuleToExistingTransactions(rule, storage);
+        autoApplyResult = await applyRuleToExistingTransactions(rule, scopedStorage);
         console.log('[Routes] Auto-apply result:', autoApplyResult);
       }
 
@@ -12657,8 +12714,9 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.patch("/categorization-rules/:id", ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
+  apiRouter.patch("/categorization-rules/:id", requireAuth, requireCompanyContext, ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const ruleId = Number(req.params.id);
 
       const existingRule = await RulesEngine.getRule(ruleId);
@@ -12709,7 +12767,7 @@ Respond in JSON format:
       let autoApplyResult = null;
       if (autoApplyBeingEnabled && updatedRule.isEnabled) {
         console.log('[Routes] AutoApply was enabled - applying rule to existing uncategorized transactions...');
-        autoApplyResult = await applyRuleToExistingTransactions(updatedRule, storage);
+        autoApplyResult = await applyRuleToExistingTransactions(updatedRule, scopedStorage);
         console.log('[Routes] Auto-apply result:', autoApplyResult);
       }
 
@@ -12728,7 +12786,7 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.delete("/categorization-rules/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/categorization-rules/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
 
@@ -12744,26 +12802,26 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/categorization-rules/:id/attachment", async (req: Request, res: Response) => {
+  apiRouter.get("/categorization-rules/:id/attachment", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
 
       const rule = await RulesEngine.getRule(ruleId);
-      
+
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
       }
-      
+
       if (!rule.attachmentPath) {
         return res.status(404).json({ message: "No attachment found for this rule" });
       }
-      
+
       if (!fs.existsSync(rule.attachmentPath)) {
         return res.status(404).json({ message: "Attachment file not found on disk" });
       }
-      
+
       const fileName = path.basename(rule.attachmentPath);
-      
+
       res.download(rule.attachmentPath, fileName, (err) => {
         if (err) {
           console.error('Error downloading attachment:', err);
@@ -12781,8 +12839,9 @@ Respond in JSON format:
   });
 
   // Apply categorization rules to uncategorized transactions (actually creates expenses/deposits)
-  apiRouter.post("/categorization-rules/apply", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/apply", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log('[ApplyRulesEndpoint] Starting rule application...');
 
       // Get all enabled rules
@@ -12801,7 +12860,7 @@ Respond in JSON format:
       }
 
       // Get all unmatched/uncategorized transactions
-      const allTransactions = await storage.getImportedTransactions();
+      const allTransactions = await scopedStorage.getImportedTransactions();
       const uncategorizedTransactions = allTransactions.filter(tx =>
         tx.status === 'unmatched' && !tx.matchedTransactionId
       );
@@ -12833,7 +12892,7 @@ Respond in JSON format:
           if (importedTx.source === 'csv') {
             glAccountId = importedTx.accountId!;
           } else {
-            const bankAccount = await storage.getBankAccount(importedTx.bankAccountId!);
+            const bankAccount = await scopedStorage.getBankAccount(importedTx.bankAccountId!);
             if (!bankAccount || !bankAccount.linkedAccountId) {
               console.log('[ApplyRulesEndpoint] Skipping tx', importedTx.id, '- no linked GL account');
               skippedCount++;
@@ -12845,10 +12904,10 @@ Respond in JSON format:
           // Find or create contact if contactName is provided
           let contactId: number | null = null;
           if (ruleMatch.contactName && ruleMatch.contactName.trim()) {
-            const contacts = await storage.getContacts();
+            const contacts = await scopedStorage.getContacts();
             let contact = contacts.find(c => c.name.toLowerCase() === ruleMatch.contactName!.toLowerCase());
             if (!contact) {
-              contact = await storage.createContact({
+              contact = await scopedStorage.createContact({
                 name: ruleMatch.contactName,
                 type: isExpense ? 'vendor' : 'customer',
               });
@@ -12862,7 +12921,7 @@ Respond in JSON format:
           const salesTaxId = ruleMatch.salesTaxId;
 
           if (salesTaxId) {
-            const allTaxes = await storage.getSalesTaxes();
+            const allTaxes = await scopedStorage.getSalesTaxes();
             const tax = allTaxes.find(t => t.id === salesTaxId);
             if (tax) {
               baseAmount = absoluteAmount / (1 + tax.rate / 100);
@@ -12922,7 +12981,7 @@ Respond in JSON format:
 
           // Add tax entry if applicable
           if (salesTaxId && taxAmount > 0) {
-            const allTaxes = await storage.getSalesTaxes();
+            const allTaxes = await scopedStorage.getSalesTaxes();
             const tax = allTaxes.find(t => t.id === salesTaxId);
             if (tax && tax.accountId) {
               ledgerEntries.push({
@@ -12937,7 +12996,7 @@ Respond in JSON format:
           }
 
           // Create the transaction
-          const transaction = await storage.createTransaction(
+          const transaction = await scopedStorage.createTransaction(
             {
               type: isExpense ? 'expense' : 'deposit',
               reference: null,
@@ -12955,7 +13014,7 @@ Respond in JSON format:
           );
 
           // Update imported transaction status to matched
-          await storage.updateImportedTransaction(importedTx.id!, {
+          await scopedStorage.updateImportedTransaction(importedTx.id!, {
             matchedTransactionId: transaction.id,
             status: 'matched',
             name: ruleMatch.contactName || importedTx.name,
@@ -12996,7 +13055,7 @@ Respond in JSON format:
   // ============= AI Categorization Routes =============
 
   // Get categorization rules by type (manual/ai)
-  apiRouter.get("/categorization-rules/type/:ruleType", async (req: Request, res: Response) => {
+  apiRouter.get("/categorization-rules/type/:ruleType", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const ruleType = req.params.ruleType as 'manual' | 'ai';
       if (ruleType !== 'manual' && ruleType !== 'ai') {
@@ -13012,7 +13071,7 @@ Respond in JSON format:
   });
 
   // Promote an AI rule to manual
-  apiRouter.post("/categorization-rules/:id/promote", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/:id/promote", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const ruleId = Number(req.params.id);
       const rule = await RulesEngine.getRule(ruleId);
@@ -13038,15 +13097,16 @@ Respond in JSON format:
   });
 
   // Generate AI rules from existing patterns (retroactive)
-  apiRouter.post("/categorization-rules/generate-from-patterns", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/generate-from-patterns", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log("[GenerateFromPatterns] Starting rule generation from patterns...");
       const { generateAiRuleFromPattern } = await import('./services/pattern-learning-service');
       const userCompanyId = req.user?.companyId;
 
       // Get all merchant patterns for this company
       console.log("[GenerateFromPatterns] Fetching merchant patterns for company:", userCompanyId);
-      const patterns = await storage.getMerchantPatterns();
+      const patterns = await scopedStorage.getMerchantPatterns();
       // Filter to company-specific patterns
       const companyPatterns = userCompanyId
         ? patterns.filter(p => p.companyId === userCompanyId)
@@ -13061,14 +13121,14 @@ Respond in JSON format:
       });
 
       const patternStorage = {
-        getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
-        createMerchantPattern: (pattern: any) => storage.createMerchantPattern(pattern),
-        updateMerchantPattern: (id: number, updates: any) => storage.updateMerchantPattern(id, updates),
-        getAiRuleByMerchant: (name: string, companyId?: number) => storage.getAiRuleByMerchant(name, companyId),
-        createCategorizationRule: (rule: any) => storage.createCategorizationRule(rule),
-        updateCategorizationRule: (id: number, updates: any) => storage.updateCategorizationRule(id, updates),
-        getAccount: (id: number) => storage.getAccount(id),
-        getContact: (id: number) => storage.getContact(id),
+        getMerchantPatternByName: (name: string, companyId?: number) => scopedStorage.getMerchantPatternByName(name, companyId),
+        createMerchantPattern: (pattern: any) => scopedStorage.createMerchantPattern(pattern),
+        updateMerchantPattern: (id: number, updates: any) => scopedStorage.updateMerchantPattern(id, updates),
+        getAiRuleByMerchant: (name: string, companyId?: number) => scopedStorage.getAiRuleByMerchant(name, companyId),
+        createCategorizationRule: (rule: any) => scopedStorage.createCategorizationRule(rule),
+        updateCategorizationRule: (id: number, updates: any) => scopedStorage.updateCategorizationRule(id, updates),
+        getAccount: (id: number) => scopedStorage.getAccount(id),
+        getContact: (id: number) => scopedStorage.getContact(id),
       };
 
       let rulesCreated = 0;
@@ -13076,7 +13136,7 @@ Respond in JSON format:
 
       for (const pattern of eligiblePatterns) {
         // Check if rule already exists for this company
-        const existingRule = await storage.getAiRuleByMerchant(pattern.merchantNameNormalized, userCompanyId);
+        const existingRule = await scopedStorage.getAiRuleByMerchant(pattern.merchantNameNormalized, userCompanyId);
         if (existingRule) {
           continue; // Skip if rule already exists
         }
@@ -13112,9 +13172,10 @@ Respond in JSON format:
   });
 
   // Promote all AI rules to manual
-  apiRouter.post("/categorization-rules/ai/promote-all", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/ai/promote-all", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const promotedCount = await storage.promoteAllAiRules();
+      const scopedStorage = createScopedStorage(req);
+      const promotedCount = await scopedStorage.promoteAllAiRules();
       res.json({ success: true, promotedCount });
     } catch (error) {
       console.error("Error promoting all AI rules:", error);
@@ -13123,9 +13184,10 @@ Respond in JSON format:
   });
 
   // Delete all AI rules
-  apiRouter.delete("/categorization-rules/ai/all", async (req: Request, res: Response) => {
+  apiRouter.delete("/categorization-rules/ai/all", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const deletedCount = await storage.deleteAiRules();
+      const scopedStorage = createScopedStorage(req);
+      const deletedCount = await scopedStorage.deleteAiRules();
       res.json({ success: true, deletedCount });
     } catch (error) {
       console.error("Error deleting AI rules:", error);
@@ -13134,7 +13196,7 @@ Respond in JSON format:
   });
 
   // Enable all disabled AI rules
-  apiRouter.post("/categorization-rules/ai/enable-all", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/ai/enable-all", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const enabledCount = await RulesEngine.enableAllRulesByType('ai');
       const aiRules = await RulesEngine.getRulesByType('ai');
@@ -13153,8 +13215,9 @@ Respond in JSON format:
   });
 
   // Debug endpoint to test rule matching
-  apiRouter.post("/categorization-rules/debug-test", async (req: Request, res: Response) => {
+  apiRouter.post("/categorization-rules/debug-test", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { transactionId } = req.body;
 
       // Get raw database state using RulesEngine
@@ -13165,7 +13228,7 @@ Respond in JSON format:
       // If transactionId provided, test against that transaction
       let testResult = null;
       if (transactionId) {
-        const tx = await storage.getImportedTransaction(transactionId);
+        const tx = await scopedStorage.getImportedTransaction(transactionId);
         if (tx) {
           testResult = await applyRulesToTransaction(tx);
         }
@@ -13189,9 +13252,10 @@ Respond in JSON format:
   });
 
   // Get merchant patterns
-  apiRouter.get("/merchant-patterns", async (req: Request, res: Response) => {
+  apiRouter.get("/merchant-patterns", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const patterns = await storage.getMerchantPatterns();
+      const scopedStorage = createScopedStorage(req);
+      const patterns = await scopedStorage.getMerchantPatterns();
       res.json(patterns);
     } catch (error) {
       console.error("Error fetching merchant patterns:", error);
@@ -13200,9 +13264,10 @@ Respond in JSON format:
   });
 
   // Get a specific merchant pattern
-  apiRouter.get("/merchant-patterns/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/merchant-patterns/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const pattern = await storage.getMerchantPattern(Number(req.params.id));
+      const scopedStorage = createScopedStorage(req);
+      const pattern = await scopedStorage.getMerchantPattern(Number(req.params.id));
       if (!pattern) {
         return res.status(404).json({ message: "Pattern not found" });
       }
@@ -13214,9 +13279,10 @@ Respond in JSON format:
   });
 
   // Delete a merchant pattern
-  apiRouter.delete("/merchant-patterns/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/merchant-patterns/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const deleted = await storage.deleteMerchantPattern(Number(req.params.id));
+      const scopedStorage = createScopedStorage(req);
+      const deleted = await scopedStorage.deleteMerchantPattern(Number(req.params.id));
       if (!deleted) {
         return res.status(404).json({ message: "Pattern not found" });
       }
@@ -13383,12 +13449,13 @@ Respond in JSON format:
   });
 
   // ============= Exchange Rate Routes =============
-  
+
   // Get all exchange rates
-  apiRouter.get("/exchange-rates", async (req: Request, res: Response) => {
+  apiRouter.get("/exchange-rates", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { fromCurrency, effectiveDate } = req.query;
-      const exchangeRates = await storage.getExchangeRates(
+      const exchangeRates = await scopedStorage.getExchangeRates(
         fromCurrency as string | undefined,
         effectiveDate as string | undefined
       );
@@ -13401,38 +13468,39 @@ Respond in JSON format:
 
   // Get exchange rate for a specific date and currency pair
   // NOTE: This must come BEFORE the /:id route to avoid "rate" being treated as an ID
-  apiRouter.get("/exchange-rates/rate", async (req: Request, res: Response) => {
+  apiRouter.get("/exchange-rates/rate", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { fromCurrency, toCurrency, date } = req.query;
-      
+
       if (!fromCurrency || !toCurrency || !date) {
-        return res.status(400).json({ 
-          message: "fromCurrency, toCurrency, and date are required" 
+        return res.status(400).json({
+          message: "fromCurrency, toCurrency, and date are required"
         });
       }
-      
+
       const requestDate = new Date(date as string);
-      let exchangeRate = await storage.getExchangeRateForDate(
+      let exchangeRate = await scopedStorage.getExchangeRateForDate(
         fromCurrency as string,
         toCurrency as string,
         requestDate
       );
-      
+
       // If rate not found, try to fetch from API
       if (!exchangeRate) {
         const exchangeRateService = createExchangeRateService();
-        
+
         if (exchangeRateService) {
           try {
             console.log(`Exchange rate not found for ${fromCurrency} -> ${toCurrency} on ${requestDate.toISOString().split('T')[0]}, fetching from API...`);
             await exchangeRateService.fetchAndStoreRates(
               fromCurrency as string,
               requestDate,
-              storage
+              scopedStorage
             );
-            
+
             // Try to get the rate again after fetching
-            exchangeRate = await storage.getExchangeRateForDate(
+            exchangeRate = await scopedStorage.getExchangeRateForDate(
               fromCurrency as string,
               toCurrency as string,
               requestDate
@@ -13442,11 +13510,11 @@ Respond in JSON format:
           }
         }
       }
-      
+
       if (!exchangeRate) {
         return res.status(404).json({ message: "Exchange rate not found for the specified date" });
       }
-      
+
       res.json(exchangeRate);
     } catch (error) {
       console.error("Error fetching exchange rate for date:", error);
@@ -13455,14 +13523,15 @@ Respond in JSON format:
   });
 
   // Get a specific exchange rate by ID
-  apiRouter.get("/exchange-rates/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/exchange-rates/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const exchangeRate = await storage.getExchangeRate(Number(req.params.id));
-      
+      const scopedStorage = createScopedStorage(req);
+      const exchangeRate = await scopedStorage.getExchangeRate(Number(req.params.id));
+
       if (!exchangeRate) {
         return res.status(404).json({ message: "Exchange rate not found" });
       }
-      
+
       res.json(exchangeRate);
     } catch (error) {
       console.error("Error fetching exchange rate:", error);
@@ -13471,23 +13540,24 @@ Respond in JSON format:
   });
 
   // Create a new exchange rate
-  apiRouter.post("/exchange-rates", async (req: Request, res: Response) => {
+  apiRouter.post("/exchange-rates", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { fromCurrency, toCurrency, rate, date } = req.body;
-      
+
       if (!fromCurrency || !toCurrency || !rate || !date) {
-        return res.status(400).json({ 
-          message: "fromCurrency, toCurrency, rate, and date are required" 
+        return res.status(400).json({
+          message: "fromCurrency, toCurrency, rate, and date are required"
         });
       }
-      
-      const exchangeRate = await storage.createExchangeRate({
+
+      const exchangeRate = await scopedStorage.createExchangeRate({
         fromCurrency,
         toCurrency,
         rate: String(rate),
         date: new Date(date)
       });
-      
+
       res.json(exchangeRate);
     } catch (error) {
       console.error("Error creating exchange rate:", error);
@@ -13496,19 +13566,20 @@ Respond in JSON format:
   });
 
   // Update an exchange rate
-  apiRouter.patch("/exchange-rates/:id", async (req: Request, res: Response) => {
+  apiRouter.patch("/exchange-rates/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const updates: any = {};
-      
+
       if (req.body.rate !== undefined) updates.rate = String(req.body.rate);
       if (req.body.date !== undefined) updates.date = new Date(req.body.date);
-      
-      const updatedRate = await storage.updateExchangeRate(Number(req.params.id), updates);
-      
+
+      const updatedRate = await scopedStorage.updateExchangeRate(Number(req.params.id), updates);
+
       if (!updatedRate) {
         return res.status(404).json({ message: "Exchange rate not found" });
       }
-      
+
       res.json(updatedRate);
     } catch (error) {
       console.error("Error updating exchange rate:", error);
@@ -13517,27 +13588,28 @@ Respond in JSON format:
   });
 
   // Update exchange rate with scope (transaction_only or all_on_date)
-  apiRouter.put("/exchange-rates", async (req: Request, res: Response) => {
+  apiRouter.put("/exchange-rates", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { fromCurrency, toCurrency, rate, date, scope } = req.body;
-      
+
       if (!fromCurrency || !toCurrency || !rate || !date || !scope) {
-        return res.status(400).json({ 
-          message: "fromCurrency, toCurrency, rate, date, and scope are required" 
+        return res.status(400).json({
+          message: "fromCurrency, toCurrency, rate, date, and scope are required"
         });
       }
 
       if (scope !== 'transaction_only' && scope !== 'all_on_date') {
-        return res.status(400).json({ 
-          message: "scope must be 'transaction_only' or 'all_on_date'" 
+        return res.status(400).json({
+          message: "scope must be 'transaction_only' or 'all_on_date'"
         });
       }
 
       const requestDate = new Date(date);
-      
+
       if (scope === 'all_on_date') {
         // Find existing rate for this date and currency pair
-        const existingRate = await storage.getExchangeRateForDate(
+        const existingRate = await scopedStorage.getExchangeRateForDate(
           fromCurrency,
           toCurrency,
           requestDate
@@ -13545,13 +13617,13 @@ Respond in JSON format:
 
         if (existingRate) {
           // Update existing rate
-          await storage.updateExchangeRate(existingRate.id, {
+          await scopedStorage.updateExchangeRate(existingRate.id, {
             rate: String(rate),
             isManual: true
           });
         } else {
           // Create new rate
-          await storage.createExchangeRate({
+          await scopedStorage.createExchangeRate({
             fromCurrency,
             toCurrency,
             rate: String(rate),
@@ -13573,14 +13645,15 @@ Respond in JSON format:
   });
 
   // Delete an exchange rate
-  apiRouter.delete("/exchange-rates/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/exchange-rates/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const deleted = await storage.deleteExchangeRate(Number(req.params.id));
-      
+      const scopedStorage = createScopedStorage(req);
+      const deleted = await scopedStorage.deleteExchangeRate(Number(req.params.id));
+
       if (!deleted) {
         return res.status(404).json({ message: "Exchange rate not found" });
       }
-      
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting exchange rate:", error);
@@ -13589,16 +13662,17 @@ Respond in JSON format:
   });
 
   // Fetch exchange rates from API for a specific date
-  apiRouter.post("/exchange-rates/fetch", async (req: Request, res: Response) => {
+  apiRouter.post("/exchange-rates/fetch", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { date } = req.body;
-      
+
       if (!date) {
         return res.status(400).json({ message: "date is required" });
       }
 
       // Get preferences to get home currency
-      const preferences = await storage.getPreferences();
+      const preferences = await scopedStorage.getPreferences();
       if (!preferences?.homeCurrency) {
         return res.status(400).json({ message: "Home currency not configured. Please set up multi-currency preferences first." });
       }
@@ -13612,11 +13686,11 @@ Respond in JSON format:
       const createdCount = await exchangeRateService.fetchAndStoreRates(
         preferences.homeCurrency,
         requestDate,
-        storage
+        scopedStorage
       );
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         createdCount,
         date: requestDate.toISOString().split('T')[0],
         homeCurrency: preferences.homeCurrency
