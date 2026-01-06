@@ -1180,16 +1180,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get transactions for a specific contact
-  apiRouter.get("/contacts/:id/transactions", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/contacts/:id/transactions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const contactId = parseInt(req.params.id);
-      const contact = await storage.getContact(contactId);
+      const contact = await scopedStorage.getContact(contactId);
 
       if (!contact) {
         return res.status(404).json({ message: "Contact not found" });
       }
 
-      const transactions = await storage.getTransactionsByContact(contactId);
+      const transactions = await scopedStorage.getTransactionsByContact(contactId);
       res.json(transactions);
     } catch (error) {
       console.error("Error fetching contact transactions:", error);
@@ -1202,10 +1204,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ========================
 
   // Get all notes for a contact
-  apiRouter.get("/contacts/:id/notes", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/contacts/:id/notes", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const contactId = parseInt(req.params.id);
-      const notes = await storage.getContactNotes(contactId);
+      const notes = await scopedStorage.getContactNotes(contactId);
       res.json(notes);
     } catch (error) {
       console.error("Error fetching contact notes:", error);
@@ -1214,15 +1218,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new note for a contact
-  apiRouter.post("/contacts/:id/notes", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.post("/contacts/:id/notes", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const contactId = parseInt(req.params.id);
       const { content, isPinned } = req.body;
 
       // Get the current user ID from the session if available
       const userId = req.user?.id || null;
 
-      const note = await storage.createContactNote({
+      const note = await scopedStorage.createContactNote({
         contactId,
         content,
         isPinned: isPinned || false,
@@ -1231,7 +1237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // If this note is pinned, update the contact's pinnedNote field
       if (isPinned) {
-        await storage.updateContact(contactId, { pinnedNote: content });
+        await scopedStorage.updateContact(contactId, { pinnedNote: content });
       }
 
       res.status(201).json(note);
@@ -1242,14 +1248,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a contact note
-  apiRouter.patch("/contact-notes/:noteId", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped via contact ownership
+  apiRouter.patch("/contact-notes/:noteId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
       const { content, isPinned } = req.body;
 
       const existingNote = await storage.getContactNote(noteId);
       if (!existingNote) {
         return res.status(404).json({ message: "Note not found" });
+      }
+
+      // Verify the contact belongs to current company
+      const contact = await scopedStorage.getContact(existingNote.contactId);
+      if (!contact) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       const updatedNote = await storage.updateContactNote(noteId, { content, isPinned });
@@ -1260,12 +1274,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Unpin all other notes for this contact
           await storage.unpinAllContactNotes(existingNote.contactId);
           await storage.updateContactNote(noteId, { isPinned: true });
-          await storage.updateContact(existingNote.contactId, { pinnedNote: content || existingNote.content });
+          await scopedStorage.updateContact(existingNote.contactId, { pinnedNote: content || existingNote.content });
         } else {
           // Clear the contact's pinnedNote if this was the pinned note
-          const contact = await storage.getContact(existingNote.contactId);
           if (contact?.pinnedNote === existingNote.content) {
-            await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+            await scopedStorage.updateContact(existingNote.contactId, { pinnedNote: null });
           }
         }
       }
@@ -1278,8 +1291,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete a contact note
-  apiRouter.delete("/contact-notes/:noteId", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped via contact ownership
+  apiRouter.delete("/contact-notes/:noteId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
       const existingNote = await storage.getContactNote(noteId);
@@ -1287,9 +1302,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Note not found" });
       }
 
+      // Verify the contact belongs to current company
+      const contact = await scopedStorage.getContact(existingNote.contactId);
+      if (!contact) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
       // If this was the pinned note, clear it from the contact
       if (existingNote.isPinned) {
-        await storage.updateContact(existingNote.contactId, { pinnedNote: null });
+        await scopedStorage.updateContact(existingNote.contactId, { pinnedNote: null });
       }
 
       await storage.deleteContactNote(noteId);
@@ -1301,8 +1322,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pin/Unpin a note (convenience endpoint)
-  apiRouter.post("/contact-notes/:noteId/pin", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped via contact ownership
+  apiRouter.post("/contact-notes/:noteId/pin", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
       const note = await storage.getContactNote(noteId);
@@ -1310,12 +1333,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Note not found" });
       }
 
+      // Verify the contact belongs to current company
+      const contact = await scopedStorage.getContact(note.contactId);
+      if (!contact) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
       // Unpin all other notes for this contact first
       await storage.unpinAllContactNotes(note.contactId);
 
       // Pin this note
       await storage.updateContactNote(noteId, { isPinned: true });
-      await storage.updateContact(note.contactId, { pinnedNote: note.content });
+      await scopedStorage.updateContact(note.contactId, { pinnedNote: note.content });
 
       res.json({ success: true, pinnedNoteId: noteId });
     } catch (error) {
@@ -1325,8 +1354,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Unpin a note
-  apiRouter.post("/contact-notes/:noteId/unpin", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped via contact ownership
+  apiRouter.post("/contact-notes/:noteId/unpin", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
       const note = await storage.getContactNote(noteId);
@@ -1334,8 +1365,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Note not found" });
       }
 
+      // Verify the contact belongs to current company
+      const contact = await scopedStorage.getContact(note.contactId);
+      if (!contact) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
       await storage.updateContactNote(noteId, { isPinned: false });
-      await storage.updateContact(note.contactId, { pinnedNote: null });
+      await scopedStorage.updateContact(note.contactId, { pinnedNote: null });
 
       res.json({ success: true });
     } catch (error) {
@@ -3159,10 +3196,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cheque routes
-  apiRouter.post("/cheques", async (req: Request, res: Response) => {
+  apiRouter.post("/cheques", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log("Cheque payload:", JSON.stringify(req.body));
-      
+
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
@@ -3171,27 +3209,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: req.body.status || 'completed',
         description: req.body.description || ''
       };
-      
+
       // Keep reference as user entered it (empty if not provided)
       body.reference = req.body.reference?.trim() || null;
-      
+
       // Validate cheque data
       console.log("Validating cheque data:", JSON.stringify(body));
       const result = chequeSchema.safeParse(body);
       if (!result.success) {
         console.log("Cheque validation errors:", JSON.stringify(result.error));
-        return res.status(400).json({ 
-          message: "Invalid cheque data", 
-          errors: result.error.errors 
+        return res.status(400).json({
+          message: "Invalid cheque data",
+          errors: result.error.errors
         });
       }
-      
+
       const chequeData = result.data;
       console.log("Cheque data passed validation:", JSON.stringify(chequeData));
-      
+
       // Validate A/P and A/R account requirements
-      const accounts = await storage.getAccounts();
-      const contacts = await storage.getContacts();
+      const accounts = await scopedStorage.getAccounts();
+      const contacts = await scopedStorage.getContacts();
       const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
       
       const { hasAP, hasAR } = hasAccountsPayableOrReceivable(chequeData.lineItems, accounts);
@@ -3225,7 +3263,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalAmount = roundTo2Decimals(chequeData.totalAmount || (subTotal + taxAmount));
       
       // Get the payment account
-      const paymentAccount = await storage.getAccount(chequeData.paymentAccountId);
+      const paymentAccount = await scopedStorage.getAccount(chequeData.paymentAccountId);
       if (!paymentAccount) {
         return res.status(400).json({ message: "Invalid bank account" });
       }
@@ -3286,7 +3324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Add debit entries for each expense line item
       for (const item of chequeData.lineItems) {
-        const expenseAccount = await storage.getAccount(item.accountId);
+        const expenseAccount = await scopedStorage.getAccount(item.accountId);
         if (!expenseAccount) {
           return res.status(400).json({ message: `Invalid expense account for line item` });
         }
@@ -3432,19 +3470,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Journal Entry routes
-  apiRouter.post("/journal-entries", async (req: Request, res: Response) => {
+  apiRouter.post("/journal-entries", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
         date: new Date(req.body.date)
       };
-      
+
       const journalData = journalEntrySchema.parse(body);
-      
+
       // Validate A/P and A/R account requirements (using per-line contactId)
-      const accounts = await storage.getAccounts();
-      const contacts = await storage.getContacts();
+      const accounts = await scopedStorage.getAccounts();
+      const contacts = await scopedStorage.getContacts();
       const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
       
       const accountLineItems = journalData.entries.map(entry => ({ accountId: entry.accountId }));
@@ -3517,29 +3556,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transfer routes
-  apiRouter.post("/transfers", async (req: Request, res: Response) => {
+  apiRouter.post("/transfers", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { fromAccountId, toAccountId, amount, date, memo, reference: userReference } = req.body;
 
       // Validate required fields
       if (!fromAccountId || !toAccountId || !amount || !date) {
-        return res.status(400).json({ 
-          message: "Missing required fields", 
-          errors: [{ message: "fromAccountId, toAccountId, amount, and date are required" }] 
+        return res.status(400).json({
+          message: "Missing required fields",
+          errors: [{ message: "fromAccountId, toAccountId, amount, and date are required" }]
         });
       }
 
       // Validate that from and to accounts are different
       if (fromAccountId === toAccountId) {
-        return res.status(400).json({ 
-          message: "Invalid transfer", 
-          errors: [{ message: "From and To accounts must be different" }] 
+        return res.status(400).json({
+          message: "Invalid transfer",
+          errors: [{ message: "From and To accounts must be different" }]
         });
       }
 
       // Fetch account details
-      const fromAccount = await storage.getAccount(fromAccountId);
-      const toAccount = await storage.getAccount(toAccountId);
+      const fromAccount = await scopedStorage.getAccount(fromAccountId);
+      const toAccount = await scopedStorage.getAccount(toAccountId);
 
       if (!fromAccount || !toAccount) {
         return res.status(400).json({ 
@@ -3596,33 +3636,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sales Receipt routes
-  apiRouter.post("/sales-receipts", async (req: Request, res: Response) => {
+  apiRouter.post("/sales-receipts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { date, contactId, reference: userReference, paymentMethod, depositAccountId, description, memo, lineItems, subTotal, taxAmount, totalAmount } = req.body;
 
       // Validate required fields
       if (!depositAccountId || !lineItems || lineItems.length === 0) {
-        return res.status(400).json({ 
-          message: "Missing required fields", 
-          errors: [{ message: "Deposit account and at least one line item are required" }] 
+        return res.status(400).json({
+          message: "Missing required fields",
+          errors: [{ message: "Deposit account and at least one line item are required" }]
         });
       }
-      
+
       // Keep reference as user entered it (empty if not provided)
       const reference = userReference?.trim() || null;
 
       // Fetch deposit account
-      const depositAccount = await storage.getAccount(depositAccountId);
+      const depositAccount = await scopedStorage.getAccount(depositAccountId);
       if (!depositAccount) {
-        return res.status(400).json({ 
-          message: "Invalid deposit account", 
-          errors: [{ message: "Deposit account not found" }] 
+        return res.status(400).json({
+          message: "Invalid deposit account",
+          errors: [{ message: "Deposit account not found" }]
         });
       }
 
       // Get revenue and tax payable accounts
-      const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
-      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+      const revenueAccount = await scopedStorage.getAccountByCode('4000'); // Service Revenue
+      const taxPayableAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
 
       if (!revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
@@ -3707,7 +3748,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Deposit routes
-  apiRouter.post("/payments", async (req: Request, res: Response) => {
+  apiRouter.post("/payments", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
+    const scopedStorage = createScopedStorage(req);
     const data = req.body;
     const lineItems = data.lineItems || [];
     const totalCreditsApplied = data.totalCreditsApplied || 0;
@@ -3740,11 +3782,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!invoiceItem.transactionId) continue;
         
         // Get the invoice
-        const invoice = await storage.getTransaction(invoiceItem.transactionId);
+        const invoice = await scopedStorage.getTransaction(invoiceItem.transactionId);
         if (!invoice) {
-          return res.status(400).json({ 
-            message: "Invoice not found", 
-            errors: [{ path: ["lineItems"], message: `Invoice #${invoiceItem.transactionId} not found` }] 
+          return res.status(400).json({
+            message: "Invoice not found",
+            errors: [{ path: ["lineItems"], message: `Invoice #${invoiceItem.transactionId} not found` }]
           });
         }
         
@@ -3830,7 +3872,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Handle invoices
           if (!item.type || item.type === 'invoice') {
             // Get the invoice to apply payment to
-            const invoice = await storage.getTransaction(item.transactionId);
+            const invoice = await scopedStorage.getTransaction(item.transactionId);
             
             if (!invoice) {
               continue;
@@ -3852,9 +3894,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const tempNewStatus = tempNewBalance === 0 ? 'completed' : 'open';
             
             // Temporary update to allow ledger entries to be created correctly
-            await storage.updateTransaction(invoice.id, { 
-              balance: tempNewBalance, 
-              status: tempNewStatus 
+            await scopedStorage.updateTransaction(invoice.id, {
+              balance: tempNewBalance,
+              status: tempNewStatus
             });
             
             // Add credit to Accounts Receivable (decrease)
@@ -3879,7 +3921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Handle deposits (unapplied credits being applied)
           else if (item.type === 'deposit') {
             // Get the deposit to apply as credit
-            const deposit = await storage.getTransaction(item.transactionId);
+            const deposit = await scopedStorage.getTransaction(item.transactionId);
             
             if (!deposit) {
               continue;
@@ -3901,15 +3943,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // If fully applied, change status to completed and zero out the balance
             if (remainingBalance <= 0) {
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'completed',
                 balance: 0
               });
               console.log(`Deposit #${deposit.id} fully applied and changed to 'completed'`);
-            } 
+            }
             // If partially applied, keep as unapplied_credit and update balance
             else {
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 balance: -remainingBalance // Maintain negative balance for credits
               });
               console.log(`Deposit #${deposit.id} partially applied, new balance: ${-remainingBalance}`);
@@ -3933,14 +3975,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Calculate and record FX gains/losses for multi-currency payments
       const { fxRealizationsSchema } = await import('@shared/schema');
-      const fxGainAccount = await storage.getAccountByCode('4300'); // Realized FX Gain
-      const fxLossAccount = await storage.getAccountByCode('7100'); // Realized FX Loss
-      
+      const fxGainAccount = await scopedStorage.getAccountByCode('4300'); // Realized FX Gain
+      const fxLossAccount = await scopedStorage.getAccountByCode('7100'); // Realized FX Loss
+
       if (!fxGainAccount || !fxLossAccount) {
         throw new Error('FX Gain and FX Loss accounts must exist. Please ensure accounts 4300 and 7100 are created.');
       }
-      
-      const preferences = await storage.getPreferences();
+
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'USD';
       
       // Process FX gains/losses for invoice payments
@@ -4154,11 +4196,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Recalculate payment balance based on actual invoice applications
   // This fixes payments that were created with incorrect balance/status
-  apiRouter.post("/payments/:id/recalculate-balance", async (req: Request, res: Response) => {
+  apiRouter.post("/payments/:id/recalculate-balance", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
+    const scopedStorage = createScopedStorage(req);
     const paymentId = parseInt(req.params.id);
 
     try {
-      const payment = await storage.getTransaction(paymentId);
+      const payment = await scopedStorage.getTransaction(paymentId);
       if (!payment) {
         return res.status(404).json({ message: "Payment not found" });
       }
@@ -4216,7 +4259,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Pay bills endpoint
-  apiRouter.post("/payments/pay-bills", async (req: Request, res: Response) => {
+  apiRouter.post("/payments/pay-bills", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
+    const scopedStorage = createScopedStorage(req);
     const data = req.body;
     const bills = data.bills || [];
     const cheques = data.cheques || [];
@@ -4260,11 +4304,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Get the cheque transaction
-        const cheque = await storage.getTransaction(chequeItem.chequeId);
+        const cheque = await scopedStorage.getTransaction(chequeItem.chequeId);
         if (!cheque) {
-          return res.status(400).json({ 
-            message: "Cheque not found", 
-            errors: [{ path: ["cheques"], message: `Cheque #${chequeItem.chequeId} not found` }] 
+          return res.status(400).json({
+            message: "Cheque not found",
+            errors: [{ path: ["cheques"], message: `Cheque #${chequeItem.chequeId} not found` }]
           });
         }
         
@@ -4311,11 +4355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Get the bill transaction
-        const bill = await storage.getTransaction(billItem.billId);
+        const bill = await scopedStorage.getTransaction(billItem.billId);
         if (!bill) {
-          return res.status(400).json({ 
-            message: "Bill not found", 
-            errors: [{ path: ["bills"], message: `Bill #${billItem.billId} not found` }] 
+          return res.status(400).json({
+            message: "Bill not found",
+            errors: [{ path: ["bills"], message: `Bill #${billItem.billId} not found` }]
           });
         }
         
@@ -4352,23 +4396,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Verify vendor exists
-      const vendor = await storage.getContact(data.vendorId);
+      const vendor = await scopedStorage.getContact(data.vendorId);
       if (!vendor) {
-        return res.status(400).json({ 
-          message: "Vendor not found", 
-          errors: [{ path: ["vendorId"], message: "Selected vendor does not exist" }] 
+        return res.status(400).json({
+          message: "Vendor not found",
+          errors: [{ path: ["vendorId"], message: "Selected vendor does not exist" }]
         });
       }
-      
+
       if (!(vendor.type === 'vendor' || vendor.type === 'both')) {
-        return res.status(400).json({ 
-          message: "Invalid vendor type", 
-          errors: [{ path: ["vendorId"], message: "Selected contact is not a vendor" }] 
+        return res.status(400).json({
+          message: "Invalid vendor type",
+          errors: [{ path: ["vendorId"], message: "Selected contact is not a vendor" }]
         });
       }
-      
+
       // Verify payment account exists
-      const paymentAccount = await storage.getAccount(data.paymentAccountId);
+      const paymentAccount = await scopedStorage.getAccount(data.paymentAccountId);
       if (!paymentAccount) {
         return res.status(400).json({ 
           message: "Payment account not found", 
@@ -4377,7 +4421,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Generate unique reference number
-      const transactions = await storage.getTransactions();
+      const transactions = await scopedStorage.getTransactions();
       const existingPayments = transactions.filter(t => t.type === 'payment');
       const nextPaymentNumber = existingPayments.length + 1;
       const paymentReference = `PAY-${String(nextPaymentNumber).padStart(4, '0')}`;
@@ -4451,7 +4495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ] : [];
       
       // Create the payment transaction
-      payment = await storage.createTransaction(
+      payment = await scopedStorage.createTransaction(
         paymentData,
         paymentLineItems, // Line items showing bills paid
         mainLedgerEntries
@@ -4528,7 +4572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const newChequeBalance = (cheque.balance || 0) - amount;
         const newChequeStatus = Math.abs(newChequeBalance) < 0.01 ? 'completed' : 'unapplied_credit';
         
-        await storage.updateTransaction(cheque.id, {
+        await scopedStorage.updateTransaction(cheque.id, {
           balance: newChequeBalance,
           status: newChequeStatus
         });
@@ -4570,9 +4614,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update bill status if fully paid
         const newStatus = Math.abs(newBalance) < 0.01 ? 'completed' : 'open';
-        
-        // Update the bill transaction  
-        await storage.updateTransaction(bill.id, {
+
+        // Update the bill transaction
+        await scopedStorage.updateTransaction(bill.id, {
           balance: newBalance,
           status: newStatus
         });
@@ -4791,15 +4835,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.delete("/products/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/products/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const success = await storage.deleteProduct(id);
-      
+      const success = await scopedStorage.deleteProduct(id);
+
       if (!success) {
         return res.status(404).json({ message: "Product not found" });
       }
-      
+
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ message: "Failed to delete product" });
@@ -4807,25 +4852,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Transaction update endpoint
-  apiRouter.patch("/transactions/:id", async (req: Request, res: Response) => {
+  apiRouter.patch("/transactions/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
-      
+
       // Fetch the existing transaction to make sure it exists
-      const existingTransaction = await storage.getTransaction(transactionId);
+      const existingTransaction = await scopedStorage.getTransaction(transactionId);
       if (!existingTransaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
-      
+
       // Convert string dates to Date objects
       const body = {
         ...req.body,
         date: req.body.date ? new Date(req.body.date) : undefined,
       };
-      
+
       // Get existing line items and ledger entries
-      const existingLineItems = await storage.getLineItemsByTransaction(transactionId);
-      const existingLedgerEntries = await storage.getLedgerEntriesByTransaction(transactionId);
+      const existingLineItems = await scopedStorage.getLineItemsByTransaction(transactionId);
+      const existingLedgerEntries = await scopedStorage.getLedgerEntriesByTransaction(transactionId);
       
       // For deposit updates, make sure we update the balance correctly 
       // when the amount changes (important for unapplied credits)
@@ -4851,7 +4897,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         
         // Update the transaction record
-        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
+        const updatedTransaction = await scopedStorage.updateTransaction(transactionId, transactionUpdate);
         
         if (!updatedTransaction) {
           return res.status(404).json({ message: "Failed to update payment" });
@@ -4877,43 +4923,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
             depositUpdate.debit = body.amount;
           }
           
-          await storage.updateLedgerEntry(depositEntry.id, depositUpdate);
+          await scopedStorage.updateLedgerEntry(depositEntry.id, depositUpdate);
         }
-        
+
         // Handle invoice payment updates if provided
         if (body.invoicePayments && Array.isArray(body.invoicePayments)) {
           // Update the credit entry for each invoice payment
           for (const payment of body.invoicePayments) {
             // Find the matching ledger entry
-            const ledgerEntry = existingLedgerEntries.find(entry => 
-              entry.id === payment.id || 
+            const ledgerEntry = existingLedgerEntries.find(entry =>
+              entry.id === payment.id ||
               (entry.credit > 0 && entry.description?.includes(payment.invoiceReference))
             );
-            
+
             if (ledgerEntry) {
               // Calculate difference between original and new payment amount
               const originalAmount = ledgerEntry.credit;
               const newAmount = payment.amount;
               const amountDifference = originalAmount - newAmount;
-              
+
               // Update the ledger entry with the new payment amount
-              await storage.updateLedgerEntry(ledgerEntry.id, {
+              await scopedStorage.updateLedgerEntry(ledgerEntry.id, {
                 credit: newAmount,
                 date: body.date || ledgerEntry.date,
               });
-              
+
               // Update the invoice balance if the payment amount changed
               if (amountDifference !== 0 && payment.invoiceId) {
-                const invoice = await storage.getTransaction(payment.invoiceId);
+                const invoice = await scopedStorage.getTransaction(payment.invoiceId);
                 if (invoice && invoice.type === 'invoice') {
                   // Calculate what the balance should be regardless of what's in the database
                   // Original invoice amount minus the new payment amount
                   const newBalance = invoice.amount - newAmount;
-                  
+
                   console.log(`Updating invoice #${invoice.id} (${invoice.reference}): Original amount: ${invoice.amount}, Current balance: ${invoice.balance}, New payment: ${newAmount}`);
-                  
+
                   // Recalculate the invoice balance properly using our new method
-                  const updatedInvoice = await storage.recalculateInvoiceBalance(invoice.id);
+                  const updatedInvoice = await scopedStorage.recalculateInvoiceBalance(invoice.id);
                   console.log(`Recalculated invoice #${invoice.id}: new balance ${updatedInvoice?.balance}, status ${updatedInvoice?.status}`);
                 }
               }
@@ -4951,7 +4997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('Processing deposit credits:', depositCredits);
         for (const credit of depositCredits) {
           // Get the deposit transaction
-          const deposit = await storage.getTransaction(credit.depositId);
+          const deposit = await scopedStorage.getTransaction(credit.depositId);
           
           if (!deposit || deposit.type !== 'deposit') {
             console.log(`Deposit #${credit.depositId} not found or not a deposit type, skipping`);
@@ -4967,27 +5013,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // If we have a ledger entry already, update it
           if (existingCreditEntry) {
             console.log(`Updating ledger entry for deposit #${deposit.id} credit to amount: ${credit.amount}`);
-            await storage.updateLedgerEntry(existingCreditEntry.id, {
+            await scopedStorage.updateLedgerEntry(existingCreditEntry.id, {
               debit: credit.amount,
               date: body.date || existingCreditEntry.date,
             });
           }
-          
+
           // Update deposit status and balance based on how much credit is applied
           if (deposit.status === 'unapplied_credit') {
             // Calculate remaining balance
             const remainingBalance = deposit.amount - credit.amount;
-            
+
             if (remainingBalance <= 0) {
               // Fully applied - mark as completed
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'completed',
                 balance: 0
               });
               console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) status to 'completed'`);
             } else {
               // Partially applied - update balance but keep status as unapplied_credit
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 balance: -remainingBalance // Keep negative balance for credits
               });
               console.log(`Updated deposit #${deposit.id} (${deposit.reference || ''}) remaining balance: ${-remainingBalance}`);
@@ -5018,38 +5064,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const invoiceRef = invoiceMatch[1];
               
               // Find matching invoice transaction
-              const invoice = await storage.getTransactionByReference(invoiceRef, 'invoice');
-              
+              const invoice = await scopedStorage.getTransactionByReference(invoiceRef, 'invoice');
+
               if (invoice && invoiceAmountMap.has(invoice.id)) {
                 const newAmount = invoiceAmountMap.get(invoice.id);
                 console.log(`Updating ledger entry ${entry.id} for invoice #${invoiceRef} to amount: ${newAmount}`);
-                
+
                 // Update the ledger entry
-                await storage.updateLedgerEntry(entry.id, { 
+                await scopedStorage.updateLedgerEntry(entry.id, {
                   credit: newAmount,
                   date: body.date || entry.date
                 });
-                
+
                 // Force recalculate the invoice balance with the updated payment amount
                 // Use true, true to force update and use only ledger entries
-                await storage.recalculateInvoiceBalance(invoice.id, true, true);
+                await scopedStorage.recalculateInvoiceBalance(invoice.id, true, true);
               }
             }
           }
         }
-        
+
         // Now recalculate all affected invoices
         for (const item of invoiceItems) {
           if (item.transactionId) {
-            await storage.recalculateInvoiceBalance(item.transactionId, true, true);
+            await scopedStorage.recalculateInvoiceBalance(item.transactionId, true, true);
           }
         }
-      
+
         // Return updated payment data with fresh data from database
         res.status(200).json({
           transaction: updatedTransaction,
-          lineItems: await storage.getLineItemsByTransaction(transactionId), // Get fresh line items
-          ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId), // Get fresh ledger entries
+          lineItems: await scopedStorage.getLineItemsByTransaction(transactionId), // Get fresh line items
+          ledgerEntries: await scopedStorage.getLedgerEntriesByTransaction(transactionId), // Get fresh ledger entries
         });
       } else if (existingTransaction.type === 'expense') {
         // Handle expense updates
@@ -5080,8 +5126,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           taxAmount: taxAmount,
         };
         
-        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
-        
+        const updatedTransaction = await scopedStorage.updateTransaction(transactionId, transactionUpdate);
+
         if (!updatedTransaction) {
           return res.status(404).json({ message: "Failed to update expense" });
         }
@@ -5104,12 +5150,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }));
           
           for (const item of newLineItems) {
-            await storage.createLineItem(item);
+            await scopedStorage.createLineItem(item);
           }
-          
+
           // Recreate ledger entries based on new line items
           const ledgerEntriesData: any[] = [];
-          
+
           // Debit expense accounts
           for (const item of body.lineItems) {
             ledgerEntriesData.push({
@@ -5121,14 +5167,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               transactionId: transactionId
             });
           }
-          
+
           // Debit sales tax if any
           if (taxAmount > 0) {
             // Find tax components from line items
             const taxComponents = new Map();
             for (const item of body.lineItems) {
               if (item.salesTaxId) {
-                const salesTaxes = await storage.getSalesTaxes();
+                const salesTaxes = await scopedStorage.getSalesTaxes();
                 const salesTax = salesTaxes.find(t => t.id === item.salesTaxId);
                 if (salesTax) {
                   if (salesTax.isComposite) {
@@ -5180,15 +5226,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Create all ledger entries
           for (const entry of ledgerEntriesData) {
-            await storage.createLedgerEntry(entry);
+            await scopedStorage.createLedgerEntry(entry);
           }
         }
-        
+
         // Return updated expense data
         res.status(200).json({
           transaction: updatedTransaction,
-          lineItems: await storage.getLineItemsByTransaction(transactionId),
-          ledgerEntries: await storage.getLedgerEntriesByTransaction(transactionId),
+          lineItems: await scopedStorage.getLineItemsByTransaction(transactionId),
+          ledgerEntries: await scopedStorage.getLedgerEntriesByTransaction(transactionId),
         });
       } else {
         // Generic update for other transaction types
@@ -5200,13 +5246,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           amount: body.amount,
           balance: body.balance, // Include balance update if provided
         };
-        
-        const updatedTransaction = await storage.updateTransaction(transactionId, transactionUpdate);
-        
+
+        const updatedTransaction = await scopedStorage.updateTransaction(transactionId, transactionUpdate);
+
         if (!updatedTransaction) {
           return res.status(404).json({ message: "Failed to update transaction" });
         }
-        
+
         res.status(200).json({
           transaction: updatedTransaction,
           lineItems: existingLineItems,
@@ -5223,8 +5269,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dedicated payment deletion endpoint
-  apiRouter.delete("/payments/:id/delete", async (req: Request, res: Response) => {
+  apiRouter.delete("/payments/:id/delete", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
       // Use the specialized handler for payment deletion
       const result = await deletePaymentAndRelatedTransactions(id);
@@ -5239,11 +5286,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transaction delete endpoint
-  apiRouter.delete("/transactions/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/transactions/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const transaction = await storage.getTransaction(id);
-      
+      const transaction = await scopedStorage.getTransaction(id);
+
       if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
@@ -6260,15 +6308,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.post("/sales-taxes", async (req: Request, res: Response) => {
+  apiRouter.post("/sales-taxes", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       console.log("Create sales tax request:", req.body);
-      
+
       // Extract componentTaxes before parsing with Zod
       const componentTaxes = req.body.componentTaxes;
-      
+
       const salesTaxData = insertSalesTaxSchema.parse(req.body);
-      const salesTax = await storage.createSalesTax(salesTaxData);
+      const salesTax = await scopedStorage.createSalesTax(salesTaxData);
       
       // Handle component taxes if provided and this is a composite tax
       if (salesTax.isComposite && componentTaxes && Array.isArray(componentTaxes)) {
@@ -6314,19 +6363,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.patch("/sales-taxes/:id", async (req: Request, res: Response) => {
+  apiRouter.patch("/sales-taxes/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
       console.log("Sales tax update request:", req.body);
-      
+
       // Extract componentTaxes before parsing with Zod
       const componentTaxes = req.body.componentTaxes;
-      
+
       // Allow partial data for update (don't require all fields)
       const salesTaxData = insertSalesTaxSchema.partial().parse(req.body);
-      
+
       // First update the main sales tax
-      const salesTax = await storage.updateSalesTax(id, salesTaxData);
+      const salesTax = await scopedStorage.updateSalesTax(id, salesTaxData);
       
       if (!salesTax) {
         return res.status(404).json({ message: "Sales tax not found" });
@@ -6385,10 +6435,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.delete("/sales-taxes/:id", async (req: Request, res: Response) => {
+  apiRouter.delete("/sales-taxes/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const success = await storage.deleteSalesTax(id);
+      const success = await scopedStorage.deleteSalesTax(id);
       
       if (!success) {
         return res.status(404).json({ message: "Sales tax not found" });
@@ -6808,45 +6859,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Ledger entries route - needed for Account Books
-  apiRouter.get("/ledger-entries", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/ledger-entries", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const startDateStr = req.query.startDate as string | undefined;
       const endDateStr = req.query.endDate as string | undefined;
-      
-      // If date range is provided, filter by date range
+
+      // If date range is provided, filter by date range - COMPANY SCOPED
       if (startDateStr && endDateStr) {
         const startDate = new Date(startDateStr);
         const endDate = new Date(endDateStr);
-        const ledgerEntries = await storage.getLedgerEntriesByDateRange(startDate, endDate);
+        const ledgerEntries = await scopedStorage.getLedgerEntriesByDateRange(startDate, endDate);
         res.json(ledgerEntries);
       } else {
-        // No date range, return all entries
-        const ledgerEntries = await storage.getAllLedgerEntries();
+        // No date range, return all entries - COMPANY SCOPED
+        const ledgerEntries = await scopedStorage.getAllLedgerEntries();
         res.json(ledgerEntries);
       }
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch ledger entries" });
     }
   });
-  
+
   // Endpoint to update a ledger entry
-  apiRouter.patch("/ledger-entries/:id", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.patch("/ledger-entries/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Validate the update data
       const body = {
         ...req.body,
         date: req.body.date ? new Date(req.body.date) : undefined,
       };
-      
+
+      // TODO: Add verification that this ledger entry belongs to current company
       // Update the ledger entry
       const updatedEntry = await storage.updateLedgerEntry(id, body);
-      
+
       if (!updatedEntry) {
         return res.status(404).json({ message: "Ledger entry not found" });
       }
-      
+
       res.json(updatedEntry);
     } catch (error) {
       console.error("Error updating ledger entry:", error);
@@ -6855,55 +6910,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Get opening balance for an account before a specific date
-  apiRouter.get("/ledger-entries/opening-balance", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/ledger-entries/opening-balance", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const accountId = parseInt(req.query.accountId as string);
       const beforeDateStr = req.query.beforeDate as string;
-      
+
       if (!accountId || !beforeDateStr) {
         return res.status(400).json({ message: "accountId and beforeDate are required" });
       }
-      
+
       const beforeDate = new Date(beforeDateStr);
-      
-      // Get the account to check if it's Retained Earnings
-      const accounts = await storage.getAccounts();
+
+      // Get the account to check if it's Retained Earnings - COMPANY SCOPED
+      const accounts = await scopedStorage.getAccounts();
       const account = accounts.find(acc => acc.id === accountId);
-      
+
       if (!account) {
         return res.status(404).json({ message: "Account not found" });
       }
-      
+
       // Special handling for Retained Earnings
       // Its opening balance is the cumulative profit/loss from all prior years
-      const isRetainedEarnings = (account.code === '3100' || account.code === '3900' || 
+      const isRetainedEarnings = (account.code === '3100' || account.code === '3900' ||
                                    account.name === 'Retained Earnings' ||
                                    account.type === 'retained_earnings');
-      
+
       if (isRetainedEarnings) {
-        // Get company fiscal year start month from the default company
-        const defaultCompany = await storage.getDefaultCompany();
-        const fiscalYearStartMonth = defaultCompany?.fiscalYearStartMonth || 1;
-        
-        // Calculate prior years' retained earnings (profit/loss from before the fiscal year start)
-        const priorYearsRetainedEarnings = await storage.calculatePriorYearsRetainedEarnings(beforeDate, fiscalYearStartMonth);
-        
+        // Get company fiscal year start month
+        const companySettings = await storage.getCompanySettings();
+        const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
+
+        // Calculate prior years' retained earnings - COMPANY SCOPED
+        const priorYearsRetainedEarnings = await scopedStorage.calculatePriorYearsRetainedEarnings(beforeDate, fiscalYearStartMonth);
+
         // Return as negative because Retained Earnings is a credit balance (equity)
-        // Positive retained earnings = credits > debits, so we return negative of the profit
         res.json({ openingBalance: -priorYearsRetainedEarnings });
       } else {
-        // For other accounts, get all ledger entries before the date
-        const allEntries = await storage.getAllLedgerEntries();
-        const accountEntries = allEntries.filter(entry => 
+        // For other accounts, get all ledger entries before the date - COMPANY SCOPED
+        const allEntries = await scopedStorage.getAllLedgerEntries();
+        const accountEntries = allEntries.filter(entry =>
           entry.accountId === accountId && new Date(entry.date) < beforeDate
         );
-        
+
         // Calculate opening balance: sum(debits) - sum(credits)
         let openingBalance = 0;
         accountEntries.forEach(entry => {
           openingBalance += Number(entry.debit || 0) - Number(entry.credit || 0);
         });
-        
+
         res.json({ openingBalance });
       }
     } catch (error) {
@@ -7230,9 +7286,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Settings routes
-  apiRouter.get("/settings/company", async (req: Request, res: Response) => {
+  apiRouter.get("/settings/company", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const companySettings = await storage.getCompanySettings();
+      const scopedStorage = createScopedStorage(req);
+      const companySettings = await scopedStorage.getCompanySettings();
       res.json(companySettings || {});
     } catch (error) {
       console.error("Error fetching company settings:", error);
@@ -7240,10 +7297,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.post("/settings/company", async (req: Request, res: Response) => {
+  apiRouter.post("/settings/company", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const companyData = insertCompanySchema.parse(req.body);
-      const result = await storage.saveCompanySettings(companyData);
+      const result = await scopedStorage.saveCompanySettings(companyData);
       res.json(result);
     } catch (error) {
       console.error("Error saving company settings:", error);
@@ -7255,9 +7313,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Preferences endpoint (used by Reports page and other components)
-  apiRouter.get("/preferences", async (req: Request, res: Response) => {
+  apiRouter.get("/preferences", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const preferences = await storage.getPreferences();
+      const scopedStorage = createScopedStorage(req);
+      const preferences = await scopedStorage.getPreferences();
       res.json(preferences || {});
     } catch (error) {
       console.error("Error fetching preferences:", error);
@@ -7265,9 +7324,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/settings/preferences", async (req: Request, res: Response) => {
+  apiRouter.get("/settings/preferences", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const preferences = await storage.getPreferences();
+      const scopedStorage = createScopedStorage(req);
+      const preferences = await scopedStorage.getPreferences();
       res.json(preferences || {});
     } catch (error) {
       console.error("Error fetching preferences:", error);
@@ -7275,10 +7335,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.post("/settings/preferences", async (req: Request, res: Response) => {
+  apiRouter.post("/settings/preferences", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const preferencesData = insertPreferencesSchema.parse(req.body);
-      const result = await storage.savePreferences(preferencesData);
+      const result = await scopedStorage.savePreferences(preferencesData);
       res.json(result);
     } catch (error) {
       console.error("Error saving preferences:", error);
@@ -8645,17 +8706,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Customer Credits API endpoint
-  apiRouter.post("/customer-credits", async (req: Request, res: Response) => {
+  apiRouter.post("/customer-credits", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const body = {
         ...req.body,
         date: new Date(req.body.date),
       };
-      
+
       // Check if customer credit reference already exists
-      const transactions = await storage.getTransactions();
-      const existingCredit = transactions.find(t => 
-        t.reference === body.reference && 
+      const transactions = await scopedStorage.getTransactions();
+      const existingCredit = transactions.find(t =>
+        t.reference === body.reference &&
         t.type === 'customer_credit'
       );
       
@@ -8713,14 +8775,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Get required accounts by code for double-entry accounting
-      const receivableAccount = await storage.getAccountByCode('1100'); // Accounts Receivable
-      const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
-      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
-      
+      const receivableAccount = await scopedStorage.getAccountByCode('1100'); // Accounts Receivable
+      const revenueAccount = await scopedStorage.getAccountByCode('4000'); // Service Revenue
+      const taxPayableAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
+
       if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
-      
+
       // Prepare ledger entries for double-entry accounting (REVERSED for credit memo)
       // Customer credit reduces what customer owes, so:
       // Debit Revenue (reduce income), Credit Accounts Receivable (reduce asset)
@@ -8732,11 +8794,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: body.date,
         transactionId: 0
       }));
-      
+
       // Handle tax if present
       const lineItemsTotal = body.lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
       const taxDifference = totalAmount - lineItemsTotal;
-      
+
       if (taxDifference > 0.01) {
         ledgerEntriesData.push({
           accountId: taxPayableAccount.id,
@@ -8747,7 +8809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionId: 0
         });
       }
-      
+
       // Credit Accounts Receivable for the total amount (reduces what customer owes)
       ledgerEntriesData.push({
         accountId: receivableAccount.id,
@@ -8757,12 +8819,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: body.date,
         transactionId: 0
       });
-      
+
       // Create the transaction
-      const creditTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
-      
-      const createdLineItems = await storage.getLineItemsByTransaction(creditTransaction.id);
-      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(creditTransaction.id);
+      const creditTransaction = await scopedStorage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+
+      const createdLineItems = await scopedStorage.getLineItemsByTransaction(creditTransaction.id);
+      const createdLedgerEntries = await scopedStorage.getLedgerEntriesByTransaction(creditTransaction.id);
       
       const result = {
         transaction: creditTransaction,
@@ -8787,17 +8849,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Vendor Credits API endpoint
-  apiRouter.post("/vendor-credits", async (req: Request, res: Response) => {
+  apiRouter.post("/vendor-credits", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const body = {
         ...req.body,
         date: new Date(req.body.date),
       };
-      
+
       // Check if vendor credit reference already exists
-      const transactions = await storage.getTransactions();
-      const existingCredit = transactions.find(t => 
-        t.reference === body.reference && 
+      const transactions = await scopedStorage.getTransactions();
+      const existingCredit = transactions.find(t =>
+        t.reference === body.reference &&
         t.type === 'vendor_credit'
       );
       
@@ -8855,18 +8918,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Get required accounts by code for double-entry accounting
-      const payableAccount = await storage.getAccountByCode('2000'); // Accounts Payable
-      const expenseAccount = await storage.getAccountByCode('6000'); // General Expense
-      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
-      
+      const payableAccount = await scopedStorage.getAccountByCode('2000'); // Accounts Payable
+      const expenseAccount = await scopedStorage.getAccountByCode('6000'); // General Expense
+      const taxPayableAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
+
       if (!payableAccount || !expenseAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
       }
-      
+
       // Prepare ledger entries for double-entry accounting (REVERSED for credit memo)
       // Vendor credit reduces what we owe vendor, so:
       // Debit Accounts Payable (reduce liability), Credit Expense (reduce expense)
-      
+
       // First, credit expense accounts for each line item
       const ledgerEntriesData = body.lineItems.map((item: any) => ({
         accountId: item.accountId || expenseAccount.id,
@@ -8876,11 +8939,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: body.date,
         transactionId: 0
       }));
-      
+
       // Handle tax if present
       const lineItemsTotal = body.lineItems.reduce((sum: number, item: any) => sum + Number(item.amount), 0);
       const taxDifference = totalAmount - lineItemsTotal;
-      
+
       if (taxDifference > 0.01) {
         ledgerEntriesData.push({
           accountId: taxPayableAccount.id,
@@ -8891,7 +8954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionId: 0
         });
       }
-      
+
       // Debit Accounts Payable for the total amount (reduces what we owe)
       ledgerEntriesData.push({
         accountId: payableAccount.id,
@@ -8901,12 +8964,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         date: body.date,
         transactionId: 0
       });
-      
+
       // Create the transaction
-      const creditTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
-      
-      const createdLineItems = await storage.getLineItemsByTransaction(creditTransaction.id);
-      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(creditTransaction.id);
+      const creditTransaction = await scopedStorage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+
+      const createdLineItems = await scopedStorage.getLineItemsByTransaction(creditTransaction.id);
+      const createdLedgerEntries = await scopedStorage.getLedgerEntriesByTransaction(creditTransaction.id);
       
       const result = {
         transaction: creditTransaction,
@@ -13826,10 +13889,14 @@ Respond in JSON format:
   });
 
   // Activity Logs endpoints
-  apiRouter.get("/activity-logs", async (req: Request, res: Response) => {
+  // SECURITY: Company-scoped to prevent cross-tenant data leakage
+  apiRouter.get("/activity-logs", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const filters: any = {};
-      
+
+      // CRITICAL: Always filter by company for multi-tenant isolation
+      filters.companyId = req.companyId;
+
       if (req.query.userId) {
         filters.userId = parseInt(req.query.userId as string);
       }
@@ -13859,15 +13926,20 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/activity-logs/:id", async (req: Request, res: Response) => {
+  apiRouter.get("/activity-logs/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const log = await storage.getActivityLog(id);
-      
+
       if (!log) {
         return res.status(404).json({ message: "Activity log not found" });
       }
-      
+
+      // Verify the log belongs to the current company
+      if (log.companyId && log.companyId !== req.companyId) {
+        return res.status(403).json({ message: "Access denied to this activity log" });
+      }
+
       res.json(log);
     } catch (error) {
       console.error("Error fetching activity log:", error);

@@ -626,6 +626,7 @@ export const rolePermissionsSchema = pgTable('role_permissions', {
 export const activityLogsSchema = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   userId: integer('user_id').references(() => usersSchema.id),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation
   action: text('action').notNull(), // e.g., "created", "updated", "deleted", "logged_in"
   entityType: text('entity_type'), // e.g., "invoice", "account", "customer", "payment"
   entityId: integer('entity_id'), // ID of the entity affected

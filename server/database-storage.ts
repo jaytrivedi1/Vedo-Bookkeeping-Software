@@ -3921,6 +3921,7 @@ export class DatabaseStorage implements IStorage {
   // Activity Logs
   async getActivityLogs(filters?: {
     userId?: number;
+    companyId?: number; // Company isolation filter
     entityType?: string;
     dateFrom?: Date;
     dateTo?: Date;
@@ -3933,6 +3934,10 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
     if (filters?.userId) {
       conditions.push(eq(activityLogsSchema.userId, filters.userId));
+    }
+    // CRITICAL: Filter by companyId for multi-tenant isolation
+    if (filters?.companyId) {
+      conditions.push(eq(activityLogsSchema.companyId, filters.companyId));
     }
     if (filters?.entityType) {
       conditions.push(eq(activityLogsSchema.entityType, filters.entityType));
