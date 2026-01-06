@@ -378,6 +378,20 @@ export class CompanyScopedStorage {
     return this.storage.getDashboardMetrics(this.companyId);
   }
 
+  // ============ ACCOUNTING HELPERS ============
+
+  async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    return this.storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth, this.companyId);
+  }
+
+  async calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+    return this.storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth, this.companyId);
+  }
+
+  async getLedgerEntriesUpToDate(asOfDate: Date): Promise<any[]> {
+    return this.storage.getLedgerEntriesUpToDateByCompany(asOfDate, this.companyId);
+  }
+
   // ============ BANK CONNECTIONS ============
 
   async getBankConnections(): Promise<BankConnection[]> {

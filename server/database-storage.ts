@@ -2462,30 +2462,61 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+  async calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number, companyId?: number): Promise<number> {
     const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
-    
-    const result = await db
-      .select({
-        accountType: accounts.type,
-        totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
-        totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
-      })
-      .from(ledgerEntries)
-      .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
-      .where(
-        and(
-          lt(ledgerEntries.date, fiscalYearStart),
-          or(
-            eq(accounts.type, 'income'),
-            eq(accounts.type, 'other_income'),
-            eq(accounts.type, 'expenses'),
-            eq(accounts.type, 'cost_of_goods_sold'),
-            eq(accounts.type, 'other_expense')
-          )
-        )
+
+    // Build conditions array
+    const conditions = [
+      lt(ledgerEntries.date, fiscalYearStart),
+      or(
+        eq(accounts.type, 'income'),
+        eq(accounts.type, 'other_income'),
+        eq(accounts.type, 'expenses'),
+        eq(accounts.type, 'cost_of_goods_sold'),
+        eq(accounts.type, 'other_expense')
       )
-      .groupBy(accounts.type);
+    ];
+
+    // Add company filter if companyId provided (join through transactions)
+    if (companyId) {
+      conditions.push(eq(transactions.companyId, companyId));
+    }
+
+    const query = companyId
+      ? db
+          .select({
+            accountType: accounts.type,
+            totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+            totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+          })
+          .from(ledgerEntries)
+          .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+          .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+          .where(and(...conditions))
+          .groupBy(accounts.type)
+      : db
+          .select({
+            accountType: accounts.type,
+            totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+            totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+          })
+          .from(ledgerEntries)
+          .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+          .where(
+            and(
+              lt(ledgerEntries.date, fiscalYearStart),
+              or(
+                eq(accounts.type, 'income'),
+                eq(accounts.type, 'other_income'),
+                eq(accounts.type, 'expenses'),
+                eq(accounts.type, 'cost_of_goods_sold'),
+                eq(accounts.type, 'other_expense')
+              )
+            )
+          )
+          .groupBy(accounts.type);
+
+    const result = await query;
 
     let revenues = 0;
     let expenses = 0;
@@ -2508,31 +2539,46 @@ export class DatabaseStorage implements IStorage {
     return revenues - expenses;
   }
 
-  async calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number> {
+  async calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number, companyId?: number): Promise<number> {
     const { fiscalYearStart } = getFiscalYearBounds(asOfDate, fiscalYearStartMonth);
-    
-    const result = await db
-      .select({
-        accountType: accounts.type,
-        totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
-        totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
-      })
-      .from(ledgerEntries)
-      .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
-      .where(
-        and(
-          gte(ledgerEntries.date, fiscalYearStart),
-          lte(ledgerEntries.date, asOfDate),
-          or(
-            eq(accounts.type, 'income'),
-            eq(accounts.type, 'other_income'),
-            eq(accounts.type, 'expenses'),
-            eq(accounts.type, 'cost_of_goods_sold'),
-            eq(accounts.type, 'other_expense')
-          )
-        )
+
+    // Build conditions array
+    const baseConditions = [
+      gte(ledgerEntries.date, fiscalYearStart),
+      lte(ledgerEntries.date, asOfDate),
+      or(
+        eq(accounts.type, 'income'),
+        eq(accounts.type, 'other_income'),
+        eq(accounts.type, 'expenses'),
+        eq(accounts.type, 'cost_of_goods_sold'),
+        eq(accounts.type, 'other_expense')
       )
-      .groupBy(accounts.type);
+    ];
+
+    const query = companyId
+      ? db
+          .select({
+            accountType: accounts.type,
+            totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+            totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+          })
+          .from(ledgerEntries)
+          .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+          .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+          .where(and(...baseConditions, eq(transactions.companyId, companyId)))
+          .groupBy(accounts.type)
+      : db
+          .select({
+            accountType: accounts.type,
+            totalDebit: sql<number>`COALESCE(SUM(${ledgerEntries.debit}), 0)`,
+            totalCredit: sql<number>`COALESCE(SUM(${ledgerEntries.credit}), 0)`,
+          })
+          .from(ledgerEntries)
+          .innerJoin(accounts, eq(ledgerEntries.accountId, accounts.id))
+          .where(and(...baseConditions))
+          .groupBy(accounts.type);
+
+    const result = await query;
 
     let revenues = 0;
     let expenses = 0;

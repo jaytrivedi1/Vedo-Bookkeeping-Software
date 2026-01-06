@@ -232,9 +232,9 @@ export interface IStorage {
     };
   }>;
   
-  // Accounting helpers for Retained Earnings and Net Income
-  calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;
-  calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number): Promise<number>;
+  // Accounting helpers for Retained Earnings and Net Income (companyId for data isolation)
+  calculatePriorYearsRetainedEarnings(asOfDate: Date, fiscalYearStartMonth: number, companyId?: number): Promise<number>;
+  calculateCurrentYearNetIncome(asOfDate: Date, fiscalYearStartMonth: number, companyId?: number): Promise<number>;
   
   // Companies
   getCompanies(): Promise<Company[]>;

@@ -41,23 +41,30 @@ const logoUpload = multer({
 });
 
 // Get companies for the authenticated user
+// SECURITY: Only returns companies where user has explicit user_companies assignment
 companyRouter.get("/", async (req: Request, res: Response) => {
   try {
     // Check if user is authenticated
     if (!req.isAuthenticated() || !req.user) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    
+
     const userId = req.user.id;
-    
-    // Get user's company assignments
+    const userEmail = req.user.email;
+
+    // Get user's company assignments from user_companies table
+    // This is the single source of truth for company access
     const userCompanies = await storage.getUserCompanies(userId);
-    
+
     // If user has no company assignments, return empty array
     if (userCompanies.length === 0) {
+      console.log(`[Company Access] User ${userEmail} (ID: ${userId}) has no company assignments`);
       return res.json([]);
     }
-    
+
+    // Log company access for audit trail (helpful for debugging multi-tenant issues)
+    console.log(`[Company Access] User ${userEmail} (ID: ${userId}) accessing ${userCompanies.length} company(ies): ${userCompanies.map(uc => uc.companyId).join(', ')}`);
+
     // Get the actual company objects for each assignment
     const companies = await Promise.all(
       userCompanies.map(async (uc) => {
@@ -65,10 +72,10 @@ companyRouter.get("/", async (req: Request, res: Response) => {
         return company;
       })
     );
-    
+
     // Filter out any null values (in case a company was deleted)
     const validCompanies = companies.filter(c => c !== null && c !== undefined);
-    
+
     res.json(validCompanies);
   } catch (error) {
     console.error("Error fetching companies:", error);

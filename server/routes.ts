@@ -6560,15 +6560,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // BALANCE SHEET RULE: Retained Earnings = ALL net income through as-of date
       // This includes prior periods + current period combined
-      const priorPeriodsNetIncome = await storage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
-      const currentPeriodNetIncome = await storage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
-      
+      // Use SCOPED storage to ensure company data isolation
+      const priorPeriodsNetIncome = await scopedStorage.calculatePriorYearsRetainedEarnings(asOfDate, fiscalYearStartMonth);
+      const currentPeriodNetIncome = await scopedStorage.calculateCurrentYearNetIncome(asOfDate, fiscalYearStartMonth);
+
       // Combined Retained Earnings for Balance Sheet (all net income through as-of date)
       const retainedEarnings = priorPeriodsNetIncome + currentPeriodNetIncome;
-      
-      // Get accounts and ledger entries up to the as-of date
-      const allAccounts = await storage.getAccounts();
-      const filteredLedgerEntries = await storage.getLedgerEntriesUpToDate(asOfDate);
+
+      // Get accounts and ledger entries up to the as-of date - COMPANY SCOPED
+      const allAccounts = await scopedStorage.getAccounts();
+      const filteredLedgerEntries = await scopedStorage.getLedgerEntriesUpToDate(asOfDate);
       
       // Recalculate account balances from filtered ledger entries
       const balanceMap = new Map<number, number>();
@@ -6686,9 +6687,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/reports/account-balances", async (req: Request, res: Response) => {
+  apiRouter.get("/reports/account-balances", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const accountBalances = await storage.getAccountBalances();
+      const scopedStorage = createScopedStorage(req);
+      const accountBalances = await scopedStorage.getAccountBalances();
       res.json(accountBalances);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch account balances" });
@@ -6703,14 +6705,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get company settings for fiscal year start month
       const companySettings = await storage.getCompanySettings();
       const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
-      
+
       // Get date parameters from query params
       const startDateStr = req.query.startDate as string | undefined;
       const asOfDateStr = req.query.asOfDate as string | undefined;
-      
+
       // Use provided dates or fallback to today
       const asOfDate = asOfDateStr ? new Date(asOfDateStr) : new Date();
-      
+
       // Determine fiscal year start date for income/expense accounts
       // If startDate is provided, use it; otherwise calculate from asOfDate
       let fiscalYearStartDate: Date;
@@ -6720,7 +6722,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Calculate fiscal year start based on asOfDate
         const year = asOfDate.getFullYear();
         const month = asOfDate.getMonth() + 1; // 1-12
-        
+
         // If current month is before fiscal year start month, we're in the previous calendar year's fiscal year
         if (month < fiscalYearStartMonth) {
           fiscalYearStartDate = new Date(year - 1, fiscalYearStartMonth - 1, 1);
@@ -6728,10 +6730,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fiscalYearStartDate = new Date(year, fiscalYearStartMonth - 1, 1);
         }
       }
-      
-      // Get trial balance using the proper method - NO synthetic adjustments
-      const trialBalanceData = await storage.getTrialBalance(asOfDate, fiscalYearStartDate);
-      
+
+      // Get trial balance using SCOPED storage - company isolated
+      const trialBalanceData = await scopedStorage.getTrialBalance(asOfDate, fiscalYearStartDate);
+
       // Transform to API response format
       const result = trialBalanceData.map(item => ({
         account: {
@@ -6745,27 +6747,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalDebits: item.totalDebits,
         totalCredits: item.totalCredits,
       }));
-      
+
       res.json(result);
     } catch (error) {
       console.error("Error generating trial balance:", error);
       res.status(500).json({ message: "Failed to generate trial balance" });
     }
   });
-  
-  // Cash Flow Statement report
-  apiRouter.get("/reports/cash-flow", async (req: Request, res: Response) => {
+
+  // Cash Flow Statement report - company-scoped
+  apiRouter.get("/reports/cash-flow", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Get date range from query params
       const startDateStr = req.query.startDate as string | undefined;
       const endDateStr = req.query.endDate as string | undefined;
-      
+
       const startDate = startDateStr ? new Date(startDateStr) : undefined;
       const endDate = endDateStr ? new Date(endDateStr) : undefined;
-      
-      // Get cash flow statement from storage
-      const cashFlowStatement = await storage.getCashFlowStatement(startDate, endDate);
-      
+
+      // Get cash flow statement using SCOPED storage
+      const cashFlowStatement = await scopedStorage.getCashFlowStatement(startDate, endDate);
+
       res.json(cashFlowStatement);
     } catch (error) {
       console.error("Error generating cash flow statement:", error);
