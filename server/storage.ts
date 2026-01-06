@@ -174,8 +174,11 @@ export interface IStorage {
   // Ledger Entries
   getLedgerEntriesByTransaction(transactionId: number): Promise<LedgerEntry[]>;
   getAllLedgerEntries(): Promise<LedgerEntry[]>;
+  getAllLedgerEntriesByCompany(companyId: number): Promise<any[]>;
   getLedgerEntriesUpToDate(asOfDate: Date): Promise<LedgerEntry[]>;
+  getLedgerEntriesUpToDateByCompany(asOfDate: Date, companyId: number): Promise<LedgerEntry[]>;
   getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]>;
+  getLedgerEntriesByDateRangeAndCompany(startDate: Date | undefined, endDate: Date | undefined, companyId: number): Promise<any[]>;
   createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry>;
   updateLedgerEntry(id: number, ledgerEntry: Partial<LedgerEntry>): Promise<LedgerEntry | undefined>;
 

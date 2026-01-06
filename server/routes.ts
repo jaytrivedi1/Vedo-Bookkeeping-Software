@@ -2395,11 +2395,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Create a new invoice
-  apiRouter.post("/invoices", async (req: Request, res: Response) => {
+  // Create a new invoice (company-scoped)
+  apiRouter.post("/invoices", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       console.log("Invoice payload:", JSON.stringify(req.body));
-      
+      const scopedStorage = createScopedStorage(req);
+
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
@@ -2408,18 +2409,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: req.body.status || 'open',
         description: req.body.description || ''
       };
-      
+
       // Check if transaction date is locked
       const lockCheck = await checkTransactionLocked(body.date);
       if (lockCheck.isLocked) {
-        return res.status(400).json({ 
-          message: "Transaction locked", 
-          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified` 
+        return res.status(400).json({
+          message: "Transaction locked",
+          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified`
         });
       }
-      
-      // Get all transactions for reference check and auto-numbering
-      const transactions = await storage.getTransactions();
+
+      // Get company-scoped transactions for reference check and auto-numbering
+      const transactions = await scopedStorage.getTransactions();
       
       // If reference not provided, generate the next invoice number by incrementing the highest existing number
       if (!req.body.reference) {
@@ -2866,10 +2867,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Expense routes
-  apiRouter.post("/expenses", async (req: Request, res: Response) => {
+  apiRouter.post("/expenses", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       console.log("Expense payload:", JSON.stringify(req.body));
-      
+      const scopedStorage = createScopedStorage(req);
+
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
@@ -2878,33 +2880,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: req.body.status || 'completed',
         description: req.body.description || ''
       };
-      
+
       // Check if transaction date is locked
       const lockCheck = await checkTransactionLocked(body.date);
       if (lockCheck.isLocked) {
-        return res.status(400).json({ 
-          message: "Transaction locked", 
-          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified` 
+        return res.status(400).json({
+          message: "Transaction locked",
+          error: `Transactions on or before ${lockCheck.lockDate?.toLocaleDateString()} cannot be created or modified`
         });
       }
-      
+
       // Validate expense data
       console.log("Validating expense data:", JSON.stringify(body));
       const result = expenseSchema.safeParse(body);
       if (!result.success) {
         console.log("Expense validation errors:", JSON.stringify(result.error));
-        return res.status(400).json({ 
-          message: "Invalid expense data", 
-          errors: result.error.errors 
+        return res.status(400).json({
+          message: "Invalid expense data",
+          errors: result.error.errors
         });
       }
-      
+
       const expenseData = result.data;
       console.log("Expense data passed validation:", JSON.stringify(expenseData));
-      
-      // Validate A/P and A/R account requirements
-      const accounts = await storage.getAccounts();
-      const contacts = await storage.getContacts();
+
+      // Validate A/P and A/R account requirements (company-scoped)
+      const accounts = await scopedStorage.getAccounts();
+      const contacts = await scopedStorage.getContacts();
       const { validateAccountContactRequirement, hasAccountsPayableOrReceivable } = await import('./accountValidation');
       
       const { hasAP, hasAR } = hasAccountsPayableOrReceivable(expenseData.lineItems, accounts);
@@ -2937,8 +2939,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const taxAmount = roundTo2Decimals(expenseData.taxAmount || 0);
       const totalAmount = roundTo2Decimals(expenseData.totalAmount || (subTotal + taxAmount));
       
-      // Get the payment account
-      const paymentAccount = await storage.getAccount(expenseData.paymentAccountId);
+      // Get the payment account (company-scoped)
+      const paymentAccount = await scopedStorage.getAccount(expenseData.paymentAccountId);
       if (!paymentAccount) {
         return res.status(400).json({ message: "Invalid payment account" });
       }
@@ -4593,14 +4595,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  apiRouter.post("/deposits", async (req: Request, res: Response) => {
+  apiRouter.post("/deposits", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
         date: new Date(req.body.date)
       };
-      
+
       // Check if using Accounts Receivable without a customer
       if (body.sourceAccountId === 2 && !body.contactId) {
         return res.status(400).json({
@@ -4611,7 +4614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }]
         });
       }
-      
+
       // Check if using Accounts Payable without a vendor
       if (body.sourceAccountId === 3 && !body.contactId) {
         return res.status(400).json({
@@ -4622,10 +4625,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }]
         });
       }
-      
-      // Verify contact type matches account type if provided
+
+      // Verify contact type matches account type if provided (company-scoped)
       if (body.contactId && (body.sourceAccountId === 2 || body.sourceAccountId === 3)) {
-        const contact = await storage.getContact(body.contactId);
+        const contact = await scopedStorage.getContact(body.contactId);
         
         if (!contact) {
           return res.status(400).json({
@@ -6406,20 +6409,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reports routes
-  apiRouter.get("/reports/income-statement", async (req: Request, res: Response) => {
+  apiRouter.get("/reports/income-statement", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Get date range from query params
       const startDateStr = req.query.startDate as string | undefined;
       const endDateStr = req.query.endDate as string | undefined;
-      
+
       const startDate = startDateStr ? new Date(startDateStr) : undefined;
       const endDate = endDateStr ? new Date(endDateStr) : undefined;
-      
-      // Get all accounts and ledger entries
-      const allAccounts = await storage.getAccounts();
-      const ledgerEntries = startDate && endDate 
-        ? await storage.getLedgerEntriesByDateRange(startDate, endDate)
-        : await storage.getAllLedgerEntries();
+
+      // Get company-scoped accounts and ledger entries
+      const allAccounts = await scopedStorage.getAccounts();
+      const ledgerEntries = startDate && endDate
+        ? await scopedStorage.getLedgerEntriesByDateRange(startDate, endDate)
+        : await scopedStorage.getAllLedgerEntries();
       
       // Calculate balance for each account from filtered ledger entries
       const balanceMap = new Map<number, number>();
@@ -6539,8 +6543,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  apiRouter.get("/reports/balance-sheet", async (req: Request, res: Response) => {
+  apiRouter.get("/reports/balance-sheet", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Get company settings for fiscal year start month
       const companySettings = await storage.getCompanySettings();
       const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
@@ -6688,8 +6693,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Trial Balance report - pure ledger entry sums, NO synthetic adjustments
   // This shows actual account balances from the ledger. Total debits must equal total credits.
-  apiRouter.get("/reports/trial-balance", async (req: Request, res: Response) => {
+  apiRouter.get("/reports/trial-balance", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Get company settings for fiscal year start month
       const companySettings = await storage.getCompanySettings();
       const fiscalYearStartMonth = companySettings?.fiscalYearStartMonth || 1;
@@ -8418,20 +8424,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Bills API endpoint
-  apiRouter.post("/bills", async (req: Request, res: Response) => {
+  // Bills API endpoint (company-scoped)
+  apiRouter.post("/bills", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Convert string dates to Date objects before validation
       const body = {
         ...req.body,
         date: new Date(req.body.date),
         dueDate: req.body.dueDate ? new Date(req.body.dueDate) : undefined
       };
-      
-      // Check if bill reference already exists
-      const transactions = await storage.getTransactions();
-      const existingBill = transactions.find(t => 
-        t.reference === body.reference && 
+
+      // Check if bill reference already exists (company-scoped)
+      const transactions = await scopedStorage.getTransactions();
+      const existingBill = transactions.find(t =>
+        t.reference === body.reference &&
         t.type === 'bill'
       );
       

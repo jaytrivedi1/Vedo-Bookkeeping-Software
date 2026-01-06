@@ -251,6 +251,14 @@ export class CompanyScopedStorage {
     return this.storage.getLedgerEntriesByTransaction(transactionId);
   }
 
+  async getAllLedgerEntries(): Promise<any[]> {
+    return this.storage.getAllLedgerEntriesByCompany(this.companyId);
+  }
+
+  async getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<any[]> {
+    return this.storage.getLedgerEntriesByDateRangeAndCompany(startDate, endDate, this.companyId);
+  }
+
   // ============ PRODUCTS ============
 
   async getProducts(): Promise<Product[]> {
