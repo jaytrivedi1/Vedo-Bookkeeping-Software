@@ -19,7 +19,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Building2, Users, MoreVertical, CheckCircle, XCircle, Search, Wifi, WifiOff, Globe, DollarSign, Unlink } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Building2, Users, MoreVertical, CheckCircle, XCircle, Search, Wifi, WifiOff, Globe, DollarSign, Unlink, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -93,6 +100,12 @@ export default function AdminDashboard() {
   const [companySearch, setCompanySearch] = useState("");
   const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState<{ id: number; name: string } | null>(null);
+
+  // User Companies Modal state
+  const [userCompaniesModalOpen, setUserCompaniesModalOpen] = useState(false);
+  const [selectedUserForCompanies, setSelectedUserForCompanies] = useState<AdminUser | null>(null);
+  const [removeCompanyDialogOpen, setRemoveCompanyDialogOpen] = useState(false);
+  const [companyToRemove, setCompanyToRemove] = useState<{ userId: number; companyId: number; companyName: string } | null>(null);
 
   // Fetch all users
   const { data: users = [], isLoading: usersLoading } = useQuery<AdminUser[]>({
@@ -171,10 +184,77 @@ export default function AdminDashboard() {
     setSelectedConnection(connection);
     setDisconnectDialogOpen(true);
   };
-  
+
   const confirmDisconnect = () => {
     if (selectedConnection) {
       disconnectBankFeed.mutate(selectedConnection.id);
+    }
+  };
+
+  // Remove user from company mutation
+  const removeUserFromCompany = useMutation({
+    mutationFn: async ({ userId, companyId }: { userId: number; companyId: number }) => {
+      return await apiRequest(`/api/user-companies/${userId}/${companyId}`, "DELETE");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Access Removed",
+        description: "User has been removed from the company successfully.",
+      });
+      setRemoveCompanyDialogOpen(false);
+      setCompanyToRemove(null);
+      // Refresh the selected user's data
+      if (selectedUserForCompanies) {
+        const updatedUsers = users.filter(u => u.id === selectedUserForCompanies.id);
+        if (updatedUsers.length > 0) {
+          setSelectedUserForCompanies({
+            ...selectedUserForCompanies,
+            companies: selectedUserForCompanies.companies.filter(
+              c => c.companyId !== companyToRemove?.companyId
+            )
+          });
+        }
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove user from company",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Helper to get company name by ID
+  const getCompanyName = (companyId: number): string => {
+    const company = companies.find(c => c.id === companyId);
+    return company?.name || `Company #${companyId}`;
+  };
+
+  // Open user companies modal
+  const handleOpenUserCompanies = (user: AdminUser) => {
+    setSelectedUserForCompanies(user);
+    setUserCompaniesModalOpen(true);
+  };
+
+  // Handle remove company click
+  const handleRemoveCompanyClick = (userId: number, companyId: number) => {
+    setCompanyToRemove({
+      userId,
+      companyId,
+      companyName: getCompanyName(companyId)
+    });
+    setRemoveCompanyDialogOpen(true);
+  };
+
+  // Confirm remove company
+  const confirmRemoveCompany = () => {
+    if (companyToRemove) {
+      removeUserFromCompany.mutate({
+        userId: companyToRemove.userId,
+        companyId: companyToRemove.companyId
+      });
     }
   };
 
@@ -536,7 +616,14 @@ export default function AdminDashboard() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-center">
-                                <Badge variant="outline">{user.companies.length}</Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                  onClick={() => handleOpenUserCompanies(user)}
+                                  data-testid={`badge-companies-${user.id}`}
+                                >
+                                  {user.companies.length}
+                                </Badge>
                               </TableCell>
                               <TableCell className="text-center">
                                 {user.isActive ? (
@@ -621,6 +708,102 @@ export default function AdminDashboard() {
               data-testid="button-confirm-disconnect"
             >
               {disconnectBankFeed.isPending ? "Disconnecting..." : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* User Companies Modal */}
+      <Dialog open={userCompaniesModalOpen} onOpenChange={setUserCompaniesModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" />
+              Company Access
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUserForCompanies && (
+                <>
+                  Companies assigned to <strong>{selectedUserForCompanies.email}</strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-4">
+            {selectedUserForCompanies && selectedUserForCompanies.companies.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No companies assigned to this user</p>
+              </div>
+            ) : (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Company Name</TableHead>
+                      <TableHead className="text-center">Role</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedUserForCompanies?.companies.map((uc) => (
+                      <TableRow key={uc.companyId} data-testid={`row-user-company-${uc.companyId}`}>
+                        <TableCell className="font-medium">
+                          {getCompanyName(uc.companyId)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={uc.role === "admin" ? "default" : "secondary"}>
+                            {uc.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleRemoveCompanyClick(selectedUserForCompanies.id, uc.companyId)}
+                            data-testid={`button-remove-company-${uc.companyId}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-4">
+            <Button variant="outline" onClick={() => setUserCompaniesModalOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Company Access Confirmation Dialog */}
+      <AlertDialog open={removeCompanyDialogOpen} onOpenChange={setRemoveCompanyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Company Access</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove access to{" "}
+              <strong>{companyToRemove?.companyName}</strong> for this user?
+              They will no longer be able to view or manage data for this company.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-remove-company">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveCompany}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={removeUserFromCompany.isPending}
+              data-testid="button-confirm-remove-company"
+            >
+              {removeUserFromCompany.isPending ? "Removing..." : "Remove Access"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
