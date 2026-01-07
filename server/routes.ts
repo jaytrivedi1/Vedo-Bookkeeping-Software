@@ -554,8 +554,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API routes
   const apiRouter = express.Router();
   
-  // TEST Endpoint for creating a payment with unapplied credit
-  apiRouter.post("/test-unapplied-credit", async (req: Request, res: Response) => {
+  // TEST Endpoint for creating a payment with unapplied credit (admin only)
+  apiRouter.post("/test-unapplied-credit", requireAdmin, async (req: Request, res: Response) => {
     try {
       // First, create an invoice to pay
       const invoice = await storage.createTransaction(
@@ -1093,26 +1093,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Utility endpoint to fix existing foreign currency contacts - creates missing AR/AP accounts
-  apiRouter.post("/contacts/fix-currency-accounts", async (req: Request, res: Response) => {
+  apiRouter.post("/contacts/fix-currency-accounts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const preferences = await storage.getPreferences();
+      const scopedStorage = createScopedStorage(req);
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'USD';
-      const contacts = await storage.getContacts(true); // Include inactive
-      const accounts = await storage.getAccounts(); // Fetch accounts once
-      
+      const contacts = await scopedStorage.getContacts(true); // Include inactive
+      const accounts = await scopedStorage.getAccounts(); // Fetch accounts once
+
       let accountsCreated = 0;
       const createdAccounts: string[] = [];
-      
+
       // Track which contact types exist for each currency
       const currencyContactTypes = new Map<string, { hasCustomer: boolean; hasVendor: boolean }>();
-      
+
       // First pass: identify which currencies need AR/AP accounts
       for (const contact of contacts) {
         if (contact.currency && contact.currency !== homeCurrency) {
           if (!currencyContactTypes.has(contact.currency)) {
             currencyContactTypes.set(contact.currency, { hasCustomer: false, hasVendor: false });
           }
-          
+
           const types = currencyContactTypes.get(contact.currency)!;
           if (contact.type === 'customer' || contact.type === 'both') {
             types.hasCustomer = true;
@@ -1122,19 +1123,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
-      
+
       // Second pass: create missing accounts only for needed types
       for (const [currency, types] of currencyContactTypes.entries()) {
         // Only create AR account if there are customers in this currency
         if (types.hasCustomer) {
           const arAccountName = `Accounts Receivable - ${currency}`;
-          const hasARAccount = accounts.some(a => 
-            a.name === arAccountName || 
+          const hasARAccount = accounts.some(a =>
+            a.name === arAccountName ||
             (a.type === 'accounts_receivable' && a.currency === currency)
           );
-          
+
           if (!hasARAccount) {
-            await storage.createAccount({
+            await scopedStorage.createAccount({
               name: arAccountName,
               type: 'accounts_receivable',
               currency: currency,
@@ -1144,17 +1145,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             createdAccounts.push(arAccountName);
           }
         }
-        
+
         // Only create AP account if there are vendors in this currency
         if (types.hasVendor) {
           const apAccountName = `Accounts Payable - ${currency}`;
-          const hasAPAccount = accounts.some(a => 
-            a.name === apAccountName || 
+          const hasAPAccount = accounts.some(a =>
+            a.name === apAccountName ||
             (a.type === 'accounts_payable' && a.currency === currency)
           );
-          
+
           if (!hasAPAccount) {
-            await storage.createAccount({
+            await scopedStorage.createAccount({
               name: apAccountName,
               type: 'accounts_payable',
               currency: currency,
@@ -1165,12 +1166,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       }
-      
-      res.json({ 
+
+      res.json({
         success: true,
         accountsCreated,
         createdAccounts,
-        message: accountsCreated > 0 
+        message: accountsCreated > 0
           ? `Created ${accountsCreated} missing currency-specific account(s)`
           : 'All currency-specific accounts already exist'
       });
@@ -1541,17 +1542,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get invoice activities (requires authentication)
-  apiRouter.get("/invoices/:id/activities", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/invoices/:id/activities", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const invoiceId = parseInt(req.params.id);
-      
+
       // Verify invoice exists and user has access to it
-      const invoice = await storage.getTransaction(invoiceId);
+      const invoice = await scopedStorage.getTransaction(invoiceId);
       if (!invoice || invoice.type !== 'invoice') {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
-      const activities = await storage.getInvoiceActivities(invoiceId);
+
+      const activities = await scopedStorage.getInvoiceActivities(invoiceId);
       res.json(activities);
     } catch (error) {
       console.error("Error fetching invoice activities:", error);
@@ -1560,21 +1562,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate or retrieve secure token for invoice (requires authentication)
-  apiRouter.post("/invoices/:id/generate-token", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/invoices/:id/generate-token", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const invoiceId = parseInt(req.params.id);
-      const invoice = await storage.getTransaction(invoiceId);
-      
+      const invoice = await scopedStorage.getTransaction(invoiceId);
+
       if (!invoice || invoice.type !== 'invoice') {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       // If invoice already has a token, return it; otherwise generate new one
       let token = invoice.secureToken;
       if (!token) {
-        token = await storage.generateSecureToken(invoiceId);
+        token = await scopedStorage.generateSecureToken(invoiceId);
       }
-      
+
       res.json({ token });
     } catch (error) {
       console.error("Error generating invoice token:", error);
@@ -1677,30 +1680,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send invoice via email (requires authentication)
-  apiRouter.post("/invoices/:id/send-email", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/invoices/:id/send-email", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const invoiceId = parseInt(req.params.id);
       const { recipientEmail, recipientName, cc, bcc, subject, message, includeAttachment = true } = req.body;
-      
+
       if (!recipientEmail) {
         return res.status(400).json({ message: "Recipient email is required" });
       }
-      
+
       // Get invoice data
-      const invoice = await storage.getTransaction(invoiceId);
+      const invoice = await scopedStorage.getTransaction(invoiceId);
       if (!invoice || invoice.type !== 'invoice') {
         return res.status(404).json({ message: "Invoice not found" });
       }
-      
+
       // Get related data
-      const lineItems = await storage.getLineItemsByTransaction(invoiceId);
-      const customer = invoice.contactId ? await storage.getContact(invoice.contactId) : null;
-      const company = await storage.getDefaultCompany();
-      
+      const lineItems = await scopedStorage.getLineItemsByTransaction(invoiceId);
+      const customer = invoice.contactId ? await scopedStorage.getContact(invoice.contactId) : null;
+      const company = await scopedStorage.getDefaultCompany();
+
       // Generate or get secure token
       let token = invoice.secureToken;
       if (!token) {
-        token = await storage.generateSecureToken(invoiceId);
+        token = await scopedStorage.generateSecureToken(invoiceId);
       }
       
       // Generate public invoice link
@@ -1807,9 +1811,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await client.emails.send(emailData);
-      
+
       // Log activity
-      await storage.createInvoiceActivity({
+      await scopedStorage.createInvoiceActivity({
         invoiceId,
         activityType: 'sent',
         userId: req.user?.id || null,
@@ -1846,30 +1850,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send quotation via email (requires authentication)
-  apiRouter.post("/quotations/:id/send", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/quotations/:id/send", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const quotationId = parseInt(req.params.id);
       const { recipientEmail, recipientName, message, includeAttachment = true } = req.body;
-      
+
       if (!recipientEmail) {
         return res.status(400).json({ message: "Recipient email is required" });
       }
-      
+
       // Get quotation data
-      const quotation = await storage.getTransaction(quotationId);
+      const quotation = await scopedStorage.getTransaction(quotationId);
       if (!quotation || quotation.type !== 'invoice' || quotation.status !== 'quotation') {
         return res.status(404).json({ message: "Quotation not found" });
       }
-      
+
       // Get related data
-      const lineItems = await storage.getLineItemsByTransaction(quotationId);
-      const customer = quotation.contactId ? await storage.getContact(quotation.contactId) : null;
-      const company = await storage.getDefaultCompany();
-      
+      const lineItems = await scopedStorage.getLineItemsByTransaction(quotationId);
+      const customer = quotation.contactId ? await scopedStorage.getContact(quotation.contactId) : null;
+      const company = await scopedStorage.getDefaultCompany();
+
       // Generate or get secure token
       let token = quotation.secureToken;
       if (!token) {
-        token = await storage.generateSecureToken(quotationId);
+        token = await scopedStorage.generateSecureToken(quotationId);
       }
       
       // Generate public quotation link
@@ -1977,9 +1982,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await client.emails.send(emailData);
-      
+
       // Log activity
-      await storage.createInvoiceActivity({
+      await scopedStorage.createInvoiceActivity({
         invoiceId: quotationId,
         activityType: 'sent',
         userId: req.user?.id || null,
@@ -1991,7 +1996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: new Date()
       });
-      
+
       // Track with activity logger
       await logActivity({
         userId: req.user?.id,
@@ -2000,14 +2005,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: quotationId,
         details: `Sent quotation ${quotation.reference} to ${recipientEmail}`
       });
-      
-      res.json({ 
+
+      res.json({
         message: "Quotation sent successfully",
         quotationLink
       });
     } catch (error) {
       console.error("Error sending quotation email:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         message: "Failed to send quotation email",
         error: error instanceof Error ? error.message : 'Unknown error'
       });
@@ -2015,18 +2020,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Convert quotation to invoice
-  apiRouter.post("/quotations/:id/convert", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/quotations/:id/convert", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const quotationId = parseInt(req.params.id);
-      
+
       // Get quotation data
-      const quotation = await storage.getTransaction(quotationId);
+      const quotation = await scopedStorage.getTransaction(quotationId);
       if (!quotation || quotation.type !== 'invoice' || quotation.status !== 'quotation') {
         return res.status(404).json({ message: "Quotation not found" });
       }
-      
+
       // Get line items
-      const lineItems = await storage.getLineItemsByTransaction(quotationId);
+      const lineItems = await scopedStorage.getLineItemsByTransaction(quotationId);
       
       // Prepare ledger entries for the now-converted invoice
       const arAccountId = 2; // Accounts Receivable
@@ -2061,8 +2067,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Update status to 'open' (converted to invoice)
-      await storage.updateTransaction(quotationId, { status: 'open' });
-      
+      await scopedStorage.updateTransaction(quotationId, { status: 'open' });
+
       // Create ledger entries
       for (const entry of ledgerEntriesData) {
         await db.insert(ledgerEntries).values({
@@ -2070,28 +2076,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionId: quotationId
         });
       }
-      
+
       // Update account balances
       for (const entry of ledgerEntriesData) {
         const account = await db.select().from(accounts).where(eq(accounts.id, entry.accountId));
         if (account.length > 0) {
           let newBalance = account[0].balance;
-          
+
           // Apply debits and credits according to account type
           if (['asset', 'expense'].includes(account[0].type)) {
             newBalance += (entry.debit || 0) - (entry.credit || 0);
           } else {
             newBalance += (entry.credit || 0) - (entry.debit || 0);
           }
-          
+
           await db.update(accounts)
             .set({ balance: newBalance })
             .where(eq(accounts.id, entry.accountId));
         }
       }
-      
+
       // Log activity
-      await storage.createInvoiceActivity({
+      await scopedStorage.createInvoiceActivity({
         invoiceId: quotationId,
         activityType: 'status_changed',
         userId: req.user?.id || null,
@@ -2102,7 +2108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         timestamp: new Date()
       });
-      
+
       // Track with activity logger
       await logActivity({
         userId: req.user?.id,
@@ -2111,9 +2117,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entityId: quotationId,
         details: `Converted quotation ${quotation.reference} to invoice`
       });
-      
+
       // Get updated transaction
-      const updatedInvoice = await storage.getTransaction(quotationId);
+      const updatedInvoice = await scopedStorage.getTransaction(quotationId);
       
       res.json({
         message: "Quotation converted to invoice successfully",
@@ -7186,37 +7192,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Banking routes for transaction classification and import
-  apiRouter.post("/banking/classify", async (req: Request, res: Response) => {
+  apiRouter.post("/banking/classify", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { transactions, accountType, accountId } = req.body;
-      
+
       if (!transactions || !Array.isArray(transactions)) {
         return res.status(400).json({ message: "Invalid transaction data format" });
       }
-      
+
       // Process each classified transaction
       const processedTransactions = [];
-      
+
       for (const transaction of transactions) {
         if (!transaction.accountId) {
           continue; // Skip unclassified transactions
         }
-        
+
         // Determine the bank/credit account to use for the offsetting entry
         let bankAccountId = 1000; // Default to Cash account
-        
+
         if (accountType === 'credit-card') {
           bankAccountId = 2000; // Credit Card Payable account
         } else if (accountType === 'line-of-credit') {
           bankAccountId = 2100; // Line of Credit account
         }
-        
+
         // Amount handling based on payment or deposit
         const transactionAmount = transaction.payment > 0 ? transaction.payment : transaction.deposit;
         const isPayment = transaction.payment > 0;
-        
+
         // Create a transaction record
-        const newTransaction = await storage.createTransaction(
+        const newTransaction = await scopedStorage.createTransaction(
           {
             type: isPayment ? 'expense' : 'deposit',
             reference: transaction.chequeNo ? `Cheque #${transaction.chequeNo}` : null,  // Allow blank reference
@@ -7255,7 +7262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Add sales tax entry if provided
         if (transaction.salesTax && transaction.salesTax > 0) {
-          await storage.createLedgerEntry({
+          await scopedStorage.createLedgerEntry({
             accountId: 2200, // Sales Tax Payable account
             transactionId: newTransaction.id,
             date: new Date(transaction.date),
@@ -7263,20 +7270,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             debit: 0,
             credit: transaction.salesTax
           });
-          
+
           // Adjust the main account entry to account for the tax
-          const mainEntry = await storage.getLedgerEntriesByTransaction(newTransaction.id);
+          const mainEntry = await scopedStorage.getLedgerEntriesByTransaction(newTransaction.id);
           if (mainEntry && mainEntry.length > 0) {
             const targetEntry = mainEntry.find(entry => entry.accountId === transaction.accountId);
             if (targetEntry) {
               if (isPayment) {
                 // For payments, increase the debit to account for tax
-                await storage.updateLedgerEntry(targetEntry.id, {
+                await scopedStorage.updateLedgerEntry(targetEntry.id, {
                   debit: targetEntry.debit + transaction.salesTax
                 });
               } else {
                 // For deposits, decrease the credit to account for tax
-                await storage.updateLedgerEntry(targetEntry.id, {
+                await scopedStorage.updateLedgerEntry(targetEntry.id, {
                   credit: targetEntry.credit - transaction.salesTax
                 });
               }
@@ -7762,8 +7769,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Specific endpoint for fixing invoice #1006 (ID: 126)
-  apiRouter.post("/fix-invoice-1006", async (req: Request, res: Response) => {
+  // Specific endpoint for fixing invoice #1006 (ID: 126) - admin only
+  apiRouter.post("/fix-invoice-1006", requireAdmin, async (req: Request, res: Response) => {
     try {
       const invoiceId = 126; // ID of invoice #1006
       
@@ -7815,7 +7822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Batch recalculation of invoice balances (admin only)
-  apiRouter.post("/recalculate-all-invoice-balances", async (req: Request, res: Response) => {
+  apiRouter.post("/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
     try {
       const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
       await batchRecalculateInvoiceBalances();
@@ -7826,8 +7833,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Temporary testing route - no auth required
-  apiRouter.post("/test/recalculate-all-invoice-balances", async (req: Request, res: Response) => {
+  // Testing route - admin only
+  apiRouter.post("/test/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
     try {
       const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
       await batchRecalculateInvoiceBalances();
@@ -7838,8 +7845,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Direct fix for Invoice #1009 - ensures balance is always $3000
-  apiRouter.post("/fix-invoice-1009", async (req: Request, res: Response) => {
+  // Direct fix for Invoice #1009 - ensures balance is always $3000 (admin only)
+  apiRouter.post("/fix-invoice-1009", requireAdmin, async (req: Request, res: Response) => {
     try {
       // Set Invoice #1009 to exactly $3000 (preserving manual adjustment)
       await db.execute(
@@ -7862,8 +7869,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Comprehensive fix for all balances - no auth required for testing
-  apiRouter.post("/test/fix-all-balances", async (req: Request, res: Response) => {
+  // Comprehensive fix for all balances - admin only
+  apiRouter.post("/test/fix-all-balances", requireAdmin, async (req: Request, res: Response) => {
     try {
       console.log('Running comprehensive fix for all transaction balances');
       await fixAllBalances();
@@ -9096,8 +9103,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
 
-  // Fix bill balances endpoint
-  apiRouter.post("/fix/bill-balances", async (req: Request, res: Response) => {
+  // Fix bill balances endpoint - admin only
+  apiRouter.post("/fix/bill-balances", requireAdmin, async (req: Request, res: Response) => {
     try {
       console.log("Starting bill balance fix...");
       
@@ -9162,8 +9169,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Repair Trial Balance - Fix incorrect ledger entries for bills and payments
-  apiRouter.post("/fix/trial-balance", async (req: Request, res: Response) => {
+  // Repair Trial Balance - Fix incorrect ledger entries for bills and payments (admin only)
+  apiRouter.post("/fix/trial-balance", requireAdmin, async (req: Request, res: Response) => {
     try {
       console.log("Starting Trial Balance repair...");
       let fixedEntries = 0;
@@ -9288,9 +9295,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Plaid Integration Routes
-  
+
   // Create link token for Plaid Link
-  apiRouter.post("/plaid/link-token", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/link-token", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       if (!plaidClient) {
         return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
@@ -9314,8 +9321,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Exchange public token for access token and save bank connection
-  apiRouter.post("/plaid/exchange-token", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/exchange-token", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       if (!plaidClient) {
         return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
       }
@@ -9341,7 +9349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const institutionId = itemResponse.data.item.institution_id;
-      
+
       if (!institutionId) {
         return res.status(400).json({ error: 'Institution ID not found' });
       }
@@ -9362,7 +9370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const accountIds = accounts.map(acc => acc.account_id);
 
       // Save bank connection to database
-      const connection = await storage.createBankConnection({
+      const connection = await scopedStorage.createBankConnection({
         itemId,
         accessToken,
         institutionId,
@@ -9379,7 +9387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bankAccounts = [];
       let isFirstAccount = true;
       for (const account of accounts) {
-        const bankAccount = await storage.createBankAccount({
+        const bankAccount = await scopedStorage.createBankAccount({
           connectionId: connection.id!,
           plaidAccountId: account.account_id,
           name: account.name,
@@ -9407,9 +9415,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all bank connections
-  apiRouter.get("/plaid/connections", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/plaid/connections", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const connections = await storage.getBankConnections();
+      const scopedStorage = createScopedStorage(req);
+      const connections = await scopedStorage.getBankConnections();
       res.json(connections);
     } catch (error: any) {
       console.error('Error fetching connections:', error);
@@ -9418,9 +9427,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get bank accounts for a connection
-  apiRouter.get("/plaid/accounts", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/plaid/accounts", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const accounts = await storage.getBankAccounts();
+      const scopedStorage = createScopedStorage(req);
+      const accounts = await scopedStorage.getBankAccounts();
       res.json(accounts);
     } catch (error: any) {
       console.error('Error fetching bank accounts:', error);
@@ -9429,20 +9439,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sync transactions for a bank account
-  apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/sync-transactions/:accountId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       if (!plaidClient) {
         return res.status(503).json({ error: 'Plaid is not configured. Please set PLAID_CLIENT_ID and PLAID_SECRET environment variables.' });
       }
       const accountId = parseInt(req.params.accountId);
-      const bankAccount = await storage.getBankAccount(accountId);
-      
+      const bankAccount = await scopedStorage.getBankAccount(accountId);
+
       if (!bankAccount) {
         return res.status(404).json({ error: 'Bank account not found' });
       }
 
-      const connection = await storage.getBankConnection(bankAccount.connectionId);
-      
+      const connection = await scopedStorage.getBankConnection(bankAccount.connectionId);
+
       if (!connection) {
         return res.status(404).json({ error: 'Bank connection not found' });
       }
@@ -9467,10 +9478,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const importedTransactions = [];
       for (const tx of transactions) {
         // Check if transaction already exists
-        const existing = await storage.getImportedTransactionByPlaidId(tx.transaction_id);
-        
+        const existing = await scopedStorage.getImportedTransactionByPlaidId(tx.transaction_id);
+
         if (!existing) {
-          const imported = await storage.createImportedTransaction({
+          const imported = await scopedStorage.createImportedTransaction({
             bankAccountId: bankAccount.id!,
             plaidTransactionId: tx.transaction_id,
             accountId: bankAccount.linkedAccountId, // Link to Chart of Accounts
@@ -9495,10 +9506,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             try {
               if (ruleMatch.autoApply) {
                 // Auto-categorize: create the expense/deposit transaction immediately
-                await autoCategorizeTransaction(imported, ruleMatch, storage);
+                await autoCategorizeTransaction(imported, ruleMatch, scopedStorage);
               } else {
                 // Just set suggestions (no auto-categorization)
-                await storage.updateImportedTransaction(imported.id!, {
+                await scopedStorage.updateImportedTransaction(imported.id!, {
                   suggestedAccountId: ruleMatch.accountId,
                   suggestedSalesTaxId: ruleMatch.salesTaxId || null,
                   suggestedContactName: ruleMatch.contactName || null,
@@ -9513,12 +9524,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Update last sync time
-      await storage.updateBankConnection(connection.id!, {
+      await scopedStorage.updateBankConnection(connection.id!, {
         lastSync: new Date(),
       });
 
       // Update bank account last synced time
-      await storage.updateBankAccount(bankAccount.id!, {
+      await scopedStorage.updateBankAccount(bankAccount.id!, {
         lastSyncedAt: new Date(),
       });
 
@@ -9936,11 +9947,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete bank connection
-  apiRouter.delete("/plaid/connections/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/plaid/connections/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const success = await storage.deleteBankConnection(id);
-      
+      const success = await scopedStorage.deleteBankConnection(id);
+
       if (success) {
         res.json({ success: true });
       } else {
@@ -9953,13 +9965,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete (soft delete) imported transaction
-  apiRouter.delete("/plaid/imported-transactions/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/plaid/imported-transactions/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      
+
       // Soft delete by marking status as 'deleted'
-      await storage.updateImportedTransaction(id, { status: 'deleted' });
-      
+      await scopedStorage.updateImportedTransaction(id, { status: 'deleted' });
+
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting imported transaction:', error);
@@ -9968,15 +9981,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Restore deleted transaction - move from deleted back to uncategorized
-  apiRouter.post("/plaid/imported-transactions/:id/restore", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/imported-transactions/:id/restore", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
 
       // Restore by marking status as 'unmatched' (uncategorized)
-      await storage.updateImportedTransaction(id, { status: 'unmatched' });
+      await scopedStorage.updateImportedTransaction(id, { status: 'unmatched' });
 
       // Try to auto-apply rules to this transaction
-      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, storage);
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, scopedStorage);
 
       res.json({ success: true, autoApplyResult });
     } catch (error: any) {
@@ -9986,23 +10000,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cleanup unmatched Plaid transactions (for fixing double-negation issues)
-  apiRouter.post("/plaid/cleanup-unmatched", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/cleanup-unmatched", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       // Get all unmatched Plaid transactions
-      const allTransactions = await storage.getImportedTransactions();
+      const allTransactions = await scopedStorage.getImportedTransactions();
       const unmatchedPlaidTransactions = allTransactions.filter(
         tx => tx.source === 'plaid' && tx.status === 'unmatched'
       );
-      
+
       // Delete them permanently so they can be re-imported with correct signs
       let deletedCount = 0;
       for (const tx of unmatchedPlaidTransactions) {
-        await storage.deleteImportedTransaction(tx.id);
+        await scopedStorage.deleteImportedTransaction(tx.id);
         deletedCount++;
       }
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         deletedCount,
         message: `Deleted ${deletedCount} unmatched Plaid transactions. Re-sync to import them with correct amounts.`
       });
@@ -10013,12 +10028,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Undo categorization - move transaction back to uncategorized
-  apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/plaid/imported-transactions/:id/undo", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
 
       // Get the imported transaction to find the matched transaction ID
-      const importedTx = await storage.getImportedTransaction(id);
+      const importedTx = await scopedStorage.getImportedTransaction(id);
       if (!importedTx) {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
@@ -10031,7 +10047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const normalizedMerchant = normalizeMerchantName(merchantName);
 
         if (normalizedMerchant && userCompanyId) {
-          const pattern = await storage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
+          const pattern = await scopedStorage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
           if (pattern && pattern.totalOccurrences > 0) {
             const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
             const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
@@ -10040,7 +10056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ? Math.min(0.99, newConfirmations / totalActions)
               : 0.5;
 
-            await storage.updateMerchantPattern(pattern.id, {
+            await scopedStorage.updateMerchantPattern(pattern.id, {
               totalOccurrences: newOccurrences,
               userConfirmations: newConfirmations,
               confidenceScore: newConfidence.toFixed(4),
@@ -10059,7 +10075,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const MIN_CONFIDENCE_FOR_RULE = 0.80;
             if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
               // Find and delete the AI rule for this merchant (company-scoped)
-              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
+              const aiRule = await scopedStorage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
                 await RulesEngine.deleteRule(aiRule.id);
                 console.log('[Undo] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId, '- pattern no longer meets thresholds');
@@ -10076,18 +10092,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const matchedTransactionId = importedTx.matchedTransactionId;
 
       // FIRST: Clear the foreign key reference to avoid constraint violation
-      await storage.updateImportedTransaction(id, {
+      await scopedStorage.updateImportedTransaction(id, {
         status: 'unmatched',
         matchedTransactionId: null
       });
 
       // THEN: Delete the matched transaction (this will cascade to line items and ledger entries)
       if (matchedTransactionId) {
-        await storage.deleteTransaction(matchedTransactionId);
+        await scopedStorage.deleteTransaction(matchedTransactionId);
       }
 
       // Try to auto-apply rules to this transaction
-      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, storage);
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(id, scopedStorage);
 
       res.json({ success: true, autoApplyResult });
     } catch (error: any) {
@@ -10112,7 +10128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/csv/parse-preview - Upload CSV and return preview
-  apiRouter.post("/csv/parse-preview", requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+  apiRouter.post("/csv/parse-preview", requireAuth, requireCompanyContext, upload.single('file'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -10153,17 +10169,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // GET /api/csv/mapping-preference/:accountId - Get saved column mapping
-  apiRouter.get("/csv/mapping-preference/:accountId", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/csv/mapping-preference/:accountId", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const accountId = parseInt(req.params.accountId);
       const userId = (req.user as any)?.id;
-      
+
       if (!userId) {
         return res.status(401).json({ error: 'User not authenticated' });
       }
 
-      const preference = await storage.getCsvMappingPreference(userId, accountId);
-      
+      const preference = await scopedStorage.getCsvMappingPreference(userId, accountId);
+
       res.json(preference || null);
     } catch (error: any) {
       console.error('Error fetching CSV mapping preference:', error);
@@ -10172,7 +10189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/csv/import - Import CSV with column mapping
-  apiRouter.post("/csv/import", requireAuth, upload.single('file'), async (req: Request, res: Response) => {
+  apiRouter.post("/csv/import", requireAuth, requireCompanyContext, upload.single('file'), async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any)?.id;
       
@@ -10611,9 +10628,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/plaid/categorize-transaction/:id - Categorize an imported transaction
-  apiRouter.post("/plaid/categorize-transaction/:id", async (req: Request, res: Response) => {
+  // POST /api/plaid/categorize-transaction/:id - Categorize an imported transaction (duplicate - use scoped version)
+  apiRouter.post("/plaid/categorize-transaction/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const { transactionType, accountId, contactName, salesTaxId, productId, transferAccountId, memo } = req.body;
 
@@ -10621,18 +10639,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Transaction ID, transaction type, and account ID are required' });
       }
 
-      // Fetch the imported transaction
-      const [importedTx] = await db
-        .select()
-        .from(importedTransactionsSchema)
-        .where(eq(importedTransactionsSchema.id, transactionId));
+      // Fetch the imported transaction (company-scoped)
+      const importedTx = await scopedStorage.getImportedTransaction(transactionId);
 
       if (!importedTx) {
         return res.status(404).json({ error: 'Imported transaction not found' });
       }
 
-      // Get the account
-      const account = await storage.getAccount(accountId);
+      // Get the account (company-scoped)
+      const account = await scopedStorage.getAccount(accountId);
       if (!account) {
         return res.status(400).json({ error: 'Account not found' });
       }
@@ -10644,8 +10659,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Find or create contact if contactName is provided
       if (contactName) {
-        const contacts = await storage.getContacts();
-        const existingContact = contacts.find(c => 
+        const contacts = await scopedStorage.getContacts();
+        const existingContact = contacts.find(c =>
           c.name.toLowerCase() === contactName.toLowerCase()
         );
 
@@ -10653,7 +10668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           contactId = existingContact.id;
         } else {
           // Create new contact
-          const newContact = await storage.createContact({
+          const newContact = await scopedStorage.createContact({
             name: contactName,
             type: importedTx.amount < 0 ? 'vendor' : 'customer',
           });
@@ -13294,9 +13309,10 @@ Respond in JSON format:
   });
 
   // Get AI categorization settings
-  apiRouter.get("/settings/categorization", async (req: Request, res: Response) => {
+  apiRouter.get("/settings/categorization", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const preferences = await storage.getPreferences();
+      const scopedStorage = createScopedStorage(req);
+      const preferences = await scopedStorage.getPreferences();
       res.json({
         aiCategorizationEnabled: preferences?.aiCategorizationEnabled ?? true,
         aiAutoPostEnabled: preferences?.aiAutoPostEnabled ?? false,
@@ -13310,8 +13326,9 @@ Respond in JSON format:
   });
 
   // Update AI categorization settings
-  apiRouter.patch("/settings/categorization", async (req: Request, res: Response) => {
+  apiRouter.patch("/settings/categorization", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const {
         aiCategorizationEnabled,
         aiAutoPostEnabled,
@@ -13325,7 +13342,7 @@ Respond in JSON format:
       if (aiAutoPostMinConfidence !== undefined) updateData.aiAutoPostMinConfidence = aiAutoPostMinConfidence.toString();
       if (aiRuleGenerationEnabled !== undefined) updateData.aiRuleGenerationEnabled = aiRuleGenerationEnabled;
 
-      const updated = await storage.updatePreferences(updateData);
+      const updated = await scopedStorage.updatePreferences(updateData);
       res.json({ success: true, preferences: updated });
     } catch (error) {
       console.error("Error updating AI categorization settings:", error);
@@ -13334,8 +13351,9 @@ Respond in JSON format:
   });
 
   // Get categorization statistics
-  apiRouter.get("/categorization/stats", async (req: Request, res: Response) => {
+  apiRouter.get("/categorization/stats", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const [
         totalFeedback,
         acceptedCount,
@@ -13344,12 +13362,12 @@ Respond in JSON format:
         aiRuleCount,
         topPatterns,
       ] = await Promise.all([
-        storage.getCategorizationFeedbackCount(),
-        storage.getAcceptedFeedbackCount(),
-        storage.getMerchantPatternCount(),
-        storage.getRuleCountByType('manual'),
-        storage.getRuleCountByType('ai'),
-        storage.getTopMerchantPatterns(10),
+        scopedStorage.getCategorizationFeedbackCount(),
+        scopedStorage.getAcceptedFeedbackCount(),
+        scopedStorage.getMerchantPatternCount(),
+        scopedStorage.getRuleCountByType('manual'),
+        scopedStorage.getRuleCountByType('ai'),
+        scopedStorage.getTopMerchantPatterns(10),
       ]);
 
       const acceptanceRate = totalFeedback > 0 ? acceptedCount / totalFeedback : 0;
@@ -13373,7 +13391,7 @@ Respond in JSON format:
   });
 
   // Get smart categorization suggestion (multi-layer)
-  apiRouter.post("/bank-feeds/smart-suggestion", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/bank-feeds/smart-suggestion", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const { transactionId } = req.body;
       const userCompanyId = req.user?.companyId;
@@ -13702,26 +13720,27 @@ Respond in JSON format:
   });
 
   // FX Revaluations - Calculate/preview unrealized gains/losses
-  apiRouter.post("/fx-revaluations/calculate", async (req: Request, res: Response) => {
+  apiRouter.post("/fx-revaluations/calculate", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { revaluationDate } = req.body;
-      
+
       if (!revaluationDate) {
         return res.status(400).json({ message: "Revaluation date is required" });
       }
 
       const asOfDate = new Date(revaluationDate);
-      const preferences = await storage.getPreferences();
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'USD';
 
       // Get foreign currency balances
-      const balances = await storage.getForeignCurrencyBalances(asOfDate);
+      const balances = await scopedStorage.getForeignCurrencyBalances(asOfDate);
 
       // Calculate unrealized gains/losses for each balance
       const calculations = await Promise.all(
         balances.map(async (balance) => {
           // Get the current exchange rate for revaluation date
-          const currentRate = await storage.getExchangeRateForDate(
+          const currentRate = await scopedStorage.getExchangeRateForDate(
             balance.currency,
             homeCurrency,
             asOfDate
@@ -13763,21 +13782,22 @@ Respond in JSON format:
   });
 
   // FX Revaluations - Post journal entry for unrealized gains/losses
-  apiRouter.post("/fx-revaluations/post", async (req: Request, res: Response) => {
+  apiRouter.post("/fx-revaluations/post", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { revaluationDate, calculations } = req.body;
-      
+
       if (!revaluationDate || !calculations || !Array.isArray(calculations)) {
         return res.status(400).json({ message: "Revaluation date and calculations are required" });
       }
 
       const asOfDate = new Date(revaluationDate);
-      const preferences = await storage.getPreferences();
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'USD';
 
       // Get FX gain/loss accounts
-      const fxGainAccount = await storage.getAccountByCode('4300');
-      const fxLossAccount = await storage.getAccountByCode('7100');
+      const fxGainAccount = await scopedStorage.getAccountByCode('4300');
+      const fxLossAccount = await scopedStorage.getAccountByCode('7100');
 
       if (!fxGainAccount || !fxLossAccount) {
         return res.status(400).json({ 
@@ -13800,7 +13820,7 @@ Respond in JSON format:
       );
 
       // Create journal entry transaction
-      const journalEntry = await storage.createTransaction(
+      const journalEntry = await scopedStorage.createTransaction(
         {
           type: 'journal_entry',
           date: asOfDate,
@@ -13821,7 +13841,7 @@ Respond in JSON format:
         const unrealizedGainLoss = parseFloat(entry.unrealizedGainLoss);
         
         // Create FX revaluation record
-        await storage.createFxRevaluation({
+        await scopedStorage.createFxRevaluation({
           revaluationDate: asOfDate,
           accountType: entry.accountType,
           currency: entry.currency,
@@ -13835,11 +13855,11 @@ Respond in JSON format:
         // Determine account based on account type
         let balanceAccount;
         if (entry.accountType === 'accounts_receivable') {
-          balanceAccount = await storage.getAccountByCode('1200');
+          balanceAccount = await scopedStorage.getAccountByCode('1200');
         } else if (entry.accountType === 'accounts_payable') {
-          balanceAccount = await storage.getAccountByCode('2000');
+          balanceAccount = await scopedStorage.getAccountByCode('2000');
         } else if (entry.accountType === 'bank') {
-          balanceAccount = await storage.getAccountByCode('1000');
+          balanceAccount = await scopedStorage.getAccountByCode('1000');
         }
 
         if (!balanceAccount) continue;
@@ -13908,7 +13928,7 @@ Respond in JSON format:
 
       // Create all ledger entries
       for (const entry of ledgerEntries) {
-        await storage.createLedgerEntry(entry);
+        await scopedStorage.createLedgerEntry(entry);
       }
 
       res.json({
@@ -14388,11 +14408,11 @@ Respond in JSON format:
   });
 
   // ====================
-  // Accounting Firm Routes
+  // Accounting Firm Routes (Admin Only)
   // ====================
 
   // GET /api/firms - Get all accounting firms
-  apiRouter.get("/firms", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/firms", requireAdmin, async (req: Request, res: Response) => {
     try {
       const firms = await storage.getAccountingFirms();
       res.json(firms);
@@ -14403,7 +14423,7 @@ Respond in JSON format:
   });
 
   // GET /api/firms/:id - Get specific firm
-  apiRouter.get("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/firms/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const firm = await storage.getAccountingFirm(id);
@@ -14420,7 +14440,7 @@ Respond in JSON format:
   });
 
   // POST /api/firms - Create new firm
-  apiRouter.post("/firms", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/firms", requireAdmin, async (req: Request, res: Response) => {
     try {
       // Validate request body
       const validatedData = insertAccountingFirmSchema.parse(req.body);
@@ -14444,7 +14464,7 @@ Respond in JSON format:
   });
 
   // PUT /api/firms/:id - Update firm
-  apiRouter.put("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.put("/firms/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       
@@ -14474,7 +14494,7 @@ Respond in JSON format:
   });
 
   // DELETE /api/firms/:id - Delete firm
-  apiRouter.delete("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/firms/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       
@@ -14504,7 +14524,7 @@ Respond in JSON format:
   });
 
   // GET /api/firms/:id/clients - Get firm's client companies
-  apiRouter.get("/firms/:id/clients", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/firms/:id/clients", requireAdmin, async (req: Request, res: Response) => {
     try {
       const firmId = parseInt(req.params.id);
       
@@ -14524,7 +14544,7 @@ Respond in JSON format:
   });
 
   // POST /api/firms/:id/clients - Grant firm access to a company
-  apiRouter.post("/firms/:id/clients", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/firms/:id/clients", requireAdmin, async (req: Request, res: Response) => {
     try {
       const firmId = parseInt(req.params.id);
       
@@ -14561,7 +14581,7 @@ Respond in JSON format:
   });
 
   // DELETE /api/firms/clients/:accessId - Revoke firm access
-  apiRouter.delete("/firms/clients/:accessId", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/firms/clients/:accessId", requireAdmin, async (req: Request, res: Response) => {
     try {
       const accessId = parseInt(req.params.accessId);
       
