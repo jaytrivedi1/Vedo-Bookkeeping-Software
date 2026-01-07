@@ -2559,8 +2559,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const subTotal = roundTo2Decimals(invoiceData.subTotal || totalAmount);
       const taxAmount = roundTo2Decimals(invoiceData.taxAmount || 0);
       
-      // Get home currency from preferences
-      const preferences = await storage.getPreferences();
+      // Get home currency from preferences (company-scoped)
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'CAD';
       
       // Check if this is a foreign currency transaction
@@ -2631,25 +2631,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For foreign currency invoices, use currency-specific AR account
       let receivableAccount;
       if (isForeignCurrency) {
-        // Use findARAccountForCurrency to get currency-specific AR account
-        receivableAccount = await (storage as any).findARAccountForCurrency(invoiceData.currency);
-        
+        // Use findARAccountForCurrency to get currency-specific AR account (company-scoped)
+        receivableAccount = await (scopedStorage as any).findARAccountForCurrency(invoiceData.currency);
+
         // If not found, create it
         if (!receivableAccount) {
-          await (storage as any).ensureCurrencyARAccount(invoiceData.currency);
-          receivableAccount = await (storage as any).findARAccountForCurrency(invoiceData.currency);
+          await (scopedStorage as any).ensureCurrencyARAccount(invoiceData.currency);
+          receivableAccount = await (scopedStorage as any).findARAccountForCurrency(invoiceData.currency);
         }
-        
+
         console.log(`Using currency-specific AR account for ${invoiceData.currency}:`, receivableAccount?.name);
       } else {
-        // Use generic Accounts Receivable for home currency
-        receivableAccount = await storage.getAccountByCode('1100');
+        // Use generic Accounts Receivable for home currency (company-scoped)
+        receivableAccount = await scopedStorage.getAccountByCode('1100');
       }
-      
-      const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
-      
-      // Get the default sales tax payable account
-      const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+
+      const revenueAccount = await scopedStorage.getAccountByCode('4000'); // Service Revenue (company-scoped)
+
+      // Get the default sales tax payable account (company-scoped)
+      const taxPayableAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
       
       if (!receivableAccount || !revenueAccount || !taxPayableAccount) {
         return res.status(500).json({ message: "Required accounts do not exist" });
@@ -2684,18 +2684,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
         let totalCalculatedTax = 0;
         
-        // Process each line item to determine tax account allocation and proportions
+        // Process each line item to determine tax account allocation and proportions (company-scoped)
         for (const item of invoiceData.lineItems) {
           if (item.salesTaxId) {
-            const salesTax = await storage.getSalesTax(item.salesTaxId);
+            const salesTax = await scopedStorage.getSalesTax(item.salesTaxId);
             
             if (salesTax) {
               if (salesTax.isComposite) {
-                // Get all component taxes for this composite tax
+                // Get all component taxes for this composite tax (company-scoped)
                 const componentTaxes = await db
                   .select()
                   .from(salesTaxSchema)
-                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .where(and(
+                    eq(salesTaxSchema.parentId, salesTax.id),
+                    eq(salesTaxSchema.companyId, req.companyId!)
+                  ))
                   .execute();
                   
                 if (componentTaxes.length > 0) {
@@ -2784,8 +2787,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-      
-      const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
+
+      // Create transaction (company-scoped)
+      const newTransaction = await scopedStorage.createTransaction(transaction, lineItems, ledgerEntries);
       
       // Process applied credits if any were included
       if (req.body.appliedCredits && Array.isArray(req.body.appliedCredits) && req.body.appliedCredits.length > 0) {
@@ -2823,27 +2827,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const invoiceItems = paymentData.lineItems.filter((item: any) => item.type === 'invoice');
         const depositItems = paymentData.lineItems.filter((item: any) => item.type === 'deposit');
         
-        // Process credit application logic
+        // Process credit application logic (company-scoped)
         for (const item of invoiceItems) {
           console.log(`Processing credit application of ${item.amount} for invoice #${item.transactionId}`);
-          
-          // Update invoice balance and status with rounding
-          const invoice = await storage.getTransaction(item.transactionId);
+
+          // Update invoice balance and status with rounding (company-scoped)
+          const invoice = await scopedStorage.getTransaction(item.transactionId);
           if (invoice) {
             const newBalance = roundTo2Decimals(invoice.balance !== null ? invoice.balance - item.amount : invoice.amount - item.amount);
             const newStatus = newBalance <= 0 ? 'paid' : 'open';
-            
-            await storage.updateTransaction(invoice.id, {
+
+            await scopedStorage.updateTransaction(invoice.id, {
               balance: newBalance,
               status: newStatus
             });
           }
         }
-        
-        // Mark the deposits as applied, with proper handling for partial credits
+
+        // Mark the deposits as applied, with proper handling for partial credits (company-scoped)
         for (const item of depositItems) {
-          // Get the current deposit to check its balance
-          const depositTransaction = await storage.getTransaction(item.transactionId);
+          // Get the current deposit to check its balance (company-scoped)
+          const depositTransaction = await scopedStorage.getTransaction(item.transactionId);
           
           if (!depositTransaction) {
             console.log(`Deposit #${item.transactionId} not found, skipping`);
@@ -2877,24 +2881,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           if (isFullApplication) {
-            // Fully applied - mark as completed with zero balance
+            // Fully applied - mark as completed with zero balance (company-scoped)
             console.log(`Deposit #${item.transactionId} fully applied and changed to 'completed'`);
-            await storage.updateTransaction(item.transactionId, {
+            await scopedStorage.updateTransaction(item.transactionId, {
               status: 'completed',
               balance: 0,
               description: updatedDescription
             });
           } else {
-            // Partial application - keep as unapplied_credit with reduced balance
+            // Partial application - keep as unapplied_credit with reduced balance (company-scoped)
             const remainingCredit = -(availableCreditAmount - item.amount);
             console.log(`Deposit #${item.transactionId} partially applied (${item.amount} of ${availableCreditAmount}), remaining credit: ${remainingCredit}`);
-            await storage.updateTransaction(item.transactionId, {
+            await scopedStorage.updateTransaction(item.transactionId, {
               status: 'unapplied_credit',
               balance: remainingCredit,
               description: updatedDescription
             });
           }
-          
+
           // Create payment_applications record for this credit application
           const { paymentApplications } = await import('@shared/schema');
           await db.insert(paymentApplications).values({
@@ -2905,15 +2909,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Created payment_application record: payment ${item.transactionId} -> invoice ${newTransaction.id}, amount ${item.amount}`);
         }
       }
-      
-      // Fetch the updated transaction after credit application to get correct balance
-      const finalTransaction = await storage.getTransaction(newTransaction.id) || newTransaction;
-      
-      // Include additional invoice details in the response
+
+      // Fetch the updated transaction after credit application to get correct balance (company-scoped)
+      const finalTransaction = await scopedStorage.getTransaction(newTransaction.id) || newTransaction;
+
+      // Include additional invoice details in the response (company-scoped)
       res.status(201).json({
         transaction: finalTransaction,
-        lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
-        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        lineItems: await scopedStorage.getLineItemsByTransaction(newTransaction.id),
+        ledgerEntries: await scopedStorage.getLedgerEntriesByTransaction(newTransaction.id),
         // Additional invoice details
         subTotal: invoiceData.subTotal,
         taxAmount: invoiceData.taxAmount,
@@ -10974,13 +10978,15 @@ Respond in JSON format:
   apiRouter.get("/bank-feeds/:id/suggestions", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const transactionId = parseInt(req.params.id);
+      const companyId = req.companyId!;
 
       if (!transactionId) {
         return res.status(400).json({ error: 'Transaction ID is required' });
       }
 
       const { matchingService } = await import('./matching-service');
-      const suggestions = await matchingService.findMatchesForBankTransaction(transactionId);
+      // Pass companyId for company isolation
+      const suggestions = await matchingService.findMatchesForBankTransaction(transactionId, companyId);
 
       res.json({
         suggestions,
@@ -13192,14 +13198,16 @@ Respond in JSON format:
   // Get smart categorization suggestion (multi-layer)
   apiRouter.post("/bank-feeds/smart-suggestion", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { transactionId } = req.body;
-      const userCompanyId = req.user?.companyId;
+      const userCompanyId = req.companyId;
 
       if (!transactionId) {
         return res.status(400).json({ message: "Transaction ID is required" });
       }
 
-      const transaction = await storage.getImportedTransaction(transactionId);
+      // Use scopedStorage for company isolation
+      const transaction = await scopedStorage.getImportedTransaction(transactionId);
       if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
@@ -13211,10 +13219,10 @@ Respond in JSON format:
       const categorizationStorage = {
         getMerchantPatternByName: (name: string, companyId?: number) => storage.getMerchantPatternByName(name, companyId),
         getEnabledCategorizationRules: (companyId?: number) => storage.getEnabledCategorizationRules(companyId),
-        getAccount: (id: number) => storage.getAccount(id),
-        getAccounts: () => storage.getAccounts(),
-        getContact: (id: number) => storage.getContact(id),
-        getContacts: () => storage.getContacts(),
+        getAccount: (id: number) => scopedStorage.getAccount(id),
+        getAccounts: () => scopedStorage.getAccounts(),
+        getContact: (id: number) => scopedStorage.getContact(id),
+        getContacts: () => scopedStorage.getContacts(),
         getPreferences: () => storage.getPreferences(),
       };
 

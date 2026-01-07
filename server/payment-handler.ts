@@ -7,19 +7,39 @@ import { eq, like, and, sql } from 'drizzle-orm';
  * 1. Deletes credit transactions generated from the payment
  * 2. Restores invoice balances and statuses
  * 3. Removes all payment-related entries
+ * 4. Company isolation - verifies payment belongs to the specified company
+ *
+ * @param paymentId The ID of the payment to delete
+ * @param companyId The company ID to verify ownership (REQUIRED for security)
  */
-export async function deletePaymentAndRelatedTransactions(paymentId: number) {
-  console.log(`Starting comprehensive payment deletion for payment #${paymentId}`);
-  
+export async function deletePaymentAndRelatedTransactions(paymentId: number, companyId?: number) {
+  console.log(`Starting comprehensive payment deletion for payment #${paymentId}, company: ${companyId}`);
+
   try {
     return await db.transaction(async (tx) => {
-      // Step 1: Find credit transactions generated from this payment
+      // Step 0: Verify payment exists and belongs to the company
+      const paymentWhereConditions = [eq(transactions.id, paymentId)];
+      if (companyId) {
+        paymentWhereConditions.push(eq(transactions.companyId, companyId));
+      }
+      const [payment] = await tx.select().from(transactions)
+        .where(and(...paymentWhereConditions));
+
+      if (!payment) {
+        throw new Error(`Payment #${paymentId} not found or access denied`);
+      }
+
+      // Step 1: Find credit transactions generated from this payment (scoped to company)
       const creditPattern = `%Unapplied credit from payment #${paymentId}%`;
+      const creditWhereConditions = [
+        eq(transactions.type, 'deposit'),
+        like(transactions.description, creditPattern)
+      ];
+      if (companyId) {
+        creditWhereConditions.push(eq(transactions.companyId, companyId));
+      }
       const relatedCredits = await tx.select().from(transactions)
-        .where(and(
-          eq(transactions.type, 'deposit'),
-          like(transactions.description, creditPattern)
-        ));
+        .where(and(...creditWhereConditions));
       
       console.log(`Found ${relatedCredits.length} credit transactions from payment #${paymentId}`);
       
@@ -35,14 +55,18 @@ export async function deletePaymentAndRelatedTransactions(paymentId: number) {
         const invoiceMatch = entry.description?.match(/invoice #([a-zA-Z0-9-]+)/i);
         if (invoiceMatch && invoiceMatch[1] && entry.credit) {
           const invoiceRef = invoiceMatch[1];
-          
-          // Find the invoice
+
+          // Find the invoice (with company filter for security)
+          const invoiceWhereConditions = [
+            eq(transactions.type, 'invoice'),
+            eq(transactions.reference, invoiceRef)
+          ];
+          if (companyId) {
+            invoiceWhereConditions.push(eq(transactions.companyId, companyId));
+          }
           const [invoice] = await tx.select().from(transactions)
-            .where(and(
-              eq(transactions.type, 'invoice'),
-              eq(transactions.reference, invoiceRef)
-            ));
-          
+            .where(and(...invoiceWhereConditions));
+
           if (invoice) {
             // Add to our map of affected invoices with the payment amount
             const currentAmount = affectedInvoices.get(invoiceRef)?.amount || 0;

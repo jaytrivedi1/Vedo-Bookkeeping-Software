@@ -262,11 +262,25 @@ companyRouter.post("/:id/set-default", async (req: Request, res: Response) => {
   }
 });
 
-// Upload company logo
+// Upload company logo - requires authentication and company access verification
 companyRouter.post("/:id/logo", logoUpload.single('logo'), async (req: Request, res: Response) => {
   try {
+    // Authentication check
+    if (!req.isAuthenticated() || !req.user) {
+      if (req.file) fs.unlinkSync(req.file.path); // Clean up uploaded file
+      return res.status(401).json({ message: "Authentication required" });
+    }
+
     const id = parseInt(req.params.id);
-    
+
+    // Verify user has access to this company
+    const userCompanies = await storage.getUserCompanies(req.user.id);
+    const hasAccess = userCompanies.some(uc => uc.companyId === id);
+    if (!hasAccess) {
+      if (req.file) fs.unlinkSync(req.file.path); // Clean up uploaded file
+      return res.status(403).json({ message: "Access denied to this company" });
+    }
+
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }

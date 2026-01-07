@@ -30,17 +30,30 @@ export class MatchingService {
   private readonly DEFAULT_AMOUNT_TOLERANCE = 0.02; // 2%
   private readonly DEFAULT_DATE_TOLERANCE_DAYS = 30;
 
+  /**
+   * Find matches for a bank transaction
+   * @param importedTransactionId The ID of the imported transaction
+   * @param companyId REQUIRED - The company ID to scope matches to
+   */
   async findMatchesForBankTransaction(
-    importedTransactionId: number
+    importedTransactionId: number,
+    companyId: number
   ): Promise<MatchSuggestion[]> {
+    if (!companyId) {
+      throw new Error('companyId is required for company isolation');
+    }
+
     const importedTx = await db
       .select()
       .from(importedTransactionsSchema)
-      .where(eq(importedTransactionsSchema.id, importedTransactionId))
+      .where(and(
+        eq(importedTransactionsSchema.id, importedTransactionId),
+        eq(importedTransactionsSchema.companyId, companyId)
+      ))
       .limit(1);
 
     if (!importedTx.length) {
-      throw new Error('Imported transaction not found');
+      throw new Error('Imported transaction not found or access denied');
     }
 
     const bankTx = importedTx[0];
@@ -49,29 +62,30 @@ export class MatchingService {
     const isDeposit = bankTx.amount > 0;
 
     if (isDeposit) {
-      const invoiceMatches = await this.findInvoiceMatches(bankTx);
+      const invoiceMatches = await this.findInvoiceMatches(bankTx, companyId);
       suggestions.push(...invoiceMatches);
 
-      const manualDepositMatches = await this.findManualDepositMatches(bankTx);
+      const manualDepositMatches = await this.findManualDepositMatches(bankTx, companyId);
       suggestions.push(...manualDepositMatches);
     } else {
-      const billMatches = await this.findBillMatches(bankTx);
+      const billMatches = await this.findBillMatches(bankTx, companyId);
       suggestions.push(...billMatches);
 
-      const manualPaymentMatches = await this.findManualPaymentMatches(bankTx);
+      const manualPaymentMatches = await this.findManualPaymentMatches(bankTx, companyId);
       suggestions.push(...manualPaymentMatches);
     }
 
     return suggestions.sort((a, b) => b.confidence - a.confidence);
   }
 
-  private async findInvoiceMatches(bankTx: any): Promise<MatchSuggestion[]> {
+  private async findInvoiceMatches(bankTx: any, companyId: number): Promise<MatchSuggestion[]> {
     const txAmount = Math.abs(bankTx.amount);
     const dateFrom = new Date(bankTx.date);
     dateFrom.setDate(dateFrom.getDate() - this.DEFAULT_DATE_TOLERANCE_DAYS);
     const dateTo = new Date(bankTx.date);
     dateTo.setDate(dateTo.getDate() + this.DEFAULT_DATE_TOLERANCE_DAYS);
 
+    // Company-scoped query for open invoices
     const openInvoices = await db
       .select({
         id: transactions.id,
@@ -88,6 +102,7 @@ export class MatchingService {
       .leftJoin(contacts, eq(transactions.contactId, contacts.id))
       .where(
         and(
+          eq(transactions.companyId, companyId),
           eq(transactions.type, 'invoice'),
           or(
             eq(transactions.status, 'open'),
@@ -174,13 +189,14 @@ export class MatchingService {
     return matches;
   }
 
-  private async findBillMatches(bankTx: any): Promise<MatchSuggestion[]> {
+  private async findBillMatches(bankTx: any, companyId: number): Promise<MatchSuggestion[]> {
     const txAmount = Math.abs(bankTx.amount);
     const dateFrom = new Date(bankTx.date);
     dateFrom.setDate(dateFrom.getDate() - this.DEFAULT_DATE_TOLERANCE_DAYS);
     const dateTo = new Date(bankTx.date);
     dateTo.setDate(dateTo.getDate() + this.DEFAULT_DATE_TOLERANCE_DAYS);
 
+    // Company-scoped query for open bills
     const openBills = await db
       .select({
         id: transactions.id,
@@ -197,6 +213,7 @@ export class MatchingService {
       .leftJoin(contacts, eq(transactions.contactId, contacts.id))
       .where(
         and(
+          eq(transactions.companyId, companyId),
           eq(transactions.type, 'bill'),
           or(
             eq(transactions.status, 'open'),
@@ -283,13 +300,14 @@ export class MatchingService {
     return matches;
   }
 
-  private async findManualDepositMatches(bankTx: any): Promise<MatchSuggestion[]> {
+  private async findManualDepositMatches(bankTx: any, companyId: number): Promise<MatchSuggestion[]> {
     const txAmount = Math.abs(bankTx.amount);
     const dateFrom = new Date(bankTx.date);
     dateFrom.setDate(dateFrom.getDate() - this.DEFAULT_DATE_TOLERANCE_DAYS);
     const dateTo = new Date(bankTx.date);
     dateTo.setDate(dateTo.getDate() + this.DEFAULT_DATE_TOLERANCE_DAYS);
 
+    // Company-scoped query for manual deposits
     const manualDeposits = await db
       .select({
         id: transactions.id,
@@ -306,6 +324,7 @@ export class MatchingService {
       .leftJoin(contacts, eq(transactions.contactId, contacts.id))
       .where(
         and(
+          eq(transactions.companyId, companyId),
           or(
             eq(transactions.type, 'deposit'),
             eq(transactions.type, 'payment'),
@@ -389,7 +408,7 @@ export class MatchingService {
     return matches;
   }
 
-  private async findManualPaymentMatches(bankTx: any): Promise<MatchSuggestion[]> {
+  private async findManualPaymentMatches(bankTx: any, companyId: number): Promise<MatchSuggestion[]> {
     const txAmount = Math.abs(bankTx.amount);
     const dateFrom = new Date(bankTx.date);
     dateFrom.setDate(dateFrom.getDate() - this.DEFAULT_DATE_TOLERANCE_DAYS);
@@ -403,9 +422,11 @@ export class MatchingService {
       txAmount,
       date: bankTx.date,
       dateFrom,
-      dateTo
+      dateTo,
+      companyId
     });
 
+    // Company-scoped query for manual payments
     const manualPayments = await db
       .select({
         id: transactions.id,
@@ -422,6 +443,7 @@ export class MatchingService {
       .leftJoin(contacts, eq(transactions.contactId, contacts.id))
       .where(
         and(
+          eq(transactions.companyId, companyId),
           or(
             eq(transactions.type, 'expense'),
             eq(transactions.type, 'payment'),
