@@ -77,9 +77,10 @@ const SUPER_ADMIN_EMAIL = "admin@finledger.com";
 
 // Helper function to apply categorization rules to an imported transaction
 // Uses the new RulesEngine for reliable rule matching
-async function applyRulesToTransaction(importedTx: any): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string; autoApply?: boolean } | null> {
+// IMPORTANT: companyId is required for company isolation
+async function applyRulesToTransaction(importedTx: any, companyId?: number): Promise<{ accountId?: number; contactName?: string; memo?: string; salesTaxId?: number; matchedRule?: string; autoApply?: boolean } | null> {
   try {
-    const rules = await RulesEngine.getEnabledRules();
+    const rules = await RulesEngine.getEnabledRules(companyId);
     const match = RulesEngine.matchTransaction({
       id: importedTx.id,
       name: importedTx.name || '',
@@ -342,6 +343,7 @@ async function applyRuleToExistingTransactions(
 
 // Helper function to try auto-applying rules to a single transaction that just became uncategorized
 // This is called when a transaction is restored, undone, or unmatched
+// IMPORTANT: Uses scopedStorage.getCompanyId() for company isolation
 async function tryAutoApplyToSingleTransaction(
   transactionId: number,
   storage: any
@@ -353,8 +355,11 @@ async function tryAutoApplyToSingleTransaction(
       return null;
     }
 
-    // Get all enabled auto-apply rules
-    const allRules = await RulesEngine.getEnabledRules();
+    // Get companyId from scoped storage for company isolation
+    const companyId = storage.getCompanyId ? storage.getCompanyId() : undefined;
+
+    // Get all enabled auto-apply rules (filtered by company)
+    const allRules = await RulesEngine.getEnabledRules(companyId);
     const autoApplyRules = allRules.filter((rule: any) => rule.autoApply === true);
 
     if (autoApplyRules.length === 0) {
@@ -1040,18 +1045,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate currency changes - prevent changing currency if there are existing transactions
       if (req.body.currency !== undefined && req.body.currency !== contact.currency) {
-        const transactions = await storage.getTransactionsByContact(id);
+        const transactions = await scopedStorage.getTransactionsByContact(id);
         if (transactions.length > 0) {
-          return res.status(400).json({ 
+          return res.status(400).json({
             message: "Cannot change currency for contact with existing transactions",
             error: "CURRENCY_LOCKED"
           });
         }
       }
-      
+
       // Validate the update data
       const contactUpdate = req.body;
-      const updatedContact = await storage.updateContact(id, contactUpdate);
+      const updatedContact = await scopedStorage.updateContact(id, contactUpdate);
       
       res.json(updatedContact);
     } catch (error) {
@@ -1071,8 +1076,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Contact not found" });
       }
 
-      // Check if contact has any transactions
-      const hasTransactions = await storage.hasContactTransactions(id);
+      // Check if contact has any transactions (using scoped storage for company isolation)
+      const hasTransactions = await scopedStorage.hasContactTransactions(id);
       if (hasTransactions) {
         return res.status(409).json({
           message: "Cannot delete contact with existing transactions. Mark as inactive instead.",
@@ -1257,7 +1262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const noteId = parseInt(req.params.noteId);
       const { content, isPinned } = req.body;
 
-      const existingNote = await storage.getContactNote(noteId);
+      const existingNote = await scopedStorage.getContactNote(noteId);
       if (!existingNote) {
         return res.status(404).json({ message: "Note not found" });
       }
@@ -1268,14 +1273,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      const updatedNote = await storage.updateContactNote(noteId, { content, isPinned });
+      const updatedNote = await scopedStorage.updateContactNote(noteId, { content, isPinned });
 
       // Handle pinned note updates on the contact
       if (isPinned !== undefined) {
         if (isPinned) {
           // Unpin all other notes for this contact
-          await storage.unpinAllContactNotes(existingNote.contactId);
-          await storage.updateContactNote(noteId, { isPinned: true });
+          await scopedStorage.unpinAllContactNotes(existingNote.contactId);
+          await scopedStorage.updateContactNote(noteId, { isPinned: true });
           await scopedStorage.updateContact(existingNote.contactId, { pinnedNote: content || existingNote.content });
         } else {
           // Clear the contact's pinnedNote if this was the pinned note
@@ -1299,7 +1304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
-      const existingNote = await storage.getContactNote(noteId);
+      const existingNote = await scopedStorage.getContactNote(noteId);
       if (!existingNote) {
         return res.status(404).json({ message: "Note not found" });
       }
@@ -1315,7 +1320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await scopedStorage.updateContact(existingNote.contactId, { pinnedNote: null });
       }
 
-      await storage.deleteContactNote(noteId);
+      await scopedStorage.deleteContactNote(noteId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting contact note:", error);
@@ -1330,7 +1335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
-      const note = await storage.getContactNote(noteId);
+      const note = await scopedStorage.getContactNote(noteId);
       if (!note) {
         return res.status(404).json({ message: "Note not found" });
       }
@@ -1342,10 +1347,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Unpin all other notes for this contact first
-      await storage.unpinAllContactNotes(note.contactId);
+      await scopedStorage.unpinAllContactNotes(note.contactId);
 
       // Pin this note
-      await storage.updateContactNote(noteId, { isPinned: true });
+      await scopedStorage.updateContactNote(noteId, { isPinned: true });
       await scopedStorage.updateContact(note.contactId, { pinnedNote: note.content });
 
       res.json({ success: true, pinnedNoteId: noteId });
@@ -1362,7 +1367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const scopedStorage = createScopedStorage(req);
       const noteId = parseInt(req.params.noteId);
 
-      const note = await storage.getContactNote(noteId);
+      const note = await scopedStorage.getContactNote(noteId);
       if (!note) {
         return res.status(404).json({ message: "Note not found" });
       }
@@ -1373,7 +1378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      await storage.updateContactNote(noteId, { isPinned: false });
+      await scopedStorage.updateContactNote(noteId, { isPinned: false });
       await scopedStorage.updateContact(note.contactId, { pinnedNote: null });
 
       res.json({ success: true });
@@ -9274,8 +9279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           importedTransactions.push(imported);
 
-          // Try to apply categorization rules
-          const ruleMatch = await applyRulesToTransaction(imported);
+          // Try to apply categorization rules (with company isolation)
+          const ruleMatch = await applyRulesToTransaction(imported, req.companyId);
           if (ruleMatch && ruleMatch.accountId) {
             try {
               if (ruleMatch.autoApply) {
@@ -9851,7 +9856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Find and delete the AI rule for this merchant (company-scoped)
               const aiRule = await scopedStorage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
-                await RulesEngine.deleteRule(aiRule.id);
+                await RulesEngine.deleteRule(aiRule.id, userCompanyId);
                 console.log('[Undo] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId, '- pattern no longer meets thresholds');
               }
             }
@@ -10105,9 +10110,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Bulk create imported transactions (using scoped storage for company isolation)
       const created = await scopedStorage.bulkCreateImportedTransactions(importedTransactions);
 
-      // Apply categorization rules to newly imported transactions
+      // Apply categorization rules to newly imported transactions (with company isolation)
       for (const tx of created) {
-        const ruleMatch = await applyRulesToTransaction(tx);
+        const ruleMatch = await applyRulesToTransaction(tx, req.companyId);
         if (ruleMatch && ruleMatch.accountId) {
           try {
             if (ruleMatch.autoApply) {
@@ -11333,7 +11338,7 @@ Respond in JSON format:
             if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
               const aiRule = await scopedStorage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
-                await RulesEngine.deleteRule(aiRule.id);
+                await RulesEngine.deleteRule(aiRule.id, userCompanyId);
                 console.log('[Unmatch] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId);
               }
             }
@@ -12405,11 +12410,12 @@ Respond in JSON format:
     }
   });
 
-  // Categorization Rules routes - Using new RulesEngine
+  // Categorization Rules routes - Using new RulesEngine (company-scoped)
   apiRouter.get("/categorization-rules", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const rules = await RulesEngine.getAllRules();
-      console.log('[Routes] GET /categorization-rules - Found', rules.length, 'rules');
+      const companyId = req.companyId;
+      const rules = await RulesEngine.getAllRules(companyId);
+      console.log('[Routes] GET /categorization-rules - Found', rules.length, 'rules for company:', companyId);
       res.json(rules);
     } catch (error) {
       console.error("Error fetching categorization rules:", error);
@@ -12419,7 +12425,8 @@ Respond in JSON format:
 
   apiRouter.get("/categorization-rules/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const rule = await RulesEngine.getRule(Number(req.params.id));
+      const companyId = req.companyId;
+      const rule = await RulesEngine.getRule(Number(req.params.id), companyId);
 
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -12466,9 +12473,10 @@ Respond in JSON format:
         return res.status(400).json({ message: "Name, conditions, and actions are required" });
       }
 
-      console.log('[Routes] POST /categorization-rules - Creating rule:', { name, conditions, actions, isEnabled, autoApply });
+      const companyId = req.companyId;
+      console.log('[Routes] POST /categorization-rules - Creating rule:', { name, conditions, actions, isEnabled, autoApply, companyId });
 
-      // Use the new RulesEngine to create the rule
+      // Use the new RulesEngine to create the rule (company-scoped)
       const rule = await RulesEngine.createRule({
         name,
         conditions,
@@ -12478,7 +12486,7 @@ Respond in JSON format:
         autoApply: autoApply !== false, // Default to true
         priority: priority ? Number(priority) : 0,
         ruleType: ruleType || 'manual',
-      });
+      }, companyId);
 
       console.log('[Routes] Rule created successfully:', { id: rule.id, name: rule.name, isEnabled: rule.isEnabled, autoApply: rule.autoApply });
 
@@ -12508,9 +12516,10 @@ Respond in JSON format:
   apiRouter.patch("/categorization-rules/:id", requireAuth, requireCompanyContext, ruleAttachmentUpload.single('attachment'), async (req: Request, res: Response) => {
     try {
       const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId;
       const ruleId = Number(req.params.id);
 
-      const existingRule = await RulesEngine.getRule(ruleId);
+      const existingRule = await RulesEngine.getRule(ruleId, companyId);
       if (!existingRule) {
         if (req.file && fs.existsSync(req.file.path)) {
           fs.unlinkSync(req.file.path);
@@ -12545,8 +12554,8 @@ Respond in JSON format:
         existingRule.autoApply === false &&
         updateData.autoApply === true;
 
-      // Use the new RulesEngine to update
-      const updatedRule = await RulesEngine.updateRule(ruleId, updateData);
+      // Use the new RulesEngine to update (company-scoped)
+      const updatedRule = await RulesEngine.updateRule(ruleId, updateData, companyId);
 
       if (!updatedRule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -12579,9 +12588,10 @@ Respond in JSON format:
 
   apiRouter.delete("/categorization-rules/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.companyId;
       const ruleId = Number(req.params.id);
 
-      const deleted = await RulesEngine.deleteRule(ruleId);
+      const deleted = await RulesEngine.deleteRule(ruleId, companyId);
       if (!deleted) {
         return res.status(404).json({ message: "Rule not found" });
       }
@@ -12595,9 +12605,10 @@ Respond in JSON format:
 
   apiRouter.get("/categorization-rules/:id/attachment", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.companyId;
       const ruleId = Number(req.params.id);
 
-      const rule = await RulesEngine.getRule(ruleId);
+      const rule = await RulesEngine.getRule(ruleId, companyId);
 
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -12633,11 +12644,12 @@ Respond in JSON format:
   apiRouter.post("/categorization-rules/apply", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const scopedStorage = createScopedStorage(req);
-      console.log('[ApplyRulesEndpoint] Starting rule application...');
+      const companyId = req.companyId;
+      console.log('[ApplyRulesEndpoint] Starting rule application for company:', companyId);
 
-      // Get all enabled rules
-      const enabledRules = await RulesEngine.getEnabledRules();
-      console.log('[ApplyRulesEndpoint] Found', enabledRules.length, 'enabled rules');
+      // Get all enabled rules (filtered by company)
+      const enabledRules = await RulesEngine.getEnabledRules(companyId);
+      console.log('[ApplyRulesEndpoint] Found', enabledRules.length, 'enabled rules for company:', companyId);
 
       if (enabledRules.length === 0) {
         return res.json({
@@ -12664,7 +12676,7 @@ Respond in JSON format:
 
       // Apply rules to each uncategorized transaction
       for (const importedTx of uncategorizedTransactions) {
-        const ruleMatch = await applyRulesToTransaction(importedTx);
+        const ruleMatch = await applyRulesToTransaction(importedTx, companyId);
 
         if (!ruleMatch || !ruleMatch.accountId) {
           skippedCount++;
@@ -12848,12 +12860,13 @@ Respond in JSON format:
   // Get categorization rules by type (manual/ai)
   apiRouter.get("/categorization-rules/type/:ruleType", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.companyId;
       const ruleType = req.params.ruleType as 'manual' | 'ai';
       if (ruleType !== 'manual' && ruleType !== 'ai') {
         return res.status(400).json({ message: "Invalid rule type. Must be 'manual' or 'ai'" });
       }
-      const rules = await RulesEngine.getRulesByType(ruleType);
-      console.log('[Routes] GET /categorization-rules/type/' + ruleType + ' - Found', rules.length, 'rules');
+      const rules = await RulesEngine.getRulesByType(ruleType, companyId);
+      console.log('[Routes] GET /categorization-rules/type/' + ruleType + ' - Found', rules.length, 'rules for company:', companyId);
       res.json(rules);
     } catch (error) {
       console.error("Error fetching categorization rules by type:", error);
@@ -12864,8 +12877,9 @@ Respond in JSON format:
   // Promote an AI rule to manual
   apiRouter.post("/categorization-rules/:id/promote", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const companyId = req.companyId;
       const ruleId = Number(req.params.id);
-      const rule = await RulesEngine.getRule(ruleId);
+      const rule = await RulesEngine.getRule(ruleId, companyId);
 
       if (!rule) {
         return res.status(404).json({ message: "Rule not found" });
@@ -12879,7 +12893,7 @@ Respond in JSON format:
       const promotedRule = await RulesEngine.updateRule(ruleId, {
         ruleType: 'manual' as any,
         priority: Math.min(rule.priority, 499), // Give higher priority
-      });
+      }, companyId);
       res.json({ success: true, rule: promotedRule });
     } catch (error) {
       console.error("Error promoting AI rule:", error);
@@ -12989,10 +13003,11 @@ Respond in JSON format:
   // Enable all disabled AI rules
   apiRouter.post("/categorization-rules/ai/enable-all", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const enabledCount = await RulesEngine.enableAllRulesByType('ai');
-      const aiRules = await RulesEngine.getRulesByType('ai');
+      const companyId = req.companyId;
+      const enabledCount = await RulesEngine.enableAllRulesByType('ai', companyId);
+      const aiRules = await RulesEngine.getRulesByType('ai', companyId);
 
-      console.log('[EnableAll] Enabled', enabledCount, 'AI rules');
+      console.log('[EnableAll] Enabled', enabledCount, 'AI rules for company:', companyId);
 
       res.json({
         success: true,
@@ -13009,19 +13024,21 @@ Respond in JSON format:
   apiRouter.post("/categorization-rules/debug-test", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId;
       const { transactionId } = req.body;
 
-      // Get raw database state using RulesEngine
+      // Get raw database state using RulesEngine (super admin only - shows all companies for debugging)
       const rawRules = await RulesEngine.debugGetRawRules();
-      const allRules = await RulesEngine.getAllRules();
-      const enabledRules = await RulesEngine.getEnabledRules();
+      // Get company-scoped rules
+      const allRules = await RulesEngine.getAllRules(companyId);
+      const enabledRules = await RulesEngine.getEnabledRules(companyId);
 
       // If transactionId provided, test against that transaction
       let testResult = null;
       if (transactionId) {
         const tx = await scopedStorage.getImportedTransaction(transactionId);
         if (tx) {
-          testResult = await applyRulesToTransaction(tx);
+          testResult = await applyRulesToTransaction(tx, companyId);
         }
       }
 
@@ -13030,6 +13047,7 @@ Respond in JSON format:
         rules: allRules,
         enabledRules,
         testResult,
+        companyId,
         summary: {
           totalCount: allRules.length,
           enabledCount: enabledRules.length,

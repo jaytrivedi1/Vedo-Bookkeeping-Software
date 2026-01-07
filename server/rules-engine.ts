@@ -48,6 +48,7 @@ export interface CreateRuleInput {
   ruleType?: 'manual' | 'ai';
   isEnabled?: boolean;
   autoApply?: boolean;
+  companyId?: number; // Required for company-scoped rules
 }
 
 export interface UpdateRuleInput {
@@ -105,7 +106,7 @@ function rowToRule(row: any): Rule {
  * Create a new rule using raw SQL
  * Rules are ALWAYS created as enabled unless explicitly set to false
  */
-export async function createRule(input: CreateRuleInput): Promise<Rule> {
+export async function createRule(input: CreateRuleInput, companyId?: number): Promise<Rule> {
   const {
     name,
     conditions,
@@ -115,7 +116,11 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
     ruleType = 'manual',
     isEnabled = true,
     autoApply = true,
+    companyId: inputCompanyId,
   } = input;
+
+  // Use provided companyId or fall back to input companyId
+  const ruleCompanyId = companyId ?? inputCompanyId;
 
   // Validate required fields
   if (!name || !name.trim()) {
@@ -137,12 +142,12 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
     cleanConditions.amountMax = conditions.amountMax;
   }
 
-  console.log('[RulesEngine] Creating rule:', { name, conditions: cleanConditions, actions, isEnabled, autoApply });
+  console.log('[RulesEngine] Creating rule:', { name, conditions: cleanConditions, actions, isEnabled, autoApply, companyId: ruleCompanyId });
 
   const result = await db.execute(sql`
     INSERT INTO categorization_rules (
       name, is_enabled, auto_apply, priority, conditions, actions,
-      sales_tax_id, rule_type, created_at, updated_at
+      sales_tax_id, rule_type, company_id, created_at, updated_at
     ) VALUES (
       ${name.trim()},
       ${isEnabled},
@@ -152,6 +157,7 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
       ${JSON.stringify(actions)}::json,
       ${salesTaxId},
       ${ruleType},
+      ${ruleCompanyId ?? null},
       NOW(),
       NOW()
     ) RETURNING *
@@ -164,38 +170,63 @@ export async function createRule(input: CreateRuleInput): Promise<Rule> {
 }
 
 /**
- * Get all rules ordered by priority
+ * Get all rules ordered by priority (filtered by companyId if provided)
  */
-export async function getAllRules(): Promise<Rule[]> {
-  const result = await db.execute(sql`
-    SELECT * FROM categorization_rules
-    ORDER BY priority ASC, id ASC
-  `);
+export async function getAllRules(companyId?: number): Promise<Rule[]> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      WHERE company_id = ${companyId}
+      ORDER BY priority ASC, id ASC
+    `);
+  } else {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      ORDER BY priority ASC, id ASC
+    `);
+  }
 
   return result.rows.map(rowToRule);
 }
 
 /**
- * Get only enabled rules ordered by priority
+ * Get only enabled rules ordered by priority (filtered by companyId if provided)
  */
-export async function getEnabledRules(): Promise<Rule[]> {
-  const result = await db.execute(sql`
-    SELECT * FROM categorization_rules
-    WHERE is_enabled = true
-    ORDER BY priority ASC, id ASC
-  `);
+export async function getEnabledRules(companyId?: number): Promise<Rule[]> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      WHERE is_enabled = true AND company_id = ${companyId}
+      ORDER BY priority ASC, id ASC
+    `);
+  } else {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      WHERE is_enabled = true
+      ORDER BY priority ASC, id ASC
+    `);
+  }
 
-  console.log('[RulesEngine] Found', result.rows.length, 'enabled rules');
+  console.log('[RulesEngine] Found', result.rows.length, 'enabled rules for company:', companyId || 'all');
   return result.rows.map(rowToRule);
 }
 
 /**
- * Get a single rule by ID
+ * Get a single rule by ID (filtered by companyId if provided for security)
  */
-export async function getRule(id: number): Promise<Rule | null> {
-  const result = await db.execute(sql`
-    SELECT * FROM categorization_rules WHERE id = ${id}
-  `);
+export async function getRule(id: number, companyId?: number): Promise<Rule | null> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules WHERE id = ${id} AND company_id = ${companyId}
+    `);
+  } else {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules WHERE id = ${id}
+    `);
+  }
 
   if (result.rows.length === 0) {
     return null;
@@ -205,10 +236,10 @@ export async function getRule(id: number): Promise<Rule | null> {
 }
 
 /**
- * Update an existing rule
+ * Update an existing rule (filtered by companyId for security)
  */
-export async function updateRule(id: number, input: UpdateRuleInput): Promise<Rule | null> {
-  const existing = await getRule(id);
+export async function updateRule(id: number, input: UpdateRuleInput, companyId?: number): Promise<Rule | null> {
+  const existing = await getRule(id, companyId);
   if (!existing) {
     return null;
   }
@@ -291,26 +322,43 @@ export async function updateRule(id: number, input: UpdateRuleInput): Promise<Ru
 }
 
 /**
- * Delete a rule by ID
+ * Delete a rule by ID (filtered by companyId for security)
  */
-export async function deleteRule(id: number): Promise<boolean> {
-  const result = await db.execute(sql`
-    DELETE FROM categorization_rules WHERE id = ${id}
-  `);
+export async function deleteRule(id: number, companyId?: number): Promise<boolean> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      DELETE FROM categorization_rules WHERE id = ${id} AND company_id = ${companyId}
+    `);
+  } else {
+    result = await db.execute(sql`
+      DELETE FROM categorization_rules WHERE id = ${id}
+    `);
+  }
 
   return (result.rowCount ?? 0) > 0;
 }
 
 /**
- * Enable a rule by ID
+ * Enable a rule by ID (filtered by companyId for security)
  */
-export async function enableRule(id: number): Promise<Rule | null> {
-  const result = await db.execute(sql`
-    UPDATE categorization_rules
-    SET is_enabled = true, updated_at = NOW()
-    WHERE id = ${id}
-    RETURNING *
-  `);
+export async function enableRule(id: number, companyId?: number): Promise<Rule | null> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = true, updated_at = NOW()
+      WHERE id = ${id} AND company_id = ${companyId}
+      RETURNING *
+    `);
+  } else {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = true, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `);
+  }
 
   if (result.rows.length === 0) {
     return null;
@@ -320,15 +368,25 @@ export async function enableRule(id: number): Promise<Rule | null> {
 }
 
 /**
- * Disable a rule by ID
+ * Disable a rule by ID (filtered by companyId for security)
  */
-export async function disableRule(id: number): Promise<Rule | null> {
-  const result = await db.execute(sql`
-    UPDATE categorization_rules
-    SET is_enabled = false, updated_at = NOW()
-    WHERE id = ${id}
-    RETURNING *
-  `);
+export async function disableRule(id: number, companyId?: number): Promise<Rule | null> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = false, updated_at = NOW()
+      WHERE id = ${id} AND company_id = ${companyId}
+      RETURNING *
+    `);
+  } else {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = false, updated_at = NOW()
+      WHERE id = ${id}
+      RETURNING *
+    `);
+  }
 
   if (result.rows.length === 0) {
     return null;
@@ -425,37 +483,55 @@ export async function applyRulesToTransactions(transactions: Transaction[]): Pro
 }
 
 /**
- * Get rules by type (manual or ai)
+ * Get rules by type (manual or ai) - filtered by companyId for security
  */
-export async function getRulesByType(ruleType: 'manual' | 'ai'): Promise<Rule[]> {
-  const result = await db.execute(sql`
-    SELECT * FROM categorization_rules
-    WHERE rule_type = ${ruleType}
-    ORDER BY priority ASC, id ASC
-  `);
+export async function getRulesByType(ruleType: 'manual' | 'ai', companyId?: number): Promise<Rule[]> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      WHERE rule_type = ${ruleType} AND company_id = ${companyId}
+      ORDER BY priority ASC, id ASC
+    `);
+  } else {
+    result = await db.execute(sql`
+      SELECT * FROM categorization_rules
+      WHERE rule_type = ${ruleType}
+      ORDER BY priority ASC, id ASC
+    `);
+  }
 
   return result.rows.map(rowToRule);
 }
 
 /**
- * Enable all rules of a specific type
+ * Enable all rules of a specific type - filtered by companyId for security
  */
-export async function enableAllRulesByType(ruleType: 'manual' | 'ai'): Promise<number> {
-  const result = await db.execute(sql`
-    UPDATE categorization_rules
-    SET is_enabled = true, updated_at = NOW()
-    WHERE rule_type = ${ruleType} AND is_enabled = false
-  `);
+export async function enableAllRulesByType(ruleType: 'manual' | 'ai', companyId?: number): Promise<number> {
+  let result;
+  if (companyId) {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = true, updated_at = NOW()
+      WHERE rule_type = ${ruleType} AND is_enabled = false AND company_id = ${companyId}
+    `);
+  } else {
+    result = await db.execute(sql`
+      UPDATE categorization_rules
+      SET is_enabled = true, updated_at = NOW()
+      WHERE rule_type = ${ruleType} AND is_enabled = false
+    `);
+  }
 
   return result.rowCount ?? 0;
 }
 
 /**
- * Debug function - get raw database state
+ * Debug function - get raw database state (super admin only - no company filter)
  */
 export async function debugGetRawRules(): Promise<any[]> {
   const result = await db.execute(sql`
-    SELECT id, name, is_enabled, priority, conditions, actions, rule_type
+    SELECT id, name, is_enabled, priority, conditions, actions, rule_type, company_id
     FROM categorization_rules
     ORDER BY priority ASC, id ASC
   `);
