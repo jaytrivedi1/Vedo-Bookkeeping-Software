@@ -7917,8 +7917,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Temporary testing route for updating invoice statuses - no auth required
-  apiRouter.post("/test/update-invoice-statuses", async (req: Request, res: Response) => {
+  // Testing route for updating invoice statuses - admin only
+  apiRouter.post("/test/update-invoice-statuses", requireAdmin, async (req: Request, res: Response) => {
     try {
       const batchUpdateInvoiceStatuses = (await import('./batch-update-invoice-statuses')).default;
       await batchUpdateInvoiceStatuses();
@@ -14350,7 +14350,7 @@ Respond in JSON format:
     }
   });
 
-  // PUT /api/users/:id/role - Update user role
+  // PUT /api/users/:id/role - Update user role (with tenant scoping)
   apiRouter.put("/users/:id/role", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
@@ -14367,6 +14367,22 @@ Respond in JSON format:
         return res.status(404).json({ error: "User not found" });
       }
 
+      // Tenant scoping: Verify target user belongs to same company/firm as req.user
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        // Admins can only modify users in their own company
+        if (user.companyId !== req.user.companyId) {
+          return res.status(403).json({ error: "Access denied - user not in your company" });
+        }
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        // Accountants can only modify users in their own firm
+        if (user.firmId !== req.user.firmId) {
+          return res.status(403).json({ error: "Access denied - user not in your firm" });
+        }
+      } else if (req.user?.role !== 'super_admin') {
+        // Only super_admin, admin (for their company), or accountant (for their firm) can modify roles
+        return res.status(403).json({ error: "Access denied - insufficient permissions" });
+      }
+
       // Don't allow modifying super admin's role
       if (user.email === SUPER_ADMIN_EMAIL) {
         return res.status(403).json({ error: "Cannot modify the super admin account" });
@@ -14374,18 +14390,18 @@ Respond in JSON format:
 
       // Update role
       const updatedUser = await storage.updateUser(id, { role });
-      
+
       if (!updatedUser) {
         return res.status(404).json({ error: "User not found" });
       }
-      
+
       // Log activity
       await logActivity(storage, req, "user_role_changed", "user", id, {
         username: user.username,
         oldRole: user.role,
         newRole: role,
       });
-      
+
       // Don't return password
       const sanitizedUser = {
         id: updatedUser.id,
@@ -14396,7 +14412,7 @@ Respond in JSON format:
         lastName: updatedUser.lastName,
         isActive: updatedUser.isActive,
       };
-      
+
       res.json(sanitizedUser);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -14866,10 +14882,11 @@ Respond in JSON format:
     }
   });
 
-  // Recurring Invoices API
-  apiRouter.get("/recurring", requireAuth, async (req: Request, res: Response) => {
+  // Recurring Invoices API (company-scoped)
+  apiRouter.get("/recurring", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const templates = await storage.getRecurringTemplates();
+      const scopedStorage = createScopedStorage(req);
+      const templates = await scopedStorage.getRecurringTemplates();
       res.json(templates);
     } catch (error: any) {
       console.error("Error fetching recurring templates:", error);
@@ -14877,10 +14894,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/recurring/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const template = await storage.getRecurringTemplate(id);
+      const template = await scopedStorage.getRecurringTemplate(id);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -14891,14 +14909,15 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/recurring", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/recurring", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { customerId, templateName, frequency, dayOfMonth, startDate, endDate, maxOccurrences, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
-      
+
       const subTotal = lines.reduce((sum: number, line: any) => sum + (line.amount || 0), 0);
       const taxAmount = 0;
-      
-      const template = await storage.createRecurringTemplate(
+
+      const template = await scopedStorage.createRecurringTemplate(
         {
           customerId,
           templateName,
@@ -14925,15 +14944,16 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.put("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.put("/recurring/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
       const { customerId, templateName, frequency, dayOfMonth, startDate, endDate, maxOccurrences, autoEmail, autoCharge, paymentTerms, memo, lines = [] } = req.body;
-      
+
       const subTotal = lines.reduce((sum: number, line: any) => sum + (line.amount || 0), 0);
       const taxAmount = 0;
-      
-      const updated = await storage.updateRecurringTemplate(id, {
+
+      const updated = await scopedStorage.updateRecurringTemplate(id, {
         customerId,
         templateName,
         frequency: frequency as any,
@@ -14951,9 +14971,9 @@ Respond in JSON format:
       });
       
       if (lines.length > 0) {
-        await storage.updateRecurringLines(id, lines);
+        await scopedStorage.updateRecurringLines(id, lines);
       }
-      
+
       res.json(updated);
     } catch (error: any) {
       console.error("Error updating template:", error);
@@ -14961,10 +14981,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.get("/recurring/:id/lines", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/recurring/:id/lines", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const lines = await storage.getRecurringLines(id);
+      const lines = await scopedStorage.getRecurringLines(id);
       res.json(lines);
     } catch (error: any) {
       console.error("Error fetching lines:", error);
@@ -14972,10 +14993,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.delete("/recurring/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/recurring/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const deleted = await storage.deleteRecurringTemplate(id);
+      const deleted = await scopedStorage.deleteRecurringTemplate(id);
       if (!deleted) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -14986,10 +15008,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/recurring/:id/pause", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/recurring/:id/pause", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const updated = await storage.pauseRecurringTemplate(id);
+      const updated = await scopedStorage.pauseRecurringTemplate(id);
       res.json(updated);
     } catch (error: any) {
       console.error("Error pausing template:", error);
@@ -14997,10 +15020,11 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/recurring/:id/resume", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/recurring/:id/resume", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const updated = await storage.resumeRecurringTemplate(id);
+      const updated = await scopedStorage.resumeRecurringTemplate(id);
       res.json(updated);
     } catch (error: any) {
       console.error("Error resuming template:", error);
@@ -15008,27 +15032,28 @@ Respond in JSON format:
     }
   });
 
-  apiRouter.post("/recurring/:id/run-now", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/recurring/:id/run-now", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const template = await storage.getRecurringTemplate(id);
+      const template = await scopedStorage.getRecurringTemplate(id);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
-      
+
       // Get template lines
-      const lines = await storage.getRecurringLines(id);
-      
+      const lines = await scopedStorage.getRecurringLines(id);
+
       // Get customer
-      const customer = await storage.getContact(template.customerId);
+      const customer = await scopedStorage.getContact(template.customerId);
       if (!customer) {
         return res.status(404).json({ error: "Customer not found" });
       }
-      
+
       // Generate invoice number
-      const lastInvoice = await storage.getLastInvoiceNumber();
+      const lastInvoice = await scopedStorage.getLastInvoiceNumber();
       const nextNumber = String(parseInt(lastInvoice) + 1).padStart(6, '0');
-      
+
       // Create invoice from template
       const today = new Date();
       const lineItems = lines.map((line) => ({
@@ -15040,8 +15065,8 @@ Respond in JSON format:
         salesTaxId: line.salesTaxId || undefined,
         productId: line.productId || undefined,
       }));
-      
-      const invoice = await storage.createTransaction(
+
+      const invoice = await scopedStorage.createTransaction(
         {
           reference: nextNumber,
           type: "invoice",
@@ -15060,24 +15085,24 @@ Respond in JSON format:
         },
         lineItems
       );
-      
+
       // Record in history
-      await storage.createRecurringHistory({
+      await scopedStorage.createRecurringHistory({
         templateId: id,
         invoiceId: invoice.id,
         scheduledAt: today,
         generatedAt: today,
         status: "generated",
       });
-      
+
       // Update template next run date
       const { calculateNextRunDate } = await import("./lib/recurringUtils");
       const nextRunAt = calculateNextRunDate(template);
-      await storage.updateRecurringTemplate(id, {
+      await scopedStorage.updateRecurringTemplate(id, {
         nextRunAt,
         currentOccurrences: (template.currentOccurrences || 0) + 1,
       });
-      
+
       res.json({ message: "Invoice generated", invoiceId: invoice.id });
     } catch (error: any) {
       console.error("Error running template:", error);
@@ -15444,35 +15469,28 @@ Respond in JSON format:
   });
 
   // ===== AI CHAT ENDPOINT =====
-  apiRouter.post("/ai-chat", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/ai-chat", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { query } = req.body;
 
       if (!query || typeof query !== 'string') {
         return res.status(400).json({ error: 'Query is required' });
       }
 
-      // Get the user's active company from user_companies table
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const userCompanies = await storage.getUserCompanies(userId);
-      if (userCompanies.length === 0) {
-        return res.status(400).json({ error: 'No company found. Please create or join a company first.' });
-      }
-
-      // Find primary company or use first one
-      const primaryAssignment = userCompanies.find(uc => uc.isPrimary);
-      const companyId = primaryAssignment ? primaryAssignment.companyId : userCompanies[0].companyId;
+      const companyId = req.companyId!;
 
       // Get company preferences for currency
-      const preferences = await storage.getPreferences();
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'CAD';
 
       // Process the chat query
-      const response = await processAIChat(query, storage, companyId, homeCurrency);
+      const response = await processAIChat(query, scopedStorage, companyId, homeCurrency);
 
       res.json(response);
     } catch (error: any) {
@@ -15487,17 +15505,16 @@ Respond in JSON format:
   // ===== AI CONVERSATION ENDPOINTS =====
 
   // Get all conversations for the current user
-  apiRouter.get("/ai-conversations", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/ai-conversations", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const userCompanies = await storage.getUserCompanies(userId);
-      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
-
-      const conversations = await storage.getAiConversations(userId, companyId);
+      const companyId = req.companyId!;
+      const conversations = await scopedStorage.getAiConversations(userId, companyId);
       res.json(conversations);
     } catch (error: any) {
       console.error('[AI Conversations] Error fetching conversations:', error);
@@ -15506,15 +15523,15 @@ Respond in JSON format:
   });
 
   // Create a new conversation
-  apiRouter.post("/ai-conversations", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/ai-conversations", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
 
-      const userCompanies = await storage.getUserCompanies(userId);
-      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
+      const companyId = req.companyId!;
 
       const parsed = insertAiConversationSchema.safeParse({
         userId,
@@ -15526,7 +15543,7 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Invalid conversation data', details: parsed.error });
       }
 
-      const conversation = await storage.createAiConversation(parsed.data);
+      const conversation = await scopedStorage.createAiConversation(parsed.data);
       res.status(201).json(conversation);
     } catch (error: any) {
       console.error('[AI Conversations] Error creating conversation:', error);
@@ -15535,8 +15552,9 @@ Respond in JSON format:
   });
 
   // Get a single conversation with its messages
-  apiRouter.get("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.get("/ai-conversations/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -15547,7 +15565,7 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Invalid conversation ID' });
       }
 
-      const conversation = await storage.getAiConversation(conversationId);
+      const conversation = await scopedStorage.getAiConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
@@ -15557,7 +15575,7 @@ Respond in JSON format:
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      const messages = await storage.getAiMessages(conversationId);
+      const messages = await scopedStorage.getAiMessages(conversationId);
       res.json({ ...conversation, messages });
     } catch (error: any) {
       console.error('[AI Conversations] Error fetching conversation:', error);
@@ -15566,8 +15584,9 @@ Respond in JSON format:
   });
 
   // Update a conversation (title, archive status)
-  apiRouter.patch("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.patch("/ai-conversations/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -15578,7 +15597,7 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Invalid conversation ID' });
       }
 
-      const conversation = await storage.getAiConversation(conversationId);
+      const conversation = await scopedStorage.getAiConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
@@ -15592,7 +15611,7 @@ Respond in JSON format:
       if (title !== undefined) updates.title = title;
       if (isArchived !== undefined) updates.isArchived = isArchived;
 
-      const updated = await storage.updateAiConversation(conversationId, updates);
+      const updated = await scopedStorage.updateAiConversation(conversationId, updates);
       res.json(updated);
     } catch (error: any) {
       console.error('[AI Conversations] Error updating conversation:', error);
@@ -15601,8 +15620,9 @@ Respond in JSON format:
   });
 
   // Delete a conversation
-  apiRouter.delete("/ai-conversations/:id", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.delete("/ai-conversations/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -15613,7 +15633,7 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Invalid conversation ID' });
       }
 
-      const conversation = await storage.getAiConversation(conversationId);
+      const conversation = await scopedStorage.getAiConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
@@ -15622,7 +15642,7 @@ Respond in JSON format:
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      await storage.deleteAiConversation(conversationId);
+      await scopedStorage.deleteAiConversation(conversationId);
       res.json({ success: true });
     } catch (error: any) {
       console.error('[AI Conversations] Error deleting conversation:', error);
@@ -15631,8 +15651,9 @@ Respond in JSON format:
   });
 
   // Add a message to a conversation and get AI response
-  apiRouter.post("/ai-conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/ai-conversations/:id/messages", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = req.user?.id;
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
@@ -15643,7 +15664,7 @@ Respond in JSON format:
         return res.status(400).json({ error: 'Invalid conversation ID' });
       }
 
-      const conversation = await storage.getAiConversation(conversationId);
+      const conversation = await scopedStorage.getAiConversation(conversationId);
       if (!conversation) {
         return res.status(404).json({ error: 'Conversation not found' });
       }
@@ -15658,23 +15679,22 @@ Respond in JSON format:
       }
 
       // Save user message
-      const userMessage = await storage.createAiMessage({
+      const userMessage = await scopedStorage.createAiMessage({
         conversationId,
         role: 'user',
         content
       });
 
       // Get company context for AI
-      const userCompanies = await storage.getUserCompanies(userId);
-      const companyId = conversation.companyId || userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0]?.companyId;
-      const preferences = await storage.getPreferences();
+      const companyId = req.companyId!;
+      const preferences = await scopedStorage.getPreferences();
       const homeCurrency = preferences?.homeCurrency || 'CAD';
 
       // Process with AI
-      const aiResponse = await processAIChat(content, storage, companyId, homeCurrency);
+      const aiResponse = await processAIChat(content, scopedStorage, companyId, homeCurrency);
 
       // Save assistant message
-      const assistantMessage = await storage.createAiMessage({
+      const assistantMessage = await scopedStorage.createAiMessage({
         conversationId,
         role: 'assistant',
         content: aiResponse.message,
@@ -15683,11 +15703,11 @@ Respond in JSON format:
       });
 
       // Auto-generate title from first message if this is the first user message
-      const allMessages = await storage.getAiMessages(conversationId);
+      const allMessages = await scopedStorage.getAiMessages(conversationId);
       if (allMessages.filter(m => m.role === 'user').length === 1) {
         // Generate a title from the first message (first 50 chars)
         const autoTitle = content.length > 50 ? content.substring(0, 47) + '...' : content;
-        await storage.updateAiConversation(conversationId, { title: autoTitle });
+        await scopedStorage.updateAiConversation(conversationId, { title: autoTitle });
       }
 
       res.json({
@@ -15707,8 +15727,9 @@ Respond in JSON format:
   // ===== INVOICE REMINDER ENDPOINTS =====
 
   // Preview reminders (for confirmation)
-  apiRouter.post("/invoice-reminders/preview", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/invoice-reminders/preview", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { invoiceIds } = req.body;
 
       if (!invoiceIds || !Array.isArray(invoiceIds)) {
@@ -15716,7 +15737,7 @@ Respond in JSON format:
       }
 
       const { previewInvoiceReminders } = await import('./services/invoice-reminder-service');
-      const previews = await previewInvoiceReminders(storage, invoiceIds);
+      const previews = await previewInvoiceReminders(scopedStorage, invoiceIds);
 
       res.json({
         total: previews.length,
@@ -15731,34 +15752,23 @@ Respond in JSON format:
   });
 
   // Send reminders
-  apiRouter.post("/invoice-reminders/send", requireAuth, async (req: Request, res: Response) => {
+  apiRouter.post("/invoice-reminders/send", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const { invoiceIds } = req.body;
 
       if (!invoiceIds || !Array.isArray(invoiceIds)) {
         return res.status(400).json({ error: 'invoiceIds array is required' });
       }
 
-      // Get company info
-      const userId = req.user?.id;
-      if (!userId) {
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      const userCompanies = await storage.getUserCompanies(userId);
-      if (userCompanies.length === 0) {
-        return res.status(400).json({ error: 'No company found' });
-      }
-
-      const companyId = userCompanies.find(uc => uc.isPrimary)?.companyId || userCompanies[0].companyId;
-      const companySettings = await storage.getCompanySettings();
-      const preferences = await storage.getPreferences();
+      const companySettings = await scopedStorage.getCompanySettings();
+      const preferences = await scopedStorage.getPreferences();
 
       const companyName = companySettings?.name || 'Your Company';
       const currency = preferences?.homeCurrency || 'CAD';
 
       const { sendInvoiceReminders } = await import('./services/invoice-reminder-service');
-      const result = await sendInvoiceReminders(storage, invoiceIds, companyName, currency);
+      const result = await sendInvoiceReminders(scopedStorage, invoiceIds, companyName, currency);
 
       res.json(result);
     } catch (error: any) {
