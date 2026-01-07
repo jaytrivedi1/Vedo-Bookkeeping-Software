@@ -45,13 +45,3 @@ export async function addSuperAdminRole() {
     throw error;
   }
 }
-
-// Run migration if called directly
-if (require.main === module) {
-  addSuperAdminRole()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error(error);
-      process.exit(1);
-    });
-}
