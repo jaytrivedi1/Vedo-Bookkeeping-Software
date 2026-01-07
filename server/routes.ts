@@ -3060,10 +3060,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalLineItemAmount = expenseData.lineItems.reduce((sum, item) => sum + item.amount, 0);
       let remainingSubTotal = subTotal;
       
-      // Add debit entries for each expense line item
+      // Add debit entries for each expense line item (company-scoped)
       for (let i = 0; i < expenseData.lineItems.length; i++) {
         const item = expenseData.lineItems[i];
-        const expenseAccount = await storage.getAccount(item.accountId);
+        const expenseAccount = await scopedStorage.getAccount(item.accountId);
         if (!expenseAccount) {
           return res.status(400).json({ message: `Invalid expense account for line item` });
         }
@@ -3096,10 +3096,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For expenses, tax paid is DEBITED to tax accounts (prepaid tax/input tax)
       if (taxAmount > 0) {
         console.log(`Processing expense tax amount: ${taxAmount}`);
-        
-        // Get the default tax receivable account (or use sales tax payable with opposite entry)
-        const taxAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
-        
+
+        // Get the default tax receivable account (company-scoped)
+        const taxAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
+
         if (!taxAccount) {
           return res.status(500).json({ message: "Tax account not found" });
         }
@@ -3110,18 +3110,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const taxComponents = new Map<number, { accountId: number, rate: number }>();
         let totalTaxRate = 0;
         
-        // Process each line item to determine tax account allocation
+        // Process each line item to determine tax account allocation (company-scoped)
         for (const item of expenseData.lineItems) {
           if (item.salesTaxId) {
-            const salesTax = await storage.getSalesTax(item.salesTaxId);
-            
+            const salesTax = await scopedStorage.getSalesTax(item.salesTaxId);
+
             if (salesTax) {
               if (salesTax.isComposite) {
-                // Get component taxes
+                // Get component taxes (company-scoped)
                 const componentTaxes = await db
                   .select()
                   .from(salesTaxSchema)
-                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .where(and(
+                    eq(salesTaxSchema.parentId, salesTax.id),
+                    eq(salesTaxSchema.companyId, req.companyId!)
+                  ))
                   .execute();
                   
                 if (componentTaxes.length > 0) {
@@ -3202,12 +3205,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionId: 0
       });
       
-      const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
-      
+      // Create transaction (company-scoped)
+      const newTransaction = await scopedStorage.createTransaction(transaction, lineItems, ledgerEntries);
+
       res.status(201).json({
         transaction: newTransaction,
-        lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
-        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        lineItems: await scopedStorage.getLineItemsByTransaction(newTransaction.id),
+        ledgerEntries: await scopedStorage.getLedgerEntriesByTransaction(newTransaction.id),
         subTotal: expenseData.subTotal,
         taxAmount: expenseData.taxAmount,
         totalAmount: expenseData.totalAmount || totalAmount
@@ -3368,30 +3372,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle tax entries if there's tax
       if (taxAmount > 0) {
         console.log(`Processing cheque tax amount: ${taxAmount}`);
-        
-        // Get the default tax receivable account
-        const taxAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
-        
+
+        // Get the default tax receivable account (company-scoped)
+        const taxAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
+
         if (!taxAccount) {
           return res.status(500).json({ message: "Tax account not found" });
         }
-        
+
         // Calculate tax components for proper allocation
         const taxComponents = new Map<number, { accountId: number, calculatedAmount: number }>();
         let totalCalculatedTax = 0;
-        
-        // Process each line item to determine tax account allocation
+
+        // Process each line item to determine tax account allocation (company-scoped)
         for (const item of chequeData.lineItems) {
           if (item.salesTaxId) {
-            const salesTax = await storage.getSalesTax(item.salesTaxId);
-            
+            const salesTax = await scopedStorage.getSalesTax(item.salesTaxId);
+
             if (salesTax) {
               if (salesTax.isComposite) {
-                // Get component taxes
+                // Get component taxes (company-scoped)
                 const componentTaxes = await db
                   .select()
                   .from(salesTaxSchema)
-                  .where(eq(salesTaxSchema.parentId, salesTax.id))
+                  .where(and(
+                    eq(salesTaxSchema.parentId, salesTax.id),
+                    eq(salesTaxSchema.companyId, req.companyId!)
+                  ))
                   .execute();
                   
                 if (componentTaxes.length > 0) {
