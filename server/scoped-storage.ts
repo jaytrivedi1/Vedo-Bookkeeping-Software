@@ -228,6 +228,10 @@ export class CompanyScopedStorage {
     return this.storage.getTransactionsByDescription(searchText, type, this.companyId);
   }
 
+  async getTransactionsByContactAndType(contactId: number, type: string): Promise<Transaction[]> {
+    return this.storage.getTransactionsByContactAndType(contactId, type, this.companyId);
+  }
+
   async getRecentTransactions(limit: number): Promise<Transaction[]> {
     return this.storage.getRecentTransactions(limit, this.companyId);
   }

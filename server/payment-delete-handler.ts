@@ -9,28 +9,37 @@ import { eq, and, sql, or, inArray } from 'drizzle-orm';
  * 3. Deposit/cheque balances are properly restored
  * 4. Related ledger entries and transactions are cleaned up
  * 5. All operations occur in a single atomic transaction
- * 
+ * 6. Company isolation - verifies payment belongs to the specified company
+ *
  * @param paymentId The ID of the payment/cheque to delete
+ * @param companyId The company ID to verify ownership (REQUIRED for security)
  * @returns Result object with details of the deletion operation
  */
-export async function deletePaymentAndRelatedTransactions(paymentId: number) {
-  console.log(`Starting comprehensive payment deletion for payment #${paymentId}`);
-  
+export async function deletePaymentAndRelatedTransactions(paymentId: number, companyId?: number) {
+  console.log(`Starting comprehensive payment deletion for payment #${paymentId}, company: ${companyId}`);
+
   try {
     // Execute all operations in a single database transaction
     return await db.transaction(async (tx) => {
-      // Step 1: Get the payment/cheque to verify it exists
+      // Step 1: Get the payment/cheque to verify it exists AND belongs to the company
+      const whereConditions = [
+        eq(transactions.id, paymentId),
+        or(
+          eq(transactions.type, 'payment'),
+          eq(transactions.type, 'cheque')
+        )
+      ];
+
+      // Add company filter for security (if provided)
+      if (companyId) {
+        whereConditions.push(eq(transactions.companyId, companyId));
+      }
+
       const [payment] = await tx.select().from(transactions)
-        .where(and(
-          eq(transactions.id, paymentId),
-          or(
-            eq(transactions.type, 'payment'),
-            eq(transactions.type, 'cheque')
-          )
-        ));
-      
+        .where(and(...whereConditions));
+
       if (!payment) {
-        throw new Error(`Payment #${paymentId} not found or is not a payment/cheque transaction`);
+        throw new Error(`Payment #${paymentId} not found, is not a payment/cheque, or access denied`);
       }
       
       console.log(`Deleting payment #${paymentId} with balance: ${payment.balance}`);

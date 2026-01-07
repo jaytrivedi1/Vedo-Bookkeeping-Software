@@ -5293,14 +5293,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dedicated payment deletion endpoint
   apiRouter.delete("/payments/:id/delete", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId;
       const id = parseInt(req.params.id);
-      // Use the specialized handler for payment deletion
-      const result = await deletePaymentAndRelatedTransactions(id);
+      // Use the specialized handler for payment deletion (with company isolation)
+      const result = await deletePaymentAndRelatedTransactions(id, companyId);
       res.status(200).json(result);
     } catch (error) {
       console.error("Payment deletion error:", error);
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: error instanceof Error ? error.message : "Failed to delete payment",
         error: String(error)
       });
@@ -5386,41 +5386,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Improved payment deletion - use the dedicated handler
       if (transaction.type === 'payment') {
         try {
-          // Use the specialized payment deletion handler function
-          const result = await deletePaymentAndRelatedTransactions(id);
+          // Use the specialized payment deletion handler function (with company isolation)
+          const result = await deletePaymentAndRelatedTransactions(id, req.companyId);
           return res.status(200).json(result);
         } catch (error) {
           console.error("Error deleting payment transaction:", error);
-          return res.status(500).json({ 
-            message: "Failed to delete payment and update related transactions", 
-            error: String(error) 
+          return res.status(500).json({
+            message: "Failed to delete payment and update related transactions",
+            error: String(error)
           });
         }
       }
-      
+
       // For non-payment transactions, continue with regular deletion process
-      
+
       // Handle deposit deletion with automatic credit application reversal
       if (transaction.type === 'deposit') {
         try {
           // Special check for system-generated credits (from payments)
-          if (transaction.status === 'unapplied_credit' && 
+          if (transaction.status === 'unapplied_credit' &&
               transaction.description?.includes("Unapplied credit from payment")) {
-            return res.status(403).json({ 
+            return res.status(403).json({
               message: "Cannot directly delete system-generated unapplied credit. Please delete the parent payment transaction instead.",
               type: "system_credit"
             });
           }
-          
-          // Use the specialized deposit deletion handler that reverses credit applications
+
+          // Use the specialized deposit deletion handler that reverses credit applications (with company isolation)
           console.log(`Using comprehensive deposit deletion handler for ${transaction.reference} (ID: ${transaction.id})`);
-          const result = await deleteDepositAndReverseApplications(id);
+          const result = await deleteDepositAndReverseApplications(id, req.companyId);
           return res.status(200).json(result);
         } catch (error) {
           console.error("Error deleting deposit transaction:", error);
-          return res.status(500).json({ 
-            message: "Failed to delete deposit and restore related invoices", 
-            error: String(error) 
+          return res.status(500).json({
+            message: "Failed to delete deposit and restore related invoices",
+            error: String(error)
           });
         }
       }
@@ -7444,9 +7444,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Get unique transaction IDs
         const transactionIds = Array.from(new Set(paymentEntries.map(entry => entry.transactionId)));
         
-        // Get transaction details for each payment
+        // Get transaction details for each payment (using scopedStorage for company isolation)
         for (const txId of transactionIds) {
-          const paymentTx = await storage.getTransaction(txId);
+          const paymentTx = await scopedStorage.getTransaction(txId);
           if (paymentTx) {
             // Find the ledger entry in our results
             const ledgerEntry = paymentEntries.find(entry => entry.transactionId === txId);
@@ -7461,18 +7461,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Find payments that have line items referencing this invoice 
-      // This is necessary to find exact amounts of credits applied
+      // Find payments that have line items referencing this invoice
+      // This is necessary to find exact amounts of credits applied (scoped to company)
       const payments = await db
         .select()
         .from(transactions)
         .where(
-          eq(transactions.type, 'payment')
+          and(
+            eq(transactions.type, 'payment'),
+            eq(transactions.companyId, req.companyId!)
+          )
         );
-      
-      // Get all line items for the payments
-      const lineItemPromises = payments.map(payment => 
-        storage.getLineItemsByTransaction(payment.id)
+
+      // Get all line items for the payments (using scopedStorage for company isolation)
+      const lineItemPromises = payments.map(payment =>
+        scopedStorage.getLineItemsByTransaction(payment.id)
       );
       const allLineItems = await Promise.all(lineItemPromises);
       
@@ -7634,8 +7637,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`DEBUG PAYMENT HISTORY: Found ${depositIdsArray.length} unique deposit IDs for invoice #${transaction.reference}:`, depositIdsArray);
       
-      // Also look for deposit transactions that mention this invoice in their description
-      const depositsByDescription = await storage.getTransactionsByDescription(`invoice #${transaction.reference}`, 'deposit');
+      // Also look for deposit transactions that mention this invoice in their description (scoped to company)
+      const depositsByDescription = await scopedStorage.getTransactionsByDescription(`invoice #${transaction.reference}`, 'deposit');
       console.log(`DEBUG PAYMENT HISTORY: Found ${depositsByDescription.length} deposits mentioning invoice #${transaction.reference} in description:`, 
         depositsByDescription.map(d => ({ id: d.id, reference: d.reference, amount: d.amount, description: d.description }))
       );
@@ -7648,15 +7651,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
       
-      // Check if we should also search for deposits by this contact that were created around the same time
-      const recentDeposits = await storage.getTransactionsByContactAndType(transaction.contactId, 'deposit');
+      // Check if we should also search for deposits by this contact that were created around the same time (scoped to company)
+      const recentDeposits = await scopedStorage.getTransactionsByContactAndType(transaction.contactId, 'deposit');
       console.log(`DEBUG PAYMENT HISTORY: Found ${recentDeposits.length} deposits for contact ID ${transaction.contactId}:`, 
         recentDeposits.map(d => ({ id: d.id, reference: d.reference, amount: d.amount, description: d.description }))  
       );
       
-      // Process each deposit
+      // Process each deposit (using scopedStorage for company isolation)
       for (const depositId of depositIdsArray) {
-        const deposit = await storage.getTransaction(depositId);
+        const deposit = await scopedStorage.getTransaction(depositId);
         if (deposit) {
           // Find all line items for this deposit to get the exact amount applied
           const depositItemsForInvoice = depositLineItems.filter(item => 
@@ -9374,8 +9377,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For CSV imports, accountId is the GL account
         glAccountId = importedTx.accountId!;
       } else {
-        // For Plaid imports, get the linkedAccountId from bank account
-        const bankAccount = await storage.getBankAccount(importedTx.bankAccountId!);
+        // For Plaid imports, get the linkedAccountId from bank account (scoped to company)
+        const bankAccount = await scopedStorage.getBankAccount(importedTx.bankAccountId!);
         if (!bankAccount || !bankAccount.linkedAccountId) {
           return res.status(400).json({ error: 'Bank account not linked to Chart of Accounts' });
         }
@@ -9448,9 +9451,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         ];
 
-        // Add sales tax ledger entry if applicable
+        // Add sales tax ledger entry if applicable (scoped to company)
         if (salesTaxId && taxAmount > 0) {
-          const allTaxes = await storage.getSalesTaxes();
+          const allTaxes = await scopedStorage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
           if (tax && tax.accountId) {
             ledgerEntries.push({
@@ -9464,7 +9467,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const transaction = await storage.createTransaction(
+        // Create expense transaction (scoped to company)
+        const transaction = await scopedStorage.createTransaction(
           {
             type: 'expense',
             reference: null, // Allow blank reference
@@ -9481,8 +9485,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ledgerEntries
         );
 
-        // Update imported transaction with matched transaction ID
-        await storage.updateImportedTransaction(importedTxId, {
+        // Update imported transaction with matched transaction ID (scoped to company)
+        await scopedStorage.updateImportedTransaction(importedTxId, {
           matchedTransactionId: transaction.id,
           status: 'matched',
           name: contactName || importedTx.name, // Update name if contact was selected
@@ -9565,9 +9569,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let baseAmount = absoluteAmount;
         let taxAmount = 0;
         let totalWithTax = absoluteAmount;
-        
+
         if (salesTaxId) {
-          const allTaxes = await storage.getSalesTaxes();
+          const allTaxes = await scopedStorage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
           if (tax) {
             // Tax-inclusive calculation
@@ -9608,9 +9612,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           },
         ];
 
-        // Add sales tax ledger entry if applicable
+        // Add sales tax ledger entry if applicable (scoped to company)
         if (salesTaxId && taxAmount > 0) {
-          const allTaxes = await storage.getSalesTaxes();
+          const allTaxes = await scopedStorage.getSalesTaxes();
           const tax = allTaxes.find(t => t.id === salesTaxId);
           if (tax && tax.accountId) {
             ledgerEntries.push({
@@ -9624,7 +9628,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        const transaction = await storage.createTransaction(
+        // Create deposit transaction (scoped to company)
+        const transaction = await scopedStorage.createTransaction(
           {
             type: 'deposit',
             reference: '',
@@ -9640,8 +9645,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ledgerEntries
         );
 
-        // Update imported transaction with matched transaction ID
-        await storage.updateImportedTransaction(importedTxId, {
+        // Update imported transaction with matched transaction ID (scoped to company)
+        await scopedStorage.updateImportedTransaction(importedTxId, {
           matchedTransactionId: transaction.id,
           status: 'matched',
           name: contactName || importedTx.name, // Update name if contact was selected

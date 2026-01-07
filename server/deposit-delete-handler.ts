@@ -8,25 +8,34 @@ import { eq, and, sql } from 'drizzle-orm';
  * 2. All ledger entries are removed
  * 3. All operations occur in a single atomic transaction
  * 4. Uses payment_applications table as the source of truth
- * 
+ * 5. Company isolation - verifies deposit belongs to the specified company
+ *
  * @param depositId The ID of the deposit to delete
+ * @param companyId The company ID to verify ownership (REQUIRED for security)
  * @returns Result object with details of the deletion operation
  */
-export async function deleteDepositAndReverseApplications(depositId: number) {
-  console.log(`Starting comprehensive deposit deletion for deposit #${depositId}`);
-  
+export async function deleteDepositAndReverseApplications(depositId: number, companyId?: number) {
+  console.log(`Starting comprehensive deposit deletion for deposit #${depositId}, company: ${companyId}`);
+
   try {
     // Execute all operations in a single database transaction
     return await db.transaction(async (tx) => {
-      // Step 1: Get the deposit to verify it exists
+      // Step 1: Get the deposit to verify it exists AND belongs to the company
+      const whereConditions = [
+        eq(transactions.id, depositId),
+        eq(transactions.type, 'deposit')
+      ];
+
+      // Add company filter for security (if provided)
+      if (companyId) {
+        whereConditions.push(eq(transactions.companyId, companyId));
+      }
+
       const [deposit] = await tx.select().from(transactions)
-        .where(and(
-          eq(transactions.id, depositId),
-          eq(transactions.type, 'deposit')
-        ));
-      
+        .where(and(...whereConditions));
+
       if (!deposit) {
-        throw new Error(`Deposit #${depositId} not found or is not a deposit transaction`);
+        throw new Error(`Deposit #${depositId} not found, is not a deposit, or access denied`);
       }
       
       console.log(`Found deposit #${deposit.reference} with amount $${deposit.amount}`);
