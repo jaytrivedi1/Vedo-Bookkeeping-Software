@@ -530,7 +530,7 @@ export type Company = typeof companiesSchema.$inferSelect;
 export type InsertCompany = z.infer<typeof insertCompaniesSchema>;
 
 // Role-based access control (RBAC)
-export const roleEnum = pgEnum('role', ['admin', 'staff', 'read_only', 'accountant']);
+export const roleEnum = pgEnum('role', ['super_admin', 'admin', 'staff', 'read_only', 'accountant']);
 
 // Accounting Firms schema - for accounting firms that manage multiple client companies
 export const accountingFirmsSchema = pgTable('accounting_firms', {

@@ -60,8 +60,8 @@ export default function Sidebar({ open, setOpen }: SidebarProps) {
     { path: "/reports", label: "Reports", icon: <LineChartIcon className="w-[18px] h-[18px]" /> },
   ];
 
-  // Add Admin Dashboard for admin users only
-  const menuItems = user?.role === 'admin'
+  // Add Admin Dashboard for super admin users only
+  const menuItems = user?.role === 'super_admin'
     ? [...baseMenuItems, { path: "/admin", label: "Admin Dashboard", icon: <ShieldIcon className="w-[18px] h-[18px]" /> }]
     : baseMenuItems;
 

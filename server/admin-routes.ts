@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 import { storage } from "./storage";
-import { requireAuth, requireAdmin } from "./auth";
+import { requireAuth, requireSuperAdmin } from "./auth";
 import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 export const adminRouter = express.Router();
@@ -20,9 +20,9 @@ const plaidConfig = new Configuration({
 });
 const plaidClient = new PlaidApi(plaidConfig);
 
-// All admin routes require authentication and admin role
+// All admin routes require authentication and super admin role
 adminRouter.use(requireAuth);
-adminRouter.use(requireAdmin);
+adminRouter.use(requireSuperAdmin);
 
 // Get all users with their company associations
 adminRouter.get("/users", async (req: Request, res: Response) => {

@@ -37,12 +37,36 @@ export type Permission =
   | 'firms:manage'
   | 'firms:invite_clients';
 
-export type Role = 'admin' | 'staff' | 'read_only' | 'accountant';
+export type Role = 'super_admin' | 'admin' | 'staff' | 'read_only' | 'accountant';
 
 // Define permissions for each role
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  super_admin: [
+    // Full access to everything including admin dashboard
+    'users:create',
+    'users:read',
+    'users:update',
+    'users:delete',
+    'users:assign_roles',
+    'transactions:create',
+    'transactions:read',
+    'transactions:update',
+    'transactions:delete',
+    'contacts:create',
+    'contacts:read',
+    'contacts:update',
+    'contacts:delete',
+    'accounts:create',
+    'accounts:read',
+    'accounts:update',
+    'accounts:delete',
+    'reports:view',
+    'settings:view',
+    'settings:update',
+  ],
+
   admin: [
-    // Full access to everything
+    // Full access to everything except admin dashboard
     'users:create',
     'users:read',
     'users:update',

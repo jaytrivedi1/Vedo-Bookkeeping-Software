@@ -94,13 +94,13 @@ function AdminRoute({ component: Component, ...rest }: { component: any; path?: 
     return <Redirect to="/login" />;
   }
 
-  if (user.role !== 'admin') {
+  if (user.role !== 'super_admin') {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
           <p className="text-gray-500">You don't have permission to access this page.</p>
-          <p className="text-sm text-gray-400 mt-2">Administrator access required.</p>
+          <p className="text-sm text-gray-400 mt-2">Super Administrator access required.</p>
         </div>
       </div>
     );

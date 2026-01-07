@@ -585,8 +585,21 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
     return res.status(401).json({ message: "Authentication required" });
   }
 
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
     return res.status(403).json({ message: "Admin access required" });
+  }
+
+  next();
+}
+
+// Middleware to ensure user has super admin role (for admin dashboard access)
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+
+  if (req.user.role !== 'super_admin') {
+    return res.status(403).json({ message: "Super Admin access required" });
   }
 
   next();
