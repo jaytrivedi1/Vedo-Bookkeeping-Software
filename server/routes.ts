@@ -555,7 +555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const apiRouter = express.Router();
   
   // TEST Endpoint for creating a payment with unapplied credit (admin only)
-  apiRouter.post("/test-unapplied-credit", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/test-unapplied-credit", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       // First, create an invoice to pay
       const invoice = await storage.createTransaction(
@@ -7769,7 +7769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Specific endpoint for fixing invoice #1006 (ID: 126) - admin only
-  apiRouter.post("/fix-invoice-1006", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/fix-invoice-1006", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const invoiceId = 126; // ID of invoice #1006
       
@@ -7821,7 +7821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Batch recalculation of invoice balances (admin only)
-  apiRouter.post("/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/recalculate-all-invoice-balances", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
       await batchRecalculateInvoiceBalances();
@@ -7833,7 +7833,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Testing route - admin only
-  apiRouter.post("/test/recalculate-all-invoice-balances", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/test/recalculate-all-invoice-balances", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
       await batchRecalculateInvoiceBalances();
@@ -7845,7 +7845,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Direct fix for Invoice #1009 - ensures balance is always $3000 (admin only)
-  apiRouter.post("/fix-invoice-1009", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/fix-invoice-1009", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       // Set Invoice #1009 to exactly $3000 (preserving manual adjustment)
       await db.execute(
@@ -7869,7 +7869,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Comprehensive fix for all balances - admin only
-  apiRouter.post("/test/fix-all-balances", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/test/fix-all-balances", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       console.log('Running comprehensive fix for all transaction balances');
       await fixAllBalances();
@@ -7917,7 +7917,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Testing route for updating invoice statuses - admin only
-  apiRouter.post("/test/update-invoice-statuses", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/test/update-invoice-statuses", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const batchUpdateInvoiceStatuses = (await import('./batch-update-invoice-statuses')).default;
       await batchUpdateInvoiceStatuses();
@@ -7932,233 +7932,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.use("/companies", companyRouter);
   apiRouter.use("/admin", adminRouter);
 
-  // User Management Routes (Protected with requireAuth middleware + tenant scoping)
-  apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-
-      // Enforce tenant scoping based on user's role and organization
-      let users: any[] = [];
-      const includeInactive = req.query.includeInactive === 'true';
-      
-      // Admins can only see users in their own company
-      if (req.user.role === 'admin' && req.user.companyId) {
-        users = await storage.getUsers({ 
-          companyId: req.user.companyId,
-          includeInactive 
-        });
-      }
-      // Accountants can see users in their own firm AND in their client companies
-      else if (req.user.role === 'accountant' && req.user.firmId) {
-        // Get firm users
-        const firmUsers = await storage.getUsers({ 
-          firmId: req.user.firmId,
-          includeInactive 
-        });
-        
-        // Get client companies for this firm
-        const clientAccess = await storage.getFirmClientAccess(req.user.firmId);
-        const clientCompanyIds = clientAccess.filter(access => access.isActive).map(access => access.companyId);
-        
-        // Get users from client companies
-        let clientUsers: any[] = [];
-        if (clientCompanyIds.length > 0) {
-          for (const companyId of clientCompanyIds) {
-            const companyUsers = await storage.getUsers({ 
-              companyId,
-              includeInactive 
-            });
-            clientUsers.push(...companyUsers);
-          }
-        }
-        
-        // Combine and deduplicate
-        const allUsers = [...firmUsers, ...clientUsers];
-        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.id, u])).values());
-        users = uniqueUsers;
-      }
-      // Other roles (staff, read_only) can only see users in their company
-      else if (req.user.companyId) {
-        users = await storage.getUsers({ 
-          companyId: req.user.companyId,
-          includeInactive 
-        });
-      }
-      else {
-        // If user has no company/firm association, they can't see any users
-        return res.json([]);
-      }
-      
-      // Don't send password hashes to the client
-      const sanitizedUsers = users.map(user => ({
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        isActive: user.isActive,
-        lastLogin: user.lastLogin,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-        companyId: user.companyId,
-        firmId: user.firmId
-      }));
-      res.json(sanitizedUsers);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      res.status(500).json({ message: "Failed to fetch users" });
-    }
-  });
-
-  apiRouter.get("/users/:id", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Don't send password hash to the client
-      const { password, ...sanitizedUser } = user;
-      res.json(sanitizedUser);
-    } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
-    }
-  });
-
-  apiRouter.post("/users", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      // Check if username is already taken
-      const existingUser = await storage.getUserByUsername(req.body.username);
-      if (existingUser) {
-        return res.status(400).json({ message: "Username is already taken" });
-      }
-      
-      // Check if email is already in use
-      if (req.body.email) {
-        const existingEmail = await storage.getUserByEmail(req.body.email);
-        if (existingEmail) {
-          return res.status(400).json({ message: "Email is already in use" });
-        }
-      }
-      
-      // Auto-assign tenant based on requester's organization
-      const userData = insertUserSchema.parse(req.body);
-      
-      // Prevent manually setting companyId or firmId - these must be inherited from requester
-      if (!req.user) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-      
-      // If creating an accountant, assign to requester's firm
-      if (userData.role === 'accountant') {
-        if (!req.user.firmId) {
-          return res.status(400).json({ message: "Only accounting firm users can create accountants" });
-        }
-        userData.firmId = req.user.firmId;
-        userData.companyId = null;
-      }
-      // If creating a company user (admin, staff, read_only), assign to requester's company
-      else {
-        if (!req.user.companyId) {
-          return res.status(400).json({ message: "Company association required to create company users" });
-        }
-        userData.companyId = req.user.companyId;
-        userData.firmId = null;
-      }
-      
-      const user = await storage.createUser(userData);
-      
-      // Don't send password hash to the client
-      const { password, ...sanitizedUser } = user;
-      res.status(201).json(sanitizedUser);
-    } catch (error) {
-      console.error("Error creating user:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to create user" });
-    }
-  });
-
-  apiRouter.patch("/users/:id", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Check if changing username and if it's already taken
-      if (req.body.username && req.body.username !== user.username) {
-        const existingUser = await storage.getUserByUsername(req.body.username);
-        if (existingUser) {
-          return res.status(400).json({ message: "Username is already taken" });
-        }
-      }
-      
-      // Check if changing email and if it's already in use
-      if (req.body.email && req.body.email !== user.email) {
-        const existingEmail = await storage.getUserByEmail(req.body.email);
-        if (existingEmail) {
-          return res.status(400).json({ message: "Email is already in use" });
-        }
-      }
-      
-      // Update the user
-      const updatedUser = await storage.updateUser(id, req.body);
-      
-      // Don't send password hash to the client
-      const { password, ...sanitizedUser } = updatedUser!;
-      res.json(sanitizedUser);
-    } catch (error) {
-      console.error("Error updating user:", error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid user data", errors: error.errors });
-      }
-      res.status(500).json({ message: "Failed to update user" });
-    }
-  });
-
-  apiRouter.delete("/users/:id", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-
-      // Check if user exists
-      const user = await storage.getUser(id);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Don't allow deleting yourself
-      if (req.user?.id === id) {
-        return res.status(400).json({ message: "Cannot delete your own account" });
-      }
-
-      // Don't allow deleting super admin
-      if (user.email === SUPER_ADMIN_EMAIL) {
-        return res.status(403).json({ message: "Cannot delete the super admin account" });
-      }
-
-      // Delete the user
-      const success = await storage.deleteUser(id);
-      
-      if (success) {
-        res.status(204).end();
-      } else {
-        res.status(500).json({ message: "Failed to delete user" });
-      }
-    } catch (error) {
-      console.error("Error deleting user:", error);
-      res.status(500).json({ message: "Failed to delete user" });
-    }
-  });
+  // NOTE: User Management Routes are defined later in this file (around line 14062)
+  // with proper tenant scoping. Do not add duplicate user routes here.
 
   // User-Company Assignment Routes
 
@@ -9103,7 +8878,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
 
   // Fix bill balances endpoint - admin only
-  apiRouter.post("/fix/bill-balances", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/fix/bill-balances", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       console.log("Starting bill balance fix...");
       
@@ -9169,7 +8944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Repair Trial Balance - Fix incorrect ledger entries for bills and payments (admin only)
-  apiRouter.post("/fix/trial-balance", requireAdmin, async (req: Request, res: Response) => {
+  apiRouter.post("/fix/trial-balance", requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       console.log("Starting Trial Balance repair...");
       let fixedEntries = 0;
@@ -11502,6 +11277,7 @@ Respond in JSON format:
   // DELETE /api/bank-feeds/:id/unmatch - Undo a match
   apiRouter.delete("/bank-feeds/:id/unmatch", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const transactionId = parseInt(req.params.id);
       const userCompanyId = req.companyId;
 
@@ -11530,7 +11306,7 @@ Respond in JSON format:
         const normalizedMerchant = normalizeMerchantName(merchantName);
 
         if (normalizedMerchant && userCompanyId) {
-          const pattern = await storage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
+          const pattern = await scopedStorage.getMerchantPatternByName(normalizedMerchant, userCompanyId);
           if (pattern && pattern.totalOccurrences > 0) {
             const newOccurrences = Math.max(0, pattern.totalOccurrences - 1);
             const newConfirmations = Math.max(0, pattern.userConfirmations - 1);
@@ -11539,7 +11315,7 @@ Respond in JSON format:
               ? Math.min(0.99, newConfirmations / totalActions)
               : 0.5;
 
-            await storage.updateMerchantPattern(pattern.id, {
+            await scopedStorage.updateMerchantPattern(pattern.id, {
               totalOccurrences: newOccurrences,
               userConfirmations: newConfirmations,
               confidenceScore: newConfidence.toFixed(4),
@@ -11555,7 +11331,7 @@ Respond in JSON format:
             const MIN_OCCURRENCES_FOR_RULE = 3;
             const MIN_CONFIDENCE_FOR_RULE = 0.80;
             if (newOccurrences < MIN_OCCURRENCES_FOR_RULE || newConfidence < MIN_CONFIDENCE_FOR_RULE) {
-              const aiRule = await storage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
+              const aiRule = await scopedStorage.getAiRuleByMerchant(normalizedMerchant, userCompanyId);
               if (aiRule) {
                 await RulesEngine.deleteRule(aiRule.id);
                 console.log('[Unmatch] Deleted AI rule', aiRule.id, 'for', normalizedMerchant, 'company:', userCompanyId);
@@ -11581,8 +11357,8 @@ Respond in JSON format:
           })
           .where(eq(importedTransactionsSchema.id, transactionId));
 
-        // Try to auto-apply rules to this transaction
-        const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, storage);
+        // Try to auto-apply rules to this transaction (using scoped storage for company isolation)
+        const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, scopedStorage);
 
         return res.json({
           success: true,
@@ -11593,7 +11369,7 @@ Respond in JSON format:
 
       // If it's an auto-created match, we need to reverse the transaction and payment applications
       if (importedTx.matchedTransactionId) {
-        const matchedTx = await storage.getTransaction(importedTx.matchedTransactionId);
+        const matchedTx = await scopedStorage.getTransaction(importedTx.matchedTransactionId);
 
         if (matchedTx && matchedTx.type === 'payment') {
           // Remove payment applications
@@ -11602,7 +11378,7 @@ Respond in JSON format:
             .where(eq(paymentApplications.paymentId, matchedTx.id));
 
           // Delete the payment transaction
-          await storage.deleteTransaction(matchedTx.id);
+          await scopedStorage.deleteTransaction(matchedTx.id);
         }
       }
 
@@ -11619,8 +11395,8 @@ Respond in JSON format:
         })
         .where(eq(importedTransactionsSchema.id, transactionId));
 
-      // Try to auto-apply rules to this transaction
-      const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, storage);
+      // Try to auto-apply rules to this transaction (using scoped storage for company isolation)
+      const autoApplyResult = await tryAutoApplyToSingleTransaction(transactionId, scopedStorage);
 
       res.json({
         success: true,
