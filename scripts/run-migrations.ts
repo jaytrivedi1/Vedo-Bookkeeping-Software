@@ -37,6 +37,7 @@ import { addCompanyScopingToAi } from "../server/migrations/add-company-scoping-
 import { addReconciliationEnhancements } from "../server/migrations/add-reconciliation-enhancements";
 import { addCompanyScopingToCoreTables } from "../server/migrations/add-company-scoping-to-core-tables";
 import { addAuthSecurityFieldsMigration } from "../server/migrations/add-auth-security-fields";
+import { addSuperAdminRole } from "../server/migrations/add-super-admin-role";
 
 function log(message: string) {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -173,6 +174,10 @@ async function runMigrations() {
     // Add company scoping to AI categorization
     log("Running company scoping for AI categorization...");
     await addCompanyScopingToAi();
+
+    // Add super_admin role and update existing admin user
+    log("Running super admin role migration...");
+    await addSuperAdminRole();
 
     log("All migrations completed successfully!");
     process.exit(0);
