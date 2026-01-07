@@ -59,7 +59,7 @@ import {
 import { z, ZodError } from "zod";
 import { companyRouter } from "./company-routes";
 import { adminRouter } from "./admin-routes";
-import { setupAuth, requireAuth, requireAdmin, requirePermission } from "./auth";
+import { setupAuth, requireAuth, requireAdmin, requireSuperAdmin, requirePermission } from "./auth";
 import { companyContextMiddleware, requireCompanyContext } from "./middleware/company-context";
 import { createScopedStorage, CompanyAccessError, NoCompanyContextError } from "./scoped-storage";
 import { plaidClient, PLAID_PRODUCTS, PLAID_COUNTRY_CODES } from "./plaid-client";
@@ -1589,11 +1589,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.post("/invoices/public/:token/track-view", async (req: Request, res: Response) => {
     try {
       const { token } = req.params;
-      
-      // Find invoice by secure token
-      const transactions = await storage.getTransactions();
-      const invoice = transactions.find(t => t.secureToken === token && t.type === 'invoice');
-      
+
+      // Find invoice by secure token (direct lookup, not fetching all transactions)
+      const invoice = await storage.getInvoiceByToken(token);
+
       if (!invoice) {
         return res.status(404).json({ message: "Invoice not found" });
       }
@@ -5421,8 +5420,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get all transactions to search for related ones
-      const allTransactions = await storage.getTransactions();
+      // Get all transactions to search for related ones (scoped to company)
+      const allTransactions = await scopedStorage.getTransactions();
       
       // IMPORTANT: Fetch ledger entries for this transaction BEFORE deleting it
       // This ensures we can detect deposit references and revert them properly
@@ -5994,9 +5993,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               deposit = await storage.getTransaction(parseInt(depositRef));
             } 
             
-            // If not found by ID or not a number, look by reference
+            // If not found by ID or not a number, look by reference (scoped to company)
             if (!deposit) {
-              const deposits = (await storage.getTransactions()).filter(
+              const deposits = (await scopedStorage.getTransactions()).filter(
                 t => t.type === 'deposit' && (t.reference === depositRef || t.reference === `DEP-${depositRef}`)
               );
               deposit = deposits.length > 0 ? deposits[0] : null;
@@ -6037,8 +6036,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const depositNameRefMatch = entry.description?.match(/(?:applied credit from|from) deposit #?([^,\s]+)/i);
           if (depositNameRefMatch && !finalMatch) {
             const depositRef = depositNameRefMatch[1];
-            // Find deposit by reference
-            const deposits = (await storage.getTransactions()).filter(
+            // Find deposit by reference (scoped to company)
+            const deposits = (await scopedStorage.getTransactions()).filter(
               t => t.type === 'deposit' && (t.reference === depositRef || t.reference === `DEP-${depositRef}`)
             );
             
@@ -10191,8 +10190,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/csv/import - Import CSV with column mapping
   apiRouter.post("/csv/import", requireAuth, requireCompanyContext, upload.single('file'), async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const userId = (req.user as any)?.id;
-      
+
       if (!userId) {
         return res.status(401).json({ error: 'User not authenticated' });
       }
@@ -10327,8 +10327,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Bulk create imported transactions
-      const created = await storage.bulkCreateImportedTransactions(importedTransactions);
+      // Bulk create imported transactions (using scoped storage for company isolation)
+      const created = await scopedStorage.bulkCreateImportedTransactions(importedTransactions);
 
       // Apply categorization rules to newly imported transactions
       for (const tx of created) {
@@ -10337,10 +10337,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             if (ruleMatch.autoApply) {
               // Auto-categorize: create the expense/deposit transaction immediately
-              await autoCategorizeTransaction(tx, ruleMatch, storage);
+              await autoCategorizeTransaction(tx, ruleMatch, scopedStorage);
             } else {
               // Just set suggestions (no auto-categorization)
-              await storage.updateImportedTransaction(tx.id!, {
+              await scopedStorage.updateImportedTransaction(tx.id!, {
                 suggestedAccountId: ruleMatch.accountId,
                 suggestedSalesTaxId: ruleMatch.salesTaxId || null,
                 suggestedContactName: ruleMatch.contactName || null,
@@ -14856,13 +14856,29 @@ Respond in JSON format:
   apiRouter.delete("/invitations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      
+
       // Check if invitation exists
       const invitation = await storage.getUserInvitation(id);
       if (!invitation) {
         return res.status(404).json({ error: "Invitation not found" });
       }
-      
+
+      // Verify user has permission to delete this invitation (company/firm ownership check)
+      if (req.user?.role === 'admin' && req.user.companyId) {
+        // Admin can only delete invitations for their company
+        if (invitation.companyId !== req.user.companyId) {
+          return res.status(403).json({ error: "Access denied - invitation belongs to a different company" });
+        }
+      } else if (req.user?.role === 'accountant' && req.user.firmId) {
+        // Accountant can only delete invitations for their firm
+        if (invitation.firmId !== req.user.firmId) {
+          return res.status(403).json({ error: "Access denied - invitation belongs to a different firm" });
+        }
+      } else if (req.user?.role !== 'super_admin') {
+        // Only super_admin, admin (same company), or accountant (same firm) can delete
+        return res.status(403).json({ error: "Access denied" });
+      }
+
       // Delete invitation
       const deleted = await storage.deleteUserInvitation(id);
       
@@ -15411,7 +15427,7 @@ Respond in JSON format:
   });
 
   // Run AI migration manually (for serverless environments like Vercel)
-  apiRouter.post("/admin/run-ai-migration", async (req: Request, res: Response) => {
+  apiRouter.post("/admin/run-ai-migration", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       console.log("[Admin] Running AI categorization migration manually...");
       const { addAiCategorizationTables } = await import('./migrations/add-ai-categorization');
@@ -15428,7 +15444,7 @@ Respond in JSON format:
   });
 
   // Test pattern creation (for debugging)
-  apiRouter.post("/admin/test-pattern-creation", async (req: Request, res: Response) => {
+  apiRouter.post("/admin/test-pattern-creation", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       console.log("[Admin] Testing pattern creation...");
 
