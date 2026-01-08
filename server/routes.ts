@@ -3483,12 +3483,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         transactionId: 0
       });
       
-      const newTransaction = await storage.createTransaction(transaction, lineItems, ledgerEntries);
-      
+      const newTransaction = await scopedStorage.createTransaction(transaction, lineItems, ledgerEntries);
+
       res.status(201).json({
         transaction: newTransaction,
-        lineItems: await storage.getLineItemsByTransaction(newTransaction.id),
-        ledgerEntries: await storage.getLedgerEntriesByTransaction(newTransaction.id),
+        lineItems: await scopedStorage.getLineItemsByTransaction(newTransaction.id),
+        ledgerEntries: await scopedStorage.getLedgerEntriesByTransaction(newTransaction.id),
         subTotal: chequeData.subTotal,
         taxAmount: chequeData.taxAmount,
         totalAmount: chequeData.totalAmount || totalAmount
@@ -10488,8 +10488,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               date: txDate,
               description: memo || importedTx.name,
               amount,
-              subTotal: salesTaxId ? amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100) : amount,
-              taxAmount: salesTaxId ? amount - (amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100)) : 0,
+              subTotal: salesTaxId ? amount / (1 + (await scopedStorage.getSalesTax(salesTaxId))!.rate / 100) : amount,
+              taxAmount: salesTaxId ? amount - (amount / (1 + (await scopedStorage.getSalesTax(salesTaxId))!.rate / 100)) : 0,
               contactId,
               status: 'completed',
             };
@@ -10517,7 +10517,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ];
 
             if (salesTaxId && transaction.taxAmount! > 0) {
-              const salesTax = await storage.getSalesTax(salesTaxId);
+              const salesTax = await scopedStorage.getSalesTax(salesTaxId);
               if (salesTax?.accountId) {
                 ledgerEntries.push({
                   accountId: salesTax.accountId,
@@ -10533,7 +10533,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Credit the bank account (money out)
             const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
             if (bankAccountId) {
-              const bankGLAccount = await storage.getAccount(bankAccountId);
+              const bankGLAccount = await scopedStorage.getAccount(bankAccountId);
               if (bankGLAccount) {
                 ledgerEntries.push({
                   accountId: bankGLAccount.id,
@@ -10546,7 +10546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
 
-            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+            createdTransaction = await scopedStorage.createTransaction(transaction, [lineItem], ledgerEntries);
           }
           break;
 
@@ -10554,8 +10554,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             // Create sales receipt transaction
             const reference = `SR-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
-            
-            const subTotal = salesTaxId ? amount / (1 + (await storage.getSalesTax(salesTaxId))!.rate / 100) : amount;
+
+            const subTotal = salesTaxId ? amount / (1 + (await scopedStorage.getSalesTax(salesTaxId))!.rate / 100) : amount;
             const taxAmount = salesTaxId ? amount - subTotal : 0;
 
             const transaction: InsertTransaction = {
@@ -10579,8 +10579,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             };
 
             // Ledger entries - Debit bank account, Credit revenue and tax
-            const revenueAccount = await storage.getAccountByCode('4000'); // Service Revenue
-            const taxPayableAccount = await storage.getAccountByCode('2100'); // Sales Tax Payable
+            const revenueAccount = await scopedStorage.getAccountByCode('4000'); // Service Revenue
+            const taxPayableAccount = await scopedStorage.getAccountByCode('2100'); // Sales Tax Payable
             
             const ledgerEntries: InsertLedgerEntry[] = [
               {
@@ -10615,7 +10615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             }
 
-            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+            createdTransaction = await scopedStorage.createTransaction(transaction, [lineItem], ledgerEntries);
           }
           break;
 
@@ -10623,20 +10623,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           {
             // Create transfer transaction
             const reference = `TRF-${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}${String(txDate.getDate()).padStart(2, '0')}-${Date.now().toString().slice(-4)}`;
-            
+
             if (!transferAccountId) {
               return res.status(400).json({ error: 'Transfer account is required for transfer transactions' });
             }
 
-            const transferAccount = await storage.getAccount(transferAccountId);
+            const transferAccount = await scopedStorage.getAccount(transferAccountId);
             if (!transferAccount) {
               return res.status(400).json({ error: 'Transfer account not found' });
             }
 
             const fromAccountId = importedTx.amount < 0 ? accountId : transferAccountId;
             const toAccountId = importedTx.amount < 0 ? transferAccountId : accountId;
-            const fromAccount = await storage.getAccount(fromAccountId);
-            const toAccount = await storage.getAccount(toAccountId);
+            const fromAccount = await scopedStorage.getAccount(fromAccountId);
+            const toAccount = await scopedStorage.getAccount(toAccountId);
 
             const transaction: InsertTransaction = {
               type: 'transfer',
@@ -10666,7 +10666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               },
             ];
 
-            createdTransaction = await storage.createTransaction(transaction, [], ledgerEntries);
+            createdTransaction = await scopedStorage.createTransaction(transaction, [], ledgerEntries);
           }
           break;
 
@@ -10711,7 +10711,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Credit/Debit the bank account
             const bankAccountId = importedTx.accountId || importedTx.bankAccountId;
             if (bankAccountId) {
-              const bankGLAccount = await storage.getAccount(bankAccountId);
+              const bankGLAccount = await scopedStorage.getAccount(bankAccountId);
               if (bankGLAccount) {
                 ledgerEntries.push({
                   accountId: bankGLAccount.id,
@@ -10724,7 +10724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
 
-            createdTransaction = await storage.createTransaction(transaction, [lineItem], ledgerEntries);
+            createdTransaction = await scopedStorage.createTransaction(transaction, [lineItem], ledgerEntries);
           }
           break;
 
@@ -11071,7 +11071,7 @@ Respond in JSON format:
       }
 
       // Credit Accounts Receivable
-      const arAccount = await storage.getAccountByCode('1200');
+      const arAccount = await scopedStorage.getAccountByCode('1200');
       if (arAccount) {
         ledgerEntries.push({
           accountId: arAccount.id,
@@ -11083,7 +11083,7 @@ Respond in JSON format:
         });
       }
 
-      const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+      const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
       // Apply payment to invoice by creating payment application
       await db.insert(paymentApplications).values({
@@ -11190,7 +11190,7 @@ Respond in JSON format:
       }
 
       // Debit Accounts Payable
-      const apAccount = await storage.getAccountByCode('2000');
+      const apAccount = await scopedStorage.getAccountByCode('2000');
       if (apAccount) {
         ledgerEntries.push({
           accountId: apAccount.id,
@@ -11202,7 +11202,7 @@ Respond in JSON format:
         });
       }
 
-      const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+      const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
       // Apply payment to bill by creating payment application
       await db.insert(paymentApplications).values({
@@ -11520,7 +11520,7 @@ Respond in JSON format:
         }
 
         // Debit Accounts Payable
-        const apAccount = await storage.getAccountByCode('2000');
+        const apAccount = await scopedStorage.getAccountByCode('2000');
         if (apAccount) {
           ledgerEntries.push({
             accountId: apAccount.id,
@@ -11532,7 +11532,7 @@ Respond in JSON format:
           });
         }
 
-        const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+        const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
         // Apply payment to bill
         await db.insert(paymentApplications).values({
@@ -11600,7 +11600,7 @@ Respond in JSON format:
           transactionId: 0,
         });
 
-        const createdExpense = await storage.createTransaction(expenseTransaction, [], expenseLedgerEntries);
+        const createdExpense = await scopedStorage.createTransaction(expenseTransaction, [], expenseLedgerEntries);
 
         // Record the match in bank_transaction_matches
         await db.insert(bankTransactionMatchesSchema).values({
@@ -11721,7 +11721,7 @@ Respond in JSON format:
         }
 
         // Credit Accounts Receivable
-        const arAccount = await storage.getAccountByCode('1200');
+        const arAccount = await scopedStorage.getAccountByCode('1200');
         if (arAccount) {
           ledgerEntries.push({
             accountId: arAccount.id,
@@ -11733,7 +11733,7 @@ Respond in JSON format:
           });
         }
 
-        const createdPayment = await storage.createTransaction(paymentTransaction, [], ledgerEntries);
+        const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
         // Apply payment to invoice
         await db.insert(paymentApplications).values({
@@ -11801,7 +11801,7 @@ Respond in JSON format:
           transactionId: 0,
         });
 
-        const createdDeposit = await storage.createTransaction(depositTransaction, [], depositLedgerEntries);
+        const createdDeposit = await scopedStorage.createTransaction(depositTransaction, [], depositLedgerEntries);
 
         // Record the match in bank_transaction_matches
         await db.insert(bankTransactionMatchesSchema).values({
@@ -12090,8 +12090,8 @@ Respond in JSON format:
       );
       
       // Recalculate cleared balance
-      const reconciliationItems = await storage.getReconciliationItems(reconciliationId);
-      const ledgerEntries = await storage.getAllLedgerEntries();
+      const reconciliationItems = await scopedStorage.getReconciliationItems(reconciliationId);
+      const ledgerEntries = await scopedStorage.getAllLedgerEntries();
       const ledgerEntryMap = new Map(ledgerEntries.map(e => [e.id, e]));
       
       let clearedBalance = 0;
@@ -12105,15 +12105,15 @@ Respond in JSON format:
       }
       
       // Get reconciliation to calculate difference
-      const reconciliation = await storage.getReconciliation(reconciliationId);
+      const reconciliation = await scopedStorage.getReconciliation(reconciliationId);
       if (!reconciliation) {
         return res.status(404).json({ message: "Reconciliation not found" });
       }
-      
+
       const difference = roundTo2Decimals(reconciliation.statementEndingBalance - clearedBalance);
-      
+
       // Update reconciliation with new balances
-      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+      const updatedReconciliation = await scopedStorage.updateReconciliation(reconciliationId, {
         clearedBalance: roundTo2Decimals(clearedBalance),
         difference,
       });
@@ -12273,7 +12273,7 @@ Respond in JSON format:
       const difference = roundTo2Decimals(reconciliation.statementEndingBalance - clearedBalance);
 
       // Update reconciliation with new balances
-      const updatedReconciliation = await storage.updateReconciliation(reconciliationId, {
+      const updatedReconciliation = await scopedStorage.updateReconciliation(reconciliationId, {
         clearedBalance: roundTo2Decimals(clearedBalance),
         difference,
       });
