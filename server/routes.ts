@@ -7818,22 +7818,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Specific endpoint for fixing invoice #1006 (ID: 126) - admin only
-  apiRouter.post("/fix-invoice-1006", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Specific endpoint for fixing invoice #1006 (ID: 126) - admin only, company-scoped
+  apiRouter.post("/fix-invoice-1006", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const invoiceId = 126; // ID of invoice #1006
-      
-      // Get the invoice
-      const invoice = await storage.getTransaction(invoiceId);
+
+      // Get the invoice (company-scoped)
+      const invoice = await scopedStorage.getTransaction(invoiceId);
       if (!invoice || invoice.type !== 'invoice' || invoice.reference !== '1006') {
-        return res.status(404).json({ message: 'Invoice #1006 not found' });
+        return res.status(404).json({ message: 'Invoice #1006 not found in current company' });
       }
-      
-      // Get all deposits for this customer around the same time
+
+      // Get all deposits for this customer around the same time (company-scoped)
       const deposits = await db.select()
         .from(transactions)
         .where(
           and(
+            eq(transactions.companyId, req.companyId!), // Company isolation
             eq(transactions.contactId, invoice.contactId),
             eq(transactions.type, 'deposit'),
             eq(transactions.status, 'completed'),
@@ -7841,23 +7843,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             sql`ABS(EXTRACT(EPOCH FROM (${transactions.date} - ${invoice.date})) / 86400) <= 2`
           )
         );
-      
+
       // Look for a deposit of approximately $1500
       const relevantDeposit = deposits.find(d => Math.abs(d.amount - 1500) < 1);
-      
+
       if (relevantDeposit) {
         console.log(`Found matching deposit #${relevantDeposit.id} (${relevantDeposit.reference}) for invoice #1006`);
-        
-        // Update the invoice balance and status
-        const [updatedInvoice] = await db.update(transactions)
-          .set({
-            balance: 0,
-            status: 'paid'
-          })
-          .where(eq(transactions.id, invoiceId))
-          .returning();
-          
-        return res.status(200).json({ 
+
+        // Update the invoice balance and status (company-scoped)
+        await scopedStorage.updateTransaction(invoiceId, {
+          balance: 0,
+          status: 'paid'
+        });
+
+        const updatedInvoice = await scopedStorage.getTransaction(invoiceId);
+
+        return res.status(200).json({
           message: `Successfully fixed invoice #1006 using deposit #${relevantDeposit.id}`,
           invoice: updatedInvoice
         });
@@ -13905,31 +13906,43 @@ Respond in JSON format:
   // User Management Routes
   // ====================
 
-  // GET /api/users - Get all users (with optional query params)
-  apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
+  // GET /api/users - Get users for current company (admins can see all)
+  apiRouter.get("/users", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      let users = await storage.getUsers();
-      
-      // Filter by companyId if provided
-      if (req.query.companyId) {
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin';
+
+      let users: any[];
+
+      if (isAdmin && req.query.companyId) {
+        // Admins can query specific company's users
         const companyId = parseInt(req.query.companyId as string);
         const companyUsers = await storage.getCompanyUsers(companyId);
         const userIds = companyUsers.map(cu => cu.userId);
-        users = users.filter(u => userIds.includes(u.id));
+        const allUsers = await storage.getUsers();
+        users = allUsers.filter(u => userIds.includes(u.id));
+      } else if (isAdmin && !req.query.companyId) {
+        // Admins without company filter see all users
+        users = await storage.getUsers();
+      } else {
+        // Non-admins only see users in their current company
+        const companyUsers = await storage.getCompanyUsers(req.companyId!);
+        const userIds = companyUsers.map(cu => cu.userId);
+        const allUsers = await storage.getUsers();
+        users = allUsers.filter(u => userIds.includes(u.id));
       }
-      
-      // Filter by firmId if provided
-      if (req.query.firmId) {
+
+      // Filter by firmId if provided (admin only)
+      if (isAdmin && req.query.firmId) {
         const firmId = parseInt(req.query.firmId as string);
         users = users.filter(u => u.firmId === firmId);
       }
-      
+
       // Filter by active status (default to active only)
       const includeInactive = req.query.includeInactive === 'true';
       if (!includeInactive) {
         users = users.filter(u => u.isActive);
       }
-      
+
       // Don't return passwords
       const sanitizedUsers = users.map(u => ({
         id: u.id,
@@ -13944,7 +13957,7 @@ Respond in JSON format:
         lastLogin: u.lastLogin,
         createdAt: u.createdAt,
       }));
-      
+
       res.json(sanitizedUsers);
     } catch (error: any) {
       console.error("Error fetching users:", error);
