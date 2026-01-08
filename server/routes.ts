@@ -4021,7 +4021,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Process FX gains/losses for invoice payments
       const invoiceApplications = (lineItems as any).invoiceApplications || [];
       for (const app of invoiceApplications) {
-        const invoice = await storage.getTransaction(app.invoiceId);
+        const invoice = await scopedStorage.getTransaction(app.invoiceId);
         if (!invoice) continue;
         
         // Only calculate FX if invoice is in a foreign currency
@@ -4112,7 +4112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add line items for invoices being paid
       const invoicesForLineItems = lineItems.filter((item: any) => !item.type || item.type === 'invoice');
       for (const item of invoicesForLineItems) {
-        const invoice = await storage.getTransaction(item.transactionId);
+        const invoice = await scopedStorage.getTransaction(item.transactionId);
         if (invoice) {
           customerPaymentLineItems.push({
             description: `Payment for invoice ${invoice.reference}`,
@@ -4128,7 +4128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add line items for deposits being used as payment source
       const depositsForLineItems = lineItems.filter((item: any) => item.type === 'deposit');
       for (const item of depositsForLineItems) {
-        const deposit = await storage.getTransaction(item.transactionId);
+        const deposit = await scopedStorage.getTransaction(item.transactionId);
         if (deposit) {
           customerPaymentLineItems.push({
             description: `Using deposit ${deposit.reference} credit`,
@@ -4142,7 +4142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Create the payment transaction with ledger entries and line items
-      const payment = await storage.createTransaction(
+      const payment = await scopedStorage.createTransaction(
         paymentData,
         customerPaymentLineItems, // Line items showing payment details
         paymentLedgerEntries
@@ -4166,7 +4166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fxRealizations = (lineItems as any).fxRealizations || [];
       if (fxRealizations.length > 0) {
         for (const fxRealization of fxRealizations) {
-          await storage.createFxRealization({
+          await scopedStorage.createFxRealization({
             transactionId: fxRealization.transactionId,
             paymentId: payment.id,
             originalRate: fxRealization.originalRate.toString(),
@@ -4191,7 +4191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         for (const item of invoiceItems as any[]) {
           if (item.transactionId) {
-            const updatedInvoice = await storage.recalculateInvoiceBalance(item.transactionId);
+            const updatedInvoice = await scopedStorage.recalculateInvoiceBalance(item.transactionId);
             console.log(`Recalculated invoice #${item.transactionId}: balance ${updatedInvoice?.balance}, status ${updatedInvoice?.status}`);
           }
         }
@@ -4212,14 +4212,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Only update if different from what was set
       if (payment.balance !== actualUnapplied || payment.status !== finalStatus) {
         console.log(`Correcting payment #${payment.id}: balance ${payment.balance} -> ${actualUnapplied}, status ${payment.status} -> ${finalStatus}`);
-        await storage.updateTransaction(payment.id, {
+        await scopedStorage.updateTransaction(payment.id, {
           balance: actualUnapplied,
           status: finalStatus as any
         });
       }
 
       // Return the corrected payment data
-      const finalPayment = await storage.getTransaction(payment.id);
+      const finalPayment = await scopedStorage.getTransaction(payment.id);
       res.status(201).json(finalPayment);
     } catch (error: any) {
       console.error("Error processing payment:", error);
@@ -5371,7 +5371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Log activity for transaction deletion
           await logActivity(
-            storage,
+            scopedStorage,
             req,
             'deleted',
             'transaction',
@@ -5383,7 +5383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               contactId: transaction.contactId
             }
           );
-          
+
           return res.status(200).json({ success: true });
         } catch (error) {
           console.error("Error directly deleting invoice #1009:", error);
@@ -5441,7 +5441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // IMPORTANT: Fetch ledger entries for this transaction BEFORE deleting it
       // This ensures we can detect deposit references and revert them properly
-      const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
+      const ledgerEntries = await scopedStorage.getLedgerEntriesByTransaction(id);
       console.log(`Fetched ${ledgerEntries.length} ledger entries for transaction #${id} before deletion`);
       
       // Process deposit references in ledger entries if this is a payment
@@ -5470,11 +5470,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const creditAmount = entry.debit || entry.credit;
                 
                 // Update the deposit to revert it to unapplied_credit status
-                await storage.updateTransaction(deposit.id, {
+                await scopedStorage.updateTransaction(deposit.id, {
                   status: 'unapplied_credit',
                   balance: -deposit.amount  // Reset to original negative balance
                 });
-                
+
                 console.log(`Reverted deposit #${deposit.id} to unapplied_credit status with balance -${deposit.amount}`);
               }
             }
@@ -5499,7 +5499,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Process each payment that was applied to this invoice
         for (const app of applications) {
-          const payment = await storage.getTransaction(app.paymentId);
+          const payment = await scopedStorage.getTransaction(app.paymentId);
           
           if (!payment) {
             console.log(`Warning: Payment ${app.paymentId} not found for application`);
@@ -5542,11 +5542,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           // Update the payment
-          await storage.updateTransaction(app.paymentId, {
+          await scopedStorage.updateTransaction(app.paymentId, {
             balance: -roundedBalance, // Negative for credit
             status: newStatus
           });
-          
+
           console.log(`Updated payment #${payment.id}: balance=${-roundedBalance}, status=${newStatus}`);
           
           // Delete the payment application record for the deleted invoice
@@ -5610,12 +5610,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Found ${creditRefIds.length} direct credit references to revert in invoice #${transaction.reference}`);
           
           for (const creditId of creditRefIds) {
-            const creditTransaction = await storage.getTransaction(creditId);
+            const creditTransaction = await scopedStorage.getTransaction(creditId);
             if (creditTransaction && creditTransaction.type === 'deposit') {
               console.log(`Found credit transaction #${creditId} referenced in invoice, status: ${creditTransaction.status}`);
-              
+
               // Update credit to be unapplied again
-              await storage.updateTransaction(creditId, {
+              await scopedStorage.updateTransaction(creditId, {
                 status: 'unapplied_credit',
                 balance: -creditTransaction.amount // Restore negative balance
               });
@@ -5635,7 +5635,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // For each payment, check if it has line items connected to this invoice
           for (const payment of paymentsWithCredits) {
             // Get line items for this payment to look for applied credits
-            const paymentLineItems = await storage.getLineItemsByTransaction(payment.id);
+            const paymentLineItems = await scopedStorage.getLineItemsByTransaction(payment.id);
             
             // Check if any line item references this invoice
             const hasInvoiceLineItem = paymentLineItems.some(item => 
@@ -5654,12 +5654,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // For each deposit line item, revert the deposit status
               for (const depositItem of depositLineItems) {
                 if (depositItem.transactionId) {
-                  const deposit = await storage.getTransaction(depositItem.transactionId);
-                  
+                  const deposit = await scopedStorage.getTransaction(depositItem.transactionId);
+
                   if (deposit && deposit.type === 'deposit') {
                     console.log(`Found deposit #${deposit.id} to revert in payment #${payment.id}`);
-                    
-                    await storage.updateTransaction(deposit.id, {
+
+                    await scopedStorage.updateTransaction(deposit.id, {
                       status: 'unapplied_credit',
                       balance: -deposit.amount // Restore negative balance
                     });
@@ -5685,7 +5685,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
             
             // Get the deposit transaction
-            const deposit = await storage.getTransaction(appliedCredit.id);
+            const deposit = await scopedStorage.getTransaction(appliedCredit.id);
             if (!deposit || deposit.type !== 'deposit') {
               console.log(`Credit #${appliedCredit.id} not found or not a deposit, skipping`);
               continue;
@@ -5706,10 +5706,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`- Amount applied to this invoice being deleted: ${amountToRestore}`);
             
             // For Special Apr 21 deposit - handle by ID to ensure consistent balance
-            if (deposit.id === 118 || deposit.id === 114 || 
+            if (deposit.id === 118 || deposit.id === 114 ||
                (deposit.reference === 'DEP-2025-04-21' && deposit.amount === 2000)) {
               console.log(`SPECIAL HANDLING: Apr 21 deposit (ID ${deposit.id})`);
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
                 balance: -2000  // Always restore to full amount
               });
@@ -5722,16 +5722,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // If the deposit was fully applied, but we're removing the only application
               // then restore it to unapplied_credit with negative balance = full amount
               if (amountToRestore >= deposit.amount) {
-                await storage.updateTransaction(deposit.id, {
+                await scopedStorage.updateTransaction(deposit.id, {
                   status: 'unapplied_credit',
-                  balance: -deposit.amount  // Restore full negative balance 
+                  balance: -deposit.amount  // Restore full negative balance
                 });
                 console.log(`Restored fully applied deposit #${deposit.id} to unapplied_credit with balance -${deposit.amount}`);
-              } 
+              }
               // If only part of the deposit was applied to this invoice
               else {
                 // Set status to unapplied_credit and balance to negative of the restored amount
-                await storage.updateTransaction(deposit.id, {
+                await scopedStorage.updateTransaction(deposit.id, {
                   status: 'unapplied_credit',
                   balance: -amountToRestore  // Only restore the amount that was applied to this invoice
                 });
@@ -5741,10 +5741,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // For partially applied deposits (already has 'unapplied_credit' status)
             else if (deposit.status === 'unapplied_credit') {
               // Special case for Apr 21 deposit (ensure it has correct balance)
-              if (deposit.id === 118 || deposit.id === 114 || 
+              if (deposit.id === 118 || deposit.id === 114 ||
                  (deposit.reference === 'DEP-2025-04-21' && deposit.amount === 2000)) {
                 console.log(`Apr 21 deposit (ID ${deposit.id}) detected during unapplied_credit handling`);
-                await storage.updateTransaction(deposit.id, {
+                await scopedStorage.updateTransaction(deposit.id, {
                   status: 'unapplied_credit',
                   balance: -2000  // Hard-coded correct amount while we develop a general solution
                 });
@@ -5761,7 +5761,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const finalBalance = Math.min(newAvailable, deposit.amount);
                 
                 // Update with the new negative balance
-                await storage.updateTransaction(deposit.id, {
+                await scopedStorage.updateTransaction(deposit.id, {
                   status: 'unapplied_credit',
                   balance: -finalBalance  // Negative represents available credit
                 });
@@ -5786,7 +5786,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`Reverting deposit #${credit.id} (${credit.reference}) to unapplied_credit status`);
               
               // For each deposit, calculate how much is already applied elsewhere
-              const allLedgerEntries = await storage.getAllLedgerEntries();
+              const allLedgerEntries = await scopedStorage.getAllLedgerEntries();
               
               // Find all ledger entries referencing this deposit being applied elsewhere
               const depositRef = credit.reference;
@@ -5813,7 +5813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Calculate available credit
               const availableCredit = credit.amount - totalAppliedElsewhere;
               
-              await storage.updateTransaction(credit.id, {
+              await scopedStorage.updateTransaction(credit.id, {
                 status: 'unapplied_credit',
                 balance: -availableCredit  // Negative balance for available credit
               });
@@ -5821,7 +5821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
         }
-        
+
         // ENHANCED FALLBACK: Look for deposits from same contact that have been partially applied
         // This catches cases where the description wasn't properly updated during invoice creation
         console.log(`ENHANCED FALLBACK: Looking for partially applied deposits from contact #${transaction.contactId}`);
@@ -5848,7 +5848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // If we're deleting an invoice and there's a partially applied deposit from the same contact,
               // restore the full credit amount to prevent credits from being "lost" in the system
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
                 balance: -originalAmount, // Restore full credit amount
                 description: deposit.description + ` [Credit restored after invoice #${transaction.reference} deletion on ${format(new Date(), 'yyyy-MM-dd')}]`
@@ -5861,9 +5861,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (autoPayment) {
           console.log(`Found auto-payment #${autoPayment.id} for credit application on invoice #${transaction.reference}`);
-          
+
           // Get line items for this payment to find deposits that were used
-          const paymentLedgerEntries = await storage.getLedgerEntriesByTransaction(autoPayment.id);
+          const paymentLedgerEntries = await scopedStorage.getLedgerEntriesByTransaction(autoPayment.id);
           
           // Find deposit references in ledger entries
           for (const entry of paymentLedgerEntries) {
@@ -5900,7 +5900,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   console.log(`Found deposit #${deposit.id} (${deposit.reference}) to revert to unapplied_credit`);
                   
                   // Determine how much of this deposit is already applied elsewhere
-                  const allLedgerEntries = await storage.getAllLedgerEntries();
+                  const allLedgerEntries = await scopedStorage.getAllLedgerEntries();
                   
                   // Find all ledger entries referencing this deposit being applied elsewhere
                   const depositRef = deposit.reference;
@@ -5927,7 +5927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Calculate available credit
                   const availableCredit = deposit.amount - totalAppliedElsewhere;
                   
-                  await storage.updateTransaction(deposit.id, {
+                  await scopedStorage.updateTransaction(deposit.id, {
                     status: 'unapplied_credit',
                     balance: -availableCredit  // Negative balance for available credit
                   });
@@ -5936,14 +5936,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
             }
           }
-          
+
           // Delete the auto-payment too
           console.log(`Deleting auto-payment #${autoPayment.id} as part of invoice deletion`);
-          await storage.deleteTransaction(autoPayment.id);
+          await scopedStorage.deleteTransaction(autoPayment.id);
         }
       } else if (transaction.type === 'payment') {
         // For payments, we need to update the balances of affected invoices
-        const ledgerEntries = await storage.getLedgerEntriesByTransaction(id);
+        const ledgerEntries = await scopedStorage.getLedgerEntriesByTransaction(id);
         
         // Find AR credits which indicate payments to invoices
         const arCreditEntries = ledgerEntries.filter(entry => 
@@ -5968,7 +5968,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               // Update invoice balance by adding back the payment amount
               const updatedBalance = (invoice.balance || invoice.amount) + entry.credit;
               console.log(`Updating invoice #${invoice.reference} balance from ${invoice.balance} to ${updatedBalance}, status from ${invoice.status} to ${updatedBalance <= 0 ? 'completed' : 'open'}`);
-              await storage.updateTransaction(invoice.id, {
+              await scopedStorage.updateTransaction(invoice.id, {
                 balance: updatedBalance,
                 // Also update status if needed - always use 'open' for invoices with a balance
                 status: updatedBalance <= 0 ? 'completed' : 'open'
@@ -6006,7 +6006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // First try to find by ID if it's a number
             let deposit;
             if (/^\d+$/.test(depositRef)) {
-              deposit = await storage.getTransaction(parseInt(depositRef));
+              deposit = await scopedStorage.getTransaction(parseInt(depositRef));
             } 
             
             // If not found by ID or not a number, look by reference (scoped to company)
@@ -6037,7 +6037,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Always reset deposit to unapplied_credit status when its payment is deleted
               // Regardless of its current status
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
                 balance: finalBalance
               });
@@ -6074,7 +6074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const finalBalance = Math.max(newBalance, -deposit.amount);
               
               // Reset deposit to unapplied_credit status
-              await storage.updateTransaction(deposit.id, {
+              await scopedStorage.updateTransaction(deposit.id, {
                 status: 'unapplied_credit',
                 balance: finalBalance
               });
@@ -6082,7 +6082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
         }
-        
+
         // Find any unapplied credit transactions created from this payment
         // These are deposit transactions with description containing text like "Unapplied credit from payment"
         // or any deposit transactions created at the same time as the payment
@@ -6162,10 +6162,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Delete all related unapplied credit transactions
         for (const credit of relatedCredits) {
           console.log(`Deleting related unapplied credit: ${credit.reference}`);
-          await storage.deleteTransaction(credit.id);
+          await scopedStorage.deleteTransaction(credit.id);
         }
       }
-      
+
       // SYNCHRONIZATION: Check if this transaction is referenced by any imported_transactions
       // If so, reset them to unmatched status so they appear in the Uncategorized tab again
       try {
@@ -6198,15 +6198,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Delete the transaction with improved error handling
       try {
-        const deleted = await storage.deleteTransaction(id);
-        
+        const deleted = await scopedStorage.deleteTransaction(id);
+
         if (!deleted) {
           return res.status(500).json({ message: "Failed to delete transaction" });
         }
-        
+
         // Log activity for transaction deletion
         await logActivity(
-          storage,
+          scopedStorage,
           req,
           'deleted',
           'transaction',
@@ -8486,11 +8486,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       // Create the transaction using the storage interface
-      const billTransaction = await storage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
-      
+      const billTransaction = await scopedStorage.createTransaction(transaction, lineItemsData, ledgerEntriesData);
+
       // Get the created line items and ledger entries
-      const createdLineItems = await storage.getLineItemsByTransaction(billTransaction.id);
-      const createdLedgerEntries = await storage.getLedgerEntriesByTransaction(billTransaction.id);
+      const createdLineItems = await scopedStorage.getLineItemsByTransaction(billTransaction.id);
+      const createdLedgerEntries = await scopedStorage.getLedgerEntriesByTransaction(billTransaction.id);
       
       const result = {
         transaction: billTransaction,
