@@ -5388,32 +5388,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Special case handling for invoice #1009 (ID 189) - direct SQL approach
+      // Special case handling for invoice #1009 (ID 189) - direct SQL approach (company-scoped)
       if (id === 189 && transaction.reference === '1009') {
         try {
-          console.log("DIRECT DELETION: Special handling for invoice #1009");
-          
-          // First fix credit #188 (CREDIT-22648) to have the proper balance before deletion
+          const companyId = req.companyId!;
+          console.log(`DIRECT DELETION: Special handling for invoice #1009 in company ${companyId}`);
+
+          // First fix credit #188 (CREDIT-22648) to have the proper balance before deletion - company-scoped
           await db.execute(
-            sql`UPDATE transactions SET status = 'unapplied_credit', balance = -2740 WHERE id = 188`
+            sql`UPDATE transactions SET status = 'unapplied_credit', balance = -2740 WHERE id = 188 AND company_id = ${companyId}`
           );
           console.log(`Reset credit #188 (CREDIT-22648) status to unapplied_credit with full balance -2740`);
-          
-          // Delete ledger entries directly using SQL
+
+          // Delete ledger entries directly using SQL - company-scoped via transaction join
           const deleteLedgerResult = await db.execute(
-            sql`DELETE FROM ledger_entries WHERE transaction_id = ${id}`
+            sql`DELETE FROM ledger_entries WHERE transaction_id = ${id} AND transaction_id IN (SELECT id FROM transactions WHERE company_id = ${companyId})`
           );
           console.log(`Deleted ${deleteLedgerResult.rowCount} ledger entries for invoice #1009`);
-          
-          // Delete line items
+
+          // Delete line items - company-scoped via transaction join
           const deleteLineItemsResult = await db.execute(
-            sql`DELETE FROM line_items WHERE transaction_id = ${id}`
+            sql`DELETE FROM line_items WHERE transaction_id = ${id} AND transaction_id IN (SELECT id FROM transactions WHERE company_id = ${companyId})`
           );
           console.log(`Deleted ${deleteLineItemsResult.rowCount} line items for invoice #1009`);
-          
-          // Delete the transaction
+
+          // Delete the transaction - company-scoped
           const deleteResult = await db.execute(
-            sql`DELETE FROM transactions WHERE id = ${id}`
+            sql`DELETE FROM transactions WHERE id = ${id} AND company_id = ${companyId}`
           );
           console.log(`Directly deleted invoice #1009, rows affected: ${deleteResult.rowCount}`);
           
@@ -6406,14 +6407,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle component taxes if provided and this is a composite tax
       if (salesTax.isComposite && componentTaxes && Array.isArray(componentTaxes)) {
         console.log("Processing component taxes:", componentTaxes);
-        
+        const companyId = req.companyId!;
+
         try {
           // Process and save each component tax
           for (let index = 0; index < componentTaxes.length; index++) {
             const component = componentTaxes[index];
             console.log(`Processing component ${index}:`, component);
-            
-            // Create child tax in the main sales_taxes table
+
+            // Create child tax in the main sales_taxes table (with company isolation)
             const childTaxResult = await db
               .insert(salesTaxSchema)
               .values({
@@ -6424,13 +6426,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 isActive: true,
                 isComposite: false,
                 parentId: salesTax.id,
-                displayOrder: index
+                displayOrder: index,
+                companyId: companyId // Company isolation
               })
               .execute();
-              
+
             console.log(`Created component tax: ${component.name} with accountId: ${component.accountId}`, childTaxResult);
           }
-          
+
           console.log("All component taxes saved successfully");
         } catch (err) {
           console.error("Error saving component taxes:", err);
@@ -6469,23 +6472,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle component taxes if provided and this is a composite tax
       if (salesTax.isComposite && componentTaxes && Array.isArray(componentTaxes)) {
         console.log("Processing component taxes:", componentTaxes);
-        
+        const companyId = req.companyId!;
+
         try {
           // First, delete all existing components for this tax by querying the sales_taxes table
           // Components are stored as child entries in the sales_taxes table with parentId field
+          // Company-scoped deletion for defense-in-depth
           await db
             .delete(salesTaxSchema)
-            .where(eq(salesTaxSchema.parentId, id))
+            .where(
+              and(
+                eq(salesTaxSchema.parentId, id),
+                eq(salesTaxSchema.companyId, companyId)
+              )
+            )
             .execute();
-          
+
           console.log("Deleted existing component taxes for parent ID:", id);
-          
+
           // Process and save each component tax
           for (let index = 0; index < componentTaxes.length; index++) {
             const component = componentTaxes[index];
             console.log(`Processing component ${index}:`, component);
-            
-            // Create child tax in the main sales_taxes table
+
+            // Create child tax in the main sales_taxes table (with company isolation)
             const childTaxResult = await db
               .insert(salesTaxSchema)
               .values({
@@ -6496,13 +6506,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 isActive: true,
                 isComposite: false,
                 parentId: id,
-                displayOrder: index
+                displayOrder: index,
+                companyId: companyId // Company isolation
               })
               .execute();
-              
+
             console.log(`Created component tax: ${component.name} with accountId: ${component.accountId}`, childTaxResult);
           }
-          
+
           console.log("All component taxes saved successfully");
         } catch (err) {
           console.error("Error saving component taxes:", err);
@@ -8382,101 +8393,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`Applying credit #${credit.reference || credit.id} for amount $${amount} to invoice #${invoice.reference}`);
-      
-      // Update the invoice balance and status with rounding
+
+      const companyId = req.companyId!;
+
+      // Update the invoice balance and status with rounding (using scopedStorage for company isolation)
       const newInvoiceBalance = roundTo2Decimals(Math.max(0, Number(invoice.amount) - amount));
       const newInvoiceStatus = newInvoiceBalance === 0 ? 'completed' : 'open';
-      
-      await db
-        .update(transactions)
-        .set({
-          balance: newInvoiceBalance,
-          status: newInvoiceStatus
-        })
-        .where(eq(transactions.id, invoiceId));
-      
-      // Update the credit description and balance with rounding
+
+      await scopedStorage.updateTransaction(invoiceId, {
+        balance: newInvoiceBalance,
+        status: newInvoiceStatus
+      });
+
+      // Update the credit description and balance with rounding (using scopedStorage for company isolation)
       const appliedAmount = roundTo2Decimals(Math.min(amount, Math.abs(credit.amount)));
       const newCreditBalance = roundTo2Decimals(-(Math.abs(credit.amount) - appliedAmount));
       const newCreditStatus = newCreditBalance === 0 ? 'completed' : 'unapplied_credit';
-      
-      await db
-        .update(transactions)
-        .set({
-          balance: newCreditBalance,
-          status: newCreditStatus,
-          description: `Credit applied to invoice #${invoice.reference} on ${new Date().toISOString().split('T')[0]} ($${appliedAmount.toFixed(2)})`
-        })
-        .where(eq(transactions.id, creditId));
-      
-      // Create or update proper ledger entries to record this application
+
+      await scopedStorage.updateTransaction(creditId, {
+        balance: newCreditBalance,
+        status: newCreditStatus,
+        description: `Credit applied to invoice #${invoice.reference} on ${new Date().toISOString().split('T')[0]} ($${appliedAmount.toFixed(2)})`
+      });
+
+      // Create or update proper ledger entries to record this application (with company filter for defense-in-depth)
       const existingCreditEntry = await db
         .select()
         .from(ledgerEntries)
+        .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
         .where(
           and(
             eq(ledgerEntries.transactionId, creditId),
+            eq(transactions.companyId, companyId),
             sql`${ledgerEntries.description} LIKE ${'%Applied%to invoice #' + invoice.reference + '%'}`
           )
         );
-      
+
       if (existingCreditEntry.length) {
         // Update existing ledger entry for the credit
-        await db
-          .update(ledgerEntries)
-          .set({
-            description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
-            debit: appliedAmount,
-            credit: 0
-          })
-          .where(eq(ledgerEntries.id, existingCreditEntry[0].id));
+        await scopedStorage.updateLedgerEntry(existingCreditEntry[0].ledger_entries.id, {
+          description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
+          debit: appliedAmount,
+          credit: 0
+        });
       } else {
-        // Create new ledger entry for the credit
-        await db
-          .insert(ledgerEntries)
-          .values({
-            transactionId: creditId,
-            accountId: 2, // Accounts Receivable
-            description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
-            debit: appliedAmount,
-            credit: 0,
-            date: new Date()
-          });
+        // Create new ledger entry for the credit (using scopedStorage for company isolation)
+        await scopedStorage.createLedgerEntry({
+          transactionId: creditId,
+          accountId: 2, // Accounts Receivable
+          description: `Applied credit from deposit #${credit.reference || credit.id} to invoice #${invoice.reference} ($${appliedAmount.toFixed(2)})`,
+          debit: appliedAmount,
+          credit: 0,
+          date: new Date()
+        });
       }
-      
-      // Create or update corresponding invoice ledger entry
+
+      // Create or update corresponding invoice ledger entry (with company filter for defense-in-depth)
       const existingInvoiceEntry = await db
         .select()
         .from(ledgerEntries)
+        .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
         .where(
           and(
             eq(ledgerEntries.transactionId, invoiceId),
+            eq(transactions.companyId, companyId),
             sql`${ledgerEntries.description} LIKE ${'%Credit applied from deposit #' + (credit.reference || credit.id) + '%'}`
           )
         );
-      
+
       if (existingInvoiceEntry.length) {
         // Update existing ledger entry for the invoice
-        await db
-          .update(ledgerEntries)
-          .set({
-            description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
-            debit: 0,
-            credit: appliedAmount
-          })
-          .where(eq(ledgerEntries.id, existingInvoiceEntry[0].id));
+        await scopedStorage.updateLedgerEntry(existingInvoiceEntry[0].ledger_entries.id, {
+          description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
+          debit: 0,
+          credit: appliedAmount
+        });
       } else {
-        // Create new ledger entry for the invoice
-        await db
-          .insert(ledgerEntries)
-          .values({
-            transactionId: invoiceId,
-            accountId: 2, // Accounts Receivable
-            description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
-            debit: 0,
-            credit: appliedAmount,
-            date: new Date()
-          });
+        // Create new ledger entry for the invoice (using scopedStorage for company isolation)
+        await scopedStorage.createLedgerEntry({
+          transactionId: invoiceId,
+          accountId: 2, // Accounts Receivable
+          description: `Credit applied from deposit #${credit.reference || credit.id} ($${appliedAmount.toFixed(2)})`,
+          debit: 0,
+          credit: appliedAmount,
+          date: new Date()
+        });
       }
       
       // Return success message with updated objects
