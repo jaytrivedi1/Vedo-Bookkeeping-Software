@@ -2084,22 +2084,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Update account balances
+      // Update account balances (company-scoped)
       for (const entry of ledgerEntriesData) {
-        const account = await db.select().from(accounts).where(eq(accounts.id, entry.accountId));
-        if (account.length > 0) {
-          let newBalance = account[0].balance;
+        const account = await scopedStorage.getAccount(entry.accountId);
+        if (account) {
+          let newBalance = account.balance;
 
           // Apply debits and credits according to account type
-          if (['asset', 'expense'].includes(account[0].type)) {
+          if (['asset', 'expense'].includes(account.type)) {
             newBalance += (entry.debit || 0) - (entry.credit || 0);
           } else {
             newBalance += (entry.credit || 0) - (entry.debit || 0);
           }
 
-          await db.update(accounts)
-            .set({ balance: newBalance })
-            .where(eq(accounts.id, entry.accountId));
+          await scopedStorage.updateAccount(entry.accountId, { balance: newBalance });
         }
       }
 
@@ -3839,11 +3837,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Total being applied in this payment
         const totalBeingApplied = directPaymentAmount + creditAmount;
         
-        // Get existing payments already applied to this invoice
-        const existingPayments = await db.select()
+        // Get existing payments already applied to this invoice (company-scoped)
+        // Join with transactions to ensure we only get entries from this company
+        const existingPayments = await db.select({
+          id: ledgerEntries.id,
+          credit: ledgerEntries.credit,
+          transactionId: ledgerEntries.transactionId
+        })
           .from(ledgerEntries)
+          .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
           .where(
             and(
+              eq(transactions.companyId, req.companyId!),
               eq(ledgerEntries.accountId, 2), // Accounts Receivable
               sql`${ledgerEntries.credit} > 0`, // Credit entries only
               sql`${ledgerEntries.description} LIKE ${'%invoice #' + invoice.reference + '%'}`, // Referencing this invoice
@@ -9549,7 +9554,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           console.log('[Categorization-Expense] Feedback recorded:', feedbackResult);
 
-          // Update suggestions on other transactions with the same merchant
+          // Update suggestions on other transactions with the same merchant (company-scoped)
           if (feedbackResult.patternUpdated) {
             const { normalizeMerchantName } = await import('./services/merchant-normalizer');
             const normalizedMerchant = normalizeMerchantName(merchantName);
@@ -9558,7 +9563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               accountId,
               salesTaxId,
               contactName || null,
-              storage
+              scopedStorage
             );
           }
 
@@ -9709,7 +9714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           console.log('[Categorization-Deposit] Feedback recorded:', feedbackResult);
 
-          // Update suggestions on other transactions with the same merchant
+          // Update suggestions on other transactions with the same merchant (company-scoped)
           if (feedbackResult.patternUpdated) {
             const { normalizeMerchantName } = await import('./services/merchant-normalizer');
             const normalizedMerchant = normalizeMerchantName(merchantName);
@@ -9718,7 +9723,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               accountId,
               salesTaxId,
               contactName || null,
-              storage
+              scopedStorage
             );
           }
 
@@ -10792,7 +10797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log('[Categorization] Feedback recorded:', feedbackResult);
 
-        // Update suggestions on other transactions with the same merchant
+        // Update suggestions on other transactions with the same merchant (company-scoped)
         if (feedbackResult.patternUpdated) {
           const normalizedMerchant = normalizeMerchantName(merchantName);
           await updateSuggestionsForMatchingTransactions(
@@ -10800,7 +10805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             accountId,
             salesTaxId,
             contactName || null,
-            storage
+            scopedStorage
           );
         }
 

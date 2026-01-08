@@ -409,24 +409,27 @@ export class DatabaseStorage implements IStorage {
   ): Promise<Transaction> {
     // Helper function to round to 2 decimals
     const roundTo2Decimals = (num: number): number => Math.round(num * 100) / 100;
-    
-    // Get home currency from preferences
-    const preferencesData = await this.getPreferences();
+
+    // Extract companyId from transaction for company-scoped lookups
+    const companyId = (transaction as any).companyId;
+
+    // Get home currency from preferences (company-scoped)
+    const preferencesData = await this.getPreferences(companyId);
     const homeCurrency = preferencesData?.homeCurrency || 'CAD';
-    
+
     // Check if this is a foreign currency transaction
     const transactionCurrency = (transaction as any).currency;
     const isForeignCurrency = transactionCurrency && transactionCurrency !== homeCurrency;
-    const exchangeRate = (transaction as any).exchangeRate ? 
+    const exchangeRate = (transaction as any).exchangeRate ?
       parseFloat((transaction as any).exchangeRate.toString()) : 1;
-    
+
     console.log(`[createTransaction] Transaction type: ${transaction.type}, Currency: ${transactionCurrency || homeCurrency}, isForeignCurrency: ${isForeignCurrency}, exchangeRate: ${exchangeRate}`);
-    
+
     // CRITICAL: For foreign currency transactions, swap generic AR/AP accounts to currency-specific ones
     let processedLedgerEntries = ledgerEntriesData;
     if (isForeignCurrency) {
-      // Get all accounts to find the generic AR/AP accounts and currency-specific ones
-      const allAccounts = await this.getAccounts();
+      // Get all accounts to find the generic AR/AP accounts and currency-specific ones (company-scoped)
+      const allAccounts = await this.getAccounts(companyId);
       
       // Find generic AR and AP accounts (no currency in name, base types)
       const genericAR = allAccounts.find(a => 

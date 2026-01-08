@@ -86,6 +86,7 @@ export const contacts = pgTable('contacts', {
 // Contact Notes - timestamped log entries for customer/vendor internal notes
 export const contactNotesSchema = pgTable('contact_notes', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation for multi-tenant
   contactId: integer('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
   content: text('content').notNull(),
   isPinned: boolean('is_pinned').notNull().default(false),
@@ -725,6 +726,7 @@ export const bankConnectionsSchema = pgTable('bank_connections', {
 // Bank Accounts (individual accounts from bank connection)
 export const bankAccountsSchema = pgTable('bank_accounts', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation for multi-tenant
   connectionId: integer('connection_id').notNull().references(() => bankConnectionsSchema.id),
   plaidAccountId: text('plaid_account_id').notNull().unique(),
   name: text('name').notNull(),
@@ -744,6 +746,7 @@ export const bankAccountsSchema = pgTable('bank_accounts', {
 // CSV Column Mapping Preferences (remembers user's column choices)
 export const csvMappingPreferencesSchema = pgTable('csv_mapping_preferences', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation for multi-tenant
   userId: integer('user_id').notNull().references(() => usersSchema.id),
   accountId: integer('account_id').notNull().references(() => accounts.id), // Which bank account
   dateColumn: text('date_column').notNull(),
@@ -792,6 +795,7 @@ export const importedTransactionsSchema = pgTable('imported_transactions', {
 // Transaction Attachments (for imported transactions)
 export const transactionAttachmentsSchema = pgTable('transaction_attachments', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation for multi-tenant
   importedTransactionId: integer('imported_transaction_id').notNull().references(() => importedTransactionsSchema.id),
   fileName: text('file_name').notNull(),
   filePath: text('file_path').notNull(),
@@ -803,6 +807,7 @@ export const transactionAttachmentsSchema = pgTable('transaction_attachments', {
 // Bank Transaction Matches (tracks one-to-many relationship between bank transactions and accounting transactions)
 export const bankTransactionMatchesSchema = pgTable('bank_transaction_matches', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company isolation for multi-tenant
   importedTransactionId: integer('imported_transaction_id').notNull().references(() => importedTransactionsSchema.id),
   matchedTransactionId: integer('matched_transaction_id').notNull().references(() => transactions.id),
   amountApplied: doublePrecision('amount_applied').notNull(),
