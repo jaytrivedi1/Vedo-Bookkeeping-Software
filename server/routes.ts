@@ -11121,17 +11121,15 @@ Respond in JSON format:
         amountApplied: amount,
       });
 
-      // Update invoice balance
-      const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
-        ? invoice.balance 
+      // Update invoice balance (company-scoped)
+      const currentBalance = invoice.balance !== null && invoice.balance !== undefined
+        ? invoice.balance
         : invoice.amount;
       const newBalance = currentBalance - amount;
-      await db.update(transactions)
-        .set({ 
-          balance: newBalance,
-          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
-        })
-        .where(eq(transactions.id, invoiceId));
+      await scopedStorage.updateTransaction(invoiceId, {
+        balance: newBalance,
+        status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+      });
 
       // Update imported transaction to mark it as matched
       await db
@@ -11240,17 +11238,15 @@ Respond in JSON format:
         amountApplied: amount,
       });
 
-      // Update bill balance
-      const currentBalance = bill.balance !== null && bill.balance !== undefined 
-        ? bill.balance 
+      // Update bill balance (company-scoped)
+      const currentBalance = bill.balance !== null && bill.balance !== undefined
+        ? bill.balance
         : bill.amount;
       const newBalance = currentBalance - amount;
-      await db.update(transactions)
-        .set({ 
-          balance: newBalance,
-          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
-        })
-        .where(eq(transactions.id, billId));
+      await scopedStorage.updateTransaction(billId, {
+        balance: newBalance,
+        status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+      });
 
       // Update imported transaction to mark it as matched
       await db
@@ -11570,20 +11566,18 @@ Respond in JSON format:
           amountApplied: amountToApply,
         });
 
-        // Update bill balance
-        const currentBalance = bill.balance !== null && bill.balance !== undefined 
-          ? bill.balance 
+        // Update bill balance (company-scoped)
+        const currentBalance = bill.balance !== null && bill.balance !== undefined
+          ? bill.balance
           : bill.amount;
         const newBalance = currentBalance - amountToApply;
-        await db.update(transactions)
-          .set({ 
-            balance: newBalance,
-            status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
-          })
-          .where(eq(transactions.id, billId));
+        await scopedStorage.updateTransaction(billId, {
+          balance: newBalance,
+          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+        });
 
-        // Record the match in bank_transaction_matches
-        await db.insert(bankTransactionMatchesSchema).values({
+        // Record the match in bank_transaction_matches (company-scoped)
+        await scopedStorage.createBankTransactionMatch({
           importedTransactionId: transactionId,
           matchedTransactionId: createdPayment.id,
           amountApplied: amountToApply,
@@ -11631,8 +11625,8 @@ Respond in JSON format:
 
         const createdExpense = await scopedStorage.createTransaction(expenseTransaction, [], expenseLedgerEntries);
 
-        // Record the match in bank_transaction_matches
-        await db.insert(bankTransactionMatchesSchema).values({
+        // Record the match in bank_transaction_matches (company-scoped)
+        await scopedStorage.createBankTransactionMatch({
           importedTransactionId: transactionId,
           matchedTransactionId: createdExpense.id,
           amountApplied: difference.amount,
@@ -11771,20 +11765,18 @@ Respond in JSON format:
           amountApplied: amountToApply,
         });
 
-        // Update invoice balance
-        const currentBalance = invoice.balance !== null && invoice.balance !== undefined 
-          ? invoice.balance 
+        // Update invoice balance (company-scoped)
+        const currentBalance = invoice.balance !== null && invoice.balance !== undefined
+          ? invoice.balance
           : invoice.amount;
         const newBalance = currentBalance - amountToApply;
-        await db.update(transactions)
-          .set({ 
-            balance: newBalance,
-            status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
-          })
-          .where(eq(transactions.id, invoiceId));
+        await scopedStorage.updateTransaction(invoiceId, {
+          balance: newBalance,
+          status: Math.abs(newBalance) <= 0.01 ? 'paid' : 'partial'
+        });
 
-        // Record the match in bank_transaction_matches
-        await db.insert(bankTransactionMatchesSchema).values({
+        // Record the match in bank_transaction_matches (company-scoped)
+        await scopedStorage.createBankTransactionMatch({
           importedTransactionId: transactionId,
           matchedTransactionId: createdPayment.id,
           amountApplied: amountToApply,
@@ -11832,8 +11824,8 @@ Respond in JSON format:
 
         const createdDeposit = await scopedStorage.createTransaction(depositTransaction, [], depositLedgerEntries);
 
-        // Record the match in bank_transaction_matches
-        await db.insert(bankTransactionMatchesSchema).values({
+        // Record the match in bank_transaction_matches (company-scoped)
+        await scopedStorage.createBankTransactionMatch({
           importedTransactionId: transactionId,
           matchedTransactionId: createdDeposit.id,
           amountApplied: difference.amount,

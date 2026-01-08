@@ -106,6 +106,9 @@ import {
   type InsertAiConversation,
   type AiMessage,
   type InsertAiMessage,
+  type BankTransactionMatch,
+  type InsertBankTransactionMatch,
+  bankTransactionMatchesSchema,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -335,6 +338,9 @@ export interface IStorage {
   createReconciliationItem(item: InsertReconciliationItem): Promise<ReconciliationItem>;
   updateReconciliationItem(id: number, item: Partial<ReconciliationItem>): Promise<ReconciliationItem | undefined>;
   bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void>;
+
+  // Bank Transaction Matches (for bank feed matching)
+  createBankTransactionMatch(match: InsertBankTransactionMatch): Promise<BankTransactionMatch>;
 
   // Categorization Rules
   getCategorizationRules(companyId?: number): Promise<CategorizationRule[]>;
@@ -1634,6 +1640,11 @@ export class MemStorage implements IStorage {
 
   async bulkUpsertReconciliationItems(reconciliationId: number, ledgerEntryIds: number[], isCleared: boolean): Promise<void> {
     throw new Error("Reconciliation items not supported in MemStorage");
+  }
+
+  // Bank Transaction Matches
+  async createBankTransactionMatch(match: InsertBankTransactionMatch): Promise<BankTransactionMatch> {
+    throw new Error("Bank transaction matches not supported in MemStorage");
   }
 
   // Categorization Rules

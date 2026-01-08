@@ -19,7 +19,8 @@ import {
   ImportedTransaction, InsertImportedTransaction, BankConnection, BankAccount,
   CategorizationRule, InsertCategorizationRule, Reconciliation,
   Preferences, InsertPreferences,
-  CsvMappingPreference, InsertCsvMappingPreference, ActivityLog
+  CsvMappingPreference, InsertCsvMappingPreference, ActivityLog,
+  BankTransactionMatch, InsertBankTransactionMatch
 } from "@shared/schema";
 
 /**
@@ -517,6 +518,35 @@ export class CompanyScopedStorage {
 
   async getActivityLog(id: number): Promise<ActivityLog | undefined> {
     return this.storage.getActivityLog(id, this.companyId);
+  }
+
+  // ============ BANK TRANSACTION MATCHES (company-scoped) ============
+
+  async createBankTransactionMatch(match: Omit<InsertBankTransactionMatch, 'companyId'>): Promise<BankTransactionMatch> {
+    // Verify both the imported transaction and matched transaction belong to this company
+    const importedTx = await this.getImportedTransaction(match.importedTransactionId);
+    if (!importedTx) {
+      throw new CompanyAccessError("Imported transaction not found or access denied");
+    }
+    const matchedTx = await this.getTransaction(match.matchedTransactionId);
+    if (!matchedTx) {
+      throw new CompanyAccessError("Matched transaction not found or access denied");
+    }
+    return this.storage.createBankTransactionMatch({
+      ...match,
+      companyId: this.companyId
+    });
+  }
+
+  // ============ TRANSACTION BALANCE UPDATES (company-scoped) ============
+
+  async updateTransactionBalance(id: number, balance: number, status: string): Promise<Transaction | undefined> {
+    // Verify the transaction belongs to this company first
+    const transaction = await this.getTransaction(id);
+    if (!transaction) {
+      throw new CompanyAccessError("Transaction not found or access denied");
+    }
+    return this.storage.updateTransaction(id, { balance, status });
   }
 
   // ============ PASS-THROUGH METHODS (no company scoping needed) ============

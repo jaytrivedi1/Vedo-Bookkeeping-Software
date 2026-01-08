@@ -3,7 +3,7 @@ import {
   Account, Contact, ContactNote, Transaction, LineItem, LedgerEntry, SalesTax, Product,
   CompanySettings, Preferences, Company, User, UserCompany, Permission, RolePermission,
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
-  Reconciliation, ReconciliationItem,
+  Reconciliation, ReconciliationItem, BankTransactionMatch,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
   AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
   RecurringTemplate, RecurringLine, RecurringHistory,
@@ -12,7 +12,7 @@ import {
   InsertAccount, InsertContact, InsertContactNote, InsertTransaction, InsertLineItem, InsertLedgerEntry, InsertSalesTax, InsertProduct,
   InsertCompanySettings, InsertPreferences, InsertCompany, InsertUser, InsertUserCompany, InsertPermission, InsertRolePermission,
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
-  InsertReconciliation, InsertReconciliationItem,
+  InsertReconciliation, InsertReconciliationItem, InsertBankTransactionMatch,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
   InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
   InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
@@ -21,7 +21,7 @@ import {
   accounts, contacts, contactNotesSchema, transactions, lineItems, ledgerEntries, salesTaxSchema, productsSchema,
   companySchema, preferencesSchema, companiesSchema, usersSchema, userCompaniesSchema,
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
-  reconciliations, reconciliationItems,
+  reconciliations, reconciliationItems, bankTransactionMatchesSchema,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
   accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema,
   recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema,
@@ -3596,6 +3596,14 @@ export class DatabaseStorage implements IStorage {
       const entryAmount = entry.debit - entry.credit;
       return amounts.some(amount => Math.abs(entryAmount - amount) <= tolerance);
     });
+  }
+
+  // Bank Transaction Matches
+  async createBankTransactionMatch(match: InsertBankTransactionMatch): Promise<BankTransactionMatch> {
+    const [newMatch] = await db.insert(bankTransactionMatchesSchema)
+      .values(match)
+      .returning();
+    return newMatch;
   }
 
   // Categorization Rules
