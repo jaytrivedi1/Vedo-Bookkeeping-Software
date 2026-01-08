@@ -444,18 +444,21 @@ async function updateSuggestionsForMatchingTransactions(
   }
 }
 
-// Helper function to check if a transaction date is locked
-async function checkTransactionLocked(transactionDate: Date): Promise<{ isLocked: boolean; lockDate?: Date }> {
+// Helper function to check if a transaction date is locked (company-scoped)
+async function checkTransactionLocked(
+  transactionDate: Date,
+  scopedStorage: { getPreferences(): Promise<{ transactionLockDate?: Date | null } | undefined> }
+): Promise<{ isLocked: boolean; lockDate?: Date }> {
   try {
-    const preferences = await storage.getPreferences();
+    const preferences = await scopedStorage.getPreferences();
     if (!preferences || !preferences.transactionLockDate) {
       return { isLocked: false };
     }
-    
+
     const lockDate = new Date(preferences.transactionLockDate);
     // Transaction is locked if its date is on or before the lock date
     const isLocked = transactionDate <= lockDate;
-    
+
     return { isLocked, lockDate };
   } catch (error) {
     console.error('Error checking transaction lock:', error);
@@ -2473,8 +2476,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
 
-      // Check if transaction date is locked
-      const lockCheck = await checkTransactionLocked(body.date);
+      // Check if transaction date is locked (company-scoped)
+      const lockCheck = await checkTransactionLocked(body.date, scopedStorage);
       if (lockCheck.isLocked) {
         return res.status(400).json({
           message: "Transaction locked",
@@ -2948,8 +2951,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: req.body.description || ''
       };
 
-      // Check if transaction date is locked
-      const lockCheck = await checkTransactionLocked(body.date);
+      // Check if transaction date is locked (company-scoped)
+      const lockCheck = await checkTransactionLocked(body.date, scopedStorage);
       if (lockCheck.isLocked) {
         return res.status(400).json({
           message: "Transaction locked",

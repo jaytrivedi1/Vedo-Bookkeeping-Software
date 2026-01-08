@@ -248,8 +248,9 @@ export interface IStorage {
   // Settings
   getCompanySettings(): Promise<CompanySettings | undefined>;
   saveCompanySettings(settings: InsertCompanySettings): Promise<CompanySettings>;
-  getPreferences(): Promise<Preferences | undefined>;
-  savePreferences(preferences: InsertPreferences): Promise<Preferences>;
+  getPreferences(companyId?: number): Promise<Preferences | undefined>;
+  savePreferences(preferences: InsertPreferences, companyId?: number): Promise<Preferences>;
+  updatePreferences(updates: Partial<InsertPreferences>, companyId?: number): Promise<Preferences>;
   
   // User Management
   getUsers(): Promise<User[]>;
@@ -1164,15 +1165,17 @@ export class MemStorage implements IStorage {
     return this.companySettings;
   }
   
-  async getPreferences(): Promise<Preferences | undefined> {
+  async getPreferences(companyId?: number): Promise<Preferences | undefined> {
+    // MemStorage doesn't support company-scoped preferences, returns global
     return this.preferences;
   }
-  
-  async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
+
+  async savePreferences(preferences: InsertPreferences, companyId?: number): Promise<Preferences> {
     const now = new Date();
     if (!this.preferences) {
       this.preferences = {
         id: 1,
+        companyId: companyId || null,
         ...preferences,
         updatedAt: now
       };
@@ -1184,6 +1187,10 @@ export class MemStorage implements IStorage {
       };
     }
     return this.preferences;
+  }
+
+  async updatePreferences(updates: Partial<InsertPreferences>, companyId?: number): Promise<Preferences> {
+    return this.savePreferences(updates as InsertPreferences, companyId);
   }
 
   // User Management Methods

@@ -17,7 +17,8 @@ import {
   InsertAccount, InsertContact, InsertTransaction, InsertLineItem, InsertLedgerEntry,
   InsertSalesTax, InsertProduct, ContactNote, InsertContactNote,
   ImportedTransaction, InsertImportedTransaction, BankConnection, BankAccount,
-  CategorizationRule, InsertCategorizationRule, Reconciliation
+  CategorizationRule, InsertCategorizationRule, Reconciliation,
+  Preferences, InsertPreferences
 } from "@shared/schema";
 
 /**
@@ -425,6 +426,20 @@ export class CompanyScopedStorage {
     }
     const { companyId, ...safeUpdate } = data;
     return this.storage.updateImportedTransaction(id, safeUpdate);
+  }
+
+  // ============ PREFERENCES (company-scoped) ============
+
+  async getPreferences(): Promise<Preferences | undefined> {
+    return this.storage.getPreferences(this.companyId);
+  }
+
+  async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
+    return this.storage.savePreferences(preferences, this.companyId);
+  }
+
+  async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
+    return this.storage.updatePreferences(updates, this.companyId);
   }
 
   // ============ PASS-THROUGH METHODS (no company scoping needed) ============

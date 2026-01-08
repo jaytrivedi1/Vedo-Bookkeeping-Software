@@ -486,9 +486,10 @@ export const companySchema = pgTable('company_settings', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
-// Settings schema for application preferences
+// Settings schema for application preferences (company-scoped for multi-tenant isolation)
 export const preferencesSchema = pgTable('preferences', {
   id: serial('id').primaryKey(),
+  companyId: integer('company_id').references(() => companiesSchema.id), // Company-specific preferences for multi-tenant isolation
   darkMode: boolean('dark_mode').default(false),
   foreignCurrency: boolean('foreign_currency').default(false), // deprecated - use multiCurrencyEnabled
   defaultCurrency: text('default_currency').default('USD'), // deprecated - use homeCurrency

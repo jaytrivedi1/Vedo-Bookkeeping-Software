@@ -2761,15 +2761,26 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // User Preferences
-  async getPreferences(): Promise<Preferences | undefined> {
-    const result = await db.select().from(preferencesSchema);
+  // User Preferences (company-scoped for multi-tenant isolation)
+  async getPreferences(companyId?: number): Promise<Preferences | undefined> {
+    if (companyId) {
+      // Get company-specific preferences
+      const result = await db.select().from(preferencesSchema)
+        .where(eq(preferencesSchema.companyId, companyId));
+      if (result[0]) {
+        return result[0];
+      }
+      // Fall back to global preferences if no company-specific ones exist
+    }
+    // Get global preferences (legacy behavior or fallback)
+    const result = await db.select().from(preferencesSchema)
+      .where(sql`${preferencesSchema.companyId} IS NULL`);
     return result[0];
   }
 
-  async savePreferences(preferences: InsertPreferences): Promise<Preferences> {
-    // Check if preferences already exist
-    const existing = await this.getPreferences();
+  async savePreferences(preferences: InsertPreferences, companyId?: number): Promise<Preferences> {
+    // Check if preferences already exist for this company
+    const existing = await this.getPreferences(companyId);
 
     if (existing) {
       // Update existing preferences
@@ -2782,10 +2793,11 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     } else {
-      // Create new preferences
+      // Create new preferences with company scope
       const [newPreferences] = await db.insert(preferencesSchema)
         .values({
           ...preferences,
+          companyId: companyId || null,
           updatedAt: new Date()
         })
         .returning();
@@ -2793,7 +2805,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
+  async updatePreferences(updates: Partial<InsertPreferences>, companyId?: number): Promise<Preferences> {
     // Ensure AI settings columns exist (inline migration for immediate availability)
     const hasAiFields = 'aiCategorizationEnabled' in updates ||
                         'aiAutoPostEnabled' in updates ||
@@ -2825,8 +2837,8 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    // Check if preferences already exist
-    const existing = await this.getPreferences();
+    // Check if preferences already exist for this company
+    const existing = await this.getPreferences(companyId);
 
     if (existing) {
       // Update existing preferences with only the provided fields
@@ -2839,10 +2851,11 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     } else {
-      // Create new preferences with defaults + updates
+      // Create new preferences with defaults + updates and company scope
       const [newPreferences] = await db.insert(preferencesSchema)
         .values({
           ...updates,
+          companyId: companyId || null,
           updatedAt: new Date()
         })
         .returning();
