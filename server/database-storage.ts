@@ -3313,18 +3313,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // CSV Mapping Preferences
-  async getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined> {
+  async getCsvMappingPreference(userId: number, accountId: number, companyId?: number): Promise<CsvMappingPreference | undefined> {
+    const conditions = [
+      eq(csvMappingPreferencesSchema.userId, userId),
+      eq(csvMappingPreferencesSchema.accountId, accountId)
+    ];
+    if (companyId) {
+      conditions.push(eq(csvMappingPreferencesSchema.companyId, companyId));
+    }
     const result = await db.select()
       .from(csvMappingPreferencesSchema)
-      .where(
-        and(
-          eq(csvMappingPreferencesSchema.userId, userId),
-          eq(csvMappingPreferencesSchema.accountId, accountId)
-        )
-      )
+      .where(and(...conditions))
       .orderBy(desc(csvMappingPreferencesSchema.updatedAt))
       .limit(1);
-    
+
     return result[0];
   }
 
@@ -3335,10 +3337,14 @@ export class DatabaseStorage implements IStorage {
     return newPreference;
   }
 
-  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference> {
+  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>, companyId?: number): Promise<CsvMappingPreference | undefined> {
+    const conditions = [eq(csvMappingPreferencesSchema.id, id)];
+    if (companyId) {
+      conditions.push(eq(csvMappingPreferencesSchema.companyId, companyId));
+    }
     const [updatedPreference] = await db.update(csvMappingPreferencesSchema)
       .set({ ...preference, updatedAt: new Date() })
-      .where(eq(csvMappingPreferencesSchema.id, id))
+      .where(and(...conditions))
       .returning();
     return updatedPreference;
   }
@@ -3993,10 +3999,14 @@ export class DatabaseStorage implements IStorage {
     return await query;
   }
 
-  async getActivityLog(id: number): Promise<ActivityLog | undefined> {
+  async getActivityLog(id: number, companyId?: number): Promise<ActivityLog | undefined> {
+    const conditions = [eq(activityLogsSchema.id, id)];
+    if (companyId) {
+      conditions.push(eq(activityLogsSchema.companyId, companyId));
+    }
     const [log] = await db.select()
       .from(activityLogsSchema)
-      .where(eq(activityLogsSchema.id, id))
+      .where(and(...conditions))
       .limit(1);
     return log;
   }

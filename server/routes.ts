@@ -10181,11 +10181,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Save or update mapping preference
-      const existingPreference = await storage.getCsvMappingPreference(userId, parsedAccountId);
-      
+      // Save or update mapping preference (company-scoped)
+      const existingPreference = await scopedStorage.getCsvMappingPreference(userId, parsedAccountId);
+
       if (existingPreference) {
-        await storage.updateCsvMappingPreference(existingPreference.id, {
+        await scopedStorage.updateCsvMappingPreference(existingPreference.id, {
           dateColumn: parsedMapping.dateColumn,
           descriptionColumn: parsedMapping.descriptionColumn,
           amountColumn: parsedMapping.amountColumn || null,
@@ -10195,7 +10195,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           hasHeaderRow: parsedHasHeaderRow,
         });
       } else {
-        await storage.createCsvMappingPreference({
+        await scopedStorage.createCsvMappingPreference({
           userId,
           accountId: parsedAccountId,
           dateColumn: parsedMapping.dateColumn,
@@ -13881,16 +13881,14 @@ Respond in JSON format:
 
   apiRouter.get("/activity-logs/:id", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
       const id = parseInt(req.params.id);
-      const log = await storage.getActivityLog(id);
+
+      // Uses company-scoped storage to ensure isolation
+      const log = await scopedStorage.getActivityLog(id);
 
       if (!log) {
         return res.status(404).json({ message: "Activity log not found" });
-      }
-
-      // Verify the log belongs to the current company
-      if (log.companyId && log.companyId !== req.companyId) {
-        return res.status(403).json({ message: "Access denied to this activity log" });
       }
 
       res.json(log);

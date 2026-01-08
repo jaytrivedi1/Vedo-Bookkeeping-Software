@@ -18,7 +18,8 @@ import {
   InsertSalesTax, InsertProduct, ContactNote, InsertContactNote,
   ImportedTransaction, InsertImportedTransaction, BankConnection, BankAccount,
   CategorizationRule, InsertCategorizationRule, Reconciliation,
-  Preferences, InsertPreferences
+  Preferences, InsertPreferences,
+  CsvMappingPreference, InsertCsvMappingPreference, ActivityLog
 } from "@shared/schema";
 
 /**
@@ -481,6 +482,41 @@ export class CompanyScopedStorage {
 
   async updatePreferences(updates: Partial<InsertPreferences>): Promise<Preferences> {
     return this.storage.updatePreferences(updates, this.companyId);
+  }
+
+  // ============ CSV MAPPING PREFERENCES (company-scoped) ============
+
+  async getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined> {
+    // Verify the account belongs to this company first
+    const account = await this.getAccount(accountId);
+    if (!account) {
+      throw new CompanyAccessError("Account not found or access denied");
+    }
+    return this.storage.getCsvMappingPreference(userId, accountId, this.companyId);
+  }
+
+  async createCsvMappingPreference(preference: Omit<InsertCsvMappingPreference, 'companyId'>): Promise<CsvMappingPreference> {
+    // Verify the account belongs to this company
+    const account = await this.getAccount(preference.accountId);
+    if (!account) {
+      throw new CompanyAccessError("Account not found or access denied");
+    }
+    return this.storage.createCsvMappingPreference({
+      ...preference,
+      companyId: this.companyId
+    });
+  }
+
+  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference | undefined> {
+    // Don't allow changing companyId
+    const { companyId, ...safeUpdate } = preference;
+    return this.storage.updateCsvMappingPreference(id, safeUpdate, this.companyId);
+  }
+
+  // ============ ACTIVITY LOGS (company-scoped) ============
+
+  async getActivityLog(id: number): Promise<ActivityLog | undefined> {
+    return this.storage.getActivityLog(id, this.companyId);
   }
 
   // ============ PASS-THROUGH METHODS (no company scoping needed) ============

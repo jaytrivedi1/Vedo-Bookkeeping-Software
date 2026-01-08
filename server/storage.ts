@@ -316,9 +316,9 @@ export interface IStorage {
   deleteImportedTransaction(id: number): Promise<boolean>;
   
   // CSV Mapping Preferences
-  getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined>;
+  getCsvMappingPreference(userId: number, accountId: number, companyId?: number): Promise<CsvMappingPreference | undefined>;
   createCsvMappingPreference(preference: InsertCsvMappingPreference): Promise<CsvMappingPreference>;
-  updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference>;
+  updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>, companyId?: number): Promise<CsvMappingPreference | undefined>;
   bulkCreateImportedTransactions(transactions: InsertImportedTransaction[]): Promise<ImportedTransaction[]>;
   
   // Reconciliations
@@ -385,7 +385,7 @@ export interface IStorage {
     limit?: number;
     offset?: number;
   }): Promise<ActivityLog[]>;
-  getActivityLog(id: number): Promise<ActivityLog | undefined>;
+  getActivityLog(id: number, companyId?: number): Promise<ActivityLog | undefined>;
   createActivityLog(activityLog: InsertActivityLog): Promise<ActivityLog>;
   
   // User Management
@@ -1574,7 +1574,7 @@ export class MemStorage implements IStorage {
   }
 
   // CSV Mapping Preferences
-  async getCsvMappingPreference(userId: number, accountId: number): Promise<CsvMappingPreference | undefined> {
+  async getCsvMappingPreference(userId: number, accountId: number, companyId?: number): Promise<CsvMappingPreference | undefined> {
     throw new Error("CSV mapping preferences not supported in MemStorage");
   }
 
@@ -1582,7 +1582,7 @@ export class MemStorage implements IStorage {
     throw new Error("CSV mapping preferences not supported in MemStorage");
   }
 
-  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>): Promise<CsvMappingPreference> {
+  async updateCsvMappingPreference(id: number, preference: Partial<InsertCsvMappingPreference>, companyId?: number): Promise<CsvMappingPreference | undefined> {
     throw new Error("CSV mapping preferences not supported in MemStorage");
   }
 
