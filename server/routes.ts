@@ -1477,6 +1477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   apiRouter.get("/invoices/:id/payment-applications", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
     try {
       const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
       const invoiceId = parseInt(req.params.id);
 
       // Verify invoice belongs to current company
@@ -1487,26 +1488,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { paymentApplications } = await import('@shared/schema');
 
+      // Get payment applications with company filter for defense-in-depth
       const applications = await db
         .select()
         .from(paymentApplications)
-        .where(eq(paymentApplications.invoiceId, invoiceId));
-      
-      // For each application, fetch the payment/credit transaction details
+        .where(
+          and(
+            eq(paymentApplications.invoiceId, invoiceId),
+            eq(paymentApplications.companyId, companyId)
+          )
+        );
+
+      // For each application, fetch the payment/credit transaction details (company-scoped)
       const applicationsWithDetails = await Promise.all(
         applications.map(async (app) => {
           const [payment] = await db
             .select()
             .from(transactions)
-            .where(eq(transactions.id, app.paymentId));
-          
+            .where(
+              and(
+                eq(transactions.id, app.paymentId),
+                eq(transactions.companyId, companyId)
+              )
+            );
+
           return {
             ...app,
             payment
           };
         })
       );
-      
+
       res.json(applicationsWithDetails);
     } catch (error) {
       console.error("Error fetching payment applications:", error);
@@ -7871,60 +7883,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Batch recalculation of invoice balances (admin only)
-  apiRouter.post("/recalculate-all-invoice-balances", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Batch recalculation of invoice balances (admin only, company-scoped)
+  apiRouter.post("/recalculate-all-invoice-balances", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
-      await batchRecalculateInvoiceBalances();
-      return res.status(200).json({ message: 'Invoice balance recalculation completed' });
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
+
+      // Get all invoices for this company
+      const allInvoices = await scopedStorage.getTransactions();
+      const invoices = allInvoices.filter(t => t.type === 'invoice');
+
+      let recalculatedCount = 0;
+      for (const invoice of invoices) {
+        await scopedStorage.recalculateInvoiceBalance(invoice.id);
+        recalculatedCount++;
+      }
+
+      return res.status(200).json({
+        message: `Invoice balance recalculation completed for company ${companyId}`,
+        invoicesProcessed: recalculatedCount
+      });
+    } catch (error) {
+      console.error('Error in batch recalculation:', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Testing route - admin only, company-scoped
+  apiRouter.post("/test/recalculate-all-invoice-balances", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
+    try {
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
+
+      // Get all invoices for this company
+      const allInvoices = await scopedStorage.getTransactions();
+      const invoices = allInvoices.filter(t => t.type === 'invoice');
+
+      let recalculatedCount = 0;
+      for (const invoice of invoices) {
+        await scopedStorage.recalculateInvoiceBalance(invoice.id);
+        recalculatedCount++;
+      }
+
+      return res.status(200).json({
+        message: `Invoice balance recalculation completed for company ${companyId}`,
+        invoicesProcessed: recalculatedCount
+      });
     } catch (error) {
       console.error('Error in batch recalculation:', error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   });
   
-  // Testing route - admin only
-  apiRouter.post("/test/recalculate-all-invoice-balances", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Direct fix for Invoice #1009 - ensures balance is always $3000 (admin only, company-scoped)
+  apiRouter.post("/fix-invoice-1009", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const batchRecalculateInvoiceBalances = (await import('./batch-recalculate-invoice-balances')).default;
-      await batchRecalculateInvoiceBalances();
-      return res.status(200).json({ message: 'Invoice balance recalculation completed' });
-    } catch (error) {
-      console.error('Error in batch recalculation:', error);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  });
-  
-  // Direct fix for Invoice #1009 - ensures balance is always $3000 (admin only)
-  apiRouter.post("/fix-invoice-1009", requireSuperAdmin, async (req: Request, res: Response) => {
-    try {
-      // Set Invoice #1009 to exactly $3000 (preserving manual adjustment)
+      const companyId = req.companyId!;
+
+      // Set Invoice #1009 to exactly $3000 (preserving manual adjustment) - company-scoped
       await db.execute(
-        sql`UPDATE transactions SET balance = 3000, status = 'open' 
-            WHERE reference = '1009' AND type = 'invoice'`
+        sql`UPDATE transactions SET balance = 3000, status = 'open'
+            WHERE reference = '1009' AND type = 'invoice' AND company_id = ${companyId}`
       );
-      console.log("Fixed Invoice #1009 balance to $3000");
-      
-      // Ensure CREDIT-53289 has correct balance of -3175
+      console.log(`Fixed Invoice #1009 balance to $3000 for company ${companyId}`);
+
+      // Ensure CREDIT-53289 has correct balance of -3175 - company-scoped
       await db.execute(
-        sql`UPDATE transactions SET balance = -3175, status = 'unapplied_credit' 
-            WHERE reference = 'CREDIT-53289' AND type = 'deposit'`
+        sql`UPDATE transactions SET balance = -3175, status = 'unapplied_credit'
+            WHERE reference = 'CREDIT-53289' AND type = 'deposit' AND company_id = ${companyId}`
       );
-      console.log("Fixed CREDIT-53289 balance to -$3175");
-      
-      return res.status(200).json({ message: "Invoice #1009 balance set to $3000 successfully" });
+      console.log(`Fixed CREDIT-53289 balance to -$3175 for company ${companyId}`);
+
+      return res.status(200).json({ message: `Invoice #1009 balance set to $3000 successfully for company ${companyId}` });
     } catch (error) {
       console.error("Error fixing Invoice #1009 balance:", error);
       return res.status(500).json({ message: "Error fixing invoice balance", error: String(error) });
     }
   });
   
-  // Comprehensive fix for all balances - admin only
-  apiRouter.post("/test/fix-all-balances", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Comprehensive fix for all balances - admin only, company-scoped
+  apiRouter.post("/test/fix-all-balances", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      console.log('Running comprehensive fix for all transaction balances');
-      await fixAllBalances();
-      return res.status(200).json({ message: 'Comprehensive balance fix completed successfully' });
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
+
+      console.log(`Running comprehensive fix for all transaction balances for company ${companyId}`);
+
+      // Get all transactions for this company
+      const allTransactions = await scopedStorage.getTransactions();
+
+      // Recalculate balances for invoices
+      const invoices = allTransactions.filter(t => t.type === 'invoice');
+      let fixedCount = 0;
+
+      for (const invoice of invoices) {
+        await scopedStorage.recalculateInvoiceBalance(invoice.id);
+        fixedCount++;
+      }
+
+      return res.status(200).json({
+        message: `Comprehensive balance fix completed for company ${companyId}`,
+        invoicesFixed: fixedCount
+      });
     } catch (error) {
       console.error('Error in fix-all-balances:', error);
       return res.status(500).json({ message: 'Internal server error' });
@@ -8928,40 +8988,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
 
-  // Fix bill balances endpoint - admin only
-  apiRouter.post("/fix/bill-balances", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Fix bill balances endpoint - admin only, company-scoped
+  apiRouter.post("/fix/bill-balances", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      console.log("Starting bill balance fix...");
-      
-      // Get all bills
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
+
+      console.log(`Starting bill balance fix for company ${companyId}...`);
+
+      // Get all bills for this company
       const allBills = await db
         .select()
         .from(transactions)
-        .where(eq(transactions.type, 'bill'));
-      
-      console.log(`Found ${allBills.length} bills to process`);
-      
+        .where(
+          and(
+            eq(transactions.type, 'bill'),
+            eq(transactions.companyId, companyId)
+          )
+        );
+
+      console.log(`Found ${allBills.length} bills to process for company ${companyId}`);
+
       for (const bill of allBills) {
         console.log(`Checking bill ${bill.reference} (ID: ${bill.id})`);
-        
-        // Find all payments made to this bill by looking for payment ledger entries
+
+        // Find all payments made to this bill by looking for payment ledger entries (company-scoped)
         const paymentEntries = await db
           .select()
           .from(ledgerEntries)
-          .where(like(ledgerEntries.description, `%bill ${bill.reference}%`));
-        
+          .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
+          .where(
+            and(
+              eq(transactions.companyId, companyId),
+              like(ledgerEntries.description, `%bill ${bill.reference}%`)
+            )
+          );
+
         // Calculate total payments made to this bill
         const totalPayments = paymentEntries.reduce((sum, entry) => {
           // Payment entries that reduce the bill should be credits in accounts payable
-          return sum + (entry.credit || 0);
+          return sum + (entry.ledger_entries.credit || 0);
         }, 0);
-        
+
         // Calculate remaining balance: Original Amount - Payments Made
         const correctBalance = Number(bill.amount) - totalPayments;
-        
+
         // Determine correct status
         const correctStatus = Math.abs(correctBalance) < 0.01 ? 'completed' : 'open';
-        
+
         console.log(`Bill ${bill.reference} analysis:`);
         console.log(`  - Original amount: ${bill.amount}`);
         console.log(`  - Total payments made: ${totalPayments}`);
@@ -8969,25 +9043,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`  - Correct balance: ${correctBalance}`);
         console.log(`  - Current status: ${bill.status}`);
         console.log(`  - Correct status: ${correctStatus}`);
-        
-        // Update if needed
+
+        // Update if needed (using scopedStorage for company isolation)
         if (Math.abs(Number(bill.balance) - correctBalance) > 0.01 || bill.status !== correctStatus) {
-          await storage.updateTransaction(bill.id, {
+          await scopedStorage.updateTransaction(bill.id, {
             balance: correctBalance,
             status: correctStatus
           });
-          
+
           console.log(`Updated bill ${bill.reference}: balance ${correctBalance}, status ${correctStatus}`);
         } else {
           console.log(`Bill ${bill.reference} already has correct values`);
         }
       }
-      
-      console.log("Bill balance fix completed successfully!");
-      res.json({ success: true, billsProcessed: allBills.length });
+
+      console.log(`Bill balance fix completed successfully for company ${companyId}!`);
+      res.json({ success: true, billsProcessed: allBills.length, companyId });
     } catch (error: any) {
       console.error("Error fixing bill balances:", error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
         error: error.message
       });
