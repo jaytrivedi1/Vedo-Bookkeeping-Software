@@ -562,18 +562,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API routes
   const apiRouter = express.Router();
   
-  // TEST Endpoint for creating a payment with unapplied credit (admin only)
-  apiRouter.post("/test-unapplied-credit", requireSuperAdmin, async (req: Request, res: Response) => {
+  // TEST Endpoint for creating a payment with unapplied credit (admin only, company-scoped)
+  apiRouter.post("/test-unapplied-credit", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
+      const scopedStorage = createScopedStorage(req);
+
+      // Get a contact from the current company for testing
+      const contacts = await scopedStorage.getContacts();
+      if (contacts.length === 0) {
+        return res.status(400).json({ error: "No contacts found in current company for testing" });
+      }
+      const testContact = contacts[0];
+
+      // Get accounts for the current company
+      const accounts = await scopedStorage.getAccounts();
+      const arAccount = accounts.find(a => a.name.toLowerCase().includes('receivable'));
+      const cashAccount = accounts.find(a => a.name.toLowerCase().includes('cash') || a.type === 'asset');
+      const revenueAccount = accounts.find(a => a.type === 'revenue');
+
+      if (!arAccount || !cashAccount || !revenueAccount) {
+        return res.status(400).json({ error: "Required accounts (AR, Cash, Revenue) not found in current company" });
+      }
+
       // First, create an invoice to pay
-      const invoice = await storage.createTransaction(
+      const invoice = await scopedStorage.createTransaction(
         {
           type: 'invoice',
           reference: `INV-TEST-${Date.now()}`,
           date: new Date(),
           description: "Test invoice for payment",
           amount: 500, // $500 invoice
-          contactId: 1, // Acme Corporation
+          contactId: testContact.id,
           status: 'open',
           balance: 500
         },
@@ -588,7 +607,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ],
         [
           {
-            accountId: 2, // Accounts Receivable
+            accountId: arAccount.id,
             description: "Test invoice",
             debit: 500,
             credit: 0,
@@ -596,7 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionId: 0 // Will be set by createTransaction
           },
           {
-            accountId: 20, // Revenue
+            accountId: revenueAccount.id,
             description: "Test invoice revenue",
             debit: 0,
             credit: 500,
@@ -605,22 +624,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         ]
       );
-      
+
       // Now create a payment for $1000 (invoice is only $500, so $500 should be unapplied credit)
-      const payment = await storage.createTransaction(
+      const payment = await scopedStorage.createTransaction(
         {
           type: 'payment',
           reference: `PAY-TEST-${Date.now()}`,
           date: new Date(),
           description: "Test payment with unapplied credit",
           amount: 1000, // $1000 payment for $500 invoice
-          contactId: 1, // Acme Corporation
+          contactId: testContact.id,
           status: 'completed'
         },
         [], // No line items for payments
         [
           {
-            accountId: 1, // Cash
+            accountId: cashAccount.id,
             description: "Test payment deposit",
             debit: 1000,
             credit: 0,
@@ -628,7 +647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionId: 0 // Will be set by createTransaction
           },
           {
-            accountId: 2, // Accounts Receivable
+            accountId: arAccount.id,
             description: `Payment for invoice #${invoice.reference}`,
             debit: 0,
             credit: 500, // Only applying $500 to the invoice
@@ -636,8 +655,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             transactionId: 0 // Will be set by createTransaction
           },
           {
-            accountId: 2, // Accounts Receivable
-            description: "Unapplied credit for customer #1",
+            accountId: arAccount.id,
+            description: `Unapplied credit for customer #${testContact.id}`,
             debit: 0,
             credit: 500, // $500 unapplied credit
             date: new Date(),
@@ -645,7 +664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         ]
       );
-      
+
       // Create a separate deposit transaction for the unapplied credit amount
       const depositData = {
         type: 'deposit' as const,
@@ -655,13 +674,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: "Unapplied credit from test payment",
         amount: 500, // $500 unapplied credit
         balance: -500, // Negative balance for credit
-        contactId: 1, // Acme Corporation
+        contactId: testContact.id,
       };
-      
+
       // Create deposit ledger entries
       const depositLedgerEntries = [
         {
-          accountId: 2, // Accounts Receivable
+          accountId: arAccount.id,
           debit: 0,
           credit: 500,
           description: "Unapplied credit from test payment",
@@ -669,7 +688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionId: 0 // Will be set by createTransaction
         },
         {
-          accountId: 1, // Cash
+          accountId: cashAccount.id,
           debit: 500,
           credit: 0,
           description: "Deposit from unapplied credit",
@@ -677,20 +696,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           transactionId: 0 // Will be set by createTransaction
         }
       ];
-      
+
       // Create the deposit transaction
-      const deposit = await storage.createTransaction(
+      const deposit = await scopedStorage.createTransaction(
         depositData,
         [], // No line items for deposits
         depositLedgerEntries
       );
-      
+
       // Update the invoice balance to show it's paid
-      await storage.updateTransaction(invoice.id, {
+      await scopedStorage.updateTransaction(invoice.id, {
         balance: 0,
         status: 'paid'
       });
-      
+
       res.status(201).json({
         message: "Test unapplied credit flow created successfully",
         invoice,
@@ -8027,12 +8046,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Testing route for updating invoice statuses - admin only
-  apiRouter.post("/test/update-invoice-statuses", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Testing route for updating invoice statuses - admin only, company-scoped
+  apiRouter.post("/test/update-invoice-statuses", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      const batchUpdateInvoiceStatuses = (await import('./batch-update-invoice-statuses')).default;
-      await batchUpdateInvoiceStatuses();
-      return res.status(200).json({ message: 'Invoice status update completed' });
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId!;
+
+      // Get all invoices for this company and update their statuses
+      const allTransactions = await scopedStorage.getTransactions();
+      const invoices = allTransactions.filter(t => t.type === 'invoice');
+
+      let updatedCount = 0;
+      for (const invoice of invoices) {
+        // Update status based on balance
+        const newStatus = Math.abs(invoice.balance || 0) < 0.01 ? 'paid' : 'open';
+        if (invoice.status !== newStatus) {
+          await scopedStorage.updateTransaction(invoice.id, { status: newStatus });
+          updatedCount++;
+        }
+      }
+
+      return res.status(200).json({
+        message: `Invoice status update completed for company ${companyId}`,
+        invoicesChecked: invoices.length,
+        invoicesUpdated: updatedCount
+      });
     } catch (error) {
       console.error('Error in batch status update:', error);
       return res.status(500).json({ message: 'Internal server error' });
