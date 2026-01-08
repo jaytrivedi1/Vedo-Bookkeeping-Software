@@ -446,6 +446,16 @@ export class CompanyScopedStorage {
     return this.storage.getBankConnections(this.companyId);
   }
 
+  // ============ BANK ACCOUNTS ============
+
+  async getBankAccount(id: number): Promise<BankAccount | undefined> {
+    const bankAccount = await this.storage.getBankAccount(id);
+    if (bankAccount && bankAccount.companyId !== this.companyId) {
+      return undefined; // Don't expose bank accounts from other companies
+    }
+    return bankAccount;
+  }
+
   // ============ CATEGORIZATION RULES ============
 
   async getCategorizationRules(): Promise<CategorizationRule[]> {
