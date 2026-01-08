@@ -264,6 +264,47 @@ export class CompanyScopedStorage {
     return this.storage.getLedgerEntriesByDateRangeAndCompany(startDate, endDate, this.companyId);
   }
 
+  async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
+    // Verify the transaction belongs to this company before creating ledger entry
+    if (ledgerEntry.transactionId) {
+      const transaction = await this.getTransaction(ledgerEntry.transactionId);
+      if (!transaction) {
+        throw new CompanyAccessError("Cannot create ledger entry: transaction not found or access denied");
+      }
+    }
+    return this.storage.createLedgerEntry(ledgerEntry);
+  }
+
+  async updateLedgerEntry(id: number, ledgerEntryUpdate: Partial<LedgerEntry>): Promise<LedgerEntry | undefined> {
+    // Verify the ledger entry's transaction belongs to this company
+    const existing = await this.storage.getLedgerEntry(id);
+    if (!existing) {
+      throw new CompanyAccessError("Ledger entry not found");
+    }
+    if (existing.transactionId) {
+      const transaction = await this.getTransaction(existing.transactionId);
+      if (!transaction) {
+        throw new CompanyAccessError("Cannot update ledger entry: transaction access denied");
+      }
+    }
+    return this.storage.updateLedgerEntry(id, ledgerEntryUpdate);
+  }
+
+  // ============ PAYMENT APPLICATIONS ============
+
+  async createPaymentApplication(paymentApplication: { paymentId: number; invoiceId: number; amountApplied: number }): Promise<any> {
+    // Verify both payment and invoice/bill transactions belong to this company
+    const payment = await this.getTransaction(paymentApplication.paymentId);
+    if (!payment) {
+      throw new CompanyAccessError("Cannot create payment application: payment not found or access denied");
+    }
+    const invoice = await this.getTransaction(paymentApplication.invoiceId);
+    if (!invoice) {
+      throw new CompanyAccessError("Cannot create payment application: invoice/bill not found or access denied");
+    }
+    return this.storage.createPaymentApplication(paymentApplication);
+  }
+
   // ============ PRODUCTS ============
 
   async getProducts(): Promise<Product[]> {

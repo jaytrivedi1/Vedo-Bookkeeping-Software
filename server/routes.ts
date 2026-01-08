@@ -2076,9 +2076,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update status to 'open' (converted to invoice)
       await scopedStorage.updateTransaction(quotationId, { status: 'open' });
 
-      // Create ledger entries
+      // Create ledger entries (company-scoped via transaction verification)
+      // The quotation was already verified via scopedStorage above
       for (const entry of ledgerEntriesData) {
-        await db.insert(ledgerEntries).values({
+        await scopedStorage.createLedgerEntry({
           ...entry,
           transactionId: quotationId
         });
@@ -2321,9 +2322,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
 
-              // Create payment application record
-              const { paymentApplications } = await import('@shared/schema');
-              await db.insert(paymentApplications).values({
+              // Create payment application record (company-scoped)
+              await scopedStorage.createPaymentApplication({
                 paymentId: credit.id,
                 invoiceId: invoiceId,
                 amountApplied: credit.amount
@@ -2423,9 +2423,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
 
-              // Create payment application record
-              const { paymentApplications } = await import('@shared/schema');
-              await db.insert(paymentApplications).values({
+              // Create payment application record (company-scoped)
+              await scopedStorage.createPaymentApplication({
                 paymentId: credit.id,
                 invoiceId: invoiceId,
                 amountApplied: credit.amount
@@ -2900,9 +2899,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          // Create payment_applications record for this credit application
-          const { paymentApplications } = await import('@shared/schema');
-          await db.insert(paymentApplications).values({
+          // Create payment_applications record for this credit application (company-scoped)
+          await scopedStorage.createPaymentApplication({
             paymentId: item.transactionId, // The deposit/credit being applied
             invoiceId: newTransaction.id, // The invoice receiving the credit
             amountApplied: item.amount
@@ -4156,12 +4154,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentLedgerEntries
       );
       
-      // Record payment applications in payment_applications table
+      // Record payment applications in payment_applications table (company-scoped)
       // invoiceApplications was already retrieved earlier for FX calculations
       if (invoiceApplications.length > 0) {
-        const { paymentApplications } = await import('@shared/schema');
         for (const app of invoiceApplications) {
-          await db.insert(paymentApplications).values({
+          await scopedStorage.createPaymentApplication({
             paymentId: payment.id,
             invoiceId: app.invoiceId,
             amountApplied: app.amount
@@ -4573,13 +4570,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           ];
           
-          // Add the bill application entries
+          // Add the bill application entries (company-scoped via scopedStorage)
           for (const entry of billApplicationEntries) {
-            await db.insert(ledgerEntries).values(entry);
+            await scopedStorage.createLedgerEntry(entry);
           }
-          
-          // Create payment_applications record to track cash payment-to-bill relationship
-          await db.insert(paymentApplications).values({
+
+          // Create payment_applications record to track cash payment-to-bill relationship (company-scoped)
+          await scopedStorage.createPaymentApplication({
             paymentId: payment.id,
             invoiceId: bill.id,
             amountApplied: cashApplicationAmount // Only the cash portion
@@ -4598,9 +4595,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const { bill, amount: billAmount } of validatedBills) {
           const chequeApplicationAmount = billAmount * proportionPerBill;
           
-          // Create payment_applications record to track payment-to-bill application
+          // Create payment_applications record to track payment-to-bill application (company-scoped)
           // Note: Use payment.id (not cheque.id) so deletion handler can find these records
-          await db.insert(paymentApplications).values({
+          await scopedStorage.createPaymentApplication({
             paymentId: payment.id,
             invoiceId: bill.id,
             amountApplied: chequeApplicationAmount
@@ -5175,9 +5172,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update line items if provided
         if (body.lineItems && Array.isArray(body.lineItems)) {
-          // Delete existing line items and ledger entries using direct database queries
-          await db.delete(ledgerEntries).where(eq(ledgerEntries.transactionId, transactionId));
-          await db.delete(lineItems).where(eq(lineItems.transactionId, transactionId));
+          // Delete existing line items and ledger entries (company-scoped via transaction verification)
+          // The transaction was already verified via scopedStorage.updateTransaction above
+          // Add explicit company filter for defense in depth
+          await db.delete(ledgerEntries).where(
+            and(
+              eq(ledgerEntries.transactionId, transactionId),
+              sql`${ledgerEntries.transactionId} IN (SELECT id FROM transactions WHERE company_id = ${req.companyId})`
+            )
+          );
+          await db.delete(lineItems).where(
+            and(
+              eq(lineItems.transactionId, transactionId),
+              sql`${lineItems.transactionId} IN (SELECT id FROM transactions WHERE company_id = ${req.companyId})`
+            )
+          );
           
           // Create new line items
           const newLineItems = body.lineItems.map((item: any) => ({
@@ -8973,26 +8982,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Repair Trial Balance - Fix incorrect ledger entries for bills and payments (admin only)
-  apiRouter.post("/fix/trial-balance", requireSuperAdmin, async (req: Request, res: Response) => {
+  // Repair Trial Balance - Fix incorrect ledger entries for bills and payments (admin only, company-scoped)
+  apiRouter.post("/fix/trial-balance", requireSuperAdmin, requireCompanyContext, async (req: Request, res: Response) => {
     try {
-      console.log("Starting Trial Balance repair...");
+      const scopedStorage = createScopedStorage(req);
+      const companyId = req.companyId;
+
+      console.log(`Starting Trial Balance repair for company ${companyId}...`);
       let fixedEntries = 0;
       let fixedTransactions = 0;
       let addedTaxEntries = 0;
-      
+
       // Step 1: Fix ledger entries that use account ID 3 (Inventory) when they should use ID 4 (Accounts Payable)
-      // Only fix entries related to bills and payments
+      // Only fix entries related to bills and payments for this company
       console.log("\nStep 1: Fixing account IDs for bills and payments (3 → 4)...");
-      
-      // Get all ledger entries for bills and payments that use account ID 3
+
+      // Get all ledger entries for bills and payments that use account ID 3 (company-scoped)
       const billTransactions = await db
         .select()
         .from(transactions)
-        .where(sql`type IN ('bill', 'payment')`);
-      
+        .where(and(
+          sql`type IN ('bill', 'payment')`,
+          eq(transactions.companyId, companyId)
+        ));
+
       const billTxIds = billTransactions.map(t => t.id);
-      
+
       if (billTxIds.length > 0) {
         // Find all ledger entries for these transactions using account ID 3
         const incorrectEntries = await db
@@ -9002,9 +9017,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             eq(ledgerEntries.accountId, 3),
             sql`transaction_id IN (${sql.raw(billTxIds.join(','))})`
           ));
-        
+
         console.log(`Found ${incorrectEntries.length} ledger entries using Inventory (ID 3) that should be Accounts Payable (ID 4)`);
-        
+
         // Update each entry to use account ID 4
         for (const entry of incorrectEntries) {
           await db
@@ -9014,34 +9029,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fixedEntries++;
         }
       }
-      
+
       console.log(`Fixed ${fixedEntries} ledger entries to use Accounts Payable`);
-      
-      // Step 2: Add missing tax debit entries for bills where debits < credits
+
+      // Step 2: Add missing tax debit entries for bills where debits < credits (company-scoped)
       console.log("\nStep 2: Adding missing tax debit entries for bills...");
-      
+
       const bills = await db
         .select()
         .from(transactions)
-        .where(eq(transactions.type, 'bill'));
-      
+        .where(and(
+          eq(transactions.type, 'bill'),
+          eq(transactions.companyId, companyId)
+        ));
+
       for (const bill of bills) {
         // Get all ledger entries for this bill
         const entries = await db
           .select()
           .from(ledgerEntries)
           .where(eq(ledgerEntries.transactionId, bill.id));
-        
+
         const totalDebits = entries.reduce((sum, e) => sum + (e.debit || 0), 0);
         const totalCredits = entries.reduce((sum, e) => sum + (e.credit || 0), 0);
         const difference = totalCredits - totalDebits;
-        
+
         // If credits exceed debits by more than 1 cent, add a tax debit entry
         if (difference > 0.01) {
           console.log(`Bill ${bill.reference}: Debits ${totalDebits}, Credits ${totalCredits}, Missing ${difference}`);
-          
-          // Add a debit entry for the tax difference
-          await db.insert(ledgerEntries).values({
+
+          // Add a debit entry for the tax difference (company-scoped via scopedStorage)
+          await scopedStorage.createLedgerEntry({
             transactionId: bill.id,
             accountId: 5, // Sales Tax Payable
             description: `Bill ${bill.reference} - Tax (repair)`,
@@ -9049,38 +9067,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
             credit: 0,
             date: bill.date
           });
-          
+
           addedTaxEntries++;
           fixedTransactions++;
         }
       }
-      
+
       console.log(`Added ${addedTaxEntries} missing tax debit entries`);
-      
-      // Step 3: Verify all transactions are now balanced
+
+      // Step 3: Verify all transactions are now balanced (company-scoped)
       console.log("\nStep 3: Verifying transaction balance...");
-      
-      const allTransactions = await db.select().from(transactions);
+
+      const allTransactions = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.companyId, companyId));
       let unbalanced = 0;
-      
+
       for (const tx of allTransactions) {
         const entries = await db
           .select()
           .from(ledgerEntries)
           .where(eq(ledgerEntries.transactionId, tx.id));
-        
+
         const totalDebits = entries.reduce((sum, e) => sum + (e.debit || 0), 0);
         const totalCredits = entries.reduce((sum, e) => sum + (e.credit || 0), 0);
-        
+
         if (Math.abs(totalDebits - totalCredits) > 0.01) {
           console.log(`UNBALANCED: Transaction ${tx.reference} (${tx.type}): Debits ${totalDebits}, Credits ${totalCredits}`);
           unbalanced++;
         }
       }
-      
+
       console.log(`Verification complete: ${unbalanced} transactions still unbalanced`);
       console.log("\nTrial Balance repair completed!");
-      
+
       res.json({
         success: true,
         fixedLedgerEntries: fixedEntries,
@@ -11093,8 +11114,8 @@ Respond in JSON format:
 
       const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-      // Apply payment to invoice by creating payment application
-      await db.insert(paymentApplications).values({
+      // Apply payment to invoice by creating payment application (company-scoped)
+      await scopedStorage.createPaymentApplication({
         paymentId: createdPayment.id,
         invoiceId: invoiceId,
         amountApplied: amount,
@@ -11212,8 +11233,8 @@ Respond in JSON format:
 
       const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-      // Apply payment to bill by creating payment application
-      await db.insert(paymentApplications).values({
+      // Apply payment to bill by creating payment application (company-scoped)
+      await scopedStorage.createPaymentApplication({
         paymentId: createdPayment.id,
         invoiceId: billId,
         amountApplied: amount,
@@ -11542,8 +11563,8 @@ Respond in JSON format:
 
         const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-        // Apply payment to bill
-        await db.insert(paymentApplications).values({
+        // Apply payment to bill (company-scoped)
+        await scopedStorage.createPaymentApplication({
           paymentId: createdPayment.id,
           invoiceId: billId,
           amountApplied: amountToApply,
@@ -11743,8 +11764,8 @@ Respond in JSON format:
 
         const createdPayment = await scopedStorage.createTransaction(paymentTransaction, [], ledgerEntries);
 
-        // Apply payment to invoice
-        await db.insert(paymentApplications).values({
+        // Apply payment to invoice (company-scoped)
+        await scopedStorage.createPaymentApplication({
           paymentId: createdPayment.id,
           invoiceId: invoiceId,
           amountApplied: amountToApply,

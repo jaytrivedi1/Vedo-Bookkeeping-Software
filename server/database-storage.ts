@@ -1841,6 +1841,11 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async getLedgerEntry(id: number): Promise<LedgerEntry | undefined> {
+    const [entry] = await db.select().from(ledgerEntries).where(eq(ledgerEntries.id, id));
+    return entry;
+  }
+
   async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
     const [newLedgerEntry] = await db.insert(ledgerEntries).values(ledgerEntry).returning();
     return newLedgerEntry;
@@ -1852,6 +1857,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ledgerEntries.id, id))
       .returning();
     return updatedLedgerEntry;
+  }
+
+  async createPaymentApplication(application: { paymentId: number; invoiceId: number; amountApplied: number }): Promise<any> {
+    const [newApplication] = await db.insert(paymentApplications).values(application).returning();
+    return newApplication;
   }
 
   // Reports

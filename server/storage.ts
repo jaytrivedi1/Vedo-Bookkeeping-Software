@@ -179,8 +179,10 @@ export interface IStorage {
   getLedgerEntriesUpToDateByCompany(asOfDate: Date, companyId: number): Promise<LedgerEntry[]>;
   getLedgerEntriesByDateRange(startDate?: Date, endDate?: Date): Promise<LedgerEntry[]>;
   getLedgerEntriesByDateRangeAndCompany(startDate: Date | undefined, endDate: Date | undefined, companyId: number): Promise<any[]>;
+  getLedgerEntry(id: number): Promise<LedgerEntry | undefined>;
   createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry>;
   updateLedgerEntry(id: number, ledgerEntry: Partial<LedgerEntry>): Promise<LedgerEntry | undefined>;
+  createPaymentApplication(application: { paymentId: number; invoiceId: number; amountApplied: number }): Promise<any>;
 
   // Reports (companyId for data isolation)
   getAccountBalances(companyId?: number): Promise<{ account: Account; balance: number }[]>;
@@ -928,13 +930,17 @@ export class MemStorage implements IStorage {
     });
   }
 
+  async getLedgerEntry(id: number): Promise<LedgerEntry | undefined> {
+    return this.ledgerEntries.get(id);
+  }
+
   async createLedgerEntry(ledgerEntry: InsertLedgerEntry): Promise<LedgerEntry> {
     const id = this.ledgerEntryIdCounter++;
     const newLedgerEntry: LedgerEntry = { ...ledgerEntry, id };
     this.ledgerEntries.set(id, newLedgerEntry);
     return newLedgerEntry;
   }
-  
+
   async updateLedgerEntry(id: number, ledgerEntryUpdate: Partial<LedgerEntry>): Promise<LedgerEntry | undefined> {
     const ledgerEntry = this.ledgerEntries.get(id);
     if (!ledgerEntry) return undefined;
@@ -942,6 +948,11 @@ export class MemStorage implements IStorage {
     const updatedLedgerEntry = { ...ledgerEntry, ...ledgerEntryUpdate };
     this.ledgerEntries.set(id, updatedLedgerEntry);
     return updatedLedgerEntry;
+  }
+
+  async createPaymentApplication(application: { paymentId: number; invoiceId: number; amountApplied: number }): Promise<any> {
+    // MemStorage stub - in real implementation, this would store in a Map
+    return { id: Date.now(), ...application, createdAt: new Date() };
   }
 
   // Reports
