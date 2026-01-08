@@ -7456,11 +7456,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Find all ledger entries that reference this invoice number
       // These are payments or credits applied to this invoice
+      // Use company-scoped query to prevent cross-company data leakage
       const paymentEntries = await db
-        .select()
+        .select({
+          id: ledgerEntries.id,
+          transactionId: ledgerEntries.transactionId,
+          accountId: ledgerEntries.accountId,
+          description: ledgerEntries.description,
+          debit: ledgerEntries.debit,
+          credit: ledgerEntries.credit,
+          date: ledgerEntries.date,
+        })
         .from(ledgerEntries)
+        .innerJoin(transactions, eq(ledgerEntries.transactionId, transactions.id))
         .where(
           and(
+            eq(transactions.companyId, req.companyId!), // Company isolation
             sql`${ledgerEntries.description} LIKE ${'%' + transaction.reference + '%'}`,
             eq(ledgerEntries.accountId, 2), // Accounts Receivable
             ne(ledgerEntries.transactionId, id), // Exclude the invoice's own ledger entries
