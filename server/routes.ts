@@ -72,8 +72,8 @@ import Papa from 'papaparse';
 import path from 'path';
 import fs from 'fs';
 
-// Super admin email - this user cannot be deactivated or deleted
-const SUPER_ADMIN_EMAIL = "admin@finledger.com";
+// Super admin email from environment variable - this user cannot be deactivated or deleted
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@vedo.com";
 
 // Helper function to apply categorization rules to an imported transaction
 // Uses the new RulesEngine for reliable rule matching
@@ -14288,8 +14288,8 @@ Respond in JSON format:
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Don't allow deactivating super admin
-      if (user.email === SUPER_ADMIN_EMAIL) {
+      // Don't allow deactivating super admin (check both email and role)
+      if (user.email === SUPER_ADMIN_EMAIL || user.role === 'super_admin') {
         return res.status(403).json({ error: "Cannot deactivate the super admin account" });
       }
 
@@ -14356,8 +14356,8 @@ Respond in JSON format:
         return res.status(403).json({ error: "Access denied - insufficient permissions" });
       }
 
-      // Don't allow modifying super admin's role
-      if (user.email === SUPER_ADMIN_EMAIL) {
+      // Don't allow modifying super admin's role (check both email and role)
+      if (user.email === SUPER_ADMIN_EMAIL || user.role === 'super_admin') {
         return res.status(403).json({ error: "Cannot modify the super admin account" });
       }
 
