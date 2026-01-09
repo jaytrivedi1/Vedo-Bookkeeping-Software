@@ -56,7 +56,7 @@ export async function sendPasswordResetEmail(
 
               <!-- CTA Button -->
               <div style="text-align: center; margin: 32px 0;">
-                <a href="${resetUrl}" style="display: inline-block; background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                <a href="${resetUrl}" style="display: inline-block; background-color: #0284c7; background-image: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 16px;">
                   Reset Password
                 </a>
               </div>
