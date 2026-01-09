@@ -6,8 +6,8 @@ import { eq } from "drizzle-orm";
 const sql = neon(process.env.DATABASE_URL!);
 const db = drizzle(sql);
 
-// Super admin email - this is the master admin account
-const SUPER_ADMIN_EMAIL = "admin@finledger.com";
+// Super admin email from environment variable (with fallback)
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@vedo.com";
 
 export async function addSuperAdminRole() {
   console.log("Starting super_admin role migration...");
