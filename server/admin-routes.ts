@@ -5,9 +5,6 @@ import { Configuration, PlaidApi, PlaidEnvironments } from "plaid";
 
 export const adminRouter = express.Router();
 
-// Super admin email from environment variable - this user cannot be deactivated or deleted
-const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || "admin@vedo.com";
-
 // Initialize Plaid client for bank feed disconnection
 const plaidConfig = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV as keyof typeof PlaidEnvironments || 'sandbox'],
@@ -34,7 +31,7 @@ adminRouter.get("/users", async (req: Request, res: Response) => {
     const usersWithCompanies = await Promise.all(
       users.map(async (user) => {
         const userCompanies = await storage.getUserCompanies(user.id);
-        const isSuperAdmin = user.email === SUPER_ADMIN_EMAIL || user.role === 'super_admin';
+        const isSuperAdmin = user.role === 'super_admin';
         return {
           ...user,
           // Don't send password hash to frontend
@@ -157,8 +154,8 @@ adminRouter.patch("/users/:id/status", async (req: Request, res: Response) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Protect super admin by both email AND role
-    if (user.email === SUPER_ADMIN_EMAIL || user.role === 'super_admin') {
+    // Protect super admin - cannot be deactivated regardless of email
+    if (user.role === 'super_admin') {
       return res.status(403).json({ message: "Cannot modify the super admin account" });
     }
 
