@@ -266,6 +266,99 @@ export function setupAuth(app: Express): void {
     }
   });
 
+  // Accounting Firm Registration
+  app.post("/api/register-firm", registrationRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { firmName, firstName, lastName, email, password } = req.body;
+
+      // Validate required fields
+      if (!firmName || !email || !password) {
+        return res.status(400).json({ message: "Firm name, email and password are required" });
+      }
+
+      // Validate email format
+      if (!email.includes('@')) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+
+      // Validate password strength
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return res.status(400).json({
+          message: "Password does not meet requirements",
+          errors: passwordValidation.errors
+        });
+      }
+
+      // Check if email already exists
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "An account with this email already exists" });
+      }
+
+      // 1. Create the accounting firm
+      const firm = await storage.createAccountingFirm({
+        name: firmName,
+        email: email,
+        isActive: true
+      });
+
+      // 2. Create the firm admin user with 'accountant' role
+      const user = await storage.createUser({
+        username: email,
+        email,
+        password,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        role: 'accountant',
+        firmId: firm.id,
+        isActive: true
+      });
+
+      // 3. Create FREE company for firm's own books
+      const ownCompany = await storage.createCompany({
+        name: `${firmName} Books`,
+        baseCurrency: 'USD',
+        fiscalYearEnd: '12-31',
+        industry: 'Accounting',
+        taxId: null,
+        address: null
+      });
+
+      // 4. Link firm to its own company with isOwnCompany=true
+      await storage.createFirmClientAccess({
+        firmId: firm.id,
+        companyId: ownCompany.id,
+        grantedBy: user.id,
+        isActive: true,
+        isOwnCompany: true,
+        billingType: 'firm_pays'
+      });
+
+      // 5. Set the user's currentCompanyId to their own company
+      await db.update(usersSchema)
+        .set({ currentCompanyId: ownCompany.id })
+        .where(eq(usersSchema.id, user.id));
+
+      // 6. Create verification token and send email
+      const token = await createVerificationToken(user.id);
+      const emailResult = await sendVerificationEmail(email, token, firstName);
+
+      if (!emailResult.success) {
+        console.error('Failed to send verification email:', emailResult.error);
+      }
+
+      return res.status(201).json({
+        message: "Firm registration successful! Please check your email to verify your account.",
+        requiresVerification: true,
+        firmId: firm.id
+      });
+    } catch (error: any) {
+      console.error("Firm registration error:", error);
+      return res.status(500).json({ message: "Firm registration failed", error: error.message });
+    }
+  });
+
   // Login with rate limiting
   app.post("/api/login", loginRateLimiter, (req: Request, res: Response, next: NextFunction) => {
     passport.authenticate("local", (err: any, user: SchemaUser | false, info: any) => {

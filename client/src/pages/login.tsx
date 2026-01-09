@@ -61,6 +61,10 @@ export default function Login() {
   const [registerLoading, setRegisterLoading] = useState(false);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
+  // Account type (business or accounting firm)
+  const [accountType, setAccountType] = useState<'business' | 'firm'>('business');
+  const [firmName, setFirmName] = useState('');
+
   // Resend verification state
   const [resendEmail, setResendEmail] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
@@ -105,12 +109,35 @@ export default function Login() {
       // Save remember me preference
       localStorage.setItem('rememberMe', rememberMe.toString());
 
+      // Login and get user data from response
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginEmail, password: loginPassword, rememberMe }),
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Login failed');
+      }
+
+      const userData = await response.json();
+
+      // Also call the context login to update state
       await login(loginEmail, loginPassword, rememberMe);
+
       toast({
         title: 'Success',
         description: 'Logged in successfully',
       });
-      setLocation('/');
+
+      // Redirect based on user type
+      if (userData.firmId && userData.role === 'accountant') {
+        setLocation('/firm/dashboard');
+      } else {
+        setLocation('/');
+      }
     } catch (error: any) {
       // Check if it's a verification error
       if (error.message?.includes('verify your email')) {
@@ -150,18 +177,39 @@ export default function Login() {
       return;
     }
 
+    // Validate firm name for accounting firm registration
+    if (accountType === 'firm' && !firmName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Firm name is required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setRegisterLoading(true);
 
     try {
-      const response = await fetch('/api/register', {
+      const endpoint = accountType === 'firm' ? '/api/register-firm' : '/api/register';
+      const body = accountType === 'firm'
+        ? {
+            firmName: firmName.trim(),
+            email: registerEmail,
+            password: registerPassword,
+            firstName: registerFirstName,
+            lastName: registerLastName
+          }
+        : {
+            email: registerEmail,
+            password: registerPassword,
+            firstName: registerFirstName,
+            lastName: registerLastName
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: registerEmail,
-          password: registerPassword,
-          firstName: registerFirstName,
-          lastName: registerLastName
-        })
+        body: JSON.stringify(body)
       });
 
       const data = await response.json();
@@ -478,6 +526,61 @@ export default function Login() {
                 </div>
 
                 <form onSubmit={handleRegister} className="space-y-4">
+                  {/* Account Type Toggle */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium text-slate-700">
+                      I am registering as
+                    </Label>
+                    <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setAccountType('business')}
+                        className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
+                          accountType === 'business'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                        data-testid="toggle-business"
+                      >
+                        Business
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAccountType('firm')}
+                        className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all ${
+                          accountType === 'firm'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                        data-testid="toggle-firm"
+                      >
+                        Accounting Firm
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Firm Name (only for accounting firms) */}
+                  {accountType === 'firm' && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="firm-name" className="text-sm font-medium text-slate-700">
+                        Firm Name
+                      </Label>
+                      <Input
+                        id="firm-name"
+                        type="text"
+                        value={firmName}
+                        onChange={(e) => setFirmName(e.target.value)}
+                        placeholder="Your Accounting Firm Name"
+                        required
+                        className="h-12 bg-transparent border-transparent rounded-xl hover:bg-slate-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 placeholder:text-slate-400 transition-all duration-150"
+                        data-testid="input-firm-name"
+                      />
+                      <p className="text-xs text-slate-500">
+                        You'll get a free company for your firm's own books
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-1.5">
                     <Label htmlFor="register-email" className="text-sm font-medium text-slate-700">
                       Email
@@ -625,7 +728,7 @@ export default function Login() {
                   <Button
                     type="submit"
                     className="w-full h-12 bg-sky-500 hover:bg-sky-600 text-white font-medium rounded-xl shadow-lg shadow-sky-500/25 transition-all mt-2"
-                    disabled={registerLoading || !allRequirementsMet || !passwordsMatch}
+                    disabled={registerLoading || !allRequirementsMet || !passwordsMatch || (accountType === 'firm' && !firmName.trim())}
                     data-testid="button-register"
                   >
                     {registerLoading ? (
@@ -638,7 +741,7 @@ export default function Login() {
                       </span>
                     ) : (
                       <span className="flex items-center justify-center gap-2">
-                        Create Account
+                        {accountType === 'firm' ? 'Create Firm Account' : 'Create Account'}
                         <ArrowRight className="w-4 h-4" />
                       </span>
                     )}

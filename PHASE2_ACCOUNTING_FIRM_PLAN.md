@@ -1,309 +1,267 @@
 # Phase 2: Accounting Firm Access Feature - Implementation Plan
 
-## Current State Analysis
+## Confirmed Requirements
 
-### What Already Exists (Backend Ready)
-- `accounting_firms` table with full CRUD support
-- `firm_client_access` table linking firms to client companies
-- User schema with `firmId` and `currentCompanyId` fields
-- `accountant` role defined with appropriate permissions
-- All firm API endpoints: `/api/firms`, `/api/firms/:id/clients`
-- Permission middleware for firm access validation
-- Invitation system supporting firm invitations
+| Requirement | Decision |
+|-------------|----------|
+| Login Page | Single login (Option A) - auto-detect user type |
+| Firm Registration | Self-service, no approval needed |
+| Client Access | Companies invite firms (not vice versa) |
+| Free Subscription | Firms get 1 FREE company for their own books |
+| Permissions | Firm admin = full access, controls team member access |
+| Billing | Track firm-pays vs client-pays |
+| Branding | Yes - firm logo/branding |
+| Cross-client Reports | No |
 
-### What's Missing (Phase 2 Scope)
-- Firm-specific login flow/landing page
-- Firm dashboard UI
-- Client company management interface
-- Company switcher for accountants
-- Firm settings page
-- Firm user management (invite accountants)
+---
+
+## User Flows
+
+### 1. Accounting Firm Registration
+```
+/register → Select "Accounting Firm" option
+                    ↓
+    Fill: Firm Name, Admin Name, Email, Password
+                    ↓
+    Account created immediately (no approval)
+                    ↓
+    System auto-creates 1 FREE company for firm's own books
+                    ↓
+    Email verification sent
+                    ↓
+    Firm Admin lands on Firm Dashboard
+```
+
+### 2. Company Invites Firm (Client Access)
+```
+Company Admin → Settings → "Invite Accounting Firm"
+                              ↓
+              Enter firm's email address
+                              ↓
+              Firm receives invitation email
+                              ↓
+              Firm accepts invitation
+                              ↓
+              Client now appears in Firm's dashboard
+```
+
+### 3. Firm Dashboard View
+```
+┌─────────────────────────────────────────┐
+│  [Firm Logo] ABC Accounting Firm        │
+├─────────────────────────────────────────┤
+│  MY FIRM BOOKS (Free)                   │
+│  └─ ABC Accounting Firm ← (own company) │
+│                                         │
+│  CLIENT COMPANIES                       │
+│  └─ XYZ Corp ← (client-pays)            │
+│  └─ 123 Industries ← (firm-pays)        │
+│                                         │
+│  PENDING INVITATIONS                    │
+│  └─ NewCo Inc ← [Accept] [Decline]      │
+└─────────────────────────────────────────┘
+```
 
 ---
 
 ## Implementation Tasks
 
-### Task 1: Firm Login Detection & Routing
-**Files to modify:**
+### Sprint 1: Registration & Core Infrastructure
+
+#### Task 1: Firm Registration Backend
+**File:** `server/routes.ts`
+
+Create endpoint: `POST /api/auth/register-firm`
+- Accept: firmName, adminFirstName, adminLastName, email, password
+- Create accounting_firm record
+- Create user with role='accountant' and firmId set
+- Create FREE company for firm's own books
+- Link firm to company via firm_client_access (special flag: is_own_company)
+- Send verification email
+- Return success with redirect URL
+
+#### Task 2: Update Register Page UI
+**File:** `client/src/pages/auth-page.tsx`
+
+- Add toggle/tabs: "Business" | "Accounting Firm"
+- When "Accounting Firm" selected:
+  - Show: Firm Name, Your Name, Email, Password fields
+  - Submit to `/api/auth/register-firm`
+- After success: redirect to `/firm/dashboard`
+
+#### Task 3: Firm Login Detection & Routing
+**Files:**
 - `client/src/contexts/AuthContext.tsx`
 - `client/src/App.tsx`
 
-**Changes:**
-1. Detect if logged-in user is a firm user (`user.firmId` exists, `user.role === 'accountant'`)
-2. Route firm users to `/firm/dashboard` instead of regular dashboard
-3. Store firm context in AuthContext
+- Add `isFirmUser` computed property to auth context
+- After login, check if `user.firmId` exists
+- If firm user → redirect to `/firm/dashboard`
+- If company user → redirect to `/dashboard`
 
-**Acceptance criteria:**
-- Accountant users are automatically redirected to firm dashboard after login
-- Regular company users continue to see normal dashboard
-
----
-
-### Task 2: Create Firm Dashboard Page
-**New file:** `client/src/pages/firm/FirmDashboard.tsx`
-
-**Features:**
-1. Welcome header with firm name
-2. Quick stats cards:
-   - Total client companies
-   - Active clients this month
-   - Recent activity count
-3. Client company list with quick access buttons
-4. Recent activity feed across all clients
-
-**API calls needed:**
-- `GET /api/firms/:id` - Get firm details
-- `GET /api/firms/:id/clients` - Get client list
-- New: `GET /api/firms/:id/activity` - Get recent activity (to be created)
-
----
-
-### Task 3: Create Client Company Management Page
-**New file:** `client/src/pages/firm/ClientManagement.tsx`
-
-**Features:**
-1. Table of all client companies with:
-   - Company name
-   - Contact info
-   - Status (active/inactive)
-   - Date access granted
-   - Action buttons (View, Remove access)
-2. "Add Client" button to invite/link new companies
-3. Search/filter functionality
-
-**API calls needed:**
-- `GET /api/firms/:id/clients`
-- `DELETE /api/firms/clients/:accessId`
-- New: Invitation flow for new clients
-
----
-
-### Task 4: Create Company Switcher Component
-**New file:** `client/src/components/firm/CompanySwitcher.tsx`
-
-**Features:**
-1. Dropdown in header showing current client company
-2. List of all accessible client companies
-3. Click to switch `currentCompanyId`
-4. Visual indicator of currently selected company
-5. "Back to Firm Dashboard" option
-
-**API endpoint needed (new):**
-```typescript
-PUT /api/users/current-company
-Body: { companyId: number }
-```
-
-**Changes to existing files:**
-- `client/src/components/Header.tsx` - Add CompanySwitcher for accountant users
-
----
-
-### Task 5: Create Firm Settings Page
-**New file:** `client/src/pages/firm/FirmSettings.tsx`
-
-**Features:**
-1. Firm profile section:
-   - Name, email, phone, address
-   - Edit capability
-2. Firm branding (future: logo upload)
-3. Notification preferences
-
-**API calls:**
-- `GET /api/firms/:id`
-- `PUT /api/firms/:id`
-
----
-
-### Task 6: Firm User Management (Invite Accountants)
-**New file:** `client/src/pages/firm/FirmUsers.tsx`
-
-**Features:**
-1. List of firm employees (other accountants)
-2. Invite new accountant button
-3. Deactivate/reactivate firm users
-4. Role management within firm (future: senior accountant, junior, etc.)
-
-**API calls:**
-- `GET /api/users?firmId=X` (need to enhance)
-- `POST /api/invitations` (with role='accountant')
-
----
-
-### Task 7: Create Firm Navigation/Layout
+#### Task 4: Create Firm Layout
 **New file:** `client/src/layouts/FirmLayout.tsx`
 
-**Features:**
-1. Firm-specific sidebar with:
-   - Dashboard
-   - Clients
-   - Users (firm team)
-   - Settings
-2. Company switcher in header (when viewing client data)
-3. Different color scheme/branding to distinguish from company view
+- Firm-specific sidebar:
+  - Dashboard
+  - My Firm Books
+  - Clients
+  - Team
+  - Settings
+- Header with firm name/logo
+- Different accent color (e.g., purple vs blue)
 
-**Sidebar items:**
-```
-- Dashboard (firm overview)
-- Clients (client company list)
-- Team (firm users)
-- Settings (firm settings)
----
-When in client context:
-- [Client Company Name] dropdown
-- All regular accounting features
-```
+#### Task 5: Create Firm Dashboard Page
+**New file:** `client/src/pages/firm/FirmDashboard.tsx`
+
+- Welcome header with firm name
+- "My Firm Books" card (link to own company)
+- "Client Companies" list with status badges
+- "Pending Invitations" section with Accept/Decline buttons
 
 ---
 
-### Task 8: Backend Enhancements
+### Sprint 2: Client Invitation Flow
 
-**8a. Add current company switching endpoint:**
-```typescript
-// server/routes.ts
-PUT /api/users/current-company
-- Validates user is accountant
-- Validates firm has access to target company
-- Updates user.currentCompanyId
-```
+#### Task 6: Company Settings - Invite Firm
+**Modify:** `client/src/pages/settings.tsx`
 
-**8b. Add firm activity endpoint:**
-```typescript
-// server/routes.ts
-GET /api/firms/:id/activity
-- Returns recent activity across all firm's client companies
-- Filters by date range (optional)
-```
+Add new section: "Accounting Firm Access"
+- "Invite Accounting Firm" button
+- Dialog: Enter firm email
+- Show currently linked firm (if any)
+- "Remove Access" option
 
-**8c. Enhance company context for firm users:**
-```typescript
-// server/middleware/company-context.ts
-- When accountant user, use currentCompanyId for data scoping
-- Allow switching without re-login
-```
+#### Task 7: Firm Invitation Backend
+**File:** `server/routes.ts`
 
----
+Create endpoints:
+- `POST /api/companies/:id/invite-firm` - Company invites a firm
+- `GET /api/firms/invitations` - Get pending invitations for firm
+- `POST /api/firms/invitations/:id/accept` - Accept invitation
+- `POST /api/firms/invitations/:id/decline` - Decline invitation
 
-### Task 9: Client Invitation Flow for Firms
-**New capability:** Allow firms to invite new client companies
+#### Task 8: Firm Invitation Email
+**New file:** `server/services/firm-invitation-email.ts`
 
-**Two paths:**
-1. **Firm creates new company** - Firm creates a new company and is auto-granted access
-2. **Link existing company** - Company admin approves firm access request
-
-**For Path 1 (MVP):**
-- Firm can create a new company via form
-- Company is auto-linked to firm in `firm_client_access`
-- Firm can invite company admin user
-
-**API endpoint:**
-```typescript
-POST /api/firms/:id/clients/create
-Body: { companyName, adminEmail, adminFirstName, adminLastName }
-- Creates company
-- Creates firm_client_access record
-- Sends invitation to admin
-```
+- Styled email template
+- "Company X has invited you to access their books"
+- Accept button linking to firm dashboard
 
 ---
 
-### Task 10: Update Permission Checks
-**Files to modify:**
-- `client/src/contexts/AuthContext.tsx`
-- Various page components
+### Sprint 3: Company Switching & Team Management
 
-**Changes:**
-1. Add `isFirmUser` boolean to auth context
-2. Add `currentClientCompany` to track selected client
-3. Update permission checks to handle firm context
-4. Hide certain features from firm users (e.g., company deletion)
+#### Task 9: Company Switcher Component
+**New file:** `client/src/components/firm/CompanySwitcher.tsx`
+
+- Dropdown showing current company context
+- List all accessible companies (own + clients)
+- Click to switch `currentCompanyId`
+- Visual indicator of current selection
+
+#### Task 10: Company Switch Backend
+**File:** `server/routes.ts`
+
+- `PUT /api/users/current-company` - Switch current company context
+- Validate firm has access to target company
+- Update user.currentCompanyId
+
+#### Task 11: Firm Team Management
+**New file:** `client/src/pages/firm/FirmTeam.tsx`
+
+- List firm team members (other accountants)
+- Invite new accountant to firm
+- Set per-client access for team members
+- Deactivate team members
+
+#### Task 12: Firm Settings Page
+**New file:** `client/src/pages/firm/FirmSettings.tsx`
+
+- Firm profile (name, email, phone, address)
+- Logo upload
+- Billing preferences
+
+---
+
+## Database Changes
+
+### New Column Needed
+Add to `firm_client_access` table:
+```sql
+is_own_company BOOLEAN DEFAULT false  -- TRUE for firm's free company
+billing_type VARCHAR(20) DEFAULT 'client_pays'  -- 'firm_pays' or 'client_pays'
+```
+
+### New Table (Optional - for team permissions)
+```sql
+CREATE TABLE firm_user_client_access (
+  id SERIAL PRIMARY KEY,
+  firm_id INTEGER REFERENCES accounting_firms(id),
+  user_id INTEGER REFERENCES users(id),
+  company_id INTEGER REFERENCES companies(id),
+  access_level VARCHAR(20) DEFAULT 'full',  -- 'full', 'read_only', 'none'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
 
 ---
 
 ## Route Structure
 
 ```
-/firm                      -> Redirect to /firm/dashboard
-/firm/dashboard            -> FirmDashboard.tsx
-/firm/clients              -> ClientManagement.tsx
-/firm/clients/:id          -> Redirect to company view with context
-/firm/team                 -> FirmUsers.tsx
-/firm/settings             -> FirmSettings.tsx
+/register                  → Register page with Business/Firm toggle
+/login                     → Single login page
 
-/company/:id/*             -> Regular company pages (with firm header showing switcher)
+# Firm Routes (after login as firm user)
+/firm                      → Redirect to /firm/dashboard
+/firm/dashboard            → FirmDashboard.tsx
+/firm/books                → Own company books (redirect to company view)
+/firm/clients              → Client list
+/firm/clients/:id          → View client (switch context + redirect)
+/firm/team                 → FirmTeam.tsx
+/firm/settings             → FirmSettings.tsx
+
+# Company Routes (with company switcher for firm users)
+/dashboard                 → Company dashboard (with switcher if firm user)
+/invoices                  → etc.
 ```
+
+---
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `client/src/layouts/FirmLayout.tsx` | Firm-specific layout |
+| `client/src/pages/firm/FirmDashboard.tsx` | Firm dashboard |
+| `client/src/pages/firm/FirmTeam.tsx` | Team management |
+| `client/src/pages/firm/FirmSettings.tsx` | Firm settings |
+| `client/src/pages/firm/FirmClients.tsx` | Client list |
+| `client/src/components/firm/CompanySwitcher.tsx` | Company switcher |
+| `server/services/firm-invitation-email.ts` | Firm invite email |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `client/src/pages/auth-page.tsx` | Add firm registration |
+| `client/src/contexts/AuthContext.tsx` | Add firm detection |
+| `client/src/App.tsx` | Add firm routes |
+| `client/src/pages/settings.tsx` | Add invite firm section |
+| `server/routes.ts` | Firm registration & invitation endpoints |
+| `shared/schema.ts` | Add new columns |
 
 ---
 
 ## Implementation Order
 
-### Sprint 1: Core Infrastructure (Highest Priority)
-1. Task 1: Firm Login Detection & Routing
-2. Task 7: Firm Navigation/Layout
-3. Task 4: Company Switcher Component
-4. Task 8: Backend Enhancements
+Starting with Sprint 1:
+1. ✅ Plan confirmed
+2. 🔄 Firm registration backend
+3. 🔄 Firm registration UI
+4. 🔄 Firm login detection & routing
+5. 🔄 Firm layout
+6. 🔄 Firm dashboard
 
-### Sprint 2: Firm Dashboard & Management
-5. Task 2: Firm Dashboard Page
-6. Task 3: Client Company Management Page
-7. Task 5: Firm Settings Page
-
-### Sprint 3: User & Client Management
-8. Task 6: Firm User Management
-9. Task 9: Client Invitation Flow
-10. Task 10: Permission Updates
-
----
-
-## Database Changes Required
-
-**None** - All necessary tables already exist:
-- `accounting_firms` ✓
-- `firm_client_access` ✓
-- `users.firmId` ✓
-- `users.currentCompanyId` ✓
-- `user_invitations.firmId` ✓
-
----
-
-## Estimated Scope
-
-| Task | Complexity | New Files | Modified Files |
-|------|-----------|-----------|----------------|
-| Task 1 | Low | 0 | 2 |
-| Task 2 | Medium | 1 | 0 |
-| Task 3 | Medium | 1 | 0 |
-| Task 4 | Medium | 1 | 1 |
-| Task 5 | Low | 1 | 0 |
-| Task 6 | Medium | 1 | 0 |
-| Task 7 | Medium | 1 | 1 |
-| Task 8 | Medium | 0 | 2 |
-| Task 9 | High | 0 | 2 |
-| Task 10 | Low | 0 | 3 |
-
-**Total new files:** 7
-**Total modified files:** 11
-
----
-
-## Questions for Approval
-
-1. **Company Creation by Firm**: Should firms be able to create new client companies directly, or only link to existing companies?
-
-2. **Billing Model**: Is billing handled outside this system, or do we need to track firm-pays vs client-pays?
-
-3. **Permission Granularity**: Should all firm users have the same access to all clients, or should we support per-client permissions for firm team members?
-
-4. **Branding**: Should firms see their own branding/logo in the firm dashboard?
-
-5. **Reports**: Should there be a cross-client reporting feature for firms to see aggregated data across all clients?
-
----
-
-## Ready to Start?
-
-Once you approve this plan (and answer the questions above), I'll begin with **Sprint 1: Core Infrastructure**, starting with:
-1. Firm login detection and routing
-2. Firm layout component
-3. Company switcher
-4. Backend endpoints for company switching
+Ready to implement!

@@ -534,6 +534,9 @@ export type InsertCompany = z.infer<typeof insertCompaniesSchema>;
 // Role-based access control (RBAC)
 export const roleEnum = pgEnum('role', ['super_admin', 'admin', 'staff', 'read_only', 'accountant']);
 
+// Billing type for firm-client relationships
+export const billingTypeEnum = pgEnum('billing_type', ['firm_pays', 'client_pays']);
+
 // Accounting Firms schema - for accounting firms that manage multiple client companies
 export const accountingFirmsSchema = pgTable('accounting_firms', {
   id: serial('id').primaryKey(),
@@ -581,6 +584,8 @@ export const firmClientAccessSchema = pgTable('firm_client_access', {
   companyId: integer('company_id').notNull().references(() => companiesSchema.id),
   grantedBy: integer('granted_by').references(() => usersSchema.id), // Company admin who granted access
   isActive: boolean('is_active').notNull().default(true),
+  isOwnCompany: boolean('is_own_company').notNull().default(false), // TRUE for firm's free company
+  billingType: billingTypeEnum('billing_type').notNull().default('client_pays'), // Who pays for subscription
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 

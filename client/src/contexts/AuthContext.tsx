@@ -9,6 +9,8 @@ interface User {
   isActive: boolean;
   firstName: string | null;
   lastName: string | null;
+  firmId: number | null;
+  currentCompanyId: number | null;
 }
 
 interface AuthContextType {
@@ -17,6 +19,7 @@ interface AuthContextType {
   register: (username: string, password: string, email?: string, firstName?: string, lastName?: string) => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
+  isFirmUser: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -96,8 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  // Computed: is this a firm user (accountant)?
+  const isFirmUser = Boolean(user?.firmId && user?.role === 'accountant');
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, isFirmUser }}>
       {children}
     </AuthContext.Provider>
   );

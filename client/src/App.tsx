@@ -52,6 +52,8 @@ import CustomerDetail from "@/pages/customer-detail";
 import VendorDetail from "@/pages/vendor-detail";
 import AIAssistant from "@/pages/ai-assistant";
 import MainLayout from "@/components/layout/MainLayout";
+import FirmLayout from "@/layouts/FirmLayout";
+import FirmDashboard from "@/pages/firm/FirmDashboard";
 import { Company } from "@shared/schema";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -131,22 +133,32 @@ function Router() {
   }
 
   const isPublicRoute = location === '/login' || location === '/signup' || location === '/onboarding' || location === '/verify-email' || location === '/forgot-password' || location === '/reset-password' || location.startsWith('/accept-invitation/') || location.startsWith('/invoice/public/');
-  
+  const isFirmRoute = location.startsWith('/firm');
+  const isFirmUser = Boolean(user?.firmId && user?.role === 'accountant');
+
   // Redirect /signup to /login?tab=register
   if (location === '/signup') {
     return <Redirect to="/login?tab=register" />;
   }
-  
+
   if (!user && !isPublicRoute) {
     return <Redirect to="/login" />;
   }
 
+  // Redirect authenticated users away from login
   if (user && (location === '/login' || location === '/signup')) {
-    return <Redirect to="/" />;
+    // Firm users go to firm dashboard, others go to regular dashboard
+    return <Redirect to={isFirmUser ? "/firm/dashboard" : "/"} />;
   }
-  
-  // If user is logged in but still loading companies, show loading
-  if (user && companiesLoading && !isPublicRoute && location !== '/onboarding') {
+
+  // Redirect firm users trying to access non-firm routes to firm dashboard
+  if (user && isFirmUser && !isFirmRoute && !isPublicRoute && location !== '/') {
+    // Allow firm users to access regular routes when they have company context
+    // For now, let them through - the company switcher will handle context
+  }
+
+  // If user is logged in but still loading companies, show loading (skip for firm users)
+  if (user && !isFirmUser && companiesLoading && !isPublicRoute && location !== '/onboarding') {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">
@@ -156,15 +168,15 @@ function Router() {
       </div>
     );
   }
-  
-  // If user has no companies, redirect to onboarding (except if already there)
-  if (user && !companiesLoading && (!companies || companies.length === 0) && location !== '/onboarding' && !isPublicRoute) {
+
+  // If user has no companies, redirect to onboarding (except firm users who have their own company)
+  if (user && !isFirmUser && !companiesLoading && (!companies || companies.length === 0) && location !== '/onboarding' && !isPublicRoute) {
     return <Redirect to="/onboarding" />;
   }
-  
+
   // If user has companies but is on onboarding, redirect to dashboard
   if (user && companies && companies.length > 0 && location === '/onboarding') {
-    return <Redirect to="/" />;
+    return <Redirect to={isFirmUser ? "/firm/dashboard" : "/"} />;
   }
 
   return (
@@ -176,6 +188,23 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/accept-invitation/:token" component={AcceptInvitation} />
       <Route path="/invoice/public/:token" component={InvoicePublicView} />
+
+      {/* Firm Routes */}
+      <Route path="/firm/:rest*">
+        {() => (
+          <FirmLayout>
+            <Switch>
+              <Route path="/firm/dashboard" component={FirmDashboard} />
+              <Route path="/firm">
+                {() => <Redirect to="/firm/dashboard" />}
+              </Route>
+              <Route component={NotFound} />
+            </Switch>
+          </FirmLayout>
+        )}
+      </Route>
+
+      {/* Regular Company Routes */}
       <Route>
         {() => (
           <MainLayout>
