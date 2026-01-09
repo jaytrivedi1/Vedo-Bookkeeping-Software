@@ -14016,29 +14016,33 @@ Respond in JSON format:
   // User Management Routes
   // ====================
 
-  // GET /api/users - Get users for current company (admins can see all)
-  apiRouter.get("/users", requireAuth, requireCompanyContext, async (req: Request, res: Response) => {
+  // GET /api/users - Get users (super_admin sees all, others see company users)
+  apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
     try {
-      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin';
+      const isSuperAdmin = req.user?.role === 'super_admin';
+      const isAdmin = req.user?.role === 'admin' || isSuperAdmin;
 
       let users: any[];
 
-      if (isAdmin && req.query.companyId) {
+      if (isSuperAdmin) {
+        // Super admin sees all users
+        users = await storage.getUsers();
+      } else if (isAdmin && req.query.companyId) {
         // Admins can query specific company's users
         const companyId = parseInt(req.query.companyId as string);
         const companyUsers = await storage.getCompanyUsers(companyId);
         const userIds = companyUsers.map(cu => cu.userId);
         const allUsers = await storage.getUsers();
         users = allUsers.filter(u => userIds.includes(u.id));
-      } else if (isAdmin && !req.query.companyId) {
-        // Admins without company filter see all users
-        users = await storage.getUsers();
-      } else {
-        // Non-admins only see users in their current company
-        const companyUsers = await storage.getCompanyUsers(req.companyId!);
+      } else if (req.companyId) {
+        // Users with company context see users in their company
+        const companyUsers = await storage.getCompanyUsers(req.companyId);
         const userIds = companyUsers.map(cu => cu.userId);
         const allUsers = await storage.getUsers();
         users = allUsers.filter(u => userIds.includes(u.id));
+      } else {
+        // No company context and not super admin - return empty
+        users = [];
       }
 
       // Filter by firmId if provided (admin only)
@@ -14053,7 +14057,7 @@ Respond in JSON format:
         users = users.filter(u => u.isActive);
       }
 
-      // Don't return passwords
+      // Don't return passwords, add isSuperAdmin flag
       const sanitizedUsers = users.map(u => ({
         id: u.id,
         username: u.username,
@@ -14066,6 +14070,7 @@ Respond in JSON format:
         currentCompanyId: u.currentCompanyId,
         lastLogin: u.lastLogin,
         createdAt: u.createdAt,
+        isSuperAdmin: u.role === 'super_admin',
       }));
 
       res.json(sanitizedUsers);
