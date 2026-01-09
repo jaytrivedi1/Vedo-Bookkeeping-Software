@@ -14017,7 +14017,9 @@ Respond in JSON format:
   // User Management Routes
   // ====================
 
-  // GET /api/users - Get users (super_admin sees all, others see company users)
+  // GET /api/users - Get users (filtered by company context)
+  // Super admin sees all users ONLY when no company context (e.g., System Administration)
+  // When viewing within a company, even super admins see only that company's users
   apiRouter.get("/users", requireAuth, async (req: Request, res: Response) => {
     try {
       const isSuperAdmin = req.user?.role === 'super_admin';
@@ -14025,22 +14027,20 @@ Respond in JSON format:
 
       let users: any[];
 
-      if (isSuperAdmin) {
-        // Super admin sees all users
+      // Check if we have company context (either from middleware or query param)
+      const companyIdFromQuery = req.query.companyId ? parseInt(req.query.companyId as string) : null;
+      const effectiveCompanyId = companyIdFromQuery || req.companyId;
+
+      if (effectiveCompanyId) {
+        // When viewing within a company context, show only that company's users
+        // This applies to ALL roles including super_admin
+        const companyUsers = await storage.getCompanyUsers(effectiveCompanyId);
+        const userIds = companyUsers.map(cu => cu.userId);
+        const allUsers = await storage.getUsers();
+        users = allUsers.filter(u => userIds.includes(u.id));
+      } else if (isSuperAdmin) {
+        // Super admin without company context (System Administration) sees all users
         users = await storage.getUsers();
-      } else if (isAdmin && req.query.companyId) {
-        // Admins can query specific company's users
-        const companyId = parseInt(req.query.companyId as string);
-        const companyUsers = await storage.getCompanyUsers(companyId);
-        const userIds = companyUsers.map(cu => cu.userId);
-        const allUsers = await storage.getUsers();
-        users = allUsers.filter(u => userIds.includes(u.id));
-      } else if (req.companyId) {
-        // Users with company context see users in their company
-        const companyUsers = await storage.getCompanyUsers(req.companyId);
-        const userIds = companyUsers.map(cu => cu.userId);
-        const allUsers = await storage.getUsers();
-        users = allUsers.filter(u => userIds.includes(u.id));
       } else {
         // No company context and not super admin - return empty
         users = [];
