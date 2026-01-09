@@ -16,6 +16,8 @@ import {
   Link2,
   MoreHorizontal,
   UserX,
+  UserCheck,
+  Search,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -78,10 +80,11 @@ interface User {
   email: string;
   firstName: string | null;
   lastName: string | null;
-  role: "admin" | "staff" | "read_only" | "accountant";
+  role: "super_admin" | "admin" | "staff" | "read_only" | "accountant";
   isActive: boolean;
   lastLogin: string | null;
   createdAt: string;
+  isSuperAdmin?: boolean;
 }
 
 interface Invitation {
@@ -528,9 +531,11 @@ export default function ManageUsers() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [deactivateUserId, setDeactivateUserId] = useState<number | null>(null);
+  const [reactivateUserId, setReactivateUserId] = useState<number | null>(null);
   const [deleteInvitationId, setDeleteInvitationId] = useState<number | null>(
     null
   );
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Permission check
   if (!user || !hasPermission(user.role as any, "users:read")) {
@@ -552,10 +557,33 @@ export default function ManageUsers() {
   const canUpdate = hasPermission(user.role as any, "users:update");
   const canDelete = hasPermission(user.role as any, "users:delete");
 
-  // Fetch users
-  const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+  // Fetch all users (including inactive)
+  const { data: allUsers = [], isLoading: usersLoading } = useQuery<User[]>({
+    queryKey: ["/api/users", { includeInactive: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/users?includeInactive=true", {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch users");
+      return res.json();
+    },
   });
+
+  // Filter users by search query
+  const filteredUsers = allUsers.filter((u) => {
+    if (!searchQuery) return true;
+    const searchLower = searchQuery.toLowerCase();
+    const fullName = `${u.firstName || ""} ${u.lastName || ""}`.toLowerCase();
+    return (
+      u.email.toLowerCase().includes(searchLower) ||
+      u.username.toLowerCase().includes(searchLower) ||
+      fullName.includes(searchLower)
+    );
+  });
+
+  // Split users into active and deactivated
+  const activeUsers = filteredUsers.filter((u) => u.isActive);
+  const deactivatedUsers = filteredUsers.filter((u) => !u.isActive);
 
   // Fetch invitations
   const { data: invitations = [], isLoading: invitationsLoading } = useQuery<
@@ -590,6 +618,30 @@ export default function ManageUsers() {
       toast({
         title: "Error",
         description: error.message || "Failed to deactivate user",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Reactivate user mutation
+  const reactivateMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      return await apiRequest(`/api/users/${userId}`, "PUT", {
+        isActive: true,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setReactivateUserId(null);
+      toast({
+        title: "User reactivated",
+        description: "The user has been reactivated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reactivate user",
         variant: "destructive",
       });
     },
@@ -642,6 +694,7 @@ export default function ManageUsers() {
 
   const getRoleLabel = (role: string) => {
     const roleLabels: Record<string, string> = {
+      super_admin: "Super Admin",
       admin: "Admin",
       staff: "Staff",
       read_only: "Read Only",
@@ -672,13 +725,28 @@ export default function ManageUsers() {
         )}
       </div>
 
+      {/* Search Input */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search users by name, email, or username..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+          data-testid="input-search-users"
+        />
+      </div>
+
       <Tabs defaultValue="active" className="space-y-4">
         <TabsList>
           <TabsTrigger value="active" data-testid="tab-active-users">
-            Active Users
+            Active Users ({activeUsers.length})
+          </TabsTrigger>
+          <TabsTrigger value="deactivated" data-testid="tab-deactivated-users">
+            Deactivated ({deactivatedUsers.length})
           </TabsTrigger>
           <TabsTrigger value="invitations" data-testid="tab-pending-invitations">
-            Pending Invitations
+            Pending Invitations ({invitations.length})
           </TabsTrigger>
         </TabsList>
 
@@ -689,7 +757,7 @@ export default function ManageUsers() {
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
-          ) : users.length === 0 ? (
+          ) : activeUsers.length === 0 ? (
             <div
               className="text-center py-12 border rounded-lg"
               data-testid="empty-users"
@@ -697,7 +765,7 @@ export default function ManageUsers() {
               <UserX className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-4 text-lg font-semibold">No users found</h3>
               <p className="text-muted-foreground mt-2">
-                Get started by inviting your first user.
+                {searchQuery ? "No users match your search." : "Get started by inviting your first user."}
               </p>
             </div>
           ) : (
@@ -713,7 +781,7 @@ export default function ManageUsers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((userItem) => (
+                  {activeUsers.map((userItem) => (
                     <TableRow key={userItem.id} data-testid={`row-user-${userItem.id}`}>
                       <TableCell data-testid={`text-name-${userItem.id}`}>
                         {userItem.firstName && userItem.lastName
@@ -724,50 +792,117 @@ export default function ManageUsers() {
                         {userItem.email}
                       </TableCell>
                       <TableCell data-testid={`text-role-${userItem.id}`}>
-                        <Badge variant="outline">
+                        <Badge variant={userItem.role === "super_admin" ? "default" : "outline"}>
                           {getRoleLabel(userItem.role)}
                         </Badge>
                       </TableCell>
                       <TableCell data-testid={`text-status-${userItem.id}`}>
-                        <Badge
-                          variant={userItem.isActive ? "default" : "secondary"}
-                        >
-                          {userItem.isActive ? "Active" : "Inactive"}
-                        </Badge>
+                        <Badge variant="default">Active</Badge>
                       </TableCell>
                       <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              data-testid={`button-actions-${userItem.id}`}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canUpdate && (
-                              <DropdownMenuItem
-                                onClick={() => handleEditUser(userItem)}
-                                data-testid={`button-edit-${userItem.id}`}
+                        {userItem.role !== "super_admin" ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`button-actions-${userItem.id}`}
                               >
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                            )}
-                            {canDelete && userItem.isActive && (
-                              <DropdownMenuItem
-                                onClick={() => setDeactivateUserId(userItem.id)}
-                                className="text-destructive"
-                                data-testid={`button-deactivate-${userItem.id}`}
-                              >
-                                <UserX className="mr-2 h-4 w-4" />
-                                Deactivate
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {canUpdate && (
+                                <DropdownMenuItem
+                                  onClick={() => handleEditUser(userItem)}
+                                  data-testid={`button-edit-${userItem.id}`}
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {canDelete && (
+                                <DropdownMenuItem
+                                  onClick={() => setDeactivateUserId(userItem.id)}
+                                  className="text-destructive"
+                                  data-testid={`button-deactivate-${userItem.id}`}
+                                >
+                                  <UserX className="mr-2 h-4 w-4" />
+                                  Deactivate
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Protected</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Deactivated Users Tab */}
+        <TabsContent value="deactivated" className="space-y-4">
+          {usersLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : deactivatedUsers.length === 0 ? (
+            <div
+              className="text-center py-12 border rounded-lg"
+              data-testid="empty-deactivated-users"
+            >
+              <UserCheck className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-4 text-lg font-semibold">No deactivated users</h3>
+              <p className="text-muted-foreground mt-2">
+                {searchQuery ? "No deactivated users match your search." : "All users are currently active."}
+              </p>
+            </div>
+          ) : (
+            <div className="border rounded-lg">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deactivatedUsers.map((userItem) => (
+                    <TableRow key={userItem.id} data-testid={`row-deactivated-user-${userItem.id}`}>
+                      <TableCell>
+                        {userItem.firstName && userItem.lastName
+                          ? `${userItem.firstName} ${userItem.lastName}`
+                          : userItem.username}
+                      </TableCell>
+                      <TableCell>{userItem.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{getRoleLabel(userItem.role)}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">Inactive</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {canUpdate && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setReactivateUserId(userItem.id)}
+                            data-testid={`button-reactivate-${userItem.id}`}
+                          >
+                            <UserCheck className="mr-2 h-4 w-4" />
+                            Reactivate
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -935,6 +1070,35 @@ export default function ManageUsers() {
               data-testid="button-delete-invitation-confirm"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reactivate User Confirmation */}
+      <AlertDialog
+        open={reactivateUserId !== null}
+        onOpenChange={(open) => !open && setReactivateUserId(null)}
+      >
+        <AlertDialogContent data-testid="dialog-reactivate-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reactivate User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reactivate this user? They will be able to
+              access the system again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-reactivate-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                reactivateUserId && reactivateMutation.mutate(reactivateUserId)
+              }
+              data-testid="button-reactivate-confirm"
+            >
+              Reactivate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

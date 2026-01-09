@@ -71,6 +71,7 @@ import multer from 'multer';
 import Papa from 'papaparse';
 import path from 'path';
 import fs from 'fs';
+import { sendInvitationEmail } from './services/invitation-email';
 
 // Helper function to apply categorization rules to an imported transaction
 // Uses the new RulesEngine for reliable rule matching
@@ -14718,13 +14719,52 @@ Respond in JSON format:
       
       // Create invitation
       const invitation = await storage.createUserInvitation(validatedData);
-      
+
       // Log activity
       await logActivity(storage, req, "invitation_created", "user_invitation", invitation.id, {
         email: invitation.email,
         role: invitation.role,
       });
-      
+
+      // Get inviter name and company name for the email
+      let inviterName: string | null = null;
+      let companyName: string | null = null;
+
+      if (req.user) {
+        const inviter = await storage.getUser(req.user.id);
+        if (inviter) {
+          inviterName = inviter.firstName && inviter.lastName
+            ? `${inviter.firstName} ${inviter.lastName}`
+            : inviter.username;
+        }
+      }
+
+      if (invitationData.companyId) {
+        const company = await storage.getCompany(invitationData.companyId);
+        if (company) {
+          companyName = company.name;
+        }
+      }
+
+      // Send invitation email
+      try {
+        const emailResult = await sendInvitationEmail(
+          invitation.email,
+          invitation.token,
+          invitation.role,
+          inviterName,
+          companyName
+        );
+
+        if (!emailResult.success) {
+          console.error("Failed to send invitation email:", emailResult.error);
+          // Continue - the invitation is still created, just email failed
+        }
+      } catch (emailError) {
+        console.error("Error sending invitation email:", emailError);
+        // Don't fail the request if email fails
+      }
+
       res.status(201).json(invitation);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
