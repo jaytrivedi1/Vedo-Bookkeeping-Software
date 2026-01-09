@@ -23,12 +23,14 @@ declare global {
 }
 
 // Routes that don't require company context
+// NOTE: Use trailing slash or exact paths to avoid accidentally excluding similar paths
+// e.g., '/api/user/' excludes '/api/user/profile' but NOT '/api/users'
 const EXCLUDED_PATHS = [
   '/api/auth',
   '/api/login',
   '/api/logout',
   '/api/register',
-  '/api/user',
+  '/api/user/', // User profile routes (NOT /api/users which needs company context)
   '/api/admin',
   '/api/companies', // Company routes handle their own scoping
   '/api/verify-email',
@@ -39,12 +41,24 @@ const EXCLUDED_PATHS = [
   '/api/validate-password',
   '/api/test-resend',
   '/api/invoices/public', // Public invoice viewing
+  '/api/firms', // Firm routes handle their own scoping
+  '/api/firm-invitations', // Firm invitation routes handle their own scoping
+];
+
+// Exact paths that should be excluded (for paths without sub-routes)
+const EXCLUDED_EXACT_PATHS = [
+  '/api/user', // GET current user (exact match only)
 ];
 
 /**
  * Check if a path should be excluded from company context requirement
  */
 function isExcludedPath(path: string): boolean {
+  // Check exact path matches first
+  if (EXCLUDED_EXACT_PATHS.includes(path)) {
+    return true;
+  }
+  // Then check prefix matches
   return EXCLUDED_PATHS.some(excluded => path.startsWith(excluded));
 }
 
