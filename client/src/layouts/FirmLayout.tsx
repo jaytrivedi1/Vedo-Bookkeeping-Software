@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
   Building2,
@@ -14,6 +15,8 @@ import {
   Menu,
   X,
   ChevronRight,
+  ArrowLeft,
+  Briefcase,
 } from "lucide-react";
 
 interface FirmLayoutProps {
@@ -53,11 +56,25 @@ const firmNavItems = [
   },
 ];
 
+interface ClientAccess {
+  id: number;
+  firmId: number;
+  companyId: number;
+  isActive: boolean;
+  isOwnCompany: boolean;
+  billingType: string;
+  company: {
+    id: number;
+    name: string;
+  };
+}
+
 export default function FirmLayout({ children }: FirmLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [location, setLocation] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, switchCompany, currentCompanyId } = useAuth();
+  const { toast } = useToast();
 
   // Fetch firm details
   const { data: firm } = useQuery<FirmData>({
@@ -70,9 +87,36 @@ export default function FirmLayout({ children }: FirmLayoutProps) {
     enabled: !!user?.firmId,
   });
 
+  // Fetch client access list to get company names
+  const { data: clientAccess = [] } = useQuery<ClientAccess[]>({
+    queryKey: ["/api/firms", user?.firmId, "clients"],
+    queryFn: async () => {
+      const res = await fetch(`/api/firms/${user?.firmId}/clients`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch clients");
+      return res.json();
+    },
+    enabled: !!user?.firmId,
+  });
+
+  // Find current company name
+  const currentCompany = clientAccess.find(c => c.companyId === currentCompanyId);
+
   const handleLogout = async () => {
     await logout();
     setLocation("/login");
+  };
+
+  const handleBackToFirm = async () => {
+    try {
+      await switchCompany(null);
+      setLocation("/firm/dashboard");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to switch back to firm view",
+        variant: "destructive",
+      });
+    }
   };
 
   const NavContent = () => (
@@ -229,6 +273,30 @@ export default function FirmLayout({ children }: FirmLayoutProps) {
             </div>
           </div>
         </header>
+
+        {/* Company Context Banner */}
+        {currentCompanyId && currentCompany && (
+          <div className="bg-gradient-to-r from-sky-500 to-sky-600 text-white px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Briefcase className="w-5 h-5" />
+              <div>
+                <p className="text-sm font-medium">Viewing: {currentCompany.company.name}</p>
+                <p className="text-xs text-sky-100">
+                  {currentCompany.isOwnCompany ? "Your Firm Books" : "Client Company"}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleBackToFirm}
+              className="bg-white/20 hover:bg-white/30 text-white border-0"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Firm Dashboard
+            </Button>
+          </div>
+        )}
 
         {/* Page Content */}
         <main className="flex-1 overflow-y-auto">

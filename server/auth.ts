@@ -655,6 +655,73 @@ export function setupAuth(app: Express): void {
     }
   });
 
+  // Switch company context for firm users
+  app.post("/api/user/switch-company", async (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const { companyId } = req.body;
+
+      // Must be a firm user to switch companies
+      if (!req.user.firmId || req.user.role !== 'accountant') {
+        return res.status(403).json({ message: "Only accounting firm users can switch companies" });
+      }
+
+      // If companyId is null, clear the context (return to firm dashboard view)
+      if (companyId === null) {
+        const updatedUser = await storage.updateUser(req.user.id, { currentCompanyId: null });
+        return res.status(200).json({
+          id: updatedUser?.id,
+          username: updatedUser?.username,
+          email: updatedUser?.email,
+          role: updatedUser?.role,
+          isActive: updatedUser?.isActive,
+          firstName: updatedUser?.firstName,
+          lastName: updatedUser?.lastName,
+          firmId: updatedUser?.firmId,
+          currentCompanyId: null,
+        });
+      }
+
+      // Validate companyId
+      if (typeof companyId !== 'number') {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      // Check if firm has access to this company
+      const firmAccess = await storage.getFirmClientAccess(req.user.firmId);
+      const hasAccess = firmAccess.some(access => access.companyId === companyId && access.isActive);
+
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Your firm does not have access to this company" });
+      }
+
+      // Update user's current company context
+      const updatedUser = await storage.updateUser(req.user.id, { currentCompanyId: companyId });
+
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      return res.status(200).json({
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        firmId: updatedUser.firmId,
+        currentCompanyId: updatedUser.currentCompanyId,
+      });
+    } catch (error) {
+      console.error("Error switching company:", error);
+      return res.status(500).json({ message: "Failed to switch company" });
+    }
+  });
+
   // Middleware to check if user is authenticated
   app.use("/api/auth-required", (req: Request, res: Response, next: NextFunction) => {
     if (!req.isAuthenticated()) {

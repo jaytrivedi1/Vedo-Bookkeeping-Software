@@ -14414,23 +14414,6 @@ Respond in JSON format:
     }
   });
 
-  // GET /api/firms/:id - Get specific firm
-  apiRouter.get("/firms/:id", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      const firm = await storage.getAccountingFirm(id);
-      
-      if (!firm) {
-        return res.status(404).json({ error: "Accounting firm not found" });
-      }
-      
-      res.json(firm);
-    } catch (error: any) {
-      console.error("Error fetching firm:", error);
-      res.status(500).json({ error: "Failed to fetch accounting firm" });
-    }
-  });
-
   // POST /api/firms - Create new firm
   apiRouter.post("/firms", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -14515,26 +14498,6 @@ Respond in JSON format:
     }
   });
 
-  // GET /api/firms/:id/clients - Get firm's client companies
-  apiRouter.get("/firms/:id/clients", requireAdmin, async (req: Request, res: Response) => {
-    try {
-      const firmId = parseInt(req.params.id);
-      
-      // Check if firm exists
-      const firm = await storage.getAccountingFirm(firmId);
-      if (!firm) {
-        return res.status(404).json({ error: "Accounting firm not found" });
-      }
-      
-      // Get client access records
-      const clientAccess = await storage.getFirmClientAccess(firmId);
-      res.json(clientAccess);
-    } catch (error: any) {
-      console.error("Error fetching firm clients:", error);
-      res.status(500).json({ error: "Failed to fetch firm clients" });
-    }
-  });
-
   // POST /api/firms/:id/clients - Grant firm access to a company
   apiRouter.post("/firms/:id/clients", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -14591,6 +14554,109 @@ Respond in JSON format:
     } catch (error: any) {
       console.error("Error revoking firm access:", error);
       res.status(500).json({ error: "Failed to revoke firm access" });
+    }
+  });
+
+  // ====================
+  // Firm User Self-Service Routes (Accountants managing their own firm)
+  // ====================
+
+  // GET /api/firms/:id - Firm users can get their own firm details
+  // Note: This overrides the admin-only route for firm users accessing their own firm
+  apiRouter.get("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      // Super admin can access any firm (for admin routes)
+      const isAdmin = req.user?.role === 'super_admin';
+
+      // Firm users can only access their own firm
+      const isOwnFirm = req.user?.firmId === id;
+
+      if (!isAdmin && !isOwnFirm) {
+        return res.status(403).json({ error: "Access denied - you can only view your own firm" });
+      }
+
+      const firm = await storage.getAccountingFirm(id);
+
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+
+      res.json(firm);
+    } catch (error: any) {
+      console.error("Error fetching firm:", error);
+      res.status(500).json({ error: "Failed to fetch accounting firm" });
+    }
+  });
+
+  // PATCH /api/firms/:id - Firm users can update their own firm
+  apiRouter.patch("/firms/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      // Super admin can update any firm
+      const isAdmin = req.user?.role === 'super_admin';
+
+      // Firm users can only update their own firm
+      const isOwnFirm = req.user?.firmId === id;
+
+      if (!isAdmin && !isOwnFirm) {
+        return res.status(403).json({ error: "Access denied - you can only update your own firm" });
+      }
+
+      // Validate request body (partial update)
+      const validatedData = insertAccountingFirmSchema.partial().parse(req.body);
+
+      // Update firm
+      const updatedFirm = await storage.updateAccountingFirm(id, validatedData);
+
+      if (!updatedFirm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+
+      // Log activity
+      await logActivity(storage, req, "firm_updated", "accounting_firm", id, {
+        updatedFields: Object.keys(validatedData),
+      });
+
+      res.json(updatedFirm);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: "Validation error", details: error.errors });
+      }
+      console.error("Error updating firm:", error);
+      res.status(500).json({ error: "Failed to update accounting firm" });
+    }
+  });
+
+  // GET /api/firms/:id/clients - Firm users can get their own client list
+  apiRouter.get("/firms/:id/clients", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const firmId = parseInt(req.params.id);
+
+      // Super admin can access any firm's clients
+      const isAdmin = req.user?.role === 'super_admin';
+
+      // Firm users can only access their own firm's clients
+      const isOwnFirm = req.user?.firmId === firmId;
+
+      if (!isAdmin && !isOwnFirm) {
+        return res.status(403).json({ error: "Access denied - you can only view your own firm's clients" });
+      }
+
+      // Check if firm exists
+      const firm = await storage.getAccountingFirm(firmId);
+      if (!firm) {
+        return res.status(404).json({ error: "Accounting firm not found" });
+      }
+
+      // Get client access records
+      const clientAccess = await storage.getFirmClientAccess(firmId);
+      res.json(clientAccess);
+    } catch (error: any) {
+      console.error("Error fetching firm clients:", error);
+      res.status(500).json({ error: "Failed to fetch firm clients" });
     }
   });
 

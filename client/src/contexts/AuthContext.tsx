@@ -18,8 +18,10 @@ interface AuthContextType {
   login: (username: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (username: string, password: string, email?: string, firstName?: string, lastName?: string) => Promise<void>;
   logout: () => Promise<void>;
+  switchCompany: (companyId: number | null) => Promise<void>;
   isLoading: boolean;
   isFirmUser: boolean;
+  currentCompanyId: number | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,11 +101,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const switchCompany = async (companyId: number | null) => {
+    const response = await fetch('/api/user/switch-company', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyId }),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to switch company');
+    }
+
+    const userData = await response.json();
+    setUser(userData);
+
+    // Clear cached data so queries refetch with new company context
+    queryClient.clear();
+  };
+
   // Computed: is this a firm user (accountant)?
   const isFirmUser = Boolean(user?.firmId && user?.role === 'accountant');
+  const currentCompanyId = user?.currentCompanyId ?? null;
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading, isFirmUser }}>
+    <AuthContext.Provider value={{ user, login, register, logout, switchCompany, isLoading, isFirmUser, currentCompanyId }}>
       {children}
     </AuthContext.Provider>
   );

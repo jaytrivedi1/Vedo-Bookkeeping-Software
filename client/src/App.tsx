@@ -54,6 +54,10 @@ import AIAssistant from "@/pages/ai-assistant";
 import MainLayout from "@/components/layout/MainLayout";
 import FirmLayout from "@/layouts/FirmLayout";
 import FirmDashboard from "@/pages/firm/FirmDashboard";
+import FirmClients from "@/pages/firm/FirmClients";
+import FirmBooks from "@/pages/firm/FirmBooks";
+import FirmTeam from "@/pages/firm/FirmTeam";
+import FirmSettings from "@/pages/firm/FirmSettings";
 import { Company } from "@shared/schema";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -195,6 +199,10 @@ function Router() {
           <FirmLayout>
             <Switch>
               <Route path="/firm/dashboard" component={FirmDashboard} />
+              <Route path="/firm/books" component={FirmBooks} />
+              <Route path="/firm/clients" component={FirmClients} />
+              <Route path="/firm/team" component={FirmTeam} />
+              <Route path="/firm/settings" component={FirmSettings} />
               <Route path="/firm">
                 {() => <Redirect to="/firm/dashboard" />}
               </Route>

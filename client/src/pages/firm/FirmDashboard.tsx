@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,9 +52,10 @@ interface PendingInvitation {
 }
 
 export default function FirmDashboard() {
-  const { user } = useAuth();
+  const { user, switchCompany } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [switchingTo, setSwitchingTo] = useState<number | null>(null);
 
   // Fetch firm details
   const { data: firm, isLoading: firmLoading } = useQuery<FirmData>({
@@ -135,9 +137,21 @@ export default function FirmDashboard() {
     },
   });
 
-  const handleViewCompany = (companyId: number) => {
-    // This will switch context to the company and navigate to dashboard
-    setLocation(`/`);
+  const handleViewCompany = async (companyId: number) => {
+    try {
+      setSwitchingTo(companyId);
+      await switchCompany(companyId);
+      // Navigate to the main dashboard which will now show the company's data
+      setLocation(`/`);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to switch company",
+        variant: "destructive",
+      });
+    } finally {
+      setSwitchingTo(null);
+    }
   };
 
   if (firmLoading) {
@@ -245,9 +259,21 @@ export default function FirmDashboard() {
                 <p className="font-medium text-slate-900">{ownCompany.company.name}</p>
                 <p className="text-sm text-slate-500">Manage your firm's finances</p>
               </div>
-              <Button onClick={() => handleViewCompany(ownCompany.companyId)}>
-                Open Books
-                <ArrowRight className="ml-2 h-4 w-4" />
+              <Button
+                onClick={() => handleViewCompany(ownCompany.companyId)}
+                disabled={switchingTo !== null}
+              >
+                {switchingTo === ownCompany.companyId ? (
+                  <>
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                    Opening...
+                  </>
+                ) : (
+                  <>
+                    Open Books
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
               </Button>
             </div>
           </CardContent>
@@ -301,9 +327,23 @@ export default function FirmDashboard() {
                       </p>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => handleViewCompany(client.companyId)}>
-                    View
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewCompany(client.companyId)}
+                    disabled={switchingTo !== null}
+                  >
+                    {switchingTo === client.companyId ? (
+                      <>
+                        <span className="animate-spin mr-2 h-4 w-4 border-2 border-slate-600 border-t-transparent rounded-full" />
+                        Opening...
+                      </>
+                    ) : (
+                      <>
+                        View
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
                   </Button>
                 </div>
               ))}
