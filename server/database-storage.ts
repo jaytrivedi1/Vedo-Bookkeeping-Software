@@ -5,7 +5,7 @@ import {
   BankConnection, BankAccount, ImportedTransaction, CsvMappingPreference,
   Reconciliation, ReconciliationItem, BankTransactionMatch,
   Currency, ExchangeRate, FxRealization, FxRevaluation, CurrencyLock, CategorizationRule, ActivityLog,
-  AccountingFirm, FirmClientAccess, UserInvitation, InvoiceActivity,
+  AccountingFirm, FirmClientAccess, FirmInvitation, UserInvitation, InvoiceActivity,
   RecurringTemplate, RecurringLine, RecurringHistory,
   MerchantPattern, CategorizationFeedback,
   AiConversation, AiMessage,
@@ -14,7 +14,7 @@ import {
   InsertBankConnection, InsertBankAccount, InsertImportedTransaction, InsertCsvMappingPreference,
   InsertReconciliation, InsertReconciliationItem, InsertBankTransactionMatch,
   InsertCurrency, InsertExchangeRate, InsertFxRealization, InsertFxRevaluation, InsertCurrencyLock, InsertCategorizationRule, InsertActivityLog,
-  InsertAccountingFirm, InsertFirmClientAccess, InsertUserInvitation, InsertInvoiceActivity,
+  InsertAccountingFirm, InsertFirmClientAccess, InsertFirmInvitation, InsertUserInvitation, InsertInvoiceActivity,
   InsertRecurringTemplate, InsertRecurringLine, InsertRecurringHistory,
   InsertMerchantPattern, InsertCategorizationFeedback,
   InsertAiConversation, InsertAiMessage,
@@ -23,7 +23,7 @@ import {
   permissionsSchema, rolePermissionsSchema, bankConnectionsSchema, bankAccountsSchema, importedTransactionsSchema, csvMappingPreferencesSchema,
   reconciliations, reconciliationItems, bankTransactionMatchesSchema,
   currenciesSchema, exchangeRatesSchema, fxRealizationsSchema, fxRevaluationsSchema, currencyLocksSchema, categorizationRulesSchema, activityLogsSchema,
-  accountingFirmsSchema, firmClientAccessSchema, userInvitationsSchema, invoiceActivitiesSchema,
+  accountingFirmsSchema, firmClientAccessSchema, firmInvitationsSchema, userInvitationsSchema, invoiceActivitiesSchema,
   recurringTemplatesSchema, recurringLinesSchema, recurringHistorySchema,
   merchantPatternsSchema, categorizationFeedbackSchema,
   aiConversationsSchema, aiMessagesSchema
@@ -4101,6 +4101,75 @@ export class DatabaseStorage implements IStorage {
       .where(eq(firmClientAccessSchema.id, id))
       .returning();
     return !!updated;
+  }
+
+  // Firm Invitations (company invites accounting firm)
+  async getFirmInvitations(filters?: { companyId?: number; firmId?: number; status?: string }): Promise<FirmInvitation[]> {
+    let query = db.select().from(firmInvitationsSchema);
+
+    const conditions = [];
+    if (filters?.companyId) {
+      conditions.push(eq(firmInvitationsSchema.companyId, filters.companyId));
+    }
+    if (filters?.firmId) {
+      conditions.push(eq(firmInvitationsSchema.firmId, filters.firmId));
+    }
+    if (filters?.status) {
+      conditions.push(eq(firmInvitationsSchema.status, filters.status as any));
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+
+    query = query.orderBy(desc(firmInvitationsSchema.createdAt)) as any;
+
+    return await query;
+  }
+
+  async getFirmInvitation(id: number): Promise<FirmInvitation | undefined> {
+    const [invitation] = await db.select()
+      .from(firmInvitationsSchema)
+      .where(eq(firmInvitationsSchema.id, id))
+      .limit(1);
+    return invitation;
+  }
+
+  async getFirmInvitationByToken(token: string): Promise<FirmInvitation | undefined> {
+    const [invitation] = await db.select()
+      .from(firmInvitationsSchema)
+      .where(eq(firmInvitationsSchema.token, token))
+      .limit(1);
+    return invitation;
+  }
+
+  async getAccountingFirmByEmail(email: string): Promise<AccountingFirm | undefined> {
+    const [firm] = await db.select()
+      .from(accountingFirmsSchema)
+      .where(eq(accountingFirmsSchema.email, email))
+      .limit(1);
+    return firm;
+  }
+
+  async createFirmInvitation(invitation: InsertFirmInvitation): Promise<FirmInvitation> {
+    const [newInvitation] = await db.insert(firmInvitationsSchema)
+      .values(invitation)
+      .returning();
+    return newInvitation;
+  }
+
+  async updateFirmInvitation(id: number, invitation: Partial<FirmInvitation>): Promise<FirmInvitation | undefined> {
+    const [updated] = await db.update(firmInvitationsSchema)
+      .set(invitation)
+      .where(eq(firmInvitationsSchema.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteFirmInvitation(id: number): Promise<boolean> {
+    const result = await db.delete(firmInvitationsSchema)
+      .where(eq(firmInvitationsSchema.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   // User Invitations

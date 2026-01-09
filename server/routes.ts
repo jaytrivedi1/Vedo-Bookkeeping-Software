@@ -14576,21 +14576,414 @@ Respond in JSON format:
   apiRouter.delete("/firms/clients/:accessId", requireAdmin, async (req: Request, res: Response) => {
     try {
       const accessId = parseInt(req.params.accessId);
-      
+
       // Revoke access
       const revoked = await storage.revokeFirmClientAccess(accessId);
-      
+
       if (!revoked) {
         return res.status(404).json({ error: "Firm client access not found" });
       }
-      
+
       // Log activity
       await logActivity(storage, req, "firm_access_revoked", "firm_client_access", accessId, {});
-      
+
       res.json({ message: "Firm access revoked successfully" });
     } catch (error: any) {
       console.error("Error revoking firm access:", error);
       res.status(500).json({ error: "Failed to revoke firm access" });
+    }
+  });
+
+  // ====================
+  // Firm Invitation Routes (Company invites Accounting Firm)
+  // ====================
+
+  // GET /api/firm-invitations - Get firm invitations for current company
+  apiRouter.get("/firm-invitations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const filters: { companyId?: number; firmId?: number; status?: string } = {};
+
+      // Company admins see invitations they sent
+      if (req.user?.companyId) {
+        filters.companyId = req.user.companyId;
+      }
+      // Firm users see invitations sent to them
+      if (req.user?.firmId) {
+        filters.firmId = req.user.firmId;
+      }
+
+      if (req.query.status && typeof req.query.status === 'string') {
+        filters.status = req.query.status;
+      }
+
+      const invitations = await storage.getFirmInvitations(filters);
+
+      // Enrich with company and firm details
+      const enrichedInvitations = await Promise.all(invitations.map(async (inv) => {
+        const company = await storage.getCompany(inv.companyId);
+        let firm = inv.firmId ? await storage.getAccountingFirm(inv.firmId) : null;
+
+        // If no firmId but we have firmEmail, try to find the firm
+        if (!firm && inv.firmEmail) {
+          firm = await storage.getAccountingFirmByEmail(inv.firmEmail);
+        }
+
+        return {
+          ...inv,
+          companyName: company?.name || 'Unknown Company',
+          firmName: firm?.name || null,
+        };
+      }));
+
+      res.json(enrichedInvitations);
+    } catch (error: any) {
+      console.error("Error fetching firm invitations:", error);
+      res.status(500).json({ error: "Failed to fetch firm invitations" });
+    }
+  });
+
+  // POST /api/firm-invitations - Create a firm invitation (company invites firm)
+  apiRouter.post("/firm-invitations", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { firmEmail, billingType = 'client_pays' } = req.body;
+
+      if (!firmEmail || typeof firmEmail !== 'string') {
+        return res.status(400).json({ error: "Firm email is required" });
+      }
+
+      if (!req.user?.companyId) {
+        return res.status(400).json({ error: "No company context" });
+      }
+
+      // Check if firm email is already registered
+      const existingFirm = await storage.getAccountingFirmByEmail(firmEmail);
+
+      // Check if there's already a pending invitation to this firm for this company
+      const existingInvitations = await storage.getFirmInvitations({
+        companyId: req.user.companyId,
+        status: 'pending'
+      });
+
+      const alreadyInvited = existingInvitations.some(inv =>
+        inv.firmEmail.toLowerCase() === firmEmail.toLowerCase()
+      );
+
+      if (alreadyInvited) {
+        return res.status(400).json({ error: "An invitation has already been sent to this firm" });
+      }
+
+      // Check if this firm already has access
+      if (existingFirm) {
+        const existingAccess = await storage.getClientFirms(req.user.companyId);
+        const alreadyHasAccess = existingAccess.some(acc =>
+          acc.firmId === existingFirm.id && acc.isActive
+        );
+
+        if (alreadyHasAccess) {
+          return res.status(400).json({ error: "This firm already has access to your company" });
+        }
+      }
+
+      // Generate secure token
+      const token = crypto.randomBytes(32).toString('hex');
+
+      // Create invitation
+      const invitation = await storage.createFirmInvitation({
+        companyId: req.user.companyId,
+        firmEmail,
+        firmId: existingFirm?.id || null,
+        token,
+        status: 'pending',
+        billingType,
+        invitedBy: req.user.id,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      });
+
+      // Send invitation email
+      const company = await storage.getCompany(req.user.companyId);
+      const inviter = await storage.getUser(req.user.id);
+
+      const baseUrl = process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`;
+      const acceptUrl = `${baseUrl}/firm-invitation/${token}`;
+
+      // Send email notification
+      if (existingFirm) {
+        // Send to existing firm - they can accept immediately
+        await sendEmail({
+          to: firmEmail,
+          subject: `${company?.name || 'A company'} has invited you to access their books`,
+          html: `
+            <h2>Company Invitation</h2>
+            <p><strong>${company?.name || 'A company'}</strong> has invited your accounting firm to access their books on Vedo.</p>
+            <p>Invited by: ${inviter?.firstName || ''} ${inviter?.lastName || ''} (${inviter?.email || ''})</p>
+            <p>To accept this invitation, click the link below:</p>
+            <p><a href="${acceptUrl}" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Accept Invitation</a></p>
+            <p>Or copy this link: ${acceptUrl}</p>
+            <p>This invitation will expire in 30 days.</p>
+          `,
+        });
+      } else {
+        // Send to unregistered firm - they need to sign up first
+        await sendEmail({
+          to: firmEmail,
+          subject: `${company?.name || 'A company'} has invited you to manage their books on Vedo`,
+          html: `
+            <h2>Accounting Firm Invitation</h2>
+            <p><strong>${company?.name || 'A company'}</strong> would like you to manage their books using Vedo.</p>
+            <p>Invited by: ${inviter?.firstName || ''} ${inviter?.lastName || ''} (${inviter?.email || ''})</p>
+            <p>To accept this invitation:</p>
+            <ol>
+              <li>Sign up for a free accounting firm account at Vedo</li>
+              <li>Use this email (${firmEmail}) when registering</li>
+              <li>Once registered, the invitation will be available in your dashboard</li>
+            </ol>
+            <p><a href="${baseUrl}/login?tab=register&type=firm" style="background-color: #7c3aed; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Sign Up as Accounting Firm</a></p>
+            <p>This invitation will expire in 30 days.</p>
+          `,
+        });
+      }
+
+      // Log activity
+      await logActivity(storage, req, "firm_invitation_sent", "firm_invitation", invitation.id, {
+        firmEmail,
+        companyId: req.user.companyId,
+      });
+
+      res.status(201).json({
+        ...invitation,
+        companyName: company?.name || 'Unknown Company',
+        firmName: existingFirm?.name || null,
+      });
+    } catch (error: any) {
+      console.error("Error creating firm invitation:", error);
+      res.status(500).json({ error: "Failed to create firm invitation" });
+    }
+  });
+
+  // GET /api/firm-invitations/:token/validate - Validate firm invitation token
+  apiRouter.get("/firm-invitations/:token/validate", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      const invitation = await storage.getFirmInvitationByToken(token);
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found", valid: false });
+      }
+
+      // Check if expired
+      if (new Date(invitation.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Invitation has expired", valid: false });
+      }
+
+      // Check if already responded
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({
+          error: `Invitation has already been ${invitation.status}`,
+          valid: false
+        });
+      }
+
+      // Get company details
+      const company = await storage.getCompany(invitation.companyId);
+      const inviter = await storage.getUser(invitation.invitedBy);
+
+      res.json({
+        valid: true,
+        invitation: {
+          id: invitation.id,
+          firmEmail: invitation.firmEmail,
+          billingType: invitation.billingType,
+          companyName: company?.name || 'Unknown Company',
+          inviterName: inviter ? `${inviter.firstName || ''} ${inviter.lastName || ''}`.trim() || inviter.email : 'Unknown',
+          expiresAt: invitation.expiresAt,
+        }
+      });
+    } catch (error: any) {
+      console.error("Error validating firm invitation:", error);
+      res.status(500).json({ error: "Failed to validate invitation" });
+    }
+  });
+
+  // POST /api/firm-invitations/:token/respond - Accept or decline firm invitation
+  apiRouter.post("/firm-invitations/:token/respond", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      const { action } = req.body; // 'accept' or 'decline'
+
+      if (!['accept', 'decline'].includes(action)) {
+        return res.status(400).json({ error: "Invalid action. Use 'accept' or 'decline'" });
+      }
+
+      // Only firm users can respond to invitations
+      if (!req.user?.firmId) {
+        return res.status(403).json({ error: "Only accounting firm users can respond to invitations" });
+      }
+
+      const invitation = await storage.getFirmInvitationByToken(token);
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+
+      // Check if expired
+      if (new Date(invitation.expiresAt) < new Date()) {
+        return res.status(400).json({ error: "Invitation has expired" });
+      }
+
+      // Check if already responded
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({ error: `Invitation has already been ${invitation.status}` });
+      }
+
+      // Verify invitation is for this firm
+      const firm = await storage.getAccountingFirm(req.user.firmId);
+      if (!firm || firm.email?.toLowerCase() !== invitation.firmEmail.toLowerCase()) {
+        return res.status(403).json({ error: "This invitation is not for your firm" });
+      }
+
+      if (action === 'accept') {
+        // Create firm client access
+        await storage.createFirmClientAccess({
+          firmId: req.user.firmId,
+          companyId: invitation.companyId,
+          grantedBy: invitation.invitedBy,
+          isActive: true,
+          isOwnCompany: false,
+          billingType: invitation.billingType,
+        });
+
+        // Update invitation status
+        await storage.updateFirmInvitation(invitation.id, {
+          status: 'accepted',
+          firmId: req.user.firmId,
+          respondedAt: new Date(),
+        });
+
+        // Log activity
+        await logActivity(storage, req, "firm_invitation_accepted", "firm_invitation", invitation.id, {
+          firmId: req.user.firmId,
+          companyId: invitation.companyId,
+        });
+
+        res.json({ message: "Invitation accepted. You now have access to the company's books." });
+      } else {
+        // Update invitation status to declined
+        await storage.updateFirmInvitation(invitation.id, {
+          status: 'declined',
+          firmId: req.user.firmId,
+          respondedAt: new Date(),
+        });
+
+        // Log activity
+        await logActivity(storage, req, "firm_invitation_declined", "firm_invitation", invitation.id, {
+          firmId: req.user.firmId,
+          companyId: invitation.companyId,
+        });
+
+        res.json({ message: "Invitation declined." });
+      }
+    } catch (error: any) {
+      console.error("Error responding to firm invitation:", error);
+      res.status(500).json({ error: "Failed to respond to invitation" });
+    }
+  });
+
+  // DELETE /api/firm-invitations/:id - Cancel/delete a firm invitation
+  apiRouter.delete("/firm-invitations/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+
+      const invitation = await storage.getFirmInvitation(id);
+
+      if (!invitation) {
+        return res.status(404).json({ error: "Invitation not found" });
+      }
+
+      // Only the company that sent the invitation can delete it
+      if (invitation.companyId !== req.user?.companyId) {
+        return res.status(403).json({ error: "Not authorized to delete this invitation" });
+      }
+
+      // Can only delete pending invitations
+      if (invitation.status !== 'pending') {
+        return res.status(400).json({ error: "Can only delete pending invitations" });
+      }
+
+      await storage.deleteFirmInvitation(id);
+
+      // Log activity
+      await logActivity(storage, req, "firm_invitation_cancelled", "firm_invitation", id, {
+        firmEmail: invitation.firmEmail,
+      });
+
+      res.json({ message: "Invitation cancelled successfully" });
+    } catch (error: any) {
+      console.error("Error deleting firm invitation:", error);
+      res.status(500).json({ error: "Failed to delete invitation" });
+    }
+  });
+
+  // GET /api/company/connected-firm - Get the accounting firm connected to current company
+  apiRouter.get("/company/connected-firm", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(400).json({ error: "No company context" });
+      }
+
+      const firmAccess = await storage.getClientFirms(req.user.companyId);
+      const activeFirmAccess = firmAccess.find(fa => fa.isActive && !fa.isOwnCompany);
+
+      if (!activeFirmAccess) {
+        return res.json({ firm: null });
+      }
+
+      const firm = await storage.getAccountingFirm(activeFirmAccess.firmId);
+
+      res.json({
+        firm: firm ? {
+          id: firm.id,
+          name: firm.name,
+          email: firm.email,
+          phone: firm.phone,
+        } : null,
+        access: {
+          id: activeFirmAccess.id,
+          billingType: activeFirmAccess.billingType,
+          createdAt: activeFirmAccess.createdAt,
+        }
+      });
+    } catch (error: any) {
+      console.error("Error fetching connected firm:", error);
+      res.status(500).json({ error: "Failed to fetch connected firm" });
+    }
+  });
+
+  // DELETE /api/company/connected-firm - Disconnect accounting firm from company
+  apiRouter.delete("/company/connected-firm", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.companyId) {
+        return res.status(400).json({ error: "No company context" });
+      }
+
+      const firmAccess = await storage.getClientFirms(req.user.companyId);
+      const activeFirmAccess = firmAccess.find(fa => fa.isActive && !fa.isOwnCompany);
+
+      if (!activeFirmAccess) {
+        return res.status(404).json({ error: "No connected firm found" });
+      }
+
+      await storage.revokeFirmClientAccess(activeFirmAccess.id);
+
+      // Log activity
+      await logActivity(storage, req, "firm_access_revoked", "firm_client_access", activeFirmAccess.id, {
+        firmId: activeFirmAccess.firmId,
+        companyId: req.user.companyId,
+      });
+
+      res.json({ message: "Accounting firm disconnected successfully" });
+    } catch (error: any) {
+      console.error("Error disconnecting firm:", error);
+      res.status(500).json({ error: "Failed to disconnect firm" });
     }
   });
 

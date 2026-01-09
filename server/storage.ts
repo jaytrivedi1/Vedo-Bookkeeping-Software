@@ -88,6 +88,9 @@ import {
   firmClientAccessSchema,
   type FirmClientAccess,
   type InsertFirmClientAccess,
+  firmInvitationsSchema,
+  type FirmInvitation,
+  type InsertFirmInvitation,
   userInvitationsSchema,
   type UserInvitation,
   type InsertUserInvitation,
@@ -415,7 +418,16 @@ export interface IStorage {
   getClientFirms(companyId: number): Promise<FirmClientAccess[]>;
   createFirmClientAccess(access: InsertFirmClientAccess): Promise<FirmClientAccess>;
   revokeFirmClientAccess(id: number): Promise<boolean>;
-  
+
+  // Firm Invitations (company invites accounting firm)
+  getFirmInvitations(filters?: { companyId?: number; firmId?: number; status?: string }): Promise<FirmInvitation[]>;
+  getFirmInvitation(id: number): Promise<FirmInvitation | undefined>;
+  getFirmInvitationByToken(token: string): Promise<FirmInvitation | undefined>;
+  getAccountingFirmByEmail(email: string): Promise<AccountingFirm | undefined>;
+  createFirmInvitation(invitation: InsertFirmInvitation): Promise<FirmInvitation>;
+  updateFirmInvitation(id: number, invitation: Partial<FirmInvitation>): Promise<FirmInvitation | undefined>;
+  deleteFirmInvitation(id: number): Promise<boolean>;
+
   // User Invitations
   getUserInvitations(filters?: { companyId?: number; firmId?: number; pending?: boolean }): Promise<UserInvitation[]>;
   getUserInvitation(id: number): Promise<UserInvitation | undefined>;

@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Building2,
   Users,
@@ -40,12 +42,18 @@ interface PendingInvitation {
   id: number;
   companyId: number;
   companyName: string;
-  invitedAt: string;
+  firmEmail: string;
+  token: string;
+  status: string;
+  billingType: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 export default function FirmDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
 
   // Fetch firm details
   const { data: firm, isLoading: firmLoading } = useQuery<FirmData>({
@@ -73,14 +81,58 @@ export default function FirmDashboard() {
   const ownCompany = clientAccess.find(c => c.isOwnCompany);
   const clientCompanies = clientAccess.filter(c => !c.isOwnCompany && c.isActive);
 
-  // Fetch pending invitations (placeholder - will implement the endpoint)
-  const { data: pendingInvitations = [] } = useQuery<PendingInvitation[]>({
-    queryKey: ["/api/firms/invitations/pending"],
+  // Fetch pending invitations from companies
+  const { data: pendingInvitations = [], isLoading: invitationsLoading } = useQuery<PendingInvitation[]>({
+    queryKey: ["/api/firm-invitations", "pending"],
     queryFn: async () => {
-      // This endpoint will be created later
-      return [];
+      const res = await fetch(`/api/firm-invitations?status=pending`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch invitations");
+      return res.json();
     },
     enabled: !!user?.firmId,
+  });
+
+  // Accept invitation mutation
+  const acceptInvitation = useMutation({
+    mutationFn: async (token: string) => {
+      return apiRequest(`/api/firm-invitations/${token}/respond`, 'POST', { action: 'accept' });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Invitation accepted",
+        description: "You now have access to the company's books.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/firm-invitations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/firms", user?.firmId, "clients"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to accept invitation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Decline invitation mutation
+  const declineInvitation = useMutation({
+    mutationFn: async (token: string) => {
+      return apiRequest(`/api/firm-invitations/${token}/respond`, 'POST', { action: 'decline' });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Invitation declined",
+        description: "The invitation has been declined.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/firm-invitations"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to decline invitation",
+        variant: "destructive",
+      });
+    },
   });
 
   const handleViewCompany = (companyId: number) => {
@@ -286,15 +338,29 @@ export default function FirmDashboard() {
                   <div>
                     <p className="font-medium text-slate-900">{invitation.companyName}</p>
                     <p className="text-sm text-slate-500">
-                      Invited on {new Date(invitation.invitedAt).toLocaleDateString()}
+                      Invited on {new Date(invitation.createdAt).toLocaleDateString()}
+                      {' '}&middot;{' '}
+                      {invitation.billingType === 'firm_pays' ? 'Firm pays' : 'Client pays'}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Expires {new Date(invitation.expiresAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => declineInvitation.mutate(invitation.token)}
+                      disabled={declineInvitation.isPending || acceptInvitation.isPending}
+                    >
                       <XCircle className="mr-2 h-4 w-4" />
                       Decline
                     </Button>
-                    <Button size="sm">
+                    <Button
+                      size="sm"
+                      onClick={() => acceptInvitation.mutate(invitation.token)}
+                      disabled={acceptInvitation.isPending || declineInvitation.isPending}
+                    >
                       <CheckCircle className="mr-2 h-4 w-4" />
                       Accept
                     </Button>

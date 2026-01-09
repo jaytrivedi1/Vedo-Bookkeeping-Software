@@ -589,6 +589,24 @@ export const firmClientAccessSchema = pgTable('firm_client_access', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Firm invitation status enum
+export const firmInvitationStatusEnum = pgEnum('firm_invitation_status', ['pending', 'accepted', 'declined', 'expired']);
+
+// Firm Invitations - for companies to invite accounting firms
+export const firmInvitationsSchema = pgTable('firm_invitations', {
+  id: serial('id').primaryKey(),
+  companyId: integer('company_id').notNull().references(() => companiesSchema.id), // Company sending the invitation
+  firmEmail: text('firm_email').notNull(), // Email of the accounting firm to invite
+  firmId: integer('firm_id').references(() => accountingFirmsSchema.id), // Set when firm is found/accepts
+  token: text('token').notNull().unique(), // Secure token for accepting invitation
+  status: firmInvitationStatusEnum('status').notNull().default('pending'),
+  billingType: billingTypeEnum('billing_type').notNull().default('client_pays'), // Who pays for subscription
+  invitedBy: integer('invited_by').notNull().references(() => usersSchema.id), // Company admin who invited
+  expiresAt: timestamp('expires_at').notNull(), // Invitation expiration
+  respondedAt: timestamp('responded_at'), // When invitation was accepted/declined
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // User Invitations - for inviting new users to join
 export const userInvitationsSchema = pgTable('user_invitations', {
   id: serial('id').primaryKey(),
@@ -662,6 +680,11 @@ export const insertFirmClientAccessSchema = createInsertSchema(firmClientAccessS
   createdAt: true
 });
 
+export const insertFirmInvitationSchema = createInsertSchema(firmInvitationsSchema).omit({
+  id: true,
+  createdAt: true
+});
+
 export const insertUserInvitationSchema = createInsertSchema(userInvitationsSchema).omit({
   id: true,
   createdAt: true
@@ -696,6 +719,9 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 
 export type FirmClientAccess = typeof firmClientAccessSchema.$inferSelect;
 export type InsertFirmClientAccess = z.infer<typeof insertFirmClientAccessSchema>;
+
+export type FirmInvitation = typeof firmInvitationsSchema.$inferSelect;
+export type InsertFirmInvitation = z.infer<typeof insertFirmInvitationSchema>;
 
 export type UserInvitation = typeof userInvitationsSchema.$inferSelect;
 export type InsertUserInvitation = z.infer<typeof insertUserInvitationSchema>;
