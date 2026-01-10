@@ -285,7 +285,7 @@ function Router() {
                       <Route path="/settings/company" component={CompanySettings} />
                       <Route path="/settings/account" component={AccountSettings} />
                       <Route path="/settings/preferences" component={PreferencesSettings} />
-                      <Route path="/settings/invoice" component={InvoiceSettings} />
+                      <Route path="/settings/invoices" component={InvoiceSettings} />
                       <Route path="/settings/currency" component={CurrencySettings} />
                       <Route path="/settings/users" component={UsersSettings} />
                       <Route path="/settings/accountant" component={AccountantSettings} />
