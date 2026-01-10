@@ -1,26 +1,22 @@
-import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import SettingsDialog from "./SettingsDialog";
 
 export default function SettingsButton() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [location] = useLocation();
+  const isActive = location.startsWith("/settings");
 
   return (
-    <>
-      <Button 
-        variant="ghost" 
-        className="w-full justify-start py-2 px-3 mt-auto"
-        onClick={() => setSettingsOpen(true)}
+    <Link href="/settings">
+      <Button
+        variant="ghost"
+        className={`w-full justify-start py-2 px-3 mt-auto ${
+          isActive ? "bg-slate-100 text-primary" : ""
+        }`}
       >
         <Settings className="mr-2 h-5 w-5" />
         Settings
       </Button>
-
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-      />
-    </>
+    </Link>
   );
 }

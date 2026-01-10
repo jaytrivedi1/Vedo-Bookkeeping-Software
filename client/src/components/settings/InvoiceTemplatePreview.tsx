@@ -1,23 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import type { SelectCompany } from "@shared/schema";
+import type { Company } from "@shared/schema";
 
 interface InvoiceTemplatePreviewProps {
   template: string;
 }
 
 export default function InvoiceTemplatePreview({ template }: InvoiceTemplatePreviewProps) {
-  const { data: company } = useQuery<SelectCompany>({
+  const { data: company } = useQuery<Company>({
     queryKey: ["/api/companies/default"],
   });
 
-  const addressParts = company?.address ? company.address.split(',') : [];
+  // Build address from company fields
+  const companyAddress = company?.street1 || "123 Business Street";
+  const companyCityState = [company?.city, company?.state, company?.postalCode]
+    .filter(Boolean)
+    .join(', ') || "City, State 12345";
+
   const sampleData = {
     invoiceNumber: "INV-001",
     date: "January 15, 2025",
     dueDate: "February 14, 2025",
     companyName: company?.name || "Your Company",
-    companyAddress: addressParts[0] || "123 Business Street",
-    companyCityState: addressParts.length > 1 ? addressParts.slice(1).join(',').trim() : "City, State 12345",
+    companyAddress,
+    companyCityState,
     companyEmail: company?.email || "contact@yourcompany.com",
     companyPhone: company?.phone || "(555) 123-4567",
     companyLogo: company?.logoUrl || null,

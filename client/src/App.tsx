@@ -58,6 +58,14 @@ import FirmClients from "@/pages/firm/FirmClients";
 import FirmBooks from "@/pages/firm/FirmBooks";
 import FirmTeam from "@/pages/firm/FirmTeam";
 import FirmSettings from "@/pages/firm/FirmSettings";
+import SettingsLayout from "@/pages/settings/SettingsLayout";
+import CompanySettings from "@/pages/settings/CompanySettings";
+import AccountSettings from "@/pages/settings/AccountSettings";
+import PreferencesSettings from "@/pages/settings/PreferencesSettings";
+import InvoiceSettings from "@/pages/settings/InvoiceSettings";
+import CurrencySettings from "@/pages/settings/CurrencySettings";
+import UsersSettings from "@/pages/settings/UsersSettings";
+import AccountantSettings from "@/pages/settings/AccountantSettings";
 import { Company } from "@shared/schema";
 
 function ProtectedRoute({ component: Component, ...rest }: { component: any; path?: string }) {
@@ -263,6 +271,28 @@ function Router() {
               <Route path="/vendors/:id" component={VendorDetail} />
               <Route path="/manage-users" component={ManageUsers} />
               <Route path="/ai-assistant" component={AIAssistant} />
+
+              {/* Settings Routes */}
+              <Route path="/settings/:rest*">
+                {() => (
+                  <SettingsLayout>
+                    <Switch>
+                      <Route path="/settings/company" component={CompanySettings} />
+                      <Route path="/settings/account" component={AccountSettings} />
+                      <Route path="/settings/preferences" component={PreferencesSettings} />
+                      <Route path="/settings/invoice" component={InvoiceSettings} />
+                      <Route path="/settings/currency" component={CurrencySettings} />
+                      <Route path="/settings/users" component={UsersSettings} />
+                      <Route path="/settings/accountant" component={AccountantSettings} />
+                      <Route path="/settings">
+                        {() => <Redirect to="/settings/company" />}
+                      </Route>
+                      <Route component={NotFound} />
+                    </Switch>
+                  </SettingsLayout>
+                )}
+              </Route>
+
               <Route path="/admin">
                 {() => <AdminRoute component={AdminDashboard} />}
               </Route>
