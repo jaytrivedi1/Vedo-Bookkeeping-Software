@@ -8238,20 +8238,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = parseInt(req.params.userId);
       const companyId = parseInt(req.params.companyId);
-      
-      // Don't allow removing the last admin from a company
-      const user = await storage.getUser(userId);
-      if (user?.role === 'admin') {
-        const companyUsers = await storage.getCompanyUsers(companyId);
+
+      // Get all users for this company to check admin count
+      const companyUsers = await storage.getCompanyUsers(companyId);
+
+      // Find the user being removed and check their company-specific role
+      const userCompanyAssignment = companyUsers.find(cu => cu.userId === userId);
+
+      if (!userCompanyAssignment) {
+        return res.status(404).json({ message: "User-company assignment not found" });
+      }
+
+      // If the user being removed is an admin in this company, check if they're the last one
+      if (userCompanyAssignment.role === 'admin') {
         const adminCount = companyUsers.filter(cu => cu.role === 'admin').length;
-        
+
         if (adminCount <= 1) {
-          return res.status(400).json({ message: "Cannot remove the last admin from a company" });
+          return res.status(400).json({
+            message: "Cannot remove the last admin. Please assign admin rights to another user first."
+          });
         }
       }
-      
+
       const success = await storage.removeUserFromCompany(userId, companyId);
-      
+
       if (success) {
         res.status(204).end();
       } else {
