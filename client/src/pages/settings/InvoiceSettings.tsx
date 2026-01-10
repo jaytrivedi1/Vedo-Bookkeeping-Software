@@ -14,140 +14,164 @@ import {
 } from "@/components/ui/dialog";
 
 // Wireframe SVG thumbnails for each template
-const ClassicThumbnail = () => (
+const ProfessionalThumbnail = () => (
   <svg viewBox="0 0 120 156" className="w-full h-full" fill="none">
-    {/* Header with border */}
-    <rect x="8" y="8" width="104" height="24" fill="#f3f4f6" stroke="#9ca3af" strokeWidth="1"/>
-    <rect x="12" y="12" width="40" height="8" fill="#6b7280"/>
-    <rect x="68" y="12" width="40" height="6" fill="#9ca3af"/>
-    <rect x="68" y="20" width="40" height="3" fill="#d1d5db"/>
+    {/* Header - logo left, invoice right */}
+    <rect x="8" y="10" width="12" height="12" rx="2" fill="#e5e7eb"/>
+    <rect x="24" y="10" width="35" height="5" fill="#374151"/>
+    <rect x="24" y="18" width="50" height="3" fill="#d1d5db"/>
+    <rect x="75" y="8" width="37" height="8" fill="#374151"/>
+    <rect x="85" y="18" width="27" height="3" fill="#9ca3af"/>
+    <rect x="85" y="23" width="27" height="3" fill="#d1d5db"/>
+    {/* Divider */}
+    <line x1="8" y1="34" x2="112" y2="34" stroke="#e5e7eb" strokeWidth="1"/>
     {/* Bill to */}
-    <rect x="8" y="38" width="30" height="3" fill="#9ca3af"/>
-    <rect x="8" y="44" width="50" height="4" fill="#6b7280"/>
-    <rect x="8" y="50" width="45" height="3" fill="#d1d5db"/>
-    {/* Table with borders */}
-    <rect x="8" y="60" width="104" height="50" fill="none" stroke="#9ca3af" strokeWidth="1"/>
-    <rect x="8" y="60" width="104" height="10" fill="#e5e7eb"/>
-    <line x1="8" y1="70" x2="112" y2="70" stroke="#d1d5db" strokeWidth="0.5"/>
-    <line x1="8" y1="80" x2="112" y2="80" stroke="#d1d5db" strokeWidth="0.5"/>
-    <line x1="8" y1="90" x2="112" y2="90" stroke="#d1d5db" strokeWidth="0.5"/>
-    <line x1="8" y1="100" x2="112" y2="100" stroke="#d1d5db" strokeWidth="0.5"/>
-    {/* Total box */}
-    <rect x="62" y="116" width="50" height="28" fill="none" stroke="#9ca3af" strokeWidth="1"/>
-    <rect x="62" y="134" width="50" height="10" fill="#374151"/>
+    <rect x="8" y="42" width="25" height="3" fill="#9ca3af"/>
+    <rect x="8" y="48" width="45" height="4" fill="#6b7280"/>
+    <rect x="8" y="55" width="40" height="3" fill="#d1d5db"/>
+    {/* Table header */}
+    <rect x="8" y="68" width="104" height="2" fill="#e5e7eb"/>
+    <rect x="8" y="66" width="40" height="3" fill="#9ca3af"/>
+    {/* Table rows with alternating */}
+    <rect x="8" y="76" width="104" height="10" fill="white"/>
+    <rect x="8" y="86" width="104" height="10" fill="#f9fafb"/>
+    <rect x="8" y="96" width="104" height="10" fill="white"/>
+    {/* Totals */}
+    <rect x="68" y="116" width="44" height="3" fill="#d1d5db"/>
+    <rect x="68" y="122" width="44" height="3" fill="#d1d5db"/>
+    <line x1="68" y1="128" x2="112" y2="128" stroke="#e5e7eb" strokeWidth="1"/>
+    <rect x="68" y="132" width="44" height="5" fill="#374151"/>
+    {/* Footer line */}
+    <line x1="8" y1="148" x2="112" y2="148" stroke="#f3f4f6" strokeWidth="1"/>
   </svg>
 );
 
-const ModernThumbnail = () => (
+const BoldThumbnail = () => (
   <svg viewBox="0 0 120 156" className="w-full h-full" fill="none">
-    {/* Blue gradient header */}
-    <rect x="0" y="0" width="120" height="32" fill="url(#modernGrad)"/>
-    <defs>
-      <linearGradient id="modernGrad" x1="0" y1="0" x2="120" y2="0">
-        <stop offset="0%" stopColor="#0284c7"/>
-        <stop offset="100%" stopColor="#0369a1"/>
-      </linearGradient>
-    </defs>
-    <rect x="8" y="8" width="50" height="10" fill="white" opacity="0.9"/>
-    <rect x="8" y="20" width="30" height="4" fill="white" opacity="0.5"/>
-    {/* Info cards */}
-    <rect x="8" y="40" width="32" height="20" rx="3" fill="#f3f4f6"/>
-    <rect x="44" y="40" width="32" height="20" rx="3" fill="#f3f4f6"/>
-    <rect x="80" y="40" width="32" height="20" rx="3" fill="#f3f4f6"/>
-    {/* Striped table */}
-    <rect x="8" y="68" width="104" height="10" rx="3" fill="#e0f2fe"/>
-    <rect x="8" y="78" width="104" height="8" fill="white"/>
-    <rect x="8" y="86" width="104" height="8" fill="#f9fafb"/>
-    <rect x="8" y="94" width="104" height="8" fill="white"/>
-    {/* Blue total button */}
-    <rect x="62" y="120" width="50" height="14" rx="4" fill="#0284c7"/>
+    {/* Top accent bar */}
+    <rect x="0" y="0" width="120" height="4" fill="#1f2937"/>
+    {/* Large INVOICE text */}
+    <rect x="8" y="14" width="55" height="10" fill="#1f2937"/>
+    {/* Pills */}
+    <rect x="8" y="30" width="30" height="8" rx="4" fill="#f3f4f6"/>
+    <rect x="42" y="30" width="40" height="8" rx="4" fill="#f3f4f6"/>
+    {/* Company info right */}
+    <rect x="80" y="14" width="32" height="5" fill="#6b7280"/>
+    <rect x="85" y="22" width="27" height="3" fill="#d1d5db"/>
+    {/* Two info cards */}
+    <rect x="8" y="46" width="50" height="28" rx="4" fill="#f9fafb"/>
+    <rect x="62" y="46" width="50" height="28" rx="4" fill="#f9fafb"/>
+    {/* Dark table header */}
+    <rect x="8" y="82" width="104" height="10" rx="3" fill="#1f2937"/>
+    {/* Table rows */}
+    <rect x="8" y="92" width="104" height="10" fill="white"/>
+    <rect x="8" y="102" width="104" height="10" fill="#f9fafb"/>
+    <rect x="8" y="112" width="104" height="10" fill="white"/>
+    {/* Dark total button */}
+    <rect x="56" y="132" width="56" height="14" rx="4" fill="#1f2937"/>
   </svg>
 );
 
-const MinimalThumbnail = () => (
+const ElegantThumbnail = () => (
   <svg viewBox="0 0 120 156" className="w-full h-full" fill="none">
     {/* Centered header */}
-    <rect x="35" y="12" width="50" height="6" fill="#374151"/>
-    <rect x="45" y="22" width="30" height="3" fill="#9ca3af"/>
-    {/* Centered company info */}
-    <rect x="30" y="34" width="60" height="3" fill="#d1d5db"/>
-    <rect x="25" y="40" width="70" height="2" fill="#e5e7eb"/>
-    {/* Divider */}
-    <line x1="20" y1="50" x2="100" y2="50" stroke="#e5e7eb" strokeWidth="1"/>
-    {/* Client info */}
-    <rect x="30" y="58" width="20" height="2" fill="#d1d5db"/>
-    <rect x="30" y="64" width="40" height="4" fill="#6b7280"/>
-    <rect x="30" y="72" width="35" height="2" fill="#d1d5db"/>
-    {/* Line items - minimal style */}
-    <rect x="20" y="88" width="60" height="4" fill="#6b7280"/>
-    <rect x="90" y="88" width="20" height="4" fill="#374151"/>
-    <line x1="20" y1="98" x2="100" y2="98" stroke="#f3f4f6" strokeWidth="1"/>
-    <rect x="20" y="104" width="55" height="4" fill="#6b7280"/>
-    <rect x="90" y="104" width="20" height="4" fill="#374151"/>
-    {/* Total */}
-    <line x1="60" y1="124" x2="100" y2="124" stroke="#e5e7eb" strokeWidth="1"/>
-    <rect x="60" y="130" width="20" height="6" fill="#9ca3af"/>
-    <rect x="85" y="130" width="25" height="6" fill="#374151"/>
+    <rect x="40" y="12" width="40" height="3" fill="#9ca3af"/>
+    <rect x="35" y="20" width="50" height="6" fill="#374151"/>
+    <rect x="45" y="30" width="30" height="3" fill="#d1d5db"/>
+    {/* Thin divider */}
+    <line x1="20" y1="42" x2="100" y2="42" stroke="#e5e7eb" strokeWidth="1"/>
+    {/* Two column layout */}
+    <rect x="15" y="50" width="20" height="2" fill="#d1d5db"/>
+    <rect x="15" y="56" width="35" height="4" fill="#6b7280"/>
+    <rect x="15" y="64" width="30" height="2" fill="#9ca3af"/>
+    <rect x="75" y="50" width="20" height="2" fill="#d1d5db"/>
+    <rect x="75" y="56" width="30" height="3" fill="#6b7280"/>
+    <rect x="75" y="64" width="30" height="3" fill="#6b7280"/>
+    {/* Line items - elegant style */}
+    <line x1="15" y1="80" x2="105" y2="80" stroke="#e5e7eb" strokeWidth="1"/>
+    <rect x="15" y="86" width="50" height="4" fill="#6b7280"/>
+    <rect x="15" y="92" width="30" height="2" fill="#d1d5db"/>
+    <rect x="90" y="88" width="15" height="4" fill="#374151"/>
+    <line x1="15" y1="100" x2="105" y2="100" stroke="#f3f4f6" strokeWidth="1"/>
+    <rect x="15" y="106" width="45" height="4" fill="#6b7280"/>
+    <rect x="90" y="108" width="15" height="4" fill="#374151"/>
+    {/* Totals with dotted lines */}
+    <rect x="60" y="124" width="20" height="3" fill="#9ca3af"/>
+    <line x1="82" y1="126" x2="100" y2="126" stroke="#e5e7eb" strokeWidth="1" strokeDasharray="2,2"/>
+    <rect x="102" y="124" width="10" height="3" fill="#6b7280"/>
+    <line x1="60" y1="134" x2="112" y2="134" stroke="#e5e7eb" strokeWidth="1"/>
+    <rect x="60" y="138" width="15" height="4" fill="#6b7280"/>
+    <rect x="98" y="138" width="14" height="5" fill="#374151"/>
   </svg>
 );
 
-const CompactThumbnail = () => (
+const SimpleThumbnail = () => (
   <svg viewBox="0 0 120 156" className="w-full h-full" fill="none">
-    {/* Two column header */}
-    <rect x="8" y="8" width="50" height="4" fill="#374151"/>
-    <rect x="8" y="14" width="45" height="2" fill="#d1d5db"/>
-    <rect x="8" y="18" width="40" height="2" fill="#d1d5db"/>
-    <rect x="72" y="8" width="40" height="8" fill="#374151"/>
-    <rect x="72" y="18" width="35" height="2" fill="#9ca3af"/>
-    <line x1="8" y1="26" x2="112" y2="26" stroke="#d1d5db" strokeWidth="1"/>
-    {/* Bill to compact */}
-    <rect x="8" y="32" width="20" height="2" fill="#9ca3af"/>
-    <rect x="8" y="36" width="40" height="3" fill="#6b7280"/>
-    {/* Dense table */}
-    <rect x="8" y="46" width="104" height="8" fill="#f3f4f6"/>
-    <rect x="8" y="46" width="104" height="44" fill="none" stroke="#d1d5db" strokeWidth="0.5"/>
-    <line x1="8" y1="54" x2="112" y2="54" stroke="#e5e7eb" strokeWidth="0.5"/>
-    <line x1="8" y1="62" x2="112" y2="62" stroke="#e5e7eb" strokeWidth="0.5"/>
-    <line x1="8" y1="70" x2="112" y2="70" stroke="#e5e7eb" strokeWidth="0.5"/>
-    <line x1="8" y1="78" x2="112" y2="78" stroke="#e5e7eb" strokeWidth="0.5"/>
-    {/* Compact totals */}
-    <rect x="72" y="96" width="40" height="6" fill="#f3f4f6"/>
-    <rect x="72" y="102" width="40" height="6" fill="#f3f4f6"/>
-    <rect x="72" y="110" width="40" height="8" fill="#374151"/>
+    {/* Simple header */}
+    <rect x="8" y="10" width="40" height="6" fill="#374151"/>
+    <rect x="8" y="20" width="30" height="3" fill="#9ca3af"/>
+    {/* Company right */}
+    <rect x="75" y="10" width="37" height="4" fill="#6b7280"/>
+    <rect x="80" y="18" width="32" height="2" fill="#d1d5db"/>
+    <rect x="80" y="23" width="32" height="2" fill="#d1d5db"/>
+    {/* Dates row */}
+    <rect x="8" y="36" width="35" height="3" fill="#d1d5db"/>
+    <rect x="50" y="36" width="35" height="3" fill="#d1d5db"/>
+    {/* Bill to */}
+    <rect x="8" y="48" width="20" height="2" fill="#9ca3af"/>
+    <rect x="8" y="54" width="45" height="4" fill="#6b7280"/>
+    <rect x="8" y="61" width="55" height="2" fill="#d1d5db"/>
+    <line x1="8" y1="70" x2="112" y2="70" stroke="#f3f4f6" strokeWidth="1"/>
+    {/* Simple table */}
+    <rect x="8" y="78" width="30" height="2" fill="#9ca3af"/>
+    <rect x="85" y="78" width="15" height="2" fill="#9ca3af"/>
+    <line x1="8" y1="84" x2="112" y2="84" stroke="#e5e7eb" strokeWidth="1"/>
+    <rect x="8" y="90" width="55" height="3" fill="#6b7280"/>
+    <rect x="95" y="90" width="17" height="3" fill="#6b7280"/>
+    <rect x="8" y="100" width="50" height="3" fill="#6b7280"/>
+    <rect x="95" y="100" width="17" height="3" fill="#6b7280"/>
+    <rect x="8" y="110" width="45" height="3" fill="#6b7280"/>
+    <rect x="95" y="110" width="17" height="3" fill="#6b7280"/>
+    {/* Totals */}
+    <rect x="70" y="124" width="20" height="3" fill="#9ca3af"/>
+    <rect x="100" y="124" width="12" height="3" fill="#6b7280"/>
+    <line x1="70" y1="132" x2="112" y2="132" stroke="#e5e7eb" strokeWidth="1"/>
+    <rect x="70" y="136" width="15" height="4" fill="#6b7280"/>
+    <rect x="98" y="136" width="14" height="4" fill="#374151"/>
   </svg>
 );
 
 const templates = [
   {
-    id: "classic",
-    name: "Classic",
-    description: "Traditional bordered layout",
-    Thumbnail: ClassicThumbnail,
+    id: "professional",
+    name: "Professional",
+    description: "Clean corporate style",
+    Thumbnail: ProfessionalThumbnail,
   },
   {
-    id: "modern",
-    name: "Modern",
-    description: "Bold header with cards",
-    Thumbnail: ModernThumbnail,
+    id: "bold",
+    name: "Bold",
+    description: "Strong visual impact",
+    Thumbnail: BoldThumbnail,
   },
   {
-    id: "minimal",
-    name: "Minimal",
-    description: "Clean centered design",
-    Thumbnail: MinimalThumbnail,
+    id: "elegant",
+    name: "Elegant",
+    description: "Refined premium feel",
+    Thumbnail: ElegantThumbnail,
   },
   {
-    id: "compact",
-    name: "Compact",
-    description: "Space-efficient layout",
-    Thumbnail: CompactThumbnail,
+    id: "simple",
+    name: "Simple",
+    description: "Clean and functional",
+    Thumbnail: SimpleThumbnail,
   },
 ];
 
 export default function InvoiceSettings() {
   const { toast } = useToast();
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("classic");
-  const [savedTemplate, setSavedTemplate] = useState<string>("classic");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("professional");
+  const [savedTemplate, setSavedTemplate] = useState<string>("professional");
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
 
   const preferencesQuery = useQuery({
@@ -157,7 +181,7 @@ export default function InvoiceSettings() {
   useEffect(() => {
     if (preferencesQuery.data) {
       const data = preferencesQuery.data as any;
-      const template = data.invoiceTemplate || "classic";
+      const template = data.invoiceTemplate || "professional";
       setSelectedTemplate(template);
       setSavedTemplate(template);
     }
