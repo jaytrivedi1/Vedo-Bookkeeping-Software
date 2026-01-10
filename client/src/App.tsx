@@ -272,8 +272,13 @@ function Router() {
               <Route path="/manage-users" component={ManageUsers} />
               <Route path="/ai-assistant" component={AIAssistant} />
 
+              {/* Settings base path redirect */}
+              <Route path="/settings">
+                {() => <Redirect to="/settings/company" />}
+              </Route>
+
               {/* Settings Routes */}
-              <Route path="/settings/:rest*">
+              <Route path="/settings/:rest+">
                 {() => (
                   <SettingsLayout>
                     <Switch>
@@ -284,9 +289,6 @@ function Router() {
                       <Route path="/settings/currency" component={CurrencySettings} />
                       <Route path="/settings/users" component={UsersSettings} />
                       <Route path="/settings/accountant" component={AccountantSettings} />
-                      <Route path="/settings">
-                        {() => <Redirect to="/settings/company" />}
-                      </Route>
                       <Route component={NotFound} />
                     </Switch>
                   </SettingsLayout>
