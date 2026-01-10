@@ -10,6 +10,7 @@ import {
   Briefcase,
   ChevronDown,
   Settings,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -52,6 +53,13 @@ const navItems = [
     icon: FileText,
     href: "/settings/invoices",
     description: "Invoice templates",
+  },
+  {
+    id: "emails",
+    label: "Emails & Reminders",
+    icon: Mail,
+    href: "/settings/emails",
+    description: "Email templates & automation",
   },
   {
     id: "currency",

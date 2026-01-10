@@ -63,6 +63,7 @@ import CompanySettings from "@/pages/settings/CompanySettings";
 import AccountSettings from "@/pages/settings/AccountSettings";
 import PreferencesSettings from "@/pages/settings/PreferencesSettings";
 import InvoiceSettings from "@/pages/settings/InvoiceSettings";
+import EmailSettings from "@/pages/settings/EmailSettings";
 import CurrencySettings from "@/pages/settings/CurrencySettings";
 import UsersSettings from "@/pages/settings/UsersSettings";
 import AccountantSettings from "@/pages/settings/AccountantSettings";
@@ -286,6 +287,7 @@ function Router() {
                       <Route path="/settings/account" component={AccountSettings} />
                       <Route path="/settings/preferences" component={PreferencesSettings} />
                       <Route path="/settings/invoices" component={InvoiceSettings} />
+                      <Route path="/settings/emails" component={EmailSettings} />
                       <Route path="/settings/currency" component={CurrencySettings} />
                       <Route path="/settings/users" component={UsersSettings} />
                       <Route path="/settings/accountant" component={AccountantSettings} />
