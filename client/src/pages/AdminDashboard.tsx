@@ -197,7 +197,10 @@ export default function AdminDashboard() {
       return await apiRequest(`/api/user-companies/${userId}/${companyId}`, "DELETE");
     },
     onSuccess: () => {
+      // Invalidate all relevant queries to ensure UI consistency across all pages
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/companies"] }); // Update company user counts
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] }); // Update Manage Users page
       toast({
         title: "Access Removed",
         description: "User has been removed from the company successfully.",
